@@ -33,10 +33,11 @@ Every orientation surface of this repo tells the truth — OVERVIEW.md, poc/READ
 - [Decide the project folder's name](issues/06-decide-the-project-folder-name.md) — rename decided but deferred (needs its own Claude-memory-migration session); OVERVIEW warning updated to state the intent.
 - [Identify fallow and rule on its artifacts](issues/07-identify-fallow-and-rule-on-artifacts.md) — fallow is a Rust TS/JS dead-code analyzer, trialled once on 2026-06-25 to find the Session Negotiation dead code; config kept, stale caches deleted ([research asset](assets/fallow-research.md)).
 - [Decide git workflow protections](issues/09-decide-git-workflow-protections.md) — guardrails hooks installed for Bash and PowerShell (with a no-jq fallback fix); commit convention and backup bundle consciously declined.
+- [Make npm test pass out of the box](issues/08-make-npm-test-pass-out-of-the-box.md) — root cause was module-level state leaking between tests (plus jsdom's missing scrollIntoView); test-side fix, 31/31 green.
 
 ## Not yet specified
 
-- **CONTEXT.md ↔ POC drift audit** — CONTEXT.md is 47KB of domain language and the POC has evolved fast (Session Negotiation removed, Weekly Session primary). Whether the glossary itself has stale or contradictory entries can't be phrased as a sharp question until the OVERVIEW/README work surfaces concrete drift. Revisit after those tickets close.
+(fog cleared — the last patch graduated into [Audit CONTEXT.md for drift](issues/10-audit-context-md-for-drift.md))
 
 ## Out of scope
 

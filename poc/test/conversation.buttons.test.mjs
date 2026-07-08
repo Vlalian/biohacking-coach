@@ -8,7 +8,17 @@ vi.mock('../public/js/api.js', () => ({
   callChat:       vi.fn().mockResolvedValue(''),
 }));
 
-import { startWeeklySession, startCoachChat } from '../public/js/conversation.js';
+// conversation.js keeps conversation state at module level, so each test gets a
+// fresh module instance — otherwise a prior test's history triggers the
+// confirm-new-session banner, which awaits a click that never comes.
+let startWeeklySession, startCoachChat;
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ startWeeklySession, startCoachChat } = await import('../public/js/conversation.js'));
+  Element.prototype.scrollIntoView = vi.fn(); // not implemented in jsdom
+  buildDOM();
+});
 
 const CHECKIN = {
   body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50,
@@ -35,8 +45,6 @@ function buildDOM() {
 }
 
 describe('startWeeklySession — agree button', () => {
-  beforeEach(buildDOM);
-
   it('shows the confirm button', async () => {
     await startWeeklySession(CHECKIN, [], [], []);
     expect(document.querySelector('#pushbackWrap .btn-confirm').style.display).toBe('');
@@ -55,8 +63,6 @@ describe('startWeeklySession — agree button', () => {
 });
 
 describe('startCoachChat — end-chat button', () => {
-  beforeEach(buildDOM);
-
   it('shows the confirm button', async () => {
     await startCoachChat(CHECKIN);
     expect(document.querySelector('#pushbackWrap .btn-confirm').style.display).toBe('');
