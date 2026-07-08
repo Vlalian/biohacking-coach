@@ -506,7 +506,7 @@ const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Coach POC running at http://localhost:${PORT}`);
-    console.log('Set ANTHROPIC_API_KEY env var or enter key in the UI');
+    console.log('Enter your Anthropic API key in the UI');
   });
 }
 module.exports = { buildWeeklyContext, renderWeeklyPrompt };

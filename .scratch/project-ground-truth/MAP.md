@@ -27,6 +27,7 @@ Every orientation surface of this repo tells the truth — OVERVIEW.md, poc/READ
 
 - [Initialize git and commit the baseline](issues/01-initialize-git-and-commit-baseline.md) — repo initialized, baseline commit `4ae934a` (158 files), root .gitignore excludes node_modules/.fallow, repo-local identity set for Mads; `.claude/settings.local.json` tracked — flagged for the sweep.
 - [Rewrite OVERVIEW.md as the real front door](issues/02-rewrite-overview-as-real-front-door.md) — OVERVIEW.md now describes the Biohacking Coach App (product, orientation table, dated current-state, skills demoted to tooling), with a folder-name warning that cites its open ticket.
+- [Refresh the POC README to the Weekly Session era](issues/03-refresh-poc-readme-to-weekly-session-era.md) — README rewritten from source (Weekly Session arcs, calendar, onboarding, patterns, personas verified); server log + package.json Session-Negotiation-era claims also fixed; pre-existing 4-test jsdom failure ticketed separately.
 
 ## Not yet specified
 

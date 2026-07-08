@@ -1,7 +1,7 @@
 {
   "name": "biohacking-coach-poc",
   "version": "1.0.0",
-  "description": "Session Negotiation POC — Biohacking Coach App",
+  "description": "Coach experience POC — Biohacking Coach App",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
