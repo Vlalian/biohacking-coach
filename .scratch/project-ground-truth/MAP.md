@@ -26,6 +26,7 @@ Every orientation surface of this repo tells the truth — OVERVIEW.md, poc/READ
 <!-- one line per closed ticket: gist + link -->
 
 - [Initialize git and commit the baseline](issues/01-initialize-git-and-commit-baseline.md) — repo initialized, baseline commit `4ae934a` (158 files), root .gitignore excludes node_modules/.fallow, repo-local identity set for Mads; `.claude/settings.local.json` tracked — flagged for the sweep.
+- [Rewrite OVERVIEW.md as the real front door](issues/02-rewrite-overview-as-real-front-door.md) — OVERVIEW.md now describes the Biohacking Coach App (product, orientation table, dated current-state, skills demoted to tooling), with a folder-name warning that cites its open ticket.
 
 ## Not yet specified
 

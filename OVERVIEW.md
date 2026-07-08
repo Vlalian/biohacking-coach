@@ -1,47 +1,26 @@
-# Project Overview
+# Biohacking Coach App
 
-This is a **Matt Pocock agent skills** project — a collection of Claude agent skills configured for use in a repo. It's set up with a local-markdown issue tracker (issues live under `.scratch/`).
+An AI coaching product for Ironman trainees. The **Coach** — an LLM agent holding full athlete context — runs a weekly training ritual: it reads the athlete's Check-in and Session Reflections, builds the Week Plan, and negotiates it as a peer backed by training science. An optional human **Head Coach** can oversee linked athletes (Coached Mode, V1).
 
----
+> **Folder name warning**: this directory is called `Trader-proj` for historical reasons — nothing here is trading-related. Whether to rename it is an open decision: [Decide the project folder's name](.scratch/project-ground-truth/issues/06-decide-the-project-folder-name.md).
 
-## Skills (16 total, from `mattpocock/skills` on GitHub)
+## Orientation — where truth lives
 
-### Engineering Skills
-
-| Skill | Purpose |
+| Surface | What it holds |
 |---|---|
-| **diagnose** | Disciplined bug diagnosis: reproduce → minimise → hypothesise → instrument → fix → regression-test |
-| **grill-with-docs** | Stress-test a plan against the domain model; updates `CONTEXT.md` and ADRs inline |
-| **improve-codebase-architecture** | Surface architectural friction, find "deepening" opportunities (deep modules), produce an HTML report |
-| **tdd** | Test-driven development with red-green-refactor vertical slices |
-| **to-issues** | Break a plan/PRD into independently-grabbable GitHub/local issues |
-| **to-prd** | Synthesize conversation context into a PRD, publish to issue tracker |
-| **triage** | Move issues through a state machine (`needs-triage` → `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`) |
-| **zoom-out** | Ask for a higher-level map of modules/callers for unfamiliar code |
-| **setup-matt-pocock-skills** | One-time setup: configures issue tracker, triage labels, and domain doc layout in `AGENTS.md` |
+| [CONTEXT.md](CONTEXT.md) | The domain glossary. Canonical terms (Weekly Session, Week Plan, Session Reflection, Coached Mode, ...) — use them exactly, don't drift to synonyms. |
+| [docs/adr/](docs/adr/) | Architecture decision records: Coach-voice-only guided tour, calendar authority model, Coached Mode authority. |
+| [poc/](poc/) | The working browser POC of the Coach interaction loop. Run instructions in [poc/README.md](poc/README.md). |
+| [.scratch/](.scratch/) | The local-markdown issue tracker — one directory per feature holding a `PRD.md` and `issues/`. Conventions: [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), labels: [docs/agents/triage-labels.md](docs/agents/triage-labels.md). |
+| [AGENTS.md](AGENTS.md) | Pointer file agents read first: tracker, labels, domain-doc layout. |
 
-### Productivity Skills
+## Current state (2026-07-08)
 
-| Skill | Purpose |
-|---|---|
-| **caveman** | Ultra-compressed ~75% fewer tokens communication mode |
-| **grill-me** | Relentless interview on a plan/design until shared understanding |
-| **handoff** | Compact current conversation into a handoff doc for a fresh agent |
-| **teach** | Stateful multi-session teaching workspace with lessons, references, learning records |
-| **write-a-skill** | Create new skills with proper structure |
-| **prototype** | Build throwaway prototypes — either a terminal app (logic/state) or multiple UI variations |
+- The POC implements the **Weekly Session** loop (Check-in → Review → Planning), the monthly **Training Plan** calendar, **MCQ onboarding**, and RPE-based **Session Reflections**. Daily Session Negotiation was retired as the primary loop in June 2026 — the Weekly Session replaced it.
+- Git history starts at the 2026-07-08 baseline commit. Local repo only, no remote.
+- Product discovery with a domain expert is ongoing — open questions in [.scratch/mvp/domain-expert-questions.md](.scratch/mvp/domain-expert-questions.md).
+- A cleanup effort, [Project Ground Truth](.scratch/project-ground-truth/MAP.md), is bringing the repo's orientation surfaces in line with reality.
 
-### Product & UX Skills
+## Agent skills tooling
 
-| Skill | Purpose |
-|---|---|
-| **user-stories-and-journeys** | Guide creation of user stories and journey maps using Donna Lichaw's narrative-arc storymapping (Concept / Origin / Usage stories), Jeff Patton's agile user story mapping, and UX journey mapping best practices |
-
----
-
-## Repo Configuration
-
-- **Issue tracker**: Local markdown under `.scratch/<feature>/`
-- **Triage labels**: Default vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`)
-- **Domain docs**: Single-context layout — `CONTEXT.md` at root + `docs/adr/`
-- **Example feature**: `.scratch/example-feature/` with a PRD and one `needs-triage` issue
+The repo carries a Matt Pocock skills installation (`.agents/skills/`, `.claude/commands/`, pinned by `skills-lock.json`), configured with the local-markdown tracker, default triage vocabulary, and single-context domain docs. This is tooling that supports the project — it is not the project.
