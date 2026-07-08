@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — Coach Constraint Memory
 
@@ -77,3 +77,7 @@ Manual verification is sufficient for the POC.
 ## Further Notes
 
 The phone calendar API is a natural V1 upgrade path: read busy slots from the device calendar and suggest them as unavailable days. The athlete confirms, and they are stored using the same mechanism as manual marking. The POC's manual mechanism is the same underlying data shape, so the upgrade is additive.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — Athlete Language
 
@@ -68,3 +68,7 @@ Manual verification: complete onboarding selecting Danish, confirm Coach respond
 The language preference is set in MCQ Onboarding and consumed here. The MCQ Onboarding PRD is a prerequisite — the `language` field must exist in the profile before this feature can be implemented.
 
 The Coach's language capability means this feature requires no translation database or external service. The directive approach is robust because the Coach understands Danish training terminology naturally — there is no risk of it translating "Zone 2" to "Zone 2" awkwardly.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

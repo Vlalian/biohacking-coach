@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — Weekly Session Date
 
@@ -57,3 +57,7 @@ Manual verification: run a Weekly Session on a Monday, confirm the Coach plans f
 ## Further Notes
 
 The `weeklySessionDay` onboarding field also serves as a natural prompt for the Coach to ask "shall I plan for this week or next week?" if the athlete's preferred day does not match today — a conversational fallback for edge cases the logic cannot handle automatically.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

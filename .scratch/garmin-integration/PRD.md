@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — Garmin Historical Data Upload
 
@@ -88,3 +88,7 @@ Manual verification: upload a sample Garmin .fit file, confirm the returned sess
 The historical data upload is a cold-start accelerator for the veteran athlete segment — the group most likely to be sceptical of an AI coach and most likely to have established training data. Getting the Coach to reference real history in the first session is a key trust-building moment for this segment.
 
 The file upload mechanism also serves as the integration point for future Garmin API work: the server-side parsing logic is the same, only the input source changes from a file to an API response.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

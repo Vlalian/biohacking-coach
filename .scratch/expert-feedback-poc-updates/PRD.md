@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — POC Updates from Domain Expert Interview
 
@@ -88,3 +88,7 @@ Manual verification is sufficient for the POC — no automated test infrastructu
 - All four changes are prompt or UI updates to the existing POC. No new routes, no new localStorage keys (except `skipped` flag on existing feedback entries), no architecture changes.
 - Training phase and session type validation against Joe Friel's Triathlete's Training Bible is a separate research task, not a POC code change.
 - The expert confirmed the weekly rhythm model (once per week formal session) is correct. The RPE, pattern surfacing, planning order, and skip marking are the four actionable POC gaps.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

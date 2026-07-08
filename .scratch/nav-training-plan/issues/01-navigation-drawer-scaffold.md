@@ -1,5 +1,5 @@
 Title: Navigation Drawer scaffold
-Status: ready-for-agent
+Status: done
 
 ## What to build
 
@@ -17,3 +17,7 @@ Add a left-side Navigation Drawer to the POC. A toggle button (hamburger) sits f
 ## Blocked by
 
 None — can start immediately
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): implemented in poc/public/js/app.js (drawer and view switching are visible in the running POC); status was stale-open. Set to done.

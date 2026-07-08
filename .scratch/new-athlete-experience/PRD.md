@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — New Athlete Experience (Presence Arc & Guided Tour)
 
@@ -76,3 +76,7 @@ The **Presence Arc** is the implementation of the **Coaching Presence** and **Pr
 The **Guided Tour** principle (Coach voice only) is documented in `docs/adr/0001-coach-voice-only-guided-tour.md`. Any future feature orientation should follow the same pattern: the Coach introduces a feature contextually, once, at the moment the athlete needs it.
 
 The **Week 1 BOOM** (Coach Chat mid-week) depends on the Coach's first session closing actively seeding the habit. If the closing does not name Coach Chat with a concrete example, the athlete will not know to use it, and the engagement signal that drives Coach Engagement Rate will not fire.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

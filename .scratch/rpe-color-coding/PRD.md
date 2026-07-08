@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — RPE Color Coding
 
@@ -52,3 +52,7 @@ Manual verification is sufficient for the POC: open the Session Feedback modal, 
 ## Further Notes
 
 This change makes the RPE scale self-explanatory for new athletes who have not yet memorised what each number means. The color provides the intuitive anchor that the label text reinforces.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.

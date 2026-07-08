@@ -1,5 +1,5 @@
 Title: View switching — Coach ↔ Training Plan
-Status: ready-for-agent
+Status: done
 
 ## What to build
 
@@ -16,3 +16,7 @@ Wire the nav buttons in the Navigation Drawer to switch the Main View. Pressing 
 ## Blocked by
 
 - 01-navigation-drawer-scaffold
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): implemented in poc/public/js/app.js (drawer and view switching are visible in the running POC); status was stale-open. Set to done.

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # PRD — MCQ Onboarding Redesign
 
@@ -96,3 +96,7 @@ Manual verification: complete the MCQ flow as a beginner, confirm experience lev
 The experience level bug (not saving correctly after current onboarding) is resolved as a direct consequence of this redesign — the athlete selects their level explicitly and it is stored without interpretation. No separate bug-fix issue is needed.
 
 The `weeklySessionDay` and `fixedConstraints` fields collected here are consumed by the Weekly Session Date and Coach Constraint Memory features respectively. MCQ Onboarding is a prerequisite for both.
+
+## Comments
+
+- 2026-07-08 — tracker sweep (Project Ground Truth): all child issues done and feature verified present in the POC. Status set to done.
