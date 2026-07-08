@@ -2,7 +2,7 @@
 
 An AI coaching product for Ironman trainees. The **Coach** — an LLM agent holding full athlete context — runs a weekly training ritual: it reads the athlete's Check-in and Session Reflections, builds the Week Plan, and negotiates it as a peer backed by training science. An optional human **Head Coach** can oversee linked athletes (Coached Mode, V1).
 
-> **Folder name warning**: this directory is called `Trader-proj` for historical reasons — nothing here is trading-related. Whether to rename it is an open decision: [Decide the project folder's name](.scratch/project-ground-truth/issues/06-decide-the-project-folder-name.md).
+> **Folder name warning**: this directory is called `Trader-proj` by historical accident — nothing here is trading-related. A rename to a truthful name is decided but deferred (it requires migrating Claude project-memory keying): [Decide the project folder's name](.scratch/project-ground-truth/issues/06-decide-the-project-folder-name.md).
 
 ## Orientation — where truth lives
 

@@ -30,11 +30,13 @@ Every orientation surface of this repo tells the truth — OVERVIEW.md, poc/READ
 - [Refresh the POC README to the Weekly Session era](issues/03-refresh-poc-readme-to-weekly-session-era.md) — README rewritten from source (Weekly Session arcs, calendar, onboarding, patterns, personas verified); server log + package.json Session-Negotiation-era claims also fixed; pre-existing 4-test jsdom failure ticketed separately.
 - [Sweep the tracker: statuses, missing PRD, example-feature](issues/04-sweep-tracker-statuses-and-scaffolding.md) — 9 finished features now say done (incl. two stale-open nav issues flipped after code verification), nav-training-plan got its PRD stub, example-feature deleted, settings.local.json untracked; every done claim shallow-verified, none false.
 - [Retire the hand-rolled deletion log](issues/05-retire-hand-rolled-deletion-log.md) — deleted; content recoverable via `git show 4ae934a:.scratch/deleted-session-negotiation.md`.
+- [Decide the project folder's name](issues/06-decide-the-project-folder-name.md) — rename decided but deferred (needs its own Claude-memory-migration session); OVERVIEW warning updated to state the intent.
+- [Identify fallow and rule on its artifacts](issues/07-identify-fallow-and-rule-on-artifacts.md) — fallow is a Rust TS/JS dead-code analyzer, trialled once on 2026-06-25 to find the Session Negotiation dead code; config kept, stale caches deleted ([research asset](assets/fallow-research.md)).
+- [Decide git workflow protections](issues/09-decide-git-workflow-protections.md) — guardrails hooks installed for Bash and PowerShell (with a no-jq fallback fix); commit convention and backup bundle consciously declined.
 
 ## Not yet specified
 
 - **CONTEXT.md ↔ POC drift audit** — CONTEXT.md is 47KB of domain language and the POC has evolved fast (Session Negotiation removed, Weekly Session primary). Whether the glossary itself has stale or contradictory entries can't be phrased as a sharp question until the OVERVIEW/README work surfaces concrete drift. Revisit after those tickets close.
-- **What replaces the deletion-log habit** — if git changes the workflow (guardrails hooks? commit conventions?), that practice question becomes ticketable once git exists and has been used for a few changes.
 
 ## Out of scope
 
