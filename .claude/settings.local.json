@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python -c \"import pdfplumber; pdf = pdfplumber.open\\(r'C:\\\\Users\\\\madsk\\\\Documents\\\\Project\\\\HI Design Playbook - pattern summary.pdf'\\); [print\\(f'--- PAGE {i+1} ---\\\\n' + \\(p.extract_text\\(\\) or ''\\)\\) for i, p in enumerate\\(pdf.pages\\)]; pdf.close\\(\\)\")",
+      "PowerShell(Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 3000 -State Listen\\).OwningProcess -Force)",
+      "Bash(node server.js)",
+      "PowerShell(Start-Process \"C:\\\\Users\\\\madsk\\\\AppData\\\\Local\\\\Temp\\\\architecture-review-20260621.html\")",
+      "Read(//c/Users/madsk/.claude/**)"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "entry": [
+    "poc/server.js",
+    "poc/public/js/app.js"
+  ],
+  "ignorePatterns": [
+    "poc/node_modules/**"
+  ]
+}
