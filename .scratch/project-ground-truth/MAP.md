@@ -25,7 +25,7 @@ Every orientation surface of this repo tells the truth — OVERVIEW.md, poc/READ
 
 <!-- one line per closed ticket: gist + link -->
 
-(none yet)
+- [Initialize git and commit the baseline](issues/01-initialize-git-and-commit-baseline.md) — repo initialized, baseline commit `4ae934a` (158 files), root .gitignore excludes node_modules/.fallow, repo-local identity set for Mads; `.claude/settings.local.json` tracked — flagged for the sweep.
 
 ## Not yet specified
 

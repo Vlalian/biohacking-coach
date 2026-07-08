@@ -13,5 +13,6 @@ Every PRD in `.scratch/` says `Status: ready-for-agent`, including features whos
 2. `nav-training-plan` has 9 issues but no PRD.md — add a one-paragraph PRD stub linking the issues, or record why none is needed.
 3. Delete `.scratch/example-feature/` (setup scaffolding, `needs-triage` since creation) — safe post-git-baseline.
 4. Verify each `done` claim shallowly: does the feature visibly exist in the poc? Flag (don't fix) any issue marked done that looks unimplemented.
+5. Surfaced by [Initialize git and commit the baseline](01-initialize-git-and-commit-baseline.md): `.claude/settings.local.json` is tracked in the baseline but is conventionally machine-local — decide untrack + gitignore, or keep tracked.
 
 Resolution records the per-feature status table and any flagged discrepancies (those may graduate fog on the map).
