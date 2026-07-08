@@ -1,5 +1,5 @@
 Status: living document — update as decisions are made or reversed
-Last updated: 2026-06-21
+Last updated: 2026-07-08 (rating terminology aligned to the shipped RPE 1–10 scale; no decisions changed)
 
 # GDPR Design Decisions
 
@@ -21,7 +21,7 @@ The athlete's name, email, date of birth, location, or any other direct identifi
 ---
 
 ### 2. Session feedback stored locally only
-Session Feedback (emoji ratings + optional comments) is stored exclusively in **browser localStorage** under the key `bh_session_feedback`. It is not sent to any server. The Coach receives an aggregated summary of the week's emoji scores during the Weekly Session — it does not receive the raw stored objects.
+Session Feedback (RPE ratings + optional comments) is stored exclusively in **browser localStorage** under the key `bh_session_feedback`. It is not sent to any server. The Coach receives an aggregated summary of the week's RPE scores during the Weekly Session — it does not receive the raw stored objects.
 
 **Where enforced:** `poc/public/js/feedback.js` — `setSessionFeedback`, `getSessionFeedback`, `getLastWeekFeedback`.
 
@@ -55,7 +55,7 @@ The optional comment field in Session Feedback (post-workout emoji rating) exist
 Only data necessary for the coaching function is collected and sent to the API:
 - Check-in signals: body readiness, mental state, energy, sleep, resting pulse
 - Training metadata: phase, experience level, session count
-- Session feedback: emoji ratings (1–5 Body, 1–5 Mind), optional comment
+- Session feedback: RPE ratings (1–10 Body, 1–10 Mind), optional comment
 
 No demographic data, no location, no wearable biometric streams, no health records. The coaching intelligence is derived from self-reported subjective signals, not from medical or fitness tracking integrations (those are V2).
 

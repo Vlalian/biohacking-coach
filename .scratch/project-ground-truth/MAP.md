@@ -34,10 +34,11 @@ Every orientation surface of this repo tells the truth — OVERVIEW.md, poc/READ
 - [Identify fallow and rule on its artifacts](issues/07-identify-fallow-and-rule-on-artifacts.md) — fallow is a Rust TS/JS dead-code analyzer, trialled once on 2026-06-25 to find the Session Negotiation dead code; config kept, stale caches deleted ([research asset](assets/fallow-research.md)).
 - [Decide git workflow protections](issues/09-decide-git-workflow-protections.md) — guardrails hooks installed for Bash and PowerShell (with a no-jq fallback fix); commit convention and backup bundle consciously declined.
 - [Make npm test pass out of the box](issues/08-make-npm-test-pass-out-of-the-box.md) — root cause was module-level state leaking between tests (plus jsdom's missing scrollIntoView); test-side fix, 31/31 green.
+- [Audit CONTEXT.md for drift](issues/10-audit-context-md-for-drift.md) — glossary largely healthy; 9 stale/contradictory entries fixed inline (incl. a pre-git corruption that had eaten the View entry), 4 ghost terms defined (Fixed Constraint, Unavailable, Weekly Session Day, Session Feedback), GDPR doc's emoji→RPE terminology aligned; two flags graduated into [Rule on the drift audit's flagged glossary decisions](issues/11-rule-on-drift-audit-flags.md).
 
 ## Not yet specified
 
-(fog cleared — the last patch graduated into [Audit CONTEXT.md for drift](issues/10-audit-context-md-for-drift.md))
+(none — the fog is cleared; all remaining work is ticketed)
 
 ## Out of scope
 
