@@ -11,12 +11,14 @@ vi.mock('../public/js/api.js', () => ({
 // conversation.js keeps conversation state at module level, so each test gets a
 // fresh module instance — otherwise a prior test's history triggers the
 // confirm-new-session banner, which awaits a click that never comes.
-let startWeeklySession, startCoachChat;
+let startWeeklySession, startCoachChat, sendWeeklyMessage;
 
 beforeEach(async () => {
   vi.resetModules();
-  ({ startWeeklySession, startCoachChat } = await import('../public/js/conversation.js'));
+  ({ startWeeklySession, startCoachChat, sendWeeklyMessage } = await import('../public/js/conversation.js'));
   Element.prototype.scrollIntoView = vi.fn(); // not implemented in jsdom
+  vi.clearAllMocks();      // mock call lists persist across tests otherwise
+  localStorage.clear();    // so does jsdom localStorage
   buildDOM();
 });
 
@@ -72,5 +74,45 @@ describe('startCoachChat — end-chat button', () => {
     await startCoachChat(CHECKIN);
     expect(document.querySelector('#pushbackWrap .btn-confirm').getAttribute('onclick'))
       .toBe('endCoachChat()');
+  });
+});
+
+describe('startWeeklySession — session numbering', () => {
+  it('counts the session once the coach replies', async () => {
+    localStorage.removeItem('bh_weekly_session_count');
+    await startWeeklySession(CHECKIN, [], [], []);
+    expect(localStorage.getItem('bh_weekly_session_count')).toBe('1');
+  });
+
+  it('sends weeklySessionNumber 1 on a fresh start', async () => {
+    localStorage.removeItem('bh_weekly_session_count');
+    const { callWeekly } = await import('../public/js/api.js');
+    await startWeeklySession(CHECKIN, [], [], []);
+    expect(callWeekly.mock.calls[0][0].weeklySessionNumber).toBe(1);
+  });
+
+  it('does not count a session when the API call fails', async () => {
+    localStorage.removeItem('bh_weekly_session_count');
+    const { callWeekly } = await import('../public/js/api.js');
+    callWeekly.mockRejectedValueOnce(new Error('network down'));
+    await startWeeklySession(CHECKIN, [], [], []);
+    expect(localStorage.getItem('bh_weekly_session_count')).toBeNull();
+  });
+
+  it('does not count a session when the API key is missing', async () => {
+    localStorage.removeItem('bh_weekly_session_count');
+    document.getElementById('apiKey').value = '';
+    window.alert = vi.fn();
+    await startWeeklySession(CHECKIN, [], [], []);
+    expect(localStorage.getItem('bh_weekly_session_count')).toBeNull();
+  });
+
+  it('follow-up turns keep the same session number (arc never shifts mid-conversation)', async () => {
+    localStorage.removeItem('bh_weekly_session_count');
+    const { callWeekly } = await import('../public/js/api.js');
+    await startWeeklySession(CHECKIN, [], [], []);
+    document.getElementById('pushbackInput').value = 'Sounds good, but Tuesday is tricky.';
+    await sendWeeklyMessage(CHECKIN, [], [], []);
+    expect(callWeekly.mock.calls[1][0].weeklySessionNumber).toBe(1);
   });
 });

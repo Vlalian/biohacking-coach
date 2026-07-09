@@ -77,7 +77,7 @@ function detectPatterns(sessionHistory) {
 // This is the seam between "what the Coach reasons about" and "how it formats that
 // reasoning into a prompt". Tests can verify this function directly — no API call needed.
 function buildCoachContext(checkIn, sessionHistory = [], sessionContext = null) {
-  const { body, mental, energy, sleep, pulse, phase, personaName, sessionCount, commStyle, experienceLevel, language, equipment } = checkIn;
+  const { body, mental, energy, sleep, pulse, phase, personaName, sessionCount, commStyle, experienceLevel, language, equipment, raceTarget, onboarding } = checkIn;
   const patterns = detectPatterns(sessionHistory);
 
   const signalConflicts = [];
@@ -88,12 +88,38 @@ function buildCoachContext(checkIn, sessionHistory = [], sessionContext = null) 
   if (sleep <= 5 && energy >= 7) signalConflicts.push('sleep was short but energy feels high');
 
   return {
-    body, mental, energy, sleep, pulse, phase, personaName, sessionCount, commStyle, experienceLevel, language, equipment,
+    body, mental, energy, sleep, pulse, phase, personaName, sessionCount, commStyle, experienceLevel, language, equipment, raceTarget, onboarding,
     signalConflicts,
     hasConflict: signalConflicts.length > 0,
     patterns,
     sessionContext,
   };
+}
+
+// Lines describing what the athlete already answered in the onboarding questionnaire.
+// Injected into every Coach prompt so the Coach builds on these instead of re-asking.
+function buildOnboardingLines(onboarding) {
+  const lines = [];
+  if (!onboarding) return lines;
+  const join = v => Array.isArray(v) ? v.join(', ') : v;
+  if (onboarding.sportBackground)   lines.push(`Sport background: ${join(onboarding.sportBackground)}`);
+  if (onboarding.weeklyHours)       lines.push(`Current weekly training hours: ${onboarding.weeklyHours}`);
+  if (onboarding.motivation)        lines.push(`Motivation: ${onboarding.motivation}`);
+  if (onboarding.bestTime)          lines.push(`Best Ironman time: ${onboarding.bestTime}`);
+  if (onboarding.weakestDiscipline) lines.push(`Weakest discipline: ${join(onboarding.weakestDiscipline)}`);
+  if (onboarding.hasHumanCoach)     lines.push(`Works with a human coach: ${onboarding.hasHumanCoach}`);
+  if (onboarding.targetTime)        lines.push(`Target time: ${onboarding.targetTime}`);
+  if (onboarding.trackedMetrics)    lines.push(`Tracks metrics: ${join(onboarding.trackedMetrics)}`);
+  return lines;
+}
+
+function renderOnboardingBlock(onboarding) {
+  const lines = buildOnboardingLines(onboarding);
+  if (lines.length === 0) return '';
+  return `ONBOARDING PROFILE (athlete already answered these at onboarding — build on them, NEVER ask for this information again):
+${lines.map(l => `- ${l}`).join('\n')}
+
+`;
 }
 
 function buildEquipmentLines(equipment) {
@@ -115,10 +141,11 @@ function buildEquipmentLines(equipment) {
 function renderPrompt(ctx) {
   const {
     body, mental, energy, sleep, pulse, phase, personaName, sessionCount, commStyle, experienceLevel,
-    signalConflicts, hasConflict, patterns, sessionContext, language, equipment,
+    signalConflicts, hasConflict, patterns, sessionContext, language, equipment, raceTarget, onboarding,
   } = ctx;
 
   const equipmentLines = buildEquipmentLines(equipment);
+  const onboardingBlock = renderOnboardingBlock(onboarding);
 
   return `You are Coach in a luxury Ironman training app.${languageDirective(language)} Knowledgeable peer — not prescription machine, not assistant.
 
@@ -137,9 +164,9 @@ Name conflict before recommending: "Mixed signals — [conflict]. Best read: [re
 ${equipmentLines.map(l => `- ${l}`).join('\n')}
 Reference kit when relevant. Never list unprompted.
 
-` : ''}STATE: phase=${phase} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${personaName ? ` athlete=${personaName}` : ''}
+` : ''}STATE: phase=${phase} sessions=${sessionCount} xp=${experienceLevel || 'intermediate'} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${personaName ? ` athlete=${personaName}` : ''}${raceTarget ? ` race=${raceTarget}` : ''}
 
-${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${patterns.length > 0 ? `PATTERNS (don't surface directly):
+${onboardingBlock}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${patterns.length > 0 ? `PATTERNS (don't surface directly):
 Athlete has: ${patterns.join('; ')}.
 Shape recommendations and questions silently. Athlete should feel known, not observed.
 
@@ -174,17 +201,18 @@ function formatWeekFeedback(weekFeedback) {
 }
 
 function buildWeeklyContext(checkIn, weekFeedback = [], sessionHistory = [], skippedSessions = [], unavailableDates = []) {
-  const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget } = checkIn;
+  const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding } = checkIn;
   const patterns        = detectPatterns(sessionHistory);
   const feedbackSummary = formatWeekFeedback(weekFeedback);
   const today           = new Date().toISOString().slice(0, 10);
-  return { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget };
+  return { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding };
 }
 
 function renderWeeklyPrompt(ctx) {
-  const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget } = ctx;
-  const equipmentLines = buildEquipmentLines(equipment);
-  const hasEquipment   = equipmentLines.length > 0;
+  const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding } = ctx;
+  const equipmentLines  = buildEquipmentLines(equipment);
+  const hasEquipment    = equipmentLines.length > 0;
+  const onboardingBlock = renderOnboardingBlock(onboarding);
 
   return `You are Coach in a luxury Ironman training app.${languageDirective(language)} Weekly Session — primary structured conversation, once per week.
 
@@ -193,11 +221,11 @@ POSTURE: Confident, evidence-led, direct. Hold position unless athlete gives rea
 ${weeklySessionNumber === 1 ? `ARC — SESSION 1:
 
 P1 WELCOME:
-First meeting. Know athlete only from onboarding (name, race, experience, background). No history, feedback, patterns. Don't fake familiarity.
-Don't ask "how did the week feel" — no week yet. Welcome briefly, ask ONE physical state question: "Where are you right now physically — in rhythm or starting from scratch?" Wait.
+First meeting. Know athlete only from onboarding (name, race, experience, and the ONBOARDING PROFILE below). No history, feedback, patterns. Don't fake familiarity.
+Don't ask "how did the week feel" — no week yet. Don't re-ask anything in ONBOARDING PROFILE — reference it as known. Welcome briefly, ask ONE physical state question: "Where are you right now physically — in rhythm or starting from scratch?" Wait.
 
 P2 INTAKE:
-Acknowledge what they say. Factor in injuries, gaps, fitness level. Brief.
+Acknowledge what they say. Factor in injuries, gaps, fitness level. Brief. Only ask what onboarding didn't cover.
 
 P3 FIRST WEEK:
 Propose week. Explain reasoning more than usual — first exposure to coaching style. Name what you're building toward, not just sessions. "This is my starting point — does it fit?" Adjust. Close → see FIRST SESSION ORIENTATION.${raceTarget ? `\nRACE: ${raceTarget} — name once in P3 close (e.g. "This is your start toward [race]"). Not as greeting.` : ''}` : weeklySessionNumber === 2 ? `ARC — SESSION 2:
@@ -239,7 +267,7 @@ ${(() => {
     : '';
 })()}${fixedConstraints && fixedConstraints.length > 0 ? `NO TRAINING ON: ${fixedConstraints.join(', ')}\n\n` : ''}${hasEquipment ? `EQUIPMENT:\n${equipmentLines.join('\n')}\n\n` : ''}STATE: phase=${phase} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm xp=${experienceLevel || 'intermediate'}${personaName ? ` athlete=${personaName}` : ''}
 
-${feedbackSummary ? `LAST WEEK FEEDBACK:\n${feedbackSummary}\n\n` : 'No feedback this week — use check-in signals and self-assessment.\n\n'}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${patterns.length > 0 ? `PATTERNS: ${patterns.join('; ')}.
+${onboardingBlock}${feedbackSummary ? `LAST WEEK FEEDBACK:\n${feedbackSummary}\n\n` : 'No feedback this week — use check-in signals and self-assessment.\n\n'}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${patterns.length > 0 ? `PATTERNS: ${patterns.join('; ')}.
 Strong (multi-week) → surface ONE in P2: "I've noticed X, pretty common at this stage. Does that match?" Not data/criticism. Max one per session.
 Weak → shape plan silently.\n\n` : ''}${skippedSessions && skippedSessions.length > 0 ? `SKIPPED: ${skippedSessions.map(s => `${s.date} ${s.sessionType}`).join(', ')} — mention naturally in review, no justification needed.\n\n` : ''}${unavailableDates && unavailableDates.length > 0 ? `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.\n\n` : ''}CONSTRAINT SIGNALS (append on last line, stripped by app):
 Specific date blocked → [UNAVAILABLE:YYYY-MM-DD]
@@ -263,10 +291,11 @@ EQUIPMENT NUDGE: One sentence in planning — don't know what they train on; Equ
 }
 
 function buildChatPrompt(checkIn) {
-  const { body, mental, energy, sleep, pulse, phase, commStyle, experienceLevel, sessionCount, language, fixedConstraints, equipment } = checkIn;
+  const { body, mental, energy, sleep, pulse, phase, commStyle, experienceLevel, sessionCount, language, fixedConstraints, equipment, raceTarget, onboarding } = checkIn;
   const today = new Date().toISOString().slice(0, 10);
 
-  const equipmentLines = buildEquipmentLines(equipment);
+  const equipmentLines  = buildEquipmentLines(equipment);
+  const onboardingBlock = renderOnboardingBlock(onboarding);
 
   return `You are Coach in a luxury Ironman training app.${languageDirective(language)} Coach Chat — on-demand open conversation. Training, nutrition, equipment, race logistics, mindset, injury, anything.
 
@@ -275,9 +304,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: ${today}
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${fixedConstraints && fixedConstraints.length > 0 ? ` no-train=${fixedConstraints.join(', ')}` : ''}${equipmentLines.length > 0 ? `\n\nEQUIPMENT:\n${equipmentLines.join('\n')}` : ''}
+phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${raceTarget ? ` race=${raceTarget}` : ''}${fixedConstraints && fixedConstraints.length > 0 ? ` no-train=${fixedConstraints.join(', ')}` : ''}${equipmentLines.length > 0 ? `\n\nEQUIPMENT:\n${equipmentLines.join('\n')}` : ''}
 
-CONSTRAINT SIGNALS (append on last line, stripped by app):
+${onboardingBlock}CONSTRAINT SIGNALS (append on last line, stripped by app):
 Specific date blocked → [UNAVAILABLE:YYYY-MM-DD]
 Ambiguous ("can't do Tuesdays") → ask "just this week or every week?" first
 Every [day] → [FIXED_CONSTRAINT_ADD:DayName]
@@ -509,4 +538,4 @@ if (require.main === module) {
     console.log('Enter your Anthropic API key in the UI');
   });
 }
-module.exports = { buildWeeklyContext, renderWeeklyPrompt };
+module.exports = { buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt };

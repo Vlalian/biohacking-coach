@@ -16,6 +16,7 @@ let sessionHistory  = [];
 
 // ── Read form ─────────────────────────────────────────────────────────────────
 function readCheckIn() {
+  const profile = getOnboardedProfile() || {};
   return {
     body:         parseInt(document.getElementById('body').value),
     mental:       parseInt(document.getElementById('mental').value),
@@ -31,7 +32,17 @@ function readCheckIn() {
     fixedConstraints:  window._fixedConstraints || [],
     experienceLevel,
     equipment:   JSON.parse(localStorage.getItem('bh_equipment') || '{}'),
-    raceTarget:  getOnboardedProfile()?.raceTarget || '',
+    raceTarget:  profile.raceTarget || '',
+    onboarding: {
+      sportBackground:   profile.sportBackground   || null,
+      weeklyHours:       profile.weeklyHours       || null,
+      motivation:        profile.motivation        || null,
+      bestTime:          profile.bestTime          || null,
+      weakestDiscipline: profile.weakestDiscipline || null,
+      hasHumanCoach:     profile.hasHumanCoach     || null,
+      targetTime:        profile.targetTime        || null,
+      trackedMetrics:    profile.trackedMetrics    || null,
+    },
   };
 }
 
@@ -255,11 +266,11 @@ window.updateReflectiveBadge = (count) => {
 
 window.sendPushback = () => sendPushback(readCheckIn(), sessionHistory);
 
-window.startWeeklySession = () => {
-  const wsNum = parseInt(localStorage.getItem('bh_weekly_session_count') || '0') + 1;
-  localStorage.setItem('bh_weekly_session_count', String(wsNum));
-  startWeeklySession({ ...readCheckIn(), weeklySessionNumber: wsNum }, sessionHistory, getLastWeekFeedback(), getSkippedSessions());
-};
+// Session numbering lives in conversation.js — it only counts sessions that
+// actually start (first Coach reply received), so cancelled or failed starts
+// don't advance the arc.
+window.startWeeklySession = () =>
+  startWeeklySession(readCheckIn(), sessionHistory, getLastWeekFeedback(), getSkippedSessions());
 window.sendWeeklyMessage  = () => sendWeeklyMessage(readCheckIn(), sessionHistory, getLastWeekFeedback(), getSkippedSessions());
 window.agreeWeeklyPlan    = agreeWeeklyPlan;
 

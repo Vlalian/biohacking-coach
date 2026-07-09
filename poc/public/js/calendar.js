@@ -23,107 +23,6 @@ const SESSION_DEFAULTS = {
 };
 
 
-// d = 1-indexed day offset from start of displayed month.
-// d > daysInMonth = next-month overflow day (d - daysInMonth = day number in next month).
-// skipped: true marks a past session as skipped rather than completed.
-const SESSION_DATA = {
-  'Early Base Building': [
-    { d: 1,  type: 'Endurance' }, { d: 3,  type: 'Recovery'  }, { d: 5,  type: 'Endurance' },
-    { d: 8,  type: 'Endurance' }, { d: 10, type: 'Recovery'  }, { d: 12, type: 'Endurance' },
-    { d: 14, type: 'Recovery',  skipped: true },
-    { d: 15, type: 'Endurance' }, { d: 17, type: 'Recovery'  }, { d: 19, type: 'Endurance' },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Endurance' }, { d: 24, type: 'Recovery'  }, { d: 26, type: 'Endurance' },
-    { d: 28, type: 'Recovery'  }, { d: 29, type: 'Endurance' },
-    { d: 31, type: 'Recovery'  }, { d: 33, type: 'Endurance' },
-  ],
-  'Base Building': [
-    { d: 1,  type: 'Endurance' }, { d: 2,  type: 'Tempo'     }, { d: 4,  type: 'Endurance' },
-    { d: 5,  type: 'Recovery'  }, { d: 6,  type: 'Endurance' },
-    { d: 8,  type: 'Endurance' }, { d: 9,  type: 'Tempo'     }, { d: 11, type: 'Endurance' },
-    { d: 12, type: 'Recovery'  }, { d: 13, type: 'Endurance', skipped: true },
-    { d: 15, type: 'Endurance' }, { d: 16, type: 'Tempo',     skipped: true },
-    { d: 18, type: 'Endurance' }, { d: 19, type: 'Recovery'  }, { d: 20, type: 'Endurance' },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Endurance' }, { d: 23, type: 'Tempo'     }, { d: 25, type: 'Endurance' },
-    { d: 26, type: 'Recovery'  }, { d: 27, type: 'Endurance' },
-    { d: 29, type: 'Endurance' }, { d: 30, type: 'Tempo'     },
-    { d: 32, type: 'Endurance' }, { d: 33, type: 'Recovery'  }, { d: 34, type: 'Endurance' },
-  ],
-  'Build Phase': [
-    { d: 1,  type: 'Endurance' }, { d: 2,  type: 'Intensity' }, { d: 3,  type: 'Recovery' },
-    { d: 4,  type: 'Tempo'     }, { d: 5,  type: 'Endurance' }, { d: 6,  type: 'Intensity' },
-    { d: 8,  type: 'Endurance' }, { d: 9,  type: 'Intensity' }, { d: 10, type: 'Recovery' },
-    { d: 11, type: 'Tempo'     }, { d: 12, type: 'Endurance' }, { d: 13, type: 'Intensity', skipped: true },
-    { d: 15, type: 'Endurance' }, { d: 16, type: 'Intensity' }, { d: 17, type: 'Recovery' },
-    { d: 18, type: 'Tempo'     }, { d: 19, type: 'Endurance' }, { d: 20, type: 'Intensity', skipped: true },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Endurance' }, { d: 23, type: 'Intensity' }, { d: 24, type: 'Recovery' },
-    { d: 25, type: 'Tempo'     }, { d: 26, type: 'Endurance' }, { d: 27, type: 'Intensity' },
-    { d: 29, type: 'Endurance' }, { d: 30, type: 'Recovery'  },
-    { d: 31, type: 'Intensity' }, { d: 32, type: 'Endurance' }, { d: 33, type: 'Recovery' },
-    { d: 34, type: 'Tempo'     }, { d: 35, type: 'Endurance' },
-  ],
-  'Peak Phase': [
-    { d: 1,  type: 'Tempo'     }, { d: 2,  type: 'Intensity' }, { d: 3,  type: 'Recovery' },
-    { d: 4,  type: 'Intensity' }, { d: 5,  type: 'Endurance' }, { d: 6,  type: 'Tempo'    },
-    { d: 8,  type: 'Intensity' }, { d: 9,  type: 'Tempo'     }, { d: 10, type: 'Recovery' },
-    { d: 11, type: 'Intensity' }, { d: 12, type: 'Endurance' }, { d: 13, type: 'Tempo',    skipped: true },
-    { d: 15, type: 'Intensity' }, { d: 16, type: 'Tempo'     }, { d: 17, type: 'Recovery' },
-    { d: 18, type: 'Intensity' }, { d: 19, type: 'Endurance' }, { d: 20, type: 'Intensity', skipped: true },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Intensity' }, { d: 23, type: 'Tempo'     }, { d: 24, type: 'Recovery' },
-    { d: 25, type: 'Intensity' }, { d: 26, type: 'Endurance' }, { d: 27, type: 'Tempo'    },
-    { d: 29, type: 'Intensity' }, { d: 30, type: 'Recovery'  },
-    { d: 31, type: 'Tempo'     }, { d: 32, type: 'Intensity' }, { d: 33, type: 'Endurance' },
-    { d: 34, type: 'Recovery'  }, { d: 35, type: 'Intensity' },
-  ],
-  'Taper': [
-    { d: 1,  type: 'Endurance' }, { d: 3,  type: 'Recovery'  }, { d: 4,  type: 'Tempo'    },
-    { d: 5,  type: 'Endurance' },
-    { d: 8,  type: 'Recovery'  }, { d: 9,  type: 'Endurance' }, { d: 10, type: 'Tempo'    },
-    { d: 12, type: 'Recovery'  },
-    { d: 15, type: 'Endurance' }, { d: 16, type: 'Tempo',     skipped: true }, { d: 17, type: 'Recovery' },
-    { d: 19, type: 'Endurance' },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Endurance' }, { d: 23, type: 'Recovery'  }, { d: 24, type: 'Tempo'    },
-    { d: 26, type: 'Endurance' },
-    { d: 29, type: 'Recovery'  }, { d: 30, type: 'Endurance' },
-    { d: 32, type: 'Recovery'  }, { d: 33, type: 'Endurance' }, { d: 35, type: 'Recovery' },
-  ],
-  'Recovery': [
-    { d: 1,  type: 'Recovery'  }, { d: 3,  type: 'Recovery'  }, { d: 5,  type: 'Endurance' },
-    { d: 7,  type: 'Recovery',  skipped: true },
-    { d: 8,  type: 'Recovery'  }, { d: 10, type: 'Recovery'  }, { d: 12, type: 'Endurance' },
-    { d: 14, type: 'Recovery'  },
-    { d: 15, type: 'Recovery'  }, { d: 17, type: 'Recovery'  }, { d: 19, type: 'Endurance' },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Recovery'  }, { d: 24, type: 'Recovery'  }, { d: 26, type: 'Endurance' },
-    { d: 28, type: 'Recovery'  }, { d: 29, type: 'Recovery'  },
-    { d: 31, type: 'Recovery'  }, { d: 33, type: 'Recovery'  }, { d: 35, type: 'Endurance' },
-  ],
-  'Return to Training': [
-    { d: 2,  type: 'Recovery'  }, { d: 4,  type: 'Endurance' }, { d: 6,  type: 'Recovery' },
-    { d: 9,  type: 'Endurance' }, { d: 11, type: 'Recovery'  }, { d: 13, type: 'Endurance', skipped: true },
-    { d: 15, type: 'Recovery'  }, { d: 16, type: 'Endurance' }, { d: 18, type: 'Recovery' },
-    { d: 20, type: 'Endurance' }, { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Endurance' }, { d: 24, type: 'Recovery'  }, { d: 26, type: 'Endurance' },
-    { d: 28, type: 'Recovery'  }, { d: 29, type: 'Endurance' },
-    { d: 31, type: 'Recovery'  }, { d: 33, type: 'Endurance' }, { d: 35, type: 'Recovery' },
-  ],
-  'Off-season Maintenance': [
-    { d: 1,  type: 'Endurance' }, { d: 3,  type: 'Recovery'  }, { d: 5,  type: 'Endurance' },
-    { d: 7,  type: 'Recovery'  },
-    { d: 8,  type: 'Endurance' }, { d: 10, type: 'Tempo',     skipped: true }, { d: 12, type: 'Endurance' },
-    { d: 14, type: 'Recovery'  },
-    { d: 15, type: 'Endurance' }, { d: 17, type: 'Tempo'     }, { d: 19, type: 'Endurance' },
-    { d: 21, type: 'Recovery'  },
-    { d: 22, type: 'Endurance' }, { d: 24, type: 'Tempo'     }, { d: 26, type: 'Endurance' },
-    { d: 28, type: 'Recovery'  }, { d: 29, type: 'Endurance' },
-    { d: 31, type: 'Endurance' }, { d: 33, type: 'Recovery'  }, { d: 35, type: 'Endurance' },
-  ],
-};
-
 const EMOJIS = ['😫', '😕', '😐', '🙂', '😄'];
 
 const DOW_OFFSETS = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4, Saturday: 5, Sunday: 6 };
@@ -206,13 +105,6 @@ export function navigateMonth(delta) {
   render();
 }
 
-function getSessions(phase, offset) {
-  const all = SESSION_DATA[phase] || [];
-  if (offset >= 3) return all.filter(s => s.type === 'Endurance' && s.d % 3 === 1);
-  if (offset >= 2) return all.filter(s => s.type === 'Endurance' || s.type === 'Recovery');
-  return all;
-}
-
 function makeDot(session, isPast, dateKey) {
   const dot           = document.createElement('div');
   const color         = SESSION_COLORS[session.type] || '#888';
@@ -224,8 +116,9 @@ function makeDot(session, isPast, dateKey) {
     dot.className = 'session-dot unavailable';
   } else if (session.skipped || lsSkipped) {
     dot.className = 'session-dot muted';
-  } else if (hasRated || (session.fromPlan && isPast)) {
-    // Solid only for rated sessions OR plan sessions that are now in the past
+  } else if (hasRated) {
+    // Solid = the athlete actually rated the session. A past plan day without
+    // feedback stays an outline — it was planned, not proven done.
     dot.className = 'session-dot solid';
     dot.style.background = color;
   } else {
@@ -309,8 +202,8 @@ function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
     const canSkip       = !isSkipped && !isUnavailable && !hasRated;
     const canMarkUnavail = !isUnavailable && !isSkipped && !hasRated && !isPast;
 
-    const status = isUnavailable ? 'unavailable' : isSkipped ? 'skipped' : (isPast || hasRated ? 'completed' : 'planned');
-    const label  = isUnavailable ? t('statusUnavailable') : isSkipped ? t('statusSkipped') : (isPast || hasRated ? t('statusCompleted') : t('statusPlanned'));
+    const status = isUnavailable ? 'unavailable' : isSkipped ? 'skipped' : (hasRated ? 'completed' : 'planned');
+    const label  = isUnavailable ? t('statusUnavailable') : isSkipped ? t('statusSkipped') : (hasRated ? t('statusCompleted') : t('statusPlanned'));
 
     const sessionCtx = { type: session.type, dayLabel, duration: defs.duration, zone: defs.zone, note: defs.note, status };
 
@@ -362,7 +255,6 @@ export function render() {
   const todayMonth = now.getMonth();
   const todayDate  = now.getDate();
   const todayObj   = new Date(todayYear, todayMonth, todayDate);
-  const cutoff31   = new Date(todayYear, todayMonth, todayDate + 31); // JS auto-handles month wrap
 
   const display     = new Date(todayYear, todayMonth + displayOffset, 1);
   const year        = display.getFullYear();
@@ -376,12 +268,6 @@ export function render() {
   const fixedConstraints = profile?.fixedConstraints || window._fixedConstraints || [];
   const planningDay      = (profile?.weeklySessionDay && profile.weeklySessionDay !== 'Flexible')
                            ? profile.weeklySessionDay : null;
-
-  const hasWeeklyPlan = !!localStorage.getItem('bh_week_plan');
-  // Phase template — only used for future days within 31-day window
-  const sessions = hasWeeklyPlan ? getSessions(phase, displayOffset) : [];
-  const sessionMap = {};
-  sessions.forEach(s => { sessionMap[s.d] = s; });
 
   const weekPlanMap = buildWeekPlanMap(getWeekPlan());
   const historyMap  = getHistoryMap();
@@ -407,7 +293,6 @@ export function render() {
     const dateKey   = getDateKey(dateObj);
     const isPast    = dateObj < todayObj;
     const isToday   = dateObj.getTime() === todayObj.getTime();
-    const isW31     = !isPast && dateObj <= cutoff31;
     const dayOfWeek = DOW_FULL[dateObj.getDay()];
     const isFxConst = fixedConstraints.includes(dayOfWeek);
     const isPlanDay = !!(planningDay && dayOfWeek === planningDay && !isPast);
@@ -420,18 +305,9 @@ export function render() {
     num.textContent = d;
     cell.appendChild(num);
 
-    // Session precedence:
-    // Past → agreed plan (current week past days first, then history)
-    // Today/future within 31d → agreed plan, then phase template
-    // Beyond 31d → agreed plan only
-    let session;
-    if (isPast) {
-      session = weekPlanMap[dateKey] || historyMap[dateKey] || null;
-    } else if (isW31) {
-      session = weekPlanMap[dateKey] || (hasWeeklyPlan ? sessionMap[d] : null);
-    } else {
-      session = weekPlanMap[dateKey] || null;
-    }
+    // Session precedence: agreed plan first, then (for past days) plan history.
+    // Only real sessions appear — nothing is invented for empty days.
+    const session = weekPlanMap[dateKey] || (isPast ? historyMap[dateKey] : null) || null;
 
     decorateCell(cell, session, dateKey, isPast, isFxConst, isPlanDay, startOffset + d - 1);
     grid.appendChild(cell);
@@ -445,7 +321,6 @@ export function render() {
       cell.className  = 'cal-day overflow-month';
       const dateObj   = new Date(year, month + 1, i);
       const dateKey   = getDateKey(dateObj);
-      const isW31     = dateObj <= cutoff31;
       const dayOfWeek = DOW_FULL[dateObj.getDay()];
       const isFxConst = fixedConstraints.includes(dayOfWeek);
       const isPlanDay = !!(planningDay && dayOfWeek === planningDay);
@@ -455,9 +330,7 @@ export function render() {
       num.textContent = i;
       cell.appendChild(num);
 
-      const session = isW31
-        ? (weekPlanMap[dateKey] || (hasWeeklyPlan ? sessionMap[daysInMonth + i] : null))
-        : (weekPlanMap[dateKey] || null);
+      const session = weekPlanMap[dateKey] || null;
 
       decorateCell(cell, session, dateKey, false, isFxConst, isPlanDay, startOffset + daysInMonth + i - 1);
       grid.appendChild(cell);

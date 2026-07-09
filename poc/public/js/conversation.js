@@ -52,6 +52,15 @@ let history       = [];
 let weeklyHistory = [];
 let chatHistory       = [];
 
+// Which Weekly Session this is (1 = first meeting). Set when a session actually
+// starts (first Coach reply received) and reused for every turn in that session,
+// so the prompt arc never shifts mid-conversation.
+let weeklySessionNumber = null;
+
+function nextWeeklySessionNumber() {
+  return parseInt(localStorage.getItem('bh_weekly_session_count') || '0', 10) + 1;
+}
+
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 
 function escapeHtml(str) {
@@ -239,9 +248,13 @@ export async function startWeeklySession(checkIn, sessionHistory, weekFeedback, 
     const firstMsg = { role: 'user', content: "Let's do our weekly session." };
     weeklyHistory.push(firstMsg);
 
-    const raw = await callWeekly(checkIn, weeklyHistory, apiKey, weekFeedback, sessionHistory, skippedSessions, getUnavailableDates());
+    const wsNum = nextWeeklySessionNumber();
+    const raw = await callWeekly({ ...checkIn, weeklySessionNumber: wsNum }, weeklyHistory, apiKey, weekFeedback, sessionHistory, skippedSessions, getUnavailableDates());
     loading.remove();
     if (raw) {
+      // Session actually started — only now does it count as held.
+      weeklySessionNumber = wsNum;
+      localStorage.setItem('bh_weekly_session_count', String(wsNum));
       const reply = processConstraintSignals(raw);
       weeklyHistory.push({ role: 'assistant', content: reply });
       addBubble(convo, 'coach', reply);
@@ -257,7 +270,10 @@ export async function startWeeklySession(checkIn, sessionHistory, weekFeedback, 
 }
 
 export async function sendWeeklyMessage(checkIn, sessionHistory, weekFeedback, skippedSessions = []) {
-  await sendTurn(weeklyHistory, apiKey => callWeekly(checkIn, weeklyHistory, apiKey, weekFeedback, sessionHistory, skippedSessions, getUnavailableDates()), {
+  // Same session number as the opening turn — falls back to the stored count
+  // (the number persisted when this session started).
+  const wsNum = weeklySessionNumber ?? Math.max(1, parseInt(localStorage.getItem('bh_weekly_session_count') || '1', 10));
+  await sendTurn(weeklyHistory, apiKey => callWeekly({ ...checkIn, weeklySessionNumber: wsNum }, weeklyHistory, apiKey, weekFeedback, sessionHistory, skippedSessions, getUnavailableDates()), {
     processSignals: true,
   });
 }
