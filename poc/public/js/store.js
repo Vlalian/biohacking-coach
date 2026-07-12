@@ -186,12 +186,23 @@ function lastSevenDaysCutoff() {
   return addDays(todayKey(), -7);
 }
 
+// Skipped sessions of the last 7 days as natural references: date + type,
+// with a 1-based position only when two same-type sessions share the day
+// (the only case where date + type is ambiguous).
 export function getSkippedSessions() {
-  const cutoff = lastSevenDaysCutoff();
-  return loadSessions()
+  const cutoff   = lastSevenDaysCutoff();
+  const sessions = loadSessions();
+  return sessions
     .filter(s => s.status === 'skipped' && s.dateKey >= cutoff)
     .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || a.dayOrder - b.dayOrder)
-    .map(s => ({ date: s.dateKey, sessionType: s.type }));
+    .map(s => {
+      const sameType = sessions
+        .filter(o => o.dateKey === s.dateKey && o.type === s.type)
+        .sort((a, b) => a.dayOrder - b.dayOrder);
+      const ref = { date: s.dateKey, sessionType: s.type };
+      if (sameType.length > 1) ref.position = sameType.findIndex(o => o.id === s.id) + 1;
+      return ref;
+    });
 }
 
 export function getLastWeekFeedback() {

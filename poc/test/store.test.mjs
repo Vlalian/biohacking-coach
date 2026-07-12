@@ -360,3 +360,21 @@ describe('day-keyed adapters (single-session semantics)', () => {
     expect(getUnavailableDates()).toEqual([todayKey]);
   });
 });
+
+describe('getSkippedSessions — same-type Double position qualifier', () => {
+  it('adds position when two same-type sessions share the day', () => {
+    initStore();
+    const first = createSession({ dateKey: todayKey, type: 'Endurance', origin: 'coach' });
+    createSession({ dateKey: todayKey, type: 'Endurance', origin: 'coach' });
+    updateSession(first.id, { status: 'skipped' });
+    expect(getSkippedSessions()).toEqual([{ date: todayKey, sessionType: 'Endurance', position: 1 }]);
+  });
+
+  it('omits position for a different-type Double', () => {
+    initStore();
+    const first = createSession({ dateKey: todayKey, type: 'Endurance', origin: 'coach' });
+    createSession({ dateKey: todayKey, type: 'Recovery', origin: 'coach' });
+    updateSession(first.id, { status: 'skipped' });
+    expect(getSkippedSessions()).toEqual([{ date: todayKey, sessionType: 'Endurance' }]);
+  });
+});

@@ -185,6 +185,23 @@ Walk through rationale in context of ${phase} phase.
 }
 
 
+const ORDINALS = ['', '1st', '2nd', '3rd'];
+function ordinal(n) {
+  return ORDINALS[n] || `${n}th`;
+}
+
+// Natural references for skipped sessions: date + type, with the position
+// qualifier ("2nd Endurance") only when two same-type sessions share a day.
+// Entity ids never appear in prompts.
+function formatSkippedSessions(skippedSessions) {
+  if (!skippedSessions || skippedSessions.length === 0) return null;
+  return skippedSessions.map(s => {
+    const dayName   = new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' });
+    const qualifier = s.position ? `${ordinal(s.position)} ` : '';
+    return `${dayName} ${s.date}: ${qualifier}${s.sessionType}, skipped`;
+  }).join('; ');
+}
+
 function formatWeekFeedback(weekFeedback) {
   if (!weekFeedback || weekFeedback.length === 0) return null;
   const EMOJI = ['😫', '😕', '😐', '🙂', '😄'];
@@ -269,7 +286,9 @@ ${(() => {
 
 ${onboardingBlock}${feedbackSummary ? `LAST WEEK FEEDBACK:\n${feedbackSummary}\n\n` : 'No feedback this week — use check-in signals and self-assessment.\n\n'}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${patterns.length > 0 ? `PATTERNS: ${patterns.join('; ')}.
 Strong (multi-week) → surface ONE in P2: "I've noticed X, pretty common at this stage. Does that match?" Not data/criticism. Max one per session.
-Weak → shape plan silently.\n\n` : ''}${skippedSessions && skippedSessions.length > 0 ? `SKIPPED: ${skippedSessions.map(s => `${s.date} ${s.sessionType}`).join(', ')} — mention naturally in review, no justification needed.\n\n` : ''}${unavailableDates && unavailableDates.length > 0 ? `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.\n\n` : ''}CONSTRAINT SIGNALS (append on last line, stripped by app):
+Weak → shape plan silently.\n\n` : ''}${skippedSessions && skippedSessions.length > 0 ? `SKIPPED: ${formatSkippedSessions(skippedSessions)} — mention naturally in review, no justification needed.\n\n` : ''}${unavailableDates && unavailableDates.length > 0 ? `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.\n\n` : ''}DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.
+
+CONSTRAINT SIGNALS (append on last line, stripped by app):
 Specific date blocked → [UNAVAILABLE:YYYY-MM-DD]
 Ambiguous ("can't do Tuesdays") → ask "just this week or every week?" first
 Every [day] → [FIXED_CONSTRAINT_ADD:DayName]
@@ -388,7 +407,30 @@ app.post('/api/weekly', async (req, res) => {
 });
 
 
-// Extracts a structured 7-day plan from the completed Weekly Session conversation
+// Extraction prompt for the agreed week plan. A day may hold two sessions:
+// the Coach returns two objects with the same dayOfWeek, and their array
+// order defines their order within the day (no index field).
+function buildPlanExtractionPrompt(conversationText) {
+  return `Extract the week training plan agreed in this coaching conversation.
+
+CONVERSATION:
+${conversationText}
+
+Return ONLY a valid JSON array of session objects covering Monday through Sunday, in day order:
+[
+  { "dayOfWeek": "Monday", "type": "Endurance"|"Intensity"|"Tempo"|"Recovery"|"Rest", "duration": "e.g. 60 min" or null, "zone": "e.g. Z2" or null, "note": "one coaching line" or null },
+  ...
+]
+
+Rules:
+- Every day Monday through Sunday appears at least once.
+- If a day is a rest day or not mentioned, use type "Rest" with null for duration, zone, and note.
+- If two sessions were agreed for one day, return two objects with the same dayOfWeek — their array order is their order within the day. Never invent a second session that wasn't agreed.
+- Only use these exact type values: Endurance, Intensity, Tempo, Recovery, Rest.
+- Return JSON only — no preamble, no code fences.`;
+}
+
+// Extracts the structured week plan from the completed Weekly Session conversation
 app.post('/api/weekly/plan', async (req, res) => {
   try {
     const { weeklyHistory, apiKey } = req.body;
@@ -398,21 +440,7 @@ app.post('/api/weekly/plan', async (req, res) => {
       .map(m => `${m.role === 'assistant' ? 'Coach' : 'Athlete'}: ${m.content}`)
       .join('\n');
 
-    const prompt = `Extract the week training plan agreed in this coaching conversation.
-
-CONVERSATION:
-${conversationText}
-
-Return ONLY a valid JSON array of exactly 7 objects, one per day Monday through Sunday, in order:
-[
-  { "dayOfWeek": "Monday", "type": "Endurance"|"Intensity"|"Tempo"|"Recovery"|"Rest", "duration": "e.g. 60 min" or null, "zone": "e.g. Z2" or null, "note": "one coaching line" or null },
-  ...
-]
-
-Rules:
-- If a day is a rest day or not mentioned, use type "Rest" with null for duration, zone, and note.
-- Only use these exact type values: Endurance, Intensity, Tempo, Recovery, Rest.
-- Return JSON only — no preamble, no code fences.`;
+    const prompt = buildPlanExtractionPrompt(conversationText);
 
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
@@ -538,4 +566,4 @@ if (require.main === module) {
     console.log('Enter your Anthropic API key in the UI');
   });
 }
-module.exports = { buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt };
+module.exports = { buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt, buildPlanExtractionPrompt, formatSkippedSessions };

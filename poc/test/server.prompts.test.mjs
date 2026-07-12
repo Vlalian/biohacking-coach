@@ -108,3 +108,54 @@ describe('onboarding answers reach every Coach prompt', () => {
     expect(renderWeeklyPrompt(ctx)).not.toContain('athlete already answered these at onboarding');
   });
 });
+
+// ── Multi-session days (Weekly plan lands in the session store) ───────────────
+
+const { buildPlanExtractionPrompt, formatSkippedSessions } = require('../server.js');
+
+describe('plan extraction prompt — multi-session days', () => {
+  it('allows two session objects with the same dayOfWeek', () => {
+    const prompt = buildPlanExtractionPrompt('Coach: two on Monday.');
+    expect(prompt).toContain('same dayOfWeek');
+    expect(prompt).not.toContain('exactly 7 objects');
+  });
+
+  it('defines dayOrder by array order, not an index field', () => {
+    const prompt = buildPlanExtractionPrompt('Coach: plan.');
+    expect(prompt.toLowerCase()).toContain('array order');
+    expect(prompt).not.toContain('sessionIndex');
+  });
+});
+
+describe('weekly prompt — planning-phase Doubles instruction', () => {
+  it('tells the Coach it may propose two sessions on one day, never forced', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).toContain('two sessions on one day');
+    expect(prompt).toContain('Never forced');
+  });
+});
+
+describe('skippedSessions — natural references', () => {
+  it('renders date + type without ids', () => {
+    const line = formatSkippedSessions([{ date: '2026-07-15', sessionType: 'Recovery' }]);
+    expect(line).toContain('2026-07-15');
+    expect(line).toContain('Recovery');
+    expect(line).toContain('skipped');
+    expect(line).not.toMatch(/s_[a-z0-9]/);
+  });
+
+  it('adds the position qualifier only when provided (same-type Doubles)', () => {
+    const withPos = formatSkippedSessions([{ date: '2026-07-15', sessionType: 'Endurance', position: 2 }]);
+    expect(withPos).toContain('2nd Endurance');
+    const noPos = formatSkippedSessions([{ date: '2026-07-15', sessionType: 'Endurance' }]);
+    expect(noPos).not.toContain('1st');
+    expect(noPos).not.toContain('2nd');
+  });
+
+  it('reaches the weekly prompt through renderWeeklyPrompt', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [],
+      [{ date: '2026-07-15', sessionType: 'Endurance', position: 2 }], []);
+    expect(renderWeeklyPrompt(ctx)).toContain('2nd Endurance');
+  });
+});
