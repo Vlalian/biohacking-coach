@@ -25,6 +25,9 @@ const STRINGS = {
     migrationTitle:     'Training data upgraded',
     migrationSummary:   'Your training history was carried over: {sessions} sessions, {ratings} ratings, {skips} skipped, {unavailable} unavailable.',
     migrationDismiss:   'Got it',
+    // Expanded Week
+    expandAll:          'Expand all',
+    collapseAll:        'Collapse all',
     // Calendar expansion
     markUnavailable:    'Mark as unavailable',
     undoUnavailable:    'Undo',
@@ -244,6 +247,9 @@ const STRINGS = {
     migrationTitle:     'Træningsdata opgraderet',
     migrationSummary:   'Din træningshistorik er overført: {sessions} sessioner, {ratings} vurderinger, {skips} sprunget over, {unavailable} utilgængelige.',
     migrationDismiss:   'Forstået',
+    // Expanded Week
+    expandAll:          'Udvid alle',
+    collapseAll:        'Luk alle',
     // Calendar expansion
     markUnavailable:    'Marker som utilgængelig',
     undoUnavailable:    'Fortryd',

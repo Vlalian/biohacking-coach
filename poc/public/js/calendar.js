@@ -1,5 +1,5 @@
 import { showFeedbackPrompt } from './feedback.js';
-import { sessionsForDay, updateSession, SESSION_DEFAULTS } from './store.js';
+import { sessionsForDay, updateSession, weekStartOf, SESSION_DEFAULTS } from './store.js';
 import { t } from './translations.js';
 
 const DOW_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -13,56 +13,34 @@ const SESSION_COLORS = {
   Intensity: '#e05555',
   Tempo:     '#c9a96e',
   Recovery:  '#6db36d',
+  Rest:      '#8a8a8a',
 };
 
 function getDateKey(dateObj) {
   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
 }
 
-// The day's rendered session: first non-Rest entity by dayOrder.
-// (Rest entities exist in the store but render in a later slice.)
-function primarySession(dateKey) {
-  return sessionsForDay(dateKey).find(s => s.type !== 'Rest') || null;
-}
+// ── View state ────────────────────────────────────────────────────────────────
 
-function decorateCell(cell, session, dateKey, isPast, isFxConst, isPlanDay, gridIdx) {
-  if (session) {
-    cell.classList.add('has-session');
-    cell.appendChild(makeDot(session));
-  }
-  if (isFxConst) {
-    const dot = document.createElement('div');
-    dot.className = 'session-dot constraint';
-    cell.appendChild(dot);
-    if (!session) cell.classList.add('has-session');
-  }
-  if (isPlanDay) {
-    const dot = document.createElement('div');
-    dot.className = 'session-dot planning';
-    cell.appendChild(dot);
-    if (!session && !isFxConst) cell.classList.add('has-session');
-  }
-  if (session || isPlanDay) {
-    cell.onclick = () => expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cell);
-  }
-}
-
-let expandedDateKey = null;
-let selectedCell    = null;
-let displayOffset   = 0;
-
-function selectCell(cell) {
-  if (selectedCell) selectedCell.classList.remove('selected');
-  selectedCell = cell;
-  if (cell) cell.classList.add('selected');
-}
+const expandedWeeks = new Set(); // week-start dateKeys of Expanded Weeks
+let visibleWeekKeys = [];        // week keys of the displayed month grid
+let expandedPanelKey = null;     // inline detail panel identity (bridge until the Session Drawer)
+let displayOffset    = 0;
 
 export function navigateMonth(delta) {
   displayOffset += delta;
-  expandedDateKey = null;
-  selectCell(null);
+  expandedPanelKey = null;
   render();
 }
+
+function toggleWeek(weekKey) {
+  if (expandedWeeks.has(weekKey)) expandedWeeks.delete(weekKey);
+  else expandedWeeks.add(weekKey);
+  expandedPanelKey = null;
+  render();
+}
+
+// ── Collapsed day dots (reconciled multi-dot spec) ────────────────────────────
 
 function makeDot(session) {
   const dot   = document.createElement('div');
@@ -83,6 +61,77 @@ function makeDot(session) {
   return dot;
 }
 
+// Up to 5 dots side by side; six or more sessions show 4 dots + a +N overflow.
+function renderDots(cell, sessions) {
+  if (sessions.length === 0) return;
+  const row = document.createElement('div');
+  row.className = 'dots-row';
+  const shown = sessions.length > 5 ? sessions.slice(0, 4) : sessions;
+  shown.forEach(s => row.appendChild(makeDot(s)));
+  if (sessions.length > 5) {
+    const more = document.createElement('span');
+    more.className   = 'dot-overflow';
+    more.textContent = `+${sessions.length - 4}`;
+    row.appendChild(more);
+  }
+  cell.appendChild(row);
+}
+
+// ── Session Blocks (Expanded Week) ────────────────────────────────────────────
+
+function makeBlock(session, slot, anchorEl) {
+  const block = document.createElement('div');
+  const color = SESSION_COLORS[session.type] || '#888';
+
+  // Style mirrors the dot status language; Rest renders as a muted block.
+  let style = 'outline';
+  if (session.type === 'Rest' || session.status === 'skipped' || session.status === 'unavailable') style = 'muted';
+  else if (session.status === 'completed') style = 'solid';
+
+  block.className = `session-block ${style}`;
+  block.dataset.sessionId = session.id;
+  block.textContent = session.type === 'Rest' || !session.duration
+    ? session.type
+    : `${session.type} · ${session.duration}`;
+
+  if (style === 'outline') { block.style.borderColor = color; block.style.color = color; }
+  if (style === 'solid')   { block.style.background = color; block.style.color = '#0a0a0a'; }
+
+  block.addEventListener('click', e => {
+    e.stopPropagation();
+    openDayPanel(slot.dateKey, session, slot.isPast === true, false, anchorEl);
+  });
+  return block;
+}
+
+function buildWeekExpansion(rowSlots) {
+  const exp = document.createElement('div');
+  exp.className = 'week-expansion';
+  rowSlots.forEach(slot => {
+    const col = document.createElement('div');
+    col.className = 'week-exp-day';
+    if (!slot.blank) {
+      col.dataset.day = slot.dateKey;
+      if (slot.isPlanDay) {
+        const marker = document.createElement('div');
+        marker.className   = 'session-block planning-marker';
+        marker.textContent = t('planningDayTitle');
+        marker.addEventListener('click', e => {
+          e.stopPropagation();
+          openDayPanel(slot.dateKey, null, false, true, exp);
+        });
+        col.appendChild(marker);
+      }
+      sessionsForDay(slot.dateKey).forEach(s => col.appendChild(makeBlock(s, slot, exp)));
+    }
+    exp.appendChild(col);
+  });
+  return exp;
+}
+
+// ── Inline day panel ──────────────────────────────────────────────────────────
+// Temporary bridge: session detail and actions until the Session Drawer lands.
+
 function buildFeedbackDisplay(fb) {
   if (!fb) return '';
   const body    = fb.body ? `RPE ${fb.body}` : '—';
@@ -100,16 +149,14 @@ function buildFeedbackDisplay(fb) {
     ${comment}`;
 }
 
-// dateKey: 'YYYY-MM-DD', session: entity or null, gridIdx: 0-based grid position
-function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
+function openDayPanel(dateKey, session, isPast, isPlanDay, anchorEl) {
   document.querySelector('.cal-expansion')?.remove();
-  if (expandedDateKey === dateKey) {
-    expandedDateKey = null;
-    selectCell(null);
+  const panelKey = `${dateKey}:${session?.id || 'plan'}`;
+  if (expandedPanelKey === panelKey) {
+    expandedPanelKey = null;
     return;
   }
-  expandedDateKey = dateKey;
-  selectCell(cellEl);
+  expandedPanelKey = panelKey;
 
   const dateObj  = new Date(dateKey + 'T00:00:00');
   const dayLabel = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -128,8 +175,7 @@ function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
     exp.appendChild(planDiv);
     planDiv.querySelector('.btn-plan-week').addEventListener('click', () => {
       document.querySelector('.cal-expansion')?.remove();
-      expandedDateKey = null;
-      selectCell(null);
+      expandedPanelKey = null;
       window.switchView('coach');
       setTimeout(() => window.startWeeklySession(), 50);
     });
@@ -189,12 +235,61 @@ function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
     if (isUnavailable)  sessionDiv.querySelector('.btn-undo-unavail').addEventListener('click',() => { updateSession(session.id, { status: 'planned' }); render(); });
   }
 
-  // ── Position after the row ──────────────────────────────────────────────────
-  const rowIdx    = Math.floor(gridIdx / 7);
-  const targetPos = (rowIdx + 1) * 7 - 1;
-  const siblings  = [...document.getElementById('calGrid').children].slice(7);
-  const anchor    = siblings[Math.min(targetPos, siblings.length - 1)];
-  anchor.after(exp);
+  anchorEl.after(exp);
+}
+
+// ── Month grid ────────────────────────────────────────────────────────────────
+
+function makeCell(slot, weekKey) {
+  const cell = document.createElement('div');
+  if (slot.blank) {
+    cell.className = 'cal-day';
+    cell.onclick   = () => toggleWeek(weekKey);
+    return cell;
+  }
+
+  cell.className = 'cal-day'
+    + (slot.isToday ? ' today' : '')
+    + (slot.isPast ? ' past' : '')
+    + (slot.overflow ? ' overflow-month' : '');
+  cell.dataset.date = slot.dateKey;
+
+  const num = document.createElement('div');
+  num.className   = 'cal-day-num';
+  num.textContent = slot.dayNum;
+  cell.appendChild(num);
+
+  // Only real sessions appear — entities from the store, nothing invented.
+  const sessions = sessionsForDay(slot.dateKey);
+  renderDots(cell, sessions);
+
+  if (slot.isFxConst) {
+    const dot = document.createElement('div');
+    dot.className = 'session-dot constraint';
+    cell.appendChild(dot);
+  }
+  if (slot.isPlanDay) {
+    const dot = document.createElement('div');
+    dot.className = 'session-dot planning';
+    cell.appendChild(dot);
+  }
+  if (sessions.length > 0 || slot.isFxConst || slot.isPlanDay) cell.classList.add('has-session');
+
+  cell.onclick = () => toggleWeek(weekKey);
+  return cell;
+}
+
+function wireExpandAll() {
+  const btn = document.getElementById('tpExpandAll');
+  if (!btn) return;
+  const allOpen = visibleWeekKeys.length > 0 && visibleWeekKeys.every(k => expandedWeeks.has(k));
+  btn.textContent = allOpen ? t('collapseAll') : t('expandAll');
+  btn.onclick = () => {
+    const open = visibleWeekKeys.every(k => expandedWeeks.has(k));
+    visibleWeekKeys.forEach(k => open ? expandedWeeks.delete(k) : expandedWeeks.add(k));
+    expandedPanelKey = null;
+    render();
+  };
 }
 
 export function render() {
@@ -203,26 +298,23 @@ export function render() {
   if (narEl) narEl.textContent = (t('phaseNarratives') || {})[phase] || '';
 
   const now        = new Date();
-  const todayYear  = now.getFullYear();
-  const todayMonth = now.getMonth();
-  const todayDate  = now.getDate();
-  const todayObj   = new Date(todayYear, todayMonth, todayDate);
+  const todayObj   = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const display     = new Date(todayYear, todayMonth + displayOffset, 1);
+  const display     = new Date(now.getFullYear(), now.getMonth() + displayOffset, 1);
   const year        = display.getFullYear();
   const month       = display.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const startOffset = (display.getDay() + 6) % 7;
 
-  document.getElementById('tp-month-label').textContent = t('months')[month] + ' ' + year;
+  const monthLabel = document.getElementById('tp-month-label');
+  if (monthLabel) monthLabel.textContent = t('months')[month] + ' ' + year;
 
   const profile          = getProfile();
   const fixedConstraints = profile?.fixedConstraints || window._fixedConstraints || [];
   const planningDay      = (profile?.weeklySessionDay && profile.weeklySessionDay !== 'Flexible')
                            ? profile.weeklySessionDay : null;
 
-  expandedDateKey = null;
-  selectedCell    = null;
+  expandedPanelKey = null;
   const grid = document.getElementById('calGrid');
   grid.innerHTML = '';
 
@@ -233,55 +325,38 @@ export function render() {
     grid.appendChild(h);
   });
 
+  // Every grid slot carries its real date; leading previous-month slots stay
+  // visually blank but keep their week membership for row toggling.
+  const slots = [];
   for (let i = 0; i < startOffset; i++) {
-    grid.appendChild(Object.assign(document.createElement('div'), { className: 'cal-day' }));
+    slots.push({ dateKey: getDateKey(new Date(year, month, 1 - (startOffset - i))), blank: true });
   }
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateObj   = new Date(year, month, d);
+  const pushDay = (dateObj, dayNum, overflow) => {
     const dateKey   = getDateKey(dateObj);
-    const isPast    = dateObj < todayObj;
-    const isToday   = dateObj.getTime() === todayObj.getTime();
     const dayOfWeek = DOW_FULL[dateObj.getDay()];
-    const isFxConst = fixedConstraints.includes(dayOfWeek);
-    const isPlanDay = !!(planningDay && dayOfWeek === planningDay && !isPast);
-
-    const cell = document.createElement('div');
-    cell.className = 'cal-day' + (isToday ? ' today' : '') + (isPast ? ' past' : '');
-
-    const num = document.createElement('div');
-    num.className   = 'cal-day-num';
-    num.textContent = d;
-    cell.appendChild(num);
-
-    // Only real sessions appear — entities from the store, nothing invented.
-    const session = primarySession(dateKey);
-
-    decorateCell(cell, session, dateKey, isPast, isFxConst, isPlanDay, startOffset + d - 1);
-    grid.appendChild(cell);
-  }
-
-  const total     = startOffset + daysInMonth;
-  const remainder = total % 7;
+    const isPast    = dateObj < todayObj;
+    slots.push({
+      dateKey, dayNum, overflow,
+      isPast,
+      isToday:   dateObj.getTime() === todayObj.getTime(),
+      isFxConst: fixedConstraints.includes(dayOfWeek),
+      isPlanDay: !!(planningDay && dayOfWeek === planningDay && !isPast),
+    });
+  };
+  for (let d = 1; d <= daysInMonth; d++) pushDay(new Date(year, month, d), d, false);
+  const remainder = slots.length % 7;
   if (remainder > 0) {
-    for (let i = 1; i <= 7 - remainder; i++) {
-      const cell      = document.createElement('div');
-      cell.className  = 'cal-day overflow-month';
-      const dateObj   = new Date(year, month + 1, i);
-      const dateKey   = getDateKey(dateObj);
-      const dayOfWeek = DOW_FULL[dateObj.getDay()];
-      const isFxConst = fixedConstraints.includes(dayOfWeek);
-      const isPlanDay = !!(planningDay && dayOfWeek === planningDay);
-
-      const num = document.createElement('div');
-      num.className   = 'cal-day-num';
-      num.textContent = i;
-      cell.appendChild(num);
-
-      const session = primarySession(dateKey);
-
-      decorateCell(cell, session, dateKey, false, isFxConst, isPlanDay, startOffset + daysInMonth + i - 1);
-      grid.appendChild(cell);
-    }
+    for (let i = 1; i <= 7 - remainder; i++) pushDay(new Date(year, month + 1, i), i, true);
   }
+
+  visibleWeekKeys = [];
+  for (let r = 0; r < slots.length / 7; r++) {
+    const rowSlots = slots.slice(r * 7, r * 7 + 7);
+    const weekKey  = weekStartOf(rowSlots[0].dateKey);
+    visibleWeekKeys.push(weekKey);
+    rowSlots.forEach(slot => grid.appendChild(makeCell(slot, weekKey)));
+    if (expandedWeeks.has(weekKey)) grid.appendChild(buildWeekExpansion(rowSlots));
+  }
+
+  wireExpandAll();
 }

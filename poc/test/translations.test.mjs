@@ -18,3 +18,8 @@ describe('kept keys still return correct strings', () => {
   it('endCoachChat',    () => expect(t('endCoachChat')).toBe('End chat'));
   it('sendResponse',    () => expect(t('sendResponse')).toBe('Send Response'));
 });
+
+describe('Expanded Week keys', () => {
+  it('expandAll',   () => expect(t('expandAll')).toBe('Expand all'));
+  it('collapseAll', () => expect(t('collapseAll')).toBe('Collapse all'));
+});

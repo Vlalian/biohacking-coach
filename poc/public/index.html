@@ -434,6 +434,53 @@
     .session-dot.planning       { background: #c9a96e; width: 5px; height: 5px; opacity: 0.75; }
     .session-dot.constraint     { background: transparent; border: 1.5px solid #553333; width: 5px; height: 5px; opacity: 0.6; }
     .cal-day.selected           { outline: 1px solid var(--accent); border-radius: 4px; }
+    /* Multi-dot collapsed days */
+    .dots-row { display: flex; gap: 3px; justify-content: center; align-items: center; }
+    .dots-row .session-dot { margin: 4px 0 0; flex: none; }
+    .dot-overflow { font-size: 8px; font-weight: 600; color: var(--muted); margin-top: 4px; line-height: 1; }
+    /* Expanded Week */
+    .cal-day { cursor: pointer; }
+    .week-expansion {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 3px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      padding: 8px 3px;
+      margin: 2px 0 4px;
+      animation: expIn 0.16s ease;
+    }
+    .week-exp-day { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; min-height: 34px; }
+    .session-block {
+      font-size: 9px;
+      font-weight: 600;
+      border-radius: 5px;
+      padding: 5px 3px;
+      text-align: center;
+      line-height: 1.3;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      background: transparent;
+      word-break: break-word;
+      transition: filter 0.12s;
+    }
+    .session-block:hover { filter: brightness(1.25); }
+    .session-block.muted { background: #232323; color: #6b6b6b; }
+    .session-block.planning-marker { border: 1.5px dashed #c9a96e; color: #c9a96e; }
+    .tp-expand-all {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      padding: 5px 10px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tp-expand-all:hover { color: var(--text); border-color: var(--muted); }
     /* Glossary accordion */
     .gloss-section summary { list-style:none; cursor:pointer; padding:14px 0; display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:600; color:var(--text); border-bottom:1px solid var(--border); user-select:none; }
     .gloss-section summary::after { content:'›'; font-size:18px; color:var(--muted); transform:rotate(90deg); transition:transform 0.2s; }
@@ -655,6 +702,7 @@
       <button class="tp-arrow" onclick="navigateMonth(-1)">&#8249;</button>
       <span id="tp-month-label"></span>
       <button class="tp-arrow" onclick="navigateMonth(1)">&#8250;</button>
+      <button id="tpExpandAll" class="tp-expand-all"></button>
     </div>
     <div class="card">
       <div id="calGrid" class="cal-grid"></div>
