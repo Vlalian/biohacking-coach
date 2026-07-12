@@ -1,6 +1,8 @@
-Status: ready-for-agent
+Status: closed-superseded
 
 # 01 — Data model: session array per day
+
+> **Closed-superseded (2026-07-12)** by [Sessions become entities](../../draggable-calendar/issues/01-sessions-become-entities.md): multiple entities sharing a `dateKey` *are* the array; feedback links by entity id; `dayOrder` replaces `sessionIndex`, whose compound-key scheme never shipped (no compat shim needed — the one-shot migration covers existing data). Absorbed into that issue: the multi-session `SESSION_DEFAULTS` phase templates and `getLastWeekFeedback` reading from the store. Ruling: [Map Multiple Sessions Per Day onto the entity store](../../calendar-implementation-route/issues/02-map-multi-session-day-onto-the-entity-store.md).
 
 ## Parent
 

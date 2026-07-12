@@ -1,5 +1,5 @@
-Status: round 2 pending — sections 9 (Draggable Calendar) and 10 (Coached Mode) added 2026-07-05, not yet asked
-Last updated: 2026-07-05. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. See PRD.md → Further Notes for full summary.
+Status: round 2 ASKED 2026-07-12 — sections 9, 10, 11 answered by the athlete expert in a live in-chat grill session (in Danish). Full findings summary in PRD.md → Further Notes. Coach-side questions the athlete couldn't answer are compiled in section 12 for the newly recruited human coach (round 3, not yet asked).
+Last updated: 2026-07-12. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. See PRD.md → Further Notes for full summary.
 
 # Domain Expert Interview Guide
 
@@ -140,6 +140,50 @@ Where the current build has taken a design position, it's noted as **→ Current
 - **→ Current position:** No in-app chat between athlete and human coach in the first version — you already have each other's numbers. Is the app missing the point, or is that correct scope?
 - What would make your coach adopt an app like this for their whole roster — and what would make them refuse outright? (Pricing model? Fear of being replaced? Liability?)
 - Does your coach have athletes they coach remotely? How does this concept change for a coach who never sees the athlete in person?
+
+## 11. Numbers the Coach Can Trust — training metrics and nutrition (round 2 — new feature)
+
+**What this drives in the app:** We're planning a calculations module that gives the Coach real, deterministic math instead of letting the AI estimate numbers — training zones, weekly load, calorie and fueling targets. The AI is unreliable at arithmetic, so every number the Coach uses will come from tested formulas, and the Coach translates them into natural language (the athlete hears "a genuinely easy week" — never a raw score, consistent with how check-in data already works). The open questions are *which* formulas a real coach actually trusts, and how big the nutrition side needs to be.
+
+- Which numbers does your coach actually work with day to day? TrainingPeaks metrics like TSS/CTL/ATL (training load and fitness/fatigue curves), heart-rate zones, power zones, pace zones — what gets used, and what gets ignored as dashboard noise?
+- **→ Current position:** Since your coaching setup runs on TrainingPeaks, we plan to anchor on its metric family (Coggan's training-load model) so the app speaks the same language as the athlete's existing data. Right call, or does your coach quietly disagree with some of those metrics?
+- How are your training zones actually set — from a field test (FTP test, threshold run), from race data, from feel? How often are they re-tested, and who decides when?
+- Does your coach talk to you in zones and numbers, or does he translate them ("comfortably hard", "conversational pace")? Does that change with athlete experience?
+- **→ Current position:** For nutrition, we plan *fueling guidance* — daily calorie/macro targets from published formulas, and race-day fueling (carbs per hour on the bike, sodium, fluids) — but **not** food tracking (no food diary, no barcode scanning, no logging every meal). The reasoning: logging meals is high-friction and most serious athletes stop doing it. Is that the right scope, or does real Ironman coaching need to see what the athlete actually eats?
+- What nutrition questions do you actually ask your coach? Everyday diet, race-week carb loading, fueling during long sessions, weight management — where does an Ironman athlete genuinely need help?
+- Has fueling ever gone wrong for you in a race or long session? What would a coach have needed to know beforehand to prevent it?
+- Are there calculations you'd *never* want automated — numbers where a formula's answer would be worse than a coach's judgment call?
+
+## 12. Questions for the Head Coach (round 3 — real human coach, recruited 2026-07-12)
+
+**Who this is for:** An actual practicing coach — not an athlete. These are the questions the athlete expert explicitly couldn't answer ("jeg er ikke træner"), plus coach-side validation of decisions his answers challenged. Where the athlete gave an answer worth double-checking from the coach's chair, it's marked **→ Athlete said**.
+
+**Coaching workflow and tools**
+- Walk me through how you actually plan an athlete's week — tools, rhythm, time spent. Where does time go to logistics instead of coaching?
+- Which metrics do you personally work from — TrainingPeaks TSS/CTL/ATL, zones, raw session data, athlete feel reports? Which dashboard numbers are noise you ignore?
+- **→ Athlete said** he trains by pace, HR, watts, and feel, and doesn't know what his coach uses internally. Is the load math (TSS/CTL/ATL) genuinely coach-side machinery the athlete never needs to see?
+- How do you set and re-test an athlete's zones? The athlete described 10+20 min field tests for bike/run and CSS for swim, with re-tests triggered by "training feels too easy" rather than a calendar. Is that your protocol too?
+
+**Calendar authority (validating round-2 findings)**
+- **→ Athlete said** a missed session is simply missed — he'd never move a session into next week, because the week is the planning unit and catch-up belongs in the weekly conversation. As a coach: is "drag a session to next week" a feature any athlete needs, or should we drop it?
+- **→ Athlete said** rest-day protection should depend on level: age-groupers need one true rest day per week, elites often train light (swim, easy run) on recovery days, and mobility never counts as load. Does that match how you program rest? Where exactly is the line?
+- If you could see how an athlete rearranges their plan over months (always pushing intensity to weekends, always shifting rest days, always adding stretching after hard days) — what would those patterns tell you, and which are worth acting on?
+- Are there session-stacking or sequencing patterns dangerous enough (injury risk, not just suboptimal) that an app should intervene immediately rather than wait for the weekly review?
+- Who owns strength programming in your coaching — you or the athlete? **→ Athlete said** he owns it and his coach only suggests.
+
+**The AI-assistant layer (Coached Mode)**
+- If an AI had read every data point about your athlete — sessions, sleep, subjective body/mind ratings — what would you actually ask it? What would you never trust it on?
+- **→ Current position:** The AI drafts the week plan; you edit, add, or override at will, and the AI never touches your sessions without asking — it only *suggests*. Right division of labor, or would you rather author from scratch?
+- How would an AI second-guessing your programming land with you — useful analyst or backseat driver? What tone would make the difference?
+- **→ Athlete said** in-app chat with the human coach is a must ("everything gathered in one place"). Would you *want* athlete conversations inside a coaching app, or is that a channel you'd rather keep on your own terms?
+- Should a coach be able to edit or delete sessions the athlete added themselves (extra strength, stretching), or is view-and-comment the right boundary?
+- What would make you adopt an app like this for your whole roster — and what would make you refuse outright? (Pricing, fear of replacement, liability, data trust?)
+- Do you coach anyone fully remotely? What changes when you never see the athlete in person?
+
+**Numbers and nutrition (coach's chair)**
+- Are there calculations you'd never want automated — where a formula's answer is worse than your judgment? (Return-to-training after illness, load progression after injury…) **→ Athlete said** "formulas are good, but a coach often knows more with a feeling."
+- What are your actual fueling rules of thumb — grams of carbs per hour by session length/intensity, race-week carb loading, fluid/sodium? Which published guidelines do you trust?
+- Do you need to see what an athlete actually eats (food logging), or is it enough to give targets and trust them? **→ Athlete said** both: computed targets as the core, optional logging to verify.
 
 ## Notes for the conversation
 

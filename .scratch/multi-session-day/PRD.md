@@ -2,6 +2,8 @@ Status: ready-for-agent
 
 # PRD — Multiple Sessions Per Day
 
+> **Superseded (2026-07-09/12, [Calendar Implementation Route](../calendar-implementation-route/MAP.md)):** the Draggable Calendar's entity store is the single data-model foundation — the `sessionIndex`/compound-key scheme below never ships. Issues 01–03 are closed-superseded (their surviving material absorbed into Draggable Calendar issues 01–03); [issue 04](issues/04-weekly-session-multi-session-prompt.md) survives, rewritten onto entities, at route position 2. This document remains as background only.
+
 ## Problem Statement
 
 Ironman training commonly involves multiple sessions on the same day — a morning swim followed by an afternoon run, a strength session alongside a recovery ride, or a brick workout (bike + run back to back). The current POC models exactly one session per day. This means the calendar, the feedback prompt, and the weekly plan extraction all silently discard the multi-discipline reality of Ironman training. An athlete looking at the Training Plan sees a single dot where their day may actually contain two or three distinct efforts.

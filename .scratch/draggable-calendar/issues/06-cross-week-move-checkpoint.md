@@ -1,6 +1,8 @@
-Status: ready-for-agent
+Status: closed-superseded
 
 # 06 — Cross-Week Move + Move Checkpoint
+
+> **Closed (2026-07-12) — retired before build.** The round-2 athlete expert has never moved a session to another week: a missed session is simply missed, the week is the planning unit, and catch-up belongs in the Weekly Session. Per the standing decision his answers are project truth until V1, so Session Moves are within-week only — a drop toward another week bounces (see [Within-week Session Move](04-within-week-session-move.md)) — the Move Checkpoint is never built, and [The Coach sees the moves](08-coach-sees-the-moves.md) simplifies accordingly. Cross-Week Move, Move Checkpoint, and the checkpoint's Pushback Rationale capture are retired in CONTEXT.md. Revisit only if the human coach disagrees at V1 (interview guide §12). Ruling: [Sequence the unified backlog](../../calendar-implementation-route/issues/05-sequence-the-unified-backlog.md).
 
 ## Parent
 

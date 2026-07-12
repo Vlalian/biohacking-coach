@@ -2,7 +2,9 @@ Status: ready-for-agent
 
 # PRD — Draggable Calendar
 
-Grounded in `CONTEXT.md` (Expanded Week, Session Block, Session Move, Cross-Week Move, Move Checkpoint, Displacement, Double, Athlete Session, Session Drawer) and `docs/adr/0002-calendar-authority-model.md`. Use those terms exactly.
+Grounded in `CONTEXT.md` (Expanded Week, Session Block, Session Move, Displacement, Double, Athlete Session, Session Drawer) and `docs/adr/0002-calendar-authority-model.md`. Use those terms exactly.
+
+> **Route amendments (2026-07-12, [Calendar Implementation Route](../calendar-implementation-route/MAP.md)):** Cross-Week Move + Move Checkpoint are retired — issue 06 is closed, Session Moves are within-week only, and drops toward another week bounce. Retro-logging opens to every past day. The canonical entity gains `dayOrder`; the collapsed-day dot cap is 5 (+N at six or more). Rest-dominance and Strength copy follow the round-2 expert rulings recorded in the issues. Final route order: 01 → [Weekly plan lands in the session store](../multi-session-day/issues/04-weekly-session-multi-session-prompt.md) → 02 → 03 → 04 → 05 → 07 → 08. Details: [Sequence the unified backlog](../calendar-implementation-route/issues/05-sequence-the-unified-backlog.md). Where this note and the body below disagree, the note wins.
 
 ## Problem Statement
 

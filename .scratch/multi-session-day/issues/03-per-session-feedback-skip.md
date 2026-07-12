@@ -1,6 +1,8 @@
-Status: ready-for-agent
+Status: closed-superseded
 
 # 03 — Per-session feedback and skip marking
+
+> **Closed-superseded (2026-07-12)**: skip becomes `status: 'skipped'` on the entity, feedback becomes the embedded `feedback` field, and per-session actions are Session Drawer actions. Absorbed into [Session Drawer replaces inline expansion](../../draggable-calendar/issues/03-session-drawer.md): the feedback modal header names the specific session's type; the "Rate this session" banner button targets today's first session by `dayOrder`. The `skippedSessions` payload moved to [Weekly plan lands in the session store](04-weekly-session-multi-session-prompt.md) with natural references. Ruling: [Map Multiple Sessions Per Day onto the entity store](../../calendar-implementation-route/issues/02-map-multi-session-day-onto-the-entity-store.md).
 
 ## Parent
 

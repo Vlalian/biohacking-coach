@@ -1,6 +1,8 @@
-Status: ready-for-agent
+Status: closed-superseded
 
 # 02 — Calendar: multiple dots and multi-session day expansion
+
+> **Closed-superseded (2026-07-12), split absorption**: the inline day-expansion half dies with [Session Drawer replaces inline expansion](../../draggable-calendar/issues/03-session-drawer.md) (per-session actions live in the Drawer, opened per Session Block); the multi-dot half is absorbed into [Expanded Week, read-only](../../draggable-calendar/issues/02-expanded-week-read-only.md) as the reconciled dot spec (up to 5 dots, `+N` overflow at six or more, per-session styling, day complete = all rated). Ruling: [Map Multiple Sessions Per Day onto the entity store](../../calendar-implementation-route/issues/02-map-multi-session-day-onto-the-entity-store.md).
 
 ## Parent
 
