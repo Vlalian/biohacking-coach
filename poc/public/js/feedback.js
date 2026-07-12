@@ -1,6 +1,5 @@
 import { t } from './translations.js';
-
-const LS_KEY = 'bh_session_feedback';
+import { sessionsForDay, rateDay } from './store.js';
 
 function rpeLabel(val) {
   return (t('rpeLabels') || [])[val] || '';
@@ -23,57 +22,9 @@ function rpeText(val, active) {
   return active ? `hsl(${h},75%,63%)` : `hsl(${h},38%,42%)`;
 }
 
-function loadAll() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); }
-  catch { return {}; }
-}
-
-export function getSessionFeedback(dateKey) {
-  return loadAll()[dateKey] || null;
-}
-
-export function setSessionFeedback(dateKey, data) {
-  const all = loadAll();
-  all[dateKey] = data;
-  localStorage.setItem(LS_KEY, JSON.stringify(all));
-}
-
-export function deleteSessionFeedback(dateKey) {
-  const all = loadAll();
-  delete all[dateKey];
-  localStorage.setItem(LS_KEY, JSON.stringify(all));
-}
-
-// Returns upcoming unavailable dates (today onwards) as ISO date strings.
-export function getUnavailableDates() {
-  const all   = loadAll();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Object.entries(all)
-    .filter(([dateKey, data]) => data.unavailable === true && new Date(dateKey) >= today)
-    .map(([dateKey]) => dateKey);
-}
-
-function getEntriesSince(days) {
-  const all    = loadAll();
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  cutoff.setHours(0, 0, 0, 0);
-  return Object.entries(all)
-    .filter(([dateKey]) => new Date(dateKey) >= cutoff)
-    .sort(([a], [b]) => a.localeCompare(b));
-}
-
-// Returns skipped sessions from the last 7 days as [{ date, sessionType }].
-export function getSkippedSessions() {
-  return getEntriesSince(7)
-    .filter(([, data]) => data.skipped === true)
-    .map(([dateKey, data]) => ({ date: dateKey, sessionType: data.sessionType || '' }));
-}
-
-// Returns session feedback entries from the last 7 days, sorted oldest-first.
-export function getLastWeekFeedback() {
-  return getEntriesSince(7).map(([dateKey, data]) => ({ dateKey, ...data }));
+// The day's rateable session — feedback data lives on session entities now.
+function primarySession(dateKey) {
+  return sessionsForDay(dateKey).find(s => s.type !== 'Rest') || null;
 }
 
 function rpeRow(dim, label, existing) {
@@ -94,7 +45,7 @@ function rpeRow(dim, label, existing) {
 export function showFeedbackPrompt(dateKey, sessionType, onSubmit, { preload = true } = {}) {
   document.getElementById('bh-feedback-modal')?.remove();
 
-  const existing = preload ? (getSessionFeedback(dateKey) || {}) : {};
+  const existing = preload ? (primarySession(dateKey)?.feedback || {}) : {};
   const selected = { body: existing.body || 0, mind: existing.mind || 0 };
 
   const overlay = document.createElement('div');
@@ -156,8 +107,8 @@ export function showFeedbackPrompt(dateKey, sessionType, onSubmit, { preload = t
 
   modal.querySelector('#bh-fb-save').addEventListener('click', () => {
     const comment = modal.querySelector('#bh-feedback-comment').value.trim();
-    const data    = { body: selected.body, mind: selected.mind, comment, sessionType };
-    setSessionFeedback(dateKey, data);
+    const data    = { body: selected.body, mind: selected.mind, comment };
+    rateDay(dateKey, sessionType, data);
     overlay.remove();
     onSubmit(data);
   });

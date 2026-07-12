@@ -1,5 +1,5 @@
 import { callNegotiate, callWeekly, callWeeklyPlan, callChat } from './api.js';
-import { setSessionFeedback, getSessionFeedback, getUnavailableDates } from './feedback.js';
+import { markDateUnavailable, getUnavailableDates, agreeWeeklyPlan as storeAgreeWeeklyPlan, weekStartOf, getDateKey } from './store.js';
 import { t } from './translations.js';
 
 function updateProfile(mutate) {
@@ -17,9 +17,7 @@ function processConstraintSignals(reply) {
   // Single-instance unavailable date
   const unavailPattern = /\[UNAVAILABLE:(\d{4}-\d{2}-\d{2})\]/g;
   for (const m of [...reply.matchAll(unavailPattern)]) {
-    const dateKey  = m[1];
-    const existing = getSessionFeedback(dateKey) || {};
-    setSessionFeedback(dateKey, { ...existing, unavailable: true });
+    markDateUnavailable(m[1]);
   }
   // Fixed constraint add
   const addPattern = /\[FIXED_CONSTRAINT_ADD:([A-Za-z]+)\]/g;
@@ -278,15 +276,6 @@ export async function sendWeeklyMessage(checkIn, sessionHistory, weekFeedback, s
   });
 }
 
-function getWeekStartKey() {
-  const today    = new Date();
-  const day      = today.getDay(); // 0=Sun, 1=Mon
-  const daysBack = day === 0 ? 6 : day - 1;
-  const mon      = new Date(today);
-  mon.setDate(today.getDate() - daysBack);
-  return `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
-}
-
 export async function agreeWeeklyPlan() {
   document.getElementById('pushbackWrap').style.display  = 'none';
   document.getElementById('confirmedWrap').style.display = 'block';
@@ -295,40 +284,17 @@ export async function agreeWeeklyPlan() {
     `<div style="margin-top:10px;font-size:13px;color:var(--muted);">${t('weekPlanMessage')}</div>`;
   document.getElementById('confirmedWrap').scrollIntoView({ behavior: 'smooth' });
 
-  // Extract structured plan silently in the background and store for the calendar
+  // Extract the structured plan silently and land it in the session store.
+  // Past weeks need no archiving — their sessions are already entities.
   try {
     const apiKey = document.getElementById('apiKey').value.trim();
     if (apiKey && weeklyHistory.length > 0) {
       const sessions = await callWeeklyPlan(weeklyHistory, apiKey);
       if (sessions) {
-        // Archive the outgoing plan to history before overwriting
-        const existing = localStorage.getItem('bh_week_plan');
-        if (existing) {
-          try {
-            const old = JSON.parse(existing);
-            const weekStart = new Date(old.weekStart + 'T00:00:00');
-            const DOW_OFF = { Monday:0, Tuesday:1, Wednesday:2, Thursday:3, Friday:4, Saturday:5, Sunday:6 };
-            const planHistory = JSON.parse(localStorage.getItem('bh_plan_history') || '[]');
-            const existingKeys = new Set(planHistory.map(h => h.dateKey));
-            (old.sessions || []).forEach(s => {
-              if (s.type === 'Rest') return;
-              const off = DOW_OFF[s.dayOfWeek];
-              if (off === undefined) return;
-              const d = new Date(weekStart);
-              d.setDate(weekStart.getDate() + off);
-              const dk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-              if (!existingKeys.has(dk)) {
-                planHistory.push({ dateKey: dk, type: s.type, duration: s.duration, zone: s.zone, note: s.note });
-                existingKeys.add(dk);
-              }
-            });
-            localStorage.setItem('bh_plan_history', JSON.stringify(planHistory));
-          } catch { /* silent */ }
-        }
-        localStorage.setItem('bh_week_plan', JSON.stringify({ weekStart: getWeekStartKey(), sessions }));
+        storeAgreeWeeklyPlan(weekStartOf(getDateKey(new Date())), sessions);
       }
     }
-  } catch { /* silent — calendar falls back to phase-based sessions */ }
+  } catch { /* silent — the calendar keeps showing the stored sessions */ }
 }
 
 // ── Coach Chat ────────────────────────────────────────────────────────────────

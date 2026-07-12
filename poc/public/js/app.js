@@ -6,7 +6,8 @@ import {
   discussWithCoach, startWeeklySession, sendWeeklyMessage, agreeWeeklyPlan,
   startCoachChat, sendChatMessage, endCoachChat,
 } from './conversation.js';
-import { showFeedbackPrompt, getLastWeekFeedback, getSkippedSessions } from './feedback.js';
+import { showFeedbackPrompt } from './feedback.js';
+import { initStore, getMigrationReport, dismissMigrationReport, getLastWeekFeedback, getSkippedSessions } from './store.js';
 import { isOnboarded, getOnboardedProfile, beginOnboarding } from './onboarding.js';
 import { t, applyStaticTranslations } from './translations.js';
 
@@ -208,8 +209,39 @@ function restoreState() {
   if (countEl) updateReflectiveBadge(parseInt(countEl.value) || 0);
 }
 
+// ── Migration report notice ───────────────────────────────────────────────────
+// One-time dismissable notice with the carried-over counts, shown after the
+// one-shot entity-store migration until the athlete dismisses it.
+function showMigrationNoticeIfPending() {
+  const report = getMigrationReport();
+  if (!report || report.dismissed) return;
+
+  const summary = t('migrationSummary')
+    .replace('{sessions}',    report.sessions)
+    .replace('{ratings}',     report.ratings)
+    .replace('{skips}',       report.skips)
+    .replace('{unavailable}', report.unavailable);
+
+  const notice = document.createElement('div');
+  notice.id = 'bh-migration-notice';
+  notice.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:300;' +
+    'background:#1e1a12;border:1px solid #c9a96e;border-radius:10px;padding:14px 18px;max-width:420px;width:calc(100% - 40px);box-sizing:border-box;';
+  notice.innerHTML = `
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;color:#c9a96e;margin-bottom:6px;">${t('migrationTitle')}</div>
+    <div style="font-size:13px;color:#e2e2e2;line-height:1.5;">${summary}</div>
+    <button id="bh-migration-dismiss" style="margin-top:10px;padding:8px 14px;background:transparent;border:1px solid #282828;border-radius:6px;color:#a0a0a0;font-size:12px;font-weight:600;cursor:pointer;">${t('migrationDismiss')}</button>`;
+  document.body.appendChild(notice);
+  notice.querySelector('#bh-migration-dismiss').addEventListener('click', () => {
+    dismissMigrationReport();
+    notice.remove();
+  });
+}
+
 // ── Event wiring ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initStore();
+  showMigrationNoticeIfPending();
+
   if (!isOnboarded()) {
     beginOnboarding();
   } else {

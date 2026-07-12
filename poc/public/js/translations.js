@@ -21,6 +21,10 @@ const STRINGS = {
     // Planning day panel
     planningDayTitle:   'Weekly Planning',
     planningDayDesc:    'Your weekly planning day — time to review the coming week with your Coach.',
+    // Migration report notice
+    migrationTitle:     'Training data upgraded',
+    migrationSummary:   'Your training history was carried over: {sessions} sessions, {ratings} ratings, {skips} skipped, {unavailable} unavailable.',
+    migrationDismiss:   'Got it',
     // Calendar expansion
     markUnavailable:    'Mark as unavailable',
     undoUnavailable:    'Undo',
@@ -236,6 +240,10 @@ const STRINGS = {
     // Planning day panel
     planningDayTitle:   'Ugentlig planlægning',
     planningDayDesc:    'Din ugentlige plandag — tid til at gennemgå den kommende uge med din coach.',
+    // Migration report notice
+    migrationTitle:     'Træningsdata opgraderet',
+    migrationSummary:   'Din træningshistorik er overført: {sessions} sessioner, {ratings} vurderinger, {skips} sprunget over, {unavailable} utilgængelige.',
+    migrationDismiss:   'Forstået',
     // Calendar expansion
     markUnavailable:    'Marker som utilgængelig',
     undoUnavailable:    'Fortryd',

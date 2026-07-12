@@ -1,4 +1,5 @@
-import { getSessionFeedback, setSessionFeedback, deleteSessionFeedback, showFeedbackPrompt } from './feedback.js';
+import { showFeedbackPrompt } from './feedback.js';
+import { sessionsForDay, updateSession, SESSION_DEFAULTS } from './store.js';
 import { t } from './translations.js';
 
 const DOW_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -7,7 +8,6 @@ function getProfile() {
   try { return JSON.parse(localStorage.getItem('bh_athlete_profile') || 'null'); } catch { return null; }
 }
 
-
 const SESSION_COLORS = {
   Endurance: '#4a90d9',
   Intensity: '#e05555',
@@ -15,51 +15,20 @@ const SESSION_COLORS = {
   Recovery:  '#6db36d',
 };
 
-const SESSION_DEFAULTS = {
-  Endurance: { duration: '90 min', zone: 'Zone 2',   note: 'Aerobic foundation — keep HR conversational and resist the urge to push.' },
-  Intensity: { duration: '60 min', zone: 'Zone 4–5', note: 'Hit your intervals hard and recover fully between reps.' },
-  Tempo:     { duration: '75 min', zone: 'Zone 3',   note: 'Comfortably hard — you should be able to speak in short sentences.' },
-  Recovery:  { duration: '45 min', zone: 'Zone 1',   note: 'Easy movement to flush the legs. No ego today.' },
-};
-
-
-const EMOJIS = ['😫', '😕', '😐', '🙂', '😄'];
-
-const DOW_OFFSETS = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 4, Saturday: 5, Sunday: 6 };
-
-function getWeekPlan() {
-  try {
-    const stored = localStorage.getItem('bh_week_plan');
-    if (!stored) return null;
-    const plan = JSON.parse(stored);
-    return (plan.weekStart && plan.sessions) ? plan : null;
-  } catch { return null; }
-}
-
-// Returns a map of dateKey → plan session for the entire week (spans month boundaries).
-function buildWeekPlanMap(plan) {
-  if (!plan) return {};
-  const map = {};
-  const weekStart = new Date(plan.weekStart + 'T00:00:00');
-  plan.sessions.forEach(s => {
-    if (s.type === 'Rest') return;
-    const offset = DOW_OFFSETS[s.dayOfWeek];
-    if (offset === undefined) return;
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + offset);
-    map[getDateKey(date)] = { type: s.type, duration: s.duration, zone: s.zone, note: s.note, fromPlan: true };
-  });
-  return map;
-}
-
 function getDateKey(dateObj) {
   return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+}
+
+// The day's rendered session: first non-Rest entity by dayOrder.
+// (Rest entities exist in the store but render in a later slice.)
+function primarySession(dateKey) {
+  return sessionsForDay(dateKey).find(s => s.type !== 'Rest') || null;
 }
 
 function decorateCell(cell, session, dateKey, isPast, isFxConst, isPlanDay, gridIdx) {
   if (session) {
     cell.classList.add('has-session');
-    cell.appendChild(makeDot(session, isPast, dateKey));
+    cell.appendChild(makeDot(session));
   }
   if (isFxConst) {
     const dot = document.createElement('div');
@@ -76,16 +45,6 @@ function decorateCell(cell, session, dateKey, isPast, isFxConst, isPlanDay, grid
   if (session || isPlanDay) {
     cell.onclick = () => expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cell);
   }
-}
-
-// Returns a flat map of dateKey → session for all historically agreed plans.
-function getHistoryMap() {
-  try {
-    const history = JSON.parse(localStorage.getItem('bh_plan_history') || '[]');
-    const map = {};
-    history.forEach(s => { if (s.dateKey) map[s.dateKey] = { ...s, fromPlan: true }; });
-    return map;
-  } catch { return {}; }
 }
 
 let expandedDateKey = null;
@@ -105,18 +64,14 @@ export function navigateMonth(delta) {
   render();
 }
 
-function makeDot(session, isPast, dateKey) {
-  const dot           = document.createElement('div');
-  const color         = SESSION_COLORS[session.type] || '#888';
-  const fb            = dateKey ? getSessionFeedback(dateKey) : null;
-  const lsSkipped     = fb?.skipped === true;
-  const lsUnavailable = fb?.unavailable === true;
-  const hasRated      = fb !== null && !lsSkipped && !lsUnavailable;
-  if (lsUnavailable) {
+function makeDot(session) {
+  const dot   = document.createElement('div');
+  const color = SESSION_COLORS[session.type] || '#888';
+  if (session.status === 'unavailable') {
     dot.className = 'session-dot unavailable';
-  } else if (session.skipped || lsSkipped) {
+  } else if (session.status === 'skipped') {
     dot.className = 'session-dot muted';
-  } else if (hasRated) {
+  } else if (session.status === 'completed') {
     // Solid = the athlete actually rated the session. A past plan day without
     // feedback stays an outline — it was planned, not proven done.
     dot.className = 'session-dot solid';
@@ -129,7 +84,7 @@ function makeDot(session, isPast, dateKey) {
 }
 
 function buildFeedbackDisplay(fb) {
-  if (!fb || fb.skipped) return '';
+  if (!fb) return '';
   const body    = fb.body ? `RPE ${fb.body}` : '—';
   const mind    = fb.mind ? `RPE ${fb.mind}` : '—';
   const comment = fb.comment
@@ -145,7 +100,7 @@ function buildFeedbackDisplay(fb) {
     ${comment}`;
 }
 
-// dateKey: 'YYYY-MM-DD', session: may be null, gridIdx: 0-based position in the day grid
+// dateKey: 'YYYY-MM-DD', session: entity or null, gridIdx: 0-based grid position
 function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
   document.querySelector('.cal-expansion')?.remove();
   if (expandedDateKey === dateKey) {
@@ -190,19 +145,16 @@ function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
     };
     const color = SESSION_COLORS[session.type] || '#888';
 
-    const fb            = getSessionFeedback(dateKey);
-    const lsSkipped     = fb?.skipped === true;
-    const lsUnavailable = fb?.unavailable === true;
-    const hasRated      = fb !== null && !lsSkipped && !lsUnavailable;
-    const isSkipped     = session.skipped || lsSkipped;
-    const isUnavailable = lsUnavailable;
+    const isSkipped     = session.status === 'skipped';
+    const isUnavailable = session.status === 'unavailable';
+    const hasRated      = session.status === 'completed' && !!session.feedback;
     const todayKey      = getDateKey(new Date());
     const isToday       = dateKey === todayKey;
     const canRate       = !isSkipped && !isUnavailable && (isPast || isToday);
     const canSkip       = !isSkipped && !isUnavailable && !hasRated;
     const canMarkUnavail = !isUnavailable && !isSkipped && !hasRated && !isPast;
 
-    const status = isUnavailable ? 'unavailable' : isSkipped ? 'skipped' : (hasRated ? 'completed' : 'planned');
+    const status = session.status;
     const label  = isUnavailable ? t('statusUnavailable') : isSkipped ? t('statusSkipped') : (hasRated ? t('statusCompleted') : t('statusPlanned'));
 
     const sessionCtx = { type: session.type, dayLabel, duration: defs.duration, zone: defs.zone, note: defs.note, status };
@@ -216,13 +168,13 @@ function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
       </div>
       <div class="cal-exp-meta">${defs.duration} &nbsp;·&nbsp; ${defs.zone}</div>
       <p class="cal-exp-note">${defs.note}</p>
-      ${hasRated ? buildFeedbackDisplay(fb) : ''}
+      ${hasRated ? buildFeedbackDisplay(session.feedback) : ''}
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
         ${canRate       ? `<button class="btn-rate"        style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #282828;border-radius:6px;color:#6b6b6b;font-size:12px;font-weight:600;cursor:pointer;">${hasRated ? t('rateSessionEdit') : t('rateSession')}</button>` : ''}
         ${canSkip       ? `<button class="btn-skip"        style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #282828;border-radius:6px;color:#6b6b6b;font-size:12px;font-weight:600;cursor:pointer;">${t('markSkipped')}</button>` : ''}
-        ${lsSkipped     ? `<button class="btn-undo-skip"   style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #282828;border-radius:6px;color:#6b6b6b;font-size:12px;font-weight:600;cursor:pointer;">${t('undoSkipped')}</button>` : ''}
+        ${isSkipped     ? `<button class="btn-undo-skip"   style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #282828;border-radius:6px;color:#6b6b6b;font-size:12px;font-weight:600;cursor:pointer;">${t('undoSkipped')}</button>` : ''}
         ${canMarkUnavail? `<button class="btn-unavail"     style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #553333;border-radius:6px;color:#8b5050;font-size:12px;font-weight:600;cursor:pointer;">${t('markUnavailable')}</button>` : ''}
-        ${lsUnavailable ? `<button class="btn-undo-unavail"style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #282828;border-radius:6px;color:#6b6b6b;font-size:12px;font-weight:600;cursor:pointer;">${t('undoUnavailable')}</button>` : ''}
+        ${isUnavailable ? `<button class="btn-undo-unavail"style="flex:1;min-width:90px;padding:8px 0;background:transparent;border:1px solid #282828;border-radius:6px;color:#6b6b6b;font-size:12px;font-weight:600;cursor:pointer;">${t('undoUnavailable')}</button>` : ''}
         <button class="btn-discuss" style="flex:2;min-width:120px;padding:8px 0;background:#c9a96e;color:#000;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;opacity:0.9;">${t('discussCoach')}</button>
       </div>`;
     exp.appendChild(sessionDiv);
@@ -231,10 +183,10 @@ function expandDay(dateKey, session, isPast, isPlanDay, gridIdx, cellEl) {
       document.dispatchEvent(new CustomEvent('calendar:sessionSelected', { detail: sessionCtx }));
     });
     if (canRate)        sessionDiv.querySelector('.btn-rate').addEventListener('click',        () => showFeedbackPrompt(dateKey, session.type, () => render(), { preload: hasRated }));
-    if (canSkip)        sessionDiv.querySelector('.btn-skip').addEventListener('click',        () => { setSessionFeedback(dateKey, { skipped: true, sessionType: session.type }); render(); });
-    if (lsSkipped)      sessionDiv.querySelector('.btn-undo-skip').addEventListener('click',   () => { deleteSessionFeedback(dateKey); render(); });
-    if (canMarkUnavail) sessionDiv.querySelector('.btn-unavail').addEventListener('click',     () => { setSessionFeedback(dateKey, { unavailable: true, sessionType: session.type }); render(); });
-    if (lsUnavailable)  sessionDiv.querySelector('.btn-undo-unavail').addEventListener('click',() => { deleteSessionFeedback(dateKey); render(); });
+    if (canSkip)        sessionDiv.querySelector('.btn-skip').addEventListener('click',        () => { updateSession(session.id, { status: 'skipped' }); render(); });
+    if (isSkipped)      sessionDiv.querySelector('.btn-undo-skip').addEventListener('click',   () => { updateSession(session.id, { status: 'planned' }); render(); });
+    if (canMarkUnavail) sessionDiv.querySelector('.btn-unavail').addEventListener('click',     () => { updateSession(session.id, { status: 'unavailable' }); render(); });
+    if (isUnavailable)  sessionDiv.querySelector('.btn-undo-unavail').addEventListener('click',() => { updateSession(session.id, { status: 'planned' }); render(); });
   }
 
   // ── Position after the row ──────────────────────────────────────────────────
@@ -269,9 +221,6 @@ export function render() {
   const planningDay      = (profile?.weeklySessionDay && profile.weeklySessionDay !== 'Flexible')
                            ? profile.weeklySessionDay : null;
 
-  const weekPlanMap = buildWeekPlanMap(getWeekPlan());
-  const historyMap  = getHistoryMap();
-
   expandedDateKey = null;
   selectedCell    = null;
   const grid = document.getElementById('calGrid');
@@ -305,9 +254,8 @@ export function render() {
     num.textContent = d;
     cell.appendChild(num);
 
-    // Session precedence: agreed plan first, then (for past days) plan history.
-    // Only real sessions appear — nothing is invented for empty days.
-    const session = weekPlanMap[dateKey] || (isPast ? historyMap[dateKey] : null) || null;
+    // Only real sessions appear — entities from the store, nothing invented.
+    const session = primarySession(dateKey);
 
     decorateCell(cell, session, dateKey, isPast, isFxConst, isPlanDay, startOffset + d - 1);
     grid.appendChild(cell);
@@ -330,7 +278,7 @@ export function render() {
       num.textContent = i;
       cell.appendChild(num);
 
-      const session = weekPlanMap[dateKey] || null;
+      const session = primarySession(dateKey);
 
       decorateCell(cell, session, dateKey, false, isFxConst, isPlanDay, startOffset + daysInMonth + i - 1);
       grid.appendChild(cell);
