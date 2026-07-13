@@ -1,5 +1,7 @@
-import { sessionsForDay, weekStartOf, SESSION_COLORS } from './store.js';
+import { sessionsForDay, weekStartOf, getDateKey as storeDateKey, SESSION_COLORS } from './store.js';
 import { openSessionDrawer, openPlanningDrawer } from './drawer.js';
+import { applyMove } from './moves.js';
+import { isFrozen } from './rules.js';
 import { t } from './translations.js';
 
 const DOW_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -66,6 +68,62 @@ function renderDots(cell, sessions) {
   cell.appendChild(row);
 }
 
+// ── Session Move — pointer-event drag ─────────────────────────────────────────
+// Drop targets: expanded-week day columns and collapsed day cells. Drops call
+// handleDrop; invalid drops bounce silently. The gesture itself is verified
+// manually in the browser — tests invoke handleDrop directly.
+
+let drag = null;        // { sessionId, el, startX, startY, active }
+let justDragged = false; // suppresses the click that follows a completed drag
+
+// Applies a drop and re-renders on success. Exported for tests and reuse.
+export function handleDrop(sessionId, targetDateKey) {
+  const verdict = applyMove(sessionId, targetDateKey);
+  if (verdict === 'move') render();
+  return verdict;
+}
+
+function dropTargetAt(x, y) {
+  const el  = document.elementFromPoint(x, y);
+  const col = el?.closest?.('.week-exp-day[data-day]');
+  if (col) return col;
+  return el?.closest?.('.cal-day[data-date]') || null;
+}
+
+function clearDropHover() {
+  document.querySelectorAll('.drop-hover').forEach(el => el.classList.remove('drop-hover'));
+}
+
+function onBlockPointerDown(e, session) {
+  if (isFrozen(session, storeDateKey(new Date()))) return; // frozen blocks cannot be lifted
+  drag = { sessionId: session.id, el: e.currentTarget, startX: e.clientX, startY: e.clientY, active: false };
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+}
+
+function onBlockPointerMove(e) {
+  if (!drag) return;
+  if (!drag.active) {
+    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
+    drag.active = true;
+    drag.el.classList.add('dragging');
+  }
+  clearDropHover();
+  dropTargetAt(e.clientX, e.clientY)?.classList.add('drop-hover');
+}
+
+function onBlockPointerUp(e) {
+  if (!drag) return;
+  const { sessionId, el, active } = drag;
+  drag = null;
+  clearDropHover();
+  el.classList.remove('dragging');
+  if (!active) return; // a plain tap — the click handler opens the drawer
+  justDragged = true;
+  const target = dropTargetAt(e.clientX, e.clientY);
+  const dateKey = target?.dataset.day || target?.dataset.date;
+  if (dateKey) handleDrop(sessionId, dateKey);
+}
+
 // ── Session Blocks (Expanded Week) ────────────────────────────────────────────
 
 function makeBlock(session) {
@@ -86,8 +144,14 @@ function makeBlock(session) {
   if (style === 'outline') { block.style.borderColor = color; block.style.color = color; }
   if (style === 'solid')   { block.style.background = color; block.style.color = '#0a0a0a'; }
 
+  block.addEventListener('pointerdown', e => onBlockPointerDown(e, session));
+  block.addEventListener('pointermove', onBlockPointerMove);
+  block.addEventListener('pointerup',   onBlockPointerUp);
+  block.addEventListener('pointercancel', () => { drag?.el.classList.remove('dragging'); drag = null; clearDropHover(); });
+
   block.addEventListener('click', e => {
     e.stopPropagation();
+    if (justDragged) { justDragged = false; return; }
     openSessionDrawer(session.id, { onChange: render });
   });
   return block;

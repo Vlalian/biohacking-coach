@@ -498,6 +498,10 @@
     .session-block:hover { filter: brightness(1.25); }
     .session-block.muted { background: #232323; color: #6b6b6b; }
     .session-block.planning-marker { border: 1.5px dashed #c9a96e; color: #c9a96e; }
+    /* Session Move drag states */
+    .session-block { touch-action: none; user-select: none; }
+    .session-block.dragging { opacity: 0.45; }
+    .drop-hover { outline: 1.5px dashed var(--accent); outline-offset: -1px; border-radius: 6px; }
     .tp-expand-all {
       background: none;
       border: 1px solid var(--border);
