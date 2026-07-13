@@ -30,6 +30,19 @@ const STRINGS = {
     collapseAll:        'Collapse all',
     // Displacement (Rest dominance)
     parkedExplain:      'A Rest day took this spot, so this session is set aside for now. Drag it to another day to keep it in your week, or leave it — you and your Coach can sort it out at the Weekly Session.',
+    // Athlete Sessions
+    createSessionTitle:        'Add session',
+    editSessionTitle:          'Edit session',
+    createTypeLabel:           'Type',
+    countsAsTraining:          'Counts as training',
+    notTraining:               'Not training',
+    createTitlePlaceholder:    'Title (optional)',
+    createDurationPlaceholder: 'Duration (optional, e.g. 30 min)',
+    createNotePlaceholder:     'Note (optional)',
+    createSave:                'Add session',
+    editSave:                  'Save',
+    editSession:               'Edit',
+    deleteSession:             'Delete',
     // Calendar expansion
     markUnavailable:    'Mark as unavailable',
     undoUnavailable:    'Undo',
@@ -254,6 +267,19 @@ const STRINGS = {
     collapseAll:        'Luk alle',
     // Displacement (Rest dominance)
     parkedExplain:      'En hviledag optog denne plads, så sessionen er sat til side indtil videre. Træk den til en anden dag for at beholde den i din uge, eller lad den ligge — du og din coach kan afklare det ved den ugentlige session.',
+    // Athlete Sessions
+    createSessionTitle:        'Tilføj session',
+    editSessionTitle:          'Rediger session',
+    createTypeLabel:           'Type',
+    countsAsTraining:          'Tæller som træning',
+    notTraining:               'Ikke træning',
+    createTitlePlaceholder:    'Titel (valgfri)',
+    createDurationPlaceholder: 'Varighed (valgfri, f.eks. 30 min)',
+    createNotePlaceholder:     'Note (valgfri)',
+    createSave:                'Tilføj session',
+    editSave:                  'Gem',
+    editSession:               'Rediger',
+    deleteSession:             'Slet',
     // Calendar expansion
     markUnavailable:    'Marker som utilgængelig',
     undoUnavailable:    'Fortryd',

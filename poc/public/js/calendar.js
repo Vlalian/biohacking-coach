@@ -1,5 +1,5 @@
 import { sessionsForDay, weekStartOf, getDateKey as storeDateKey, SESSION_COLORS } from './store.js';
-import { openSessionDrawer, openPlanningDrawer } from './drawer.js';
+import { openSessionDrawer, openPlanningDrawer, openCreateDrawer } from './drawer.js';
 import { applyMove } from './moves.js';
 import { isFrozen } from './rules.js';
 import { t } from './translations.js';
@@ -138,9 +138,10 @@ function makeBlock(session) {
   block.className = `session-block ${style}`;
   if (session.parked) block.classList.add('parked');
   block.dataset.sessionId = session.id;
+  const name = session.title || session.type;
   block.textContent = session.type === 'Rest' || !session.duration
-    ? session.type
-    : `${session.type} · ${session.duration}`;
+    ? name
+    : `${name} · ${session.duration}`;
   if (session.parked) block.textContent = `⏸ ${block.textContent}`;
 
   if (style === 'outline') { block.style.borderColor = color; block.style.color = color; }
@@ -178,6 +179,17 @@ function buildWeekExpansion(rowSlots) {
         col.appendChild(marker);
       }
       sessionsForDay(slot.dateKey).forEach(s => col.appendChild(makeBlock(s)));
+
+      // "+" — create an Athlete Session; on past days this is the retro-log.
+      const add = document.createElement('div');
+      add.className   = 'day-add';
+      add.textContent = '+';
+      add.title       = t('createSessionTitle');
+      add.addEventListener('click', e => {
+        e.stopPropagation();
+        openCreateDrawer(slot.dateKey, { onChange: render });
+      });
+      col.appendChild(add);
     }
     exp.appendChild(col);
   });

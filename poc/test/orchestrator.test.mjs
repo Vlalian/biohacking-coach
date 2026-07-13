@@ -109,3 +109,55 @@ describe('applyMove — Displacement stories', () => {
     expect(getMoveLog()).toHaveLength(0);
   });
 });
+
+describe('Athlete Sessions — create, edit, delete, retro-log', () => {
+  it('creates a planned Athlete Session on a future day and logs it silently', async () => {
+    const { createAthleteSession } = await import('../public/js/moves.js');
+    const { getCreationLog } = await import('../public/js/store.js');
+    const s = createAthleteSession({ dateKey: nextTue, type: 'Strength', duration: '30 min', note: 'Hips.' });
+    expect(s).toMatchObject({ origin: 'athlete', type: 'Strength', status: 'planned', isTraining: true, dateKey: nextTue });
+    expect(getCreationLog()).toEqual([{ sessionId: s.id, sessionType: 'Strength', dateKey: nextTue, retro: false }]);
+  });
+
+  it('Mobility is fixed not-training; Other takes its toggle', async () => {
+    const { createAthleteSession } = await import('../public/js/moves.js');
+    const mob   = createAthleteSession({ dateKey: nextTue, type: 'Mobility' });
+    const other = createAthleteSession({ dateKey: nextWed, type: 'Other', isTraining: false });
+    expect(mob.isTraining).toBe(false);
+    expect(other.isTraining).toBe(false);
+  });
+
+  it('retro-log on a past day creates the session as already completed', async () => {
+    const { createAthleteSession } = await import('../public/js/moves.js');
+    const { getCreationLog } = await import('../public/js/store.js');
+    const pastDay = addDays(lastMonday, 2);
+    const s = createAthleteSession({ dateKey: pastDay, type: 'Strength' });
+    expect(s.status).toBe('completed');
+    expect(getCreationLog()[0].retro).toBe(true);
+  });
+
+  it('edits and deletes an Athlete Session', async () => {
+    const { createAthleteSession, editAthleteSession, deleteAthleteSession } = await import('../public/js/moves.js');
+    const s = createAthleteSession({ dateKey: nextTue, type: 'Other', isTraining: true, title: 'Yoga' });
+    editAthleteSession(s.id, { title: 'Hot yoga', duration: '45 min' });
+    expect(getSession(s.id)).toMatchObject({ title: 'Hot yoga', duration: '45 min' });
+    deleteAthleteSession(s.id);
+    expect(getSession(s.id)).toBeNull();
+  });
+
+  it('a training-typed Athlete Session parks when dropped on a Rest day', async () => {
+    const { createAthleteSession } = await import('../public/js/moves.js');
+    createSession({ dateKey: nextWed, type: 'Rest', origin: 'coach' });
+    const s = createAthleteSession({ dateKey: nextMon, type: 'Strength' });
+    expect(applyMove(s.id, nextWed)).toBe('move');
+    expect(getSession(s.id)).toMatchObject({ status: 'unavailable', parked: true });
+  });
+
+  it('a non-load Athlete Session coexists with Rest', async () => {
+    const { createAthleteSession } = await import('../public/js/moves.js');
+    createSession({ dateKey: nextWed, type: 'Rest', origin: 'coach' });
+    const s = createAthleteSession({ dateKey: nextMon, type: 'Mobility' });
+    expect(applyMove(s.id, nextWed)).toBe('move');
+    expect(getSession(s.id)).toMatchObject({ status: 'planned', parked: false });
+  });
+});

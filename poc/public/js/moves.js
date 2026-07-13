@@ -2,7 +2,10 @@
 // classify → resolve → persist → log. Rules live in rules.js (pure);
 // persistence lives in store.js. This module just wires them together.
 import { classifyMove, resolveDrop } from './rules.js';
-import { getSession, sessionsForDay, moveSession, updateSession, appendMoveLog, getDateKey } from './store.js';
+import {
+  getSession, sessionsForDay, createSession, moveSession, updateSession, deleteSession,
+  appendMoveLog, appendCreationLog, getDateKey,
+} from './store.js';
 
 // Applies an attempted Session Move. Returns the verdict:
 // 'move' — applied and logged; 'frozen' / 'bounce' — no state change.
@@ -39,4 +42,38 @@ function restoreParkedOn(dateKey) {
   const day = sessionsForDay(dateKey);
   if (day.some(s => s.type === 'Rest')) return;
   day.filter(s => s.parked).forEach(s => updateSession(s.id, { status: 'planned', parked: false }));
+}
+
+// ── Athlete Sessions ──────────────────────────────────────────────────────────
+// Sessions the athlete authors: Mobility (never load), Strength (always load),
+// Other (its own toggle). Creating on a past day is a retro-log — the session
+// is born completed (done but forgotten; there is no deadline on recording
+// reality). Creation is silently logged and never challenged in the moment.
+
+export function createAthleteSession({ dateKey, type, isTraining, title, duration, note }) {
+  const retro = dateKey < getDateKey(new Date());
+  const session = createSession({
+    dateKey, type, title, duration, note,
+    origin:     'athlete',
+    isTraining: type === 'Strength' ? true : type === 'Mobility' ? false : !!isTraining,
+    status:     retro ? 'completed' : 'planned',
+  });
+  appendCreationLog({ sessionId: session.id, sessionType: type, dateKey, retro });
+  return session;
+}
+
+export function editAthleteSession(id, patch) {
+  const session = getSession(id);
+  if (!session || session.origin !== 'athlete') return null;
+  const allowed = {};
+  ['title', 'duration', 'note', 'isTraining'].forEach(k => {
+    if (patch[k] !== undefined) allowed[k] = patch[k];
+  });
+  return updateSession(id, allowed);
+}
+
+export function deleteAthleteSession(id) {
+  const session = getSession(id);
+  if (!session || session.origin !== 'athlete') return;
+  deleteSession(id);
 }

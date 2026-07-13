@@ -2,9 +2,12 @@
 // mirroring the Navigation Drawer's behavior: overlays the content area,
 // dismissed by tapping outside or the close button. Replaces the former
 // inline calendar expansion.
-import { getSession, updateSession, SESSION_COLORS, SESSION_DEFAULTS } from './store.js';
+import { getSession, updateSession, sessionsForDay, weekStartOf, getDateKey, SESSION_COLORS, SESSION_DEFAULTS } from './store.js';
+import { createAthleteSession, editAthleteSession, deleteAthleteSession } from './moves.js';
 import { showSessionFeedbackPrompt } from './feedback.js';
 import { t } from './translations.js';
+
+const ATHLETE_TYPES = ['Mobility', 'Strength', 'Other'];
 
 let onChangeCb = null; // notifies the calendar that store state changed
 
@@ -109,6 +112,12 @@ function renderSessionContent(panel, sessionId) {
               : hasRated      ? t('statusCompleted')
               : t('statusPlanned');
 
+  // Athlete Sessions are the athlete's territory: editable and deletable —
+  // but past weeks are frozen; retro-log creation is the one action that
+  // reaches them. Coach content is read-only and never deletable.
+  const canEdit = session.origin === 'athlete'
+    && weekStartOf(session.dateKey) >= weekStartOf(todayKey);
+
   const dayLabel = new Date(session.dateKey + 'T00:00:00')
     .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const sessionCtx = { type: session.type, dayLabel, duration, zone, note, status: session.status };
@@ -120,6 +129,7 @@ function renderSessionContent(panel, sessionId) {
       <span class="sd-badge ${session.status}">${label}</span>
     </div>
     <div class="sd-date">${fullDate(session.dateKey)}</div>
+    ${session.title ? `<div class="sd-title">${session.title}</div>` : ''}
     ${duration || zone ? `<div class="sd-meta">${[duration, zone].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>` : ''}
     ${note ? `<p class="sd-note">${note}</p>` : ''}
     ${isParked ? `<div class="sd-parked">${t('parkedExplain')}</div>` : ''}
@@ -130,6 +140,8 @@ function renderSessionContent(panel, sessionId) {
       ${isSkipped      ? `<button class="btn-undo-skip" style="${BTN_STYLE}">${t('undoSkipped')}</button>` : ''}
       ${canMarkUnavail ? `<button class="btn-unavail" style="${WARN_STYLE}">${t('markUnavailable')}</button>` : ''}
       ${canUndoUnavail ? `<button class="btn-undo-unavail" style="${BTN_STYLE}">${t('undoUnavailable')}</button>` : ''}
+      ${canEdit        ? `<button class="btn-edit" style="${BTN_STYLE}">${t('editSession')}</button>` : ''}
+      ${canEdit        ? `<button class="btn-delete-session" style="${WARN_STYLE}">${t('deleteSession')}</button>` : ''}
       <button class="btn-discuss" style="width:100%;padding:10px 0;background:#c9a96e;color:#000;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;opacity:0.9;">${t('discussCoach')}</button>
     </div>`;
 
@@ -146,12 +158,114 @@ function renderSessionContent(panel, sessionId) {
   if (isSkipped)      panel.querySelector('.btn-undo-skip').addEventListener('click',    () => { updateSession(session.id, { status: 'planned' }); refresh(); });
   if (canMarkUnavail) panel.querySelector('.btn-unavail').addEventListener('click',      () => { updateSession(session.id, { status: 'unavailable' }); refresh(); });
   if (canUndoUnavail) panel.querySelector('.btn-undo-unavail').addEventListener('click', () => { updateSession(session.id, { status: 'planned' }); refresh(); });
+  if (canEdit) {
+    panel.querySelector('.btn-edit').addEventListener('click', () => renderAthleteForm(panel, { session }));
+    panel.querySelector('.btn-delete-session').addEventListener('click', () => {
+      deleteAthleteSession(session.id);
+      closeSessionDrawer();
+      notifyChange();
+    });
+  }
 }
 
 export function openSessionDrawer(sessionId, { onChange } = {}) {
   if (onChange) onChangeCb = onChange;
   const panel = openPanel();
   renderSessionContent(panel, sessionId);
+}
+
+// ── Athlete Session create / edit form ────────────────────────────────────────
+
+const INPUT_STYLE = 'width:100%;background:#141414;border:1px solid #282828;border-radius:8px;color:#e2e2e2;' +
+  'font-size:13px;font-family:inherit;padding:10px 12px;outline:none;box-sizing:border-box;margin-bottom:10px;';
+
+// "+" on a day opens the drawer in create mode. On a past day the session is
+// retro-logged: created as already completed, chaining straight into the
+// rating prompt — there is no deadline on recording reality.
+export function openCreateDrawer(dateKey, { onChange } = {}) {
+  if (onChange) onChangeCb = onChange;
+  const panel = openPanel();
+  renderAthleteForm(panel, { dateKey });
+}
+
+function renderAthleteForm(panel, { dateKey, session = null }) {
+  const isEdit  = !!session;
+  const day     = session ? session.dateKey : dateKey;
+  // On Rest days only non-training types are offered — they coexist with Rest.
+  const restDay = sessionsForDay(day).some(s => s.type === 'Rest');
+  const types   = restDay ? ['Mobility', 'Other'] : ATHLETE_TYPES;
+
+  const state = {
+    type:       session?.type || types[0],
+    isTraining: session ? session.isTraining : false,
+  };
+  // Mobility is fixed not-training, Strength fixed training; Other carries its
+  // own toggle — locked to not-training on Rest days.
+  const trainingLocked = () => state.type !== 'Other' || restDay;
+  const trainingFor    = type => type === 'Strength' && !restDay;
+  if (!isEdit) state.isTraining = trainingFor(state.type);
+
+  panel.innerHTML = `
+    ${closeButtonHtml()}
+    <div class="sd-row"><span class="sd-type" style="color:#c9a96e">${isEdit ? t('editSessionTitle') : t('createSessionTitle')}</span></div>
+    <div class="sd-date">${fullDate(day)}</div>
+    <div class="sd-form-label">${t('createTypeLabel')}</div>
+    <div class="sd-type-picker">
+      ${types.map(ty => `<button data-type="${ty}" class="sd-type-btn${ty === state.type ? ' active' : ''}"${isEdit ? ' disabled' : ''}>${ty}</button>`).join('')}
+    </div>
+    <button id="sd-training-toggle" class="sd-type-btn" style="width:100%;margin-bottom:14px;"></button>
+    <input id="sd-title" style="${INPUT_STYLE}" placeholder="${t('createTitlePlaceholder')}" value="${session?.title || ''}">
+    <input id="sd-duration" style="${INPUT_STYLE}" placeholder="${t('createDurationPlaceholder')}" value="${session?.duration || ''}">
+    <textarea id="sd-note" rows="3" style="${INPUT_STYLE}resize:none;" placeholder="${t('createNotePlaceholder')}">${session?.note || ''}</textarea>
+    <button id="sd-save" style="width:100%;padding:11px;background:#c9a96e;color:#000;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">${isEdit ? t('editSave') : t('createSave')}</button>`;
+
+  wireClose(panel);
+
+  const toggle = panel.querySelector('#sd-training-toggle');
+  function syncToggle() {
+    toggle.textContent    = state.isTraining ? t('countsAsTraining') : t('notTraining');
+    toggle.disabled       = trainingLocked();
+    toggle.style.opacity  = trainingLocked() ? '0.55' : '1';
+    toggle.classList.toggle('active', state.isTraining);
+  }
+  syncToggle();
+  toggle.addEventListener('click', () => {
+    if (trainingLocked()) return;
+    state.isTraining = !state.isTraining;
+    syncToggle();
+  });
+
+  panel.querySelectorAll('[data-type]').forEach(btn => btn.addEventListener('click', () => {
+    if (isEdit) return;
+    state.type = btn.dataset.type;
+    state.isTraining = trainingFor(state.type);
+    panel.querySelectorAll('[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === state.type));
+    syncToggle();
+  }));
+
+  panel.querySelector('#sd-save').addEventListener('click', () => {
+    const fields = {
+      title:    panel.querySelector('#sd-title').value.trim() || null,
+      duration: panel.querySelector('#sd-duration').value.trim() || null,
+      note:     panel.querySelector('#sd-note').value.trim() || null,
+      isTraining: state.isTraining,
+    };
+    if (isEdit) {
+      editAthleteSession(session.id, fields);
+      notifyChange();
+      renderSessionContent(panel, session.id);
+      return;
+    }
+    const created = createAthleteSession({ dateKey: day, type: state.type, ...fields });
+    notifyChange();
+    if (created.status === 'completed') {
+      // Retro-log: the rating is offered immediately in the same create flow.
+      closeSessionDrawer();
+      showSessionFeedbackPrompt(created, () => notifyChange(), { preload: false });
+    } else {
+      renderSessionContent(panel, created.id);
+    }
+  });
 }
 
 // The planning-day marker opens the drawer with the Weekly Session CTA.

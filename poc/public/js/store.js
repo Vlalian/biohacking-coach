@@ -9,6 +9,7 @@ const LS_VERSION  = 'bh_store_version';
 const LS_REPORT   = 'bh_migration_report';
 const LS_UNAVAIL  = 'bh_unavailable_dates';
 const LS_MOVELOG  = 'bh_move_log';
+const LS_CREATELOG = 'bh_creation_log';
 
 const STORE_VERSION = 1;
 const HORIZON_WEEKS = 4;
@@ -24,6 +25,9 @@ export const SESSION_COLORS = {
   Tempo:     '#c9a96e',
   Recovery:  '#6db36d',
   Rest:      '#8a8a8a',
+  Strength:  '#9b6dd6',
+  Mobility:  '#4db6ac',
+  Other:     '#9e9e9e',
 };
 
 export const SESSION_DEFAULTS = {
@@ -105,6 +109,7 @@ function makeEntity(sessions, fields) {
     duration:   fields.duration ?? SESSION_DEFAULTS[type]?.duration ?? null,
     zone:       fields.zone     ?? SESSION_DEFAULTS[type]?.zone     ?? null,
     note:       fields.note     ?? SESSION_DEFAULTS[type]?.note     ?? null,
+    title:      fields.title    ?? null, // athlete's own name for the session
     dayOrder:   fields.dayOrder || nextDayOrder(sessions, fields.dateKey),
     feedback:   fields.feedback || null,
   };
@@ -179,6 +184,18 @@ export function appendMoveLog(entry) {
 
 export function getMoveLog() {
   try { return JSON.parse(localStorage.getItem(LS_MOVELOG) || '[]'); }
+  catch { return []; }
+}
+
+// Athlete Session creations are logged the same silent way.
+export function appendCreationLog(entry) {
+  const log = getCreationLog();
+  log.push(entry);
+  localStorage.setItem(LS_CREATELOG, JSON.stringify(log));
+}
+
+export function getCreationLog() {
+  try { return JSON.parse(localStorage.getItem(LS_CREATELOG) || '[]'); }
   catch { return []; }
 }
 
