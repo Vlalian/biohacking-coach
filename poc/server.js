@@ -202,6 +202,23 @@ function formatSkippedSessions(skippedSessions) {
   }).join('; ');
 }
 
+// The week's Session Moves and Athlete Session creations as natural
+// references — date + type, position qualifier only for same-type Doubles,
+// never entity ids. Silent Pattern Insight material for the Weekly Session.
+function formatWeekActivity(weekActivity) {
+  if (!weekActivity) return null;
+  const dayName = k => new Date(k + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' });
+  const lines = [];
+  (weekActivity.moves || []).forEach(m => {
+    const qualifier = m.position ? `${ordinal(m.position)} ` : '';
+    lines.push(`- moved ${dayName(m.from)} ${m.from} ${qualifier}${m.sessionType} to ${dayName(m.to)} ${m.to}`);
+  });
+  (weekActivity.creations || []).forEach(c => {
+    lines.push(`- added ${dayName(c.dateKey)} ${c.dateKey} ${c.sessionType}${c.retro ? ' (retro-logged as done)' : ''}`);
+  });
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
 function formatWeekFeedback(weekFeedback) {
   if (!weekFeedback || weekFeedback.length === 0) return null;
   const EMOJI = ['😫', '😕', '😐', '🙂', '😄'];
@@ -217,16 +234,17 @@ function formatWeekFeedback(weekFeedback) {
   }).join('\n');
 }
 
-function buildWeeklyContext(checkIn, weekFeedback = [], sessionHistory = [], skippedSessions = [], unavailableDates = []) {
+function buildWeeklyContext(checkIn, weekFeedback = [], sessionHistory = [], skippedSessions = [], unavailableDates = [], weekActivity = null) {
   const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding } = checkIn;
   const patterns        = detectPatterns(sessionHistory);
   const feedbackSummary = formatWeekFeedback(weekFeedback);
+  const weekActivityLines = formatWeekActivity(weekActivity);
   const today           = new Date().toISOString().slice(0, 10);
-  return { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding };
+  return { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, weekActivityLines, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding };
 }
 
 function renderWeeklyPrompt(ctx) {
-  const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding } = ctx;
+  const { body, mental, energy, sleep, pulse, phase, personaName, commStyle, experienceLevel, sessionCount, patterns, feedbackSummary, skippedSessions, unavailableDates, weekActivityLines, today, language, weeklySessionDay, fixedConstraints, equipment, weeklySessionNumber, raceTarget, onboarding } = ctx;
   const equipmentLines  = buildEquipmentLines(equipment);
   const hasEquipment    = equipmentLines.length > 0;
   const onboardingBlock = renderOnboardingBlock(onboarding);
@@ -286,7 +304,10 @@ ${(() => {
 
 ${onboardingBlock}${feedbackSummary ? `LAST WEEK FEEDBACK:\n${feedbackSummary}\n\n` : 'No feedback this week — use check-in signals and self-assessment.\n\n'}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${patterns.length > 0 ? `PATTERNS: ${patterns.join('; ')}.
 Strong (multi-week) → surface ONE in P2: "I've noticed X, pretty common at this stage. Does that match?" Not data/criticism. Max one per session.
-Weak → shape plan silently.\n\n` : ''}${skippedSessions && skippedSessions.length > 0 ? `SKIPPED: ${formatSkippedSessions(skippedSessions)} — mention naturally in review, no justification needed.\n\n` : ''}${unavailableDates && unavailableDates.length > 0 ? `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.\n\n` : ''}DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.
+Weak → shape plan silently.\n\n` : ''}${skippedSessions && skippedSessions.length > 0 ? `SKIPPED: ${formatSkippedSessions(skippedSessions)} — mention naturally in review, no justification needed.\n\n` : ''}${unavailableDates && unavailableDates.length > 0 ? `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.\n\n` : ''}${weekActivityLines ? `WEEK ACTIVITY (silent background — the athlete arranged their own week. NEVER challenge or raise these in the moment; read them as Pattern Insight material only):
+${weekActivityLines}
+
+` : ''}DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.
 
 CONSTRAINT SIGNALS (append on last line, stripped by app):
 Specific date blocked → [UNAVAILABLE:YYYY-MM-DD]
@@ -383,11 +404,11 @@ app.post('/api/negotiate', async (req, res) => {
 // Weekly Session: Reflective Prompt → week review → next week planning
 app.post('/api/weekly', async (req, res) => {
   try {
-    const { checkIn, messages, apiKey, weekFeedback, sessionHistory, skippedSessions, unavailableDates } = req.body;
+    const { checkIn, messages, apiKey, weekFeedback, sessionHistory, skippedSessions, unavailableDates, weekActivity } = req.body;
     if (!apiKey) return res.status(400).json({ error: 'API key required' });
 
     const client = new Anthropic({ apiKey });
-    const ctx    = buildWeeklyContext(checkIn, weekFeedback || [], sessionHistory || [], skippedSessions || [], unavailableDates || []);
+    const ctx    = buildWeeklyContext(checkIn, weekFeedback || [], sessionHistory || [], skippedSessions || [], unavailableDates || [], weekActivity || null);
     const conversationMessages = messages && messages.length > 0
       ? messages
       : [{ role: 'user', content: "Let's do our weekly session." }];
@@ -566,4 +587,4 @@ if (require.main === module) {
     console.log('Enter your Anthropic API key in the UI');
   });
 }
-module.exports = { buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt, buildPlanExtractionPrompt, formatSkippedSessions };
+module.exports = { buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt, buildPlanExtractionPrompt, formatSkippedSessions, formatWeekActivity };

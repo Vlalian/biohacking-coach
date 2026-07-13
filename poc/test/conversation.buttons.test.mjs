@@ -116,3 +116,19 @@ describe('startWeeklySession — session numbering', () => {
     expect(callWeekly.mock.calls[1][0].weeklySessionNumber).toBe(1);
   });
 });
+
+describe('startWeeklySession — week activity context', () => {
+  it('the weekly request carries the current week\'s move and creation logs', async () => {
+    const { createSession, appendMoveLog, appendCreationLog, getDateKey, weekStartOf } = await import('../public/js/store.js');
+    const { callWeekly } = await import('../public/js/api.js');
+    const todayKey = getDateKey(new Date());
+    const s = createSession({ dateKey: todayKey, type: 'Recovery', origin: 'coach' });
+    appendMoveLog({ sessionId: s.id, sessionType: 'Recovery', from: weekStartOf(todayKey), to: todayKey });
+    appendCreationLog({ sessionId: 'a1', sessionType: 'Strength', dateKey: todayKey, retro: false });
+
+    await startWeeklySession(CHECKIN, [], [], []);
+    const weekActivity = callWeekly.mock.calls[0][7];
+    expect(weekActivity.moves).toEqual([{ sessionType: 'Recovery', from: weekStartOf(todayKey), to: todayKey }]);
+    expect(weekActivity.creations).toEqual([{ sessionType: 'Strength', dateKey: todayKey, retro: false }]);
+  });
+});

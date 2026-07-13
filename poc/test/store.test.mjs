@@ -378,3 +378,27 @@ describe('getSkippedSessions — same-type Double position qualifier', () => {
     expect(getSkippedSessions()).toEqual([{ date: todayKey, sessionType: 'Endurance' }]);
   });
 });
+
+describe('getWeekActivity — current-week moves and creations for the Coach', () => {
+  it('returns only current-week entries as natural-reference data', async () => {
+    const { getWeekActivity, appendMoveLog, appendCreationLog } = await import('../public/js/store.js');
+    initStore();
+    const s = createSession({ dateKey: todayKey, type: 'Recovery', origin: 'coach' });
+    appendMoveLog({ sessionId: s.id, sessionType: 'Recovery', from: thisMonday, to: todayKey });
+    appendMoveLog({ sessionId: 'gone', sessionType: 'Tempo', from: lastMonday, to: lastMonday }); // past week
+    appendCreationLog({ sessionId: s.id, sessionType: 'Strength', dateKey: todayKey, retro: false });
+    appendCreationLog({ sessionId: 'x', sessionType: 'Mobility', dateKey: lastMonday, retro: true }); // past week
+    const activity = getWeekActivity();
+    expect(activity.moves).toEqual([{ sessionType: 'Recovery', from: thisMonday, to: todayKey }]);
+    expect(activity.creations).toEqual([{ sessionType: 'Strength', dateKey: todayKey, retro: false }]);
+  });
+
+  it('adds the position qualifier when the moved session sits in a same-type Double', async () => {
+    const { getWeekActivity, appendMoveLog } = await import('../public/js/store.js');
+    initStore();
+    createSession({ dateKey: todayKey, type: 'Endurance', origin: 'coach' });
+    const s = createSession({ dateKey: todayKey, type: 'Endurance', origin: 'coach' });
+    appendMoveLog({ sessionId: s.id, sessionType: 'Endurance', from: thisMonday, to: todayKey });
+    expect(getWeekActivity().moves[0].position).toBe(2);
+  });
+});

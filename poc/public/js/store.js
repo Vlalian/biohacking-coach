@@ -199,6 +199,35 @@ export function getCreationLog() {
   catch { return []; }
 }
 
+// The current week's Session Moves and Athlete Session creations, shaped as
+// natural-reference data for the Weekly Session request: type + dates, with a
+// 1-based position only when the moved session sits in a same-type Double.
+// Entity ids never leave the client.
+export function getWeekActivity() {
+  const weekStart = weekStartOf(todayKey());
+  const weekEnd   = addDays(weekStart, 6);
+  const inWeek    = k => k >= weekStart && k <= weekEnd;
+  const sessions  = loadSessions();
+
+  const moves = getMoveLog().filter(m => inWeek(m.to)).map(m => {
+    const ref = { sessionType: m.sessionType, from: m.from, to: m.to };
+    const s = sessions.find(x => x.id === m.sessionId);
+    if (s) {
+      const sameType = sessions
+        .filter(o => o.dateKey === s.dateKey && o.type === s.type)
+        .sort((a, b) => a.dayOrder - b.dayOrder);
+      if (sameType.length > 1) ref.position = sameType.findIndex(o => o.id === s.id) + 1;
+    }
+    return ref;
+  });
+
+  const creations = getCreationLog()
+    .filter(c => inWeek(c.dateKey))
+    .map(({ sessionType, dateKey, retro }) => ({ sessionType, dateKey, retro }));
+
+  return { moves, creations };
+}
+
 // ── Unavailable dates (date-level, distinct from unavailable sessions) ────────
 
 function loadUnavailableDates() {

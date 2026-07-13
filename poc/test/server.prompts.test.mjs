@@ -159,3 +159,68 @@ describe('skippedSessions — natural references', () => {
     expect(renderWeeklyPrompt(ctx)).toContain('2nd Endurance');
   });
 });
+
+// ── The Coach sees the moves (route 8/8) ──────────────────────────────────────
+
+const { formatWeekActivity } = require('../server.js');
+
+describe('formatWeekActivity — natural references', () => {
+  it('renders a move as date + type → target day, no entity ids', () => {
+    const line = formatWeekActivity({
+      moves: [{ sessionType: 'Recovery', from: '2026-07-15', to: '2026-07-17' }],
+      creations: [],
+    });
+    expect(line).toContain('moved Wed 2026-07-15 Recovery to Fri 2026-07-17');
+    expect(line).not.toMatch(/s_[a-z0-9]/);
+  });
+
+  it('adds the position qualifier only for same-type Doubles', () => {
+    const withPos = formatWeekActivity({ moves: [{ sessionType: 'Endurance', from: '2026-07-15', to: '2026-07-17', position: 2 }], creations: [] });
+    expect(withPos).toContain('2nd Endurance');
+    const noPos = formatWeekActivity({ moves: [{ sessionType: 'Endurance', from: '2026-07-15', to: '2026-07-17' }], creations: [] });
+    expect(noPos).not.toContain('1st');
+  });
+
+  it('renders Athlete Session creations, flagging retro-logs', () => {
+    const line = formatWeekActivity({
+      moves: [],
+      creations: [
+        { sessionType: 'Strength', dateKey: '2026-07-18', retro: false },
+        { sessionType: 'Mobility', dateKey: '2026-07-14', retro: true },
+      ],
+    });
+    expect(line).toContain('added Sat 2026-07-18 Strength');
+    expect(line).toContain('added Tue 2026-07-14 Mobility (retro-logged as done)');
+  });
+
+  it('returns null when there is nothing to report', () => {
+    expect(formatWeekActivity({ moves: [], creations: [] })).toBeNull();
+    expect(formatWeekActivity(undefined)).toBeNull();
+  });
+});
+
+describe('weekly prompt — week activity as silent background', () => {
+  const ACTIVITY = {
+    moves:     [{ sessionType: 'Recovery', from: '2026-07-15', to: '2026-07-17' }],
+    creations: [{ sessionType: 'Strength', dateKey: '2026-07-18', retro: false }],
+  };
+
+  it('injects moves and creations with the no-challenge instruction', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], ACTIVITY);
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).toContain('WEEK ACTIVITY');
+    expect(prompt).toContain('moved Wed 2026-07-15 Recovery to Fri 2026-07-17');
+    expect(prompt).toContain('added Sat 2026-07-18 Strength');
+    expect(prompt.toLowerCase()).toContain('never challenge');
+  });
+
+  it('an empty log produces no move section', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], { moves: [], creations: [] });
+    expect(renderWeeklyPrompt(ctx)).not.toContain('WEEK ACTIVITY');
+  });
+
+  it('no weekActivity at all produces no move section', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
+    expect(renderWeeklyPrompt(ctx)).not.toContain('WEEK ACTIVITY');
+  });
+});
