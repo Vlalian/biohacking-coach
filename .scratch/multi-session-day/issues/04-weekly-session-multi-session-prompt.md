@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 2 of 8 (Calendar Implementation Route)
 
 # 04 — Weekly plan lands in the session store (multi-session days)
@@ -37,3 +37,7 @@ The Weekly Session planning flow produces multi-session days and lands them in t
 ## Blocked by
 
 `.scratch/draggable-calendar/issues/01-sessions-become-entities.md`
+
+## Resolution
+
+Implemented 2026-07-13 (commit 3f4f5b8); all acceptance criteria covered by tests, suite green.

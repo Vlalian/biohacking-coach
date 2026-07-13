@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 1 of 8 (Calendar Implementation Route)
 
 # 01 — Sessions become entities
@@ -36,3 +36,7 @@ The store owns CRUD, week/day queries, and a one-time idempotent migration of ex
 ## Blocked by
 
 None — can start immediately.
+
+## Resolution
+
+Implemented 2026-07-13 (commit 6cf41e6); all acceptance criteria covered by tests, suite green.

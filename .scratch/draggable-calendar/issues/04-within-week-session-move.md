@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 5 of 8 (Calendar Implementation Route)
 
 # 04 — Within-week Session Move
@@ -29,3 +29,7 @@ Rules delivered here: completed sessions and everything in past weeks are frozen
 ## Blocked by
 
 `.scratch/draggable-calendar/issues/02-expanded-week-read-only.md`
+
+## Resolution
+
+Implemented 2026-07-13 (commit 6a1dc82); all acceptance criteria covered by tests, suite green.

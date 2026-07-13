@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 4 of 8 (Calendar Implementation Route)
 
 # 03 — Session Drawer replaces inline expansion
@@ -29,3 +29,7 @@ Drawer content top-to-bottom per the glossary: header (Session Type in colour, s
 ## Blocked by
 
 `.scratch/draggable-calendar/issues/02-expanded-week-read-only.md`
+
+## Resolution
+
+Implemented 2026-07-13 (commit 6c9c644); all acceptance criteria covered by tests, suite green.

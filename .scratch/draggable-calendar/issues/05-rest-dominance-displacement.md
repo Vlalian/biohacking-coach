@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 6 of 8 (Calendar Implementation Route)
 
 # 05 — Rest dominance (Displacement)
@@ -26,3 +26,7 @@ The Displacement rule, end-to-end: Rest is dominant and never displaced. Droppin
 ## Blocked by
 
 `.scratch/draggable-calendar/issues/04-within-week-session-move.md`
+
+## Resolution
+
+Implemented 2026-07-13 (commit 199d565); all acceptance criteria covered by tests, suite green.

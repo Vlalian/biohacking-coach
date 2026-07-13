@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 7 of 8 (Calendar Implementation Route)
 
 # 07 — Athlete Sessions + retro-log
@@ -28,3 +28,7 @@ Athlete Sessions are full session entities — movable, stackable into Doubles, 
 ## Blocked by
 
 `.scratch/draggable-calendar/issues/03-session-drawer.md`, `.scratch/draggable-calendar/issues/04-within-week-session-move.md`
+
+## Resolution
+
+Implemented 2026-07-13 (commit c70c2b9); all acceptance criteria covered by tests, suite green.

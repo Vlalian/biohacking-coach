@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 Route position: 8 of 8 (Calendar Implementation Route)
 
 # 08 — The Coach sees the moves
@@ -26,3 +26,7 @@ All moves are within-week. Log entries render as **natural references** — date
 ## Blocked by
 
 `.scratch/draggable-calendar/issues/04-within-week-session-move.md`, `.scratch/draggable-calendar/issues/07-athlete-sessions-retro-log.md`
+
+## Resolution
+
+Implemented 2026-07-13 (commit 784cd08); all acceptance criteria covered by tests, suite green.
