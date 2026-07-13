@@ -7,7 +7,8 @@ import {
   startCoachChat, sendChatMessage, endCoachChat,
 } from './conversation.js';
 import { showFeedbackPrompt, showSessionFeedbackPrompt } from './feedback.js';
-import { initStore, getMigrationReport, dismissMigrationReport, getLastWeekFeedback, getSkippedSessions, sessionsForDay } from './store.js';
+import { initStore, getMigrationReport, dismissMigrationReport } from './migration.js';
+import { getLastWeekFeedback, getSkippedSessions, sessionsForDay } from './store.js';
 import { isOnboarded, getOnboardedProfile, beginOnboarding } from './onboarding.js';
 import { t, applyStaticTranslations } from './translations.js';
 

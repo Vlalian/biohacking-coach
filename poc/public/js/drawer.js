@@ -68,9 +68,9 @@ function feedbackDisplay(fb) {
     : '';
   return `
     <div style="margin:12px 0 8px;padding:10px 12px;background:#141414;border-radius:8px;display:flex;gap:16px;align-items:center;">
-      <span style="font-size:11px;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.1em;">Body</span>
+      <span style="font-size:11px;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.1em;">${t('feedbackBodyShort')}</span>
       <span style="font-size:13px;font-weight:700;color:#e2e2e2;">${body}</span>
-      <span style="font-size:11px;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.1em;margin-left:8px;">Mind</span>
+      <span style="font-size:11px;color:#6b6b6b;text-transform:uppercase;letter-spacing:0.1em;margin-left:8px;">${t('feedbackMindShort')}</span>
       <span style="font-size:13px;font-weight:700;color:#e2e2e2;">${mind}</span>
     </div>
     ${comment}`;

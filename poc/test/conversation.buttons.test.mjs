@@ -88,7 +88,7 @@ describe('startWeeklySession — session numbering', () => {
     localStorage.removeItem('bh_weekly_session_count');
     const { callWeekly } = await import('../public/js/api.js');
     await startWeeklySession(CHECKIN, [], [], []);
-    expect(callWeekly.mock.calls[0][0].weeklySessionNumber).toBe(1);
+    expect(callWeekly.mock.calls[0][0].checkIn.weeklySessionNumber).toBe(1);
   });
 
   it('does not count a session when the API call fails', async () => {
@@ -113,7 +113,7 @@ describe('startWeeklySession — session numbering', () => {
     await startWeeklySession(CHECKIN, [], [], []);
     document.getElementById('pushbackInput').value = 'Sounds good, but Tuesday is tricky.';
     await sendWeeklyMessage(CHECKIN, [], [], []);
-    expect(callWeekly.mock.calls[1][0].weeklySessionNumber).toBe(1);
+    expect(callWeekly.mock.calls[1][0].checkIn.weeklySessionNumber).toBe(1);
   });
 });
 
@@ -127,7 +127,7 @@ describe('startWeeklySession — week activity context', () => {
     appendCreationLog({ sessionId: 'a1', sessionType: 'Strength', dateKey: todayKey, retro: false });
 
     await startWeeklySession(CHECKIN, [], [], []);
-    const weekActivity = callWeekly.mock.calls[0][7];
+    const weekActivity = callWeekly.mock.calls[0][0].weekActivity;
     expect(weekActivity.moves).toEqual([{ sessionType: 'Recovery', from: weekStartOf(todayKey), to: todayKey }]);
     expect(weekActivity.creations).toEqual([{ sessionType: 'Strength', dateKey: todayKey, retro: false }]);
   });

@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done — implemented 2026-07-13 (route commits 6cf41e6..8a925ca)
 
 # PRD — Draggable Calendar
 

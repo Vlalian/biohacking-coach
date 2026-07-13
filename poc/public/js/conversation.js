@@ -247,7 +247,16 @@ export async function startWeeklySession(checkIn, sessionHistory, weekFeedback, 
     weeklyHistory.push(firstMsg);
 
     const wsNum = nextWeeklySessionNumber();
-    const raw = await callWeekly({ ...checkIn, weeklySessionNumber: wsNum }, weeklyHistory, apiKey, weekFeedback, sessionHistory, skippedSessions, getUnavailableDates(), getWeekActivity());
+    const raw = await callWeekly({
+      checkIn:          { ...checkIn, weeklySessionNumber: wsNum },
+      messages:         weeklyHistory,
+      apiKey,
+      weekFeedback,
+      sessionHistory,
+      skippedSessions,
+      unavailableDates: getUnavailableDates(),
+      weekActivity:     getWeekActivity(),
+    });
     loading.remove();
     if (raw) {
       // Session actually started — only now does it count as held.
@@ -271,7 +280,16 @@ export async function sendWeeklyMessage(checkIn, sessionHistory, weekFeedback, s
   // Same session number as the opening turn — falls back to the stored count
   // (the number persisted when this session started).
   const wsNum = weeklySessionNumber ?? Math.max(1, parseInt(localStorage.getItem('bh_weekly_session_count') || '1', 10));
-  await sendTurn(weeklyHistory, apiKey => callWeekly({ ...checkIn, weeklySessionNumber: wsNum }, weeklyHistory, apiKey, weekFeedback, sessionHistory, skippedSessions, getUnavailableDates(), getWeekActivity()), {
+  await sendTurn(weeklyHistory, apiKey => callWeekly({
+    checkIn:          { ...checkIn, weeklySessionNumber: wsNum },
+    messages:         weeklyHistory,
+    apiKey,
+    weekFeedback,
+    sessionHistory,
+    skippedSessions,
+    unavailableDates: getUnavailableDates(),
+    weekActivity:     getWeekActivity(),
+  }), {
     processSignals: true,
   });
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
+import { initStore, getMigrationReport, dismissMigrationReport } from '../public/js/migration.js';
 import {
-  initStore, getMigrationReport, dismissMigrationReport,
   createSession, getSession, updateSession, deleteSession,
   allSessions, sessionsForDay, sessionsForWeek,
   agreeWeeklyPlan, rateDay, markDateUnavailable,

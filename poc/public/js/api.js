@@ -31,11 +31,13 @@ export async function callChat(messages, apiKey, checkIn) {
   return (await res.json()).content;
 }
 
-export async function callWeekly(checkIn, messages, apiKey, weekFeedback, sessionHistory, skippedSessions = [], unavailableDates = [], weekActivity = null) {
+// request: { checkIn, messages, apiKey, weekFeedback, sessionHistory,
+//            skippedSessions, unavailableDates, weekActivity }
+export async function callWeekly(request) {
   const res = await fetch(`${API_BASE}/api/weekly`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ checkIn, messages, apiKey, weekFeedback, sessionHistory, skippedSessions, unavailableDates, weekActivity }),
+    body: JSON.stringify(request),
   });
   if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'API error'); }
   return (await res.json()).content;
