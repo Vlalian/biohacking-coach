@@ -94,3 +94,43 @@ describe('handleDrop — within-week Session Move', () => {
     expect(blockIn(THIS_SAT, mover.id)).not.toBeNull();
   });
 });
+
+describe('Displacement — parked visuals and drawer copy', () => {
+  it('a displaced session renders as a badged parked block', () => {
+    const training = createSession({ dateKey: THIS_SAT, type: 'Endurance', origin: 'coach' });
+    const rest     = createSession({ dateKey: THIS_THU, type: 'Rest', origin: 'coach' });
+    render();
+    expandWeekOf(THIS_THU);
+    handleDrop(rest.id, THIS_SAT);
+    const block = blockIn(THIS_SAT, training.id);
+    expect(block.classList.contains('parked')).toBe(true);
+    expect(block.textContent).toContain('⏸');
+    const dot = document.querySelector(`#calGrid .cal-day[data-date="${THIS_SAT}"] .session-dot.parked`);
+    expect(dot).not.toBeNull();
+  });
+
+  it('the drawer explains a parked session in plain language, with no undo button', () => {
+    const training = createSession({ dateKey: THIS_SAT, type: 'Endurance', origin: 'coach' });
+    const rest     = createSession({ dateKey: THIS_THU, type: 'Rest', origin: 'coach' });
+    render();
+    expandWeekOf(THIS_THU);
+    handleDrop(rest.id, THIS_SAT);
+    blockIn(THIS_SAT, training.id).click();
+    const drawer = document.getElementById('sessionDrawer');
+    expect(drawer.querySelector('.sd-parked')).not.toBeNull();
+    expect(drawer.querySelector('.sd-parked').textContent).toContain('Rest day took this spot');
+    expect(drawer.querySelector('.btn-undo-unavail')).toBeNull();
+  });
+
+  it('moving the Rest away restores the parked block to outline planned', () => {
+    const training = createSession({ dateKey: THIS_SAT, type: 'Endurance', origin: 'coach' });
+    const rest     = createSession({ dateKey: THIS_THU, type: 'Rest', origin: 'coach' });
+    render();
+    expandWeekOf(THIS_THU);
+    handleDrop(rest.id, THIS_SAT);   // parks the training on Saturday
+    handleDrop(rest.id, '2026-07-17'); // Rest leaves Saturday → auto-restore
+    const block = blockIn(THIS_SAT, training.id);
+    expect(block.classList.contains('parked')).toBe(false);
+    expect(block.classList.contains('outline')).toBe(true);
+  });
+});

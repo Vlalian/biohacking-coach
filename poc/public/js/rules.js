@@ -25,14 +25,31 @@ export function classifyMove(session, targetDateKey, todayKey) {
   return 'move';
 }
 
-// Resolves what a valid drop does to the target day.
-// Training onto training never conflicts — it forms a Double, unlimited.
-// (Rest dominance — parking and displacement — lands with the Displacement
-// rule; without Rest involved every drop simply places the session planned.)
+// Resolves what a valid drop does to the target day (the Displacement rule).
+// Rest is dominant and never displaced:
+// - Rest onto training flips every non-completed training on the day to
+//   parked-unavailable, in place; the Rest lands active.
+// - Training onto a Rest day parks the incoming session as unavailable.
+// - Rest onto Rest is a no-op — Rest days cannot be part of a Double.
+// - Training onto training never conflicts — it forms a Double, unlimited.
+// - Non-load sessions coexist with Rest: no displacement, no parking.
+// Completed sessions are never touched — the training record is immutable.
 export function resolveDrop(moving, occupants) {
-  return {
-    incomingStatus: 'planned', // moving a skipped/unavailable session revives it
-    parkIncoming:   false,
-    displaceIds:    [],
-  };
+  const place = { incomingStatus: 'planned', parkIncoming: false, displaceIds: [] };
+
+  if (moving.type === 'Rest') {
+    if (occupants.some(o => o.type === 'Rest')) return { ...place, noop: true };
+    return {
+      ...place,
+      displaceIds: occupants
+        .filter(o => o.isTraining && o.status !== 'completed')
+        .map(o => o.id),
+    };
+  }
+
+  if (moving.isTraining && occupants.some(o => o.type === 'Rest')) {
+    return { incomingStatus: 'unavailable', parkIncoming: true, displaceIds: [] };
+  }
+
+  return place; // moving a skipped/unavailable session revives it
 }

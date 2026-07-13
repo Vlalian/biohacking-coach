@@ -37,7 +37,7 @@ function makeDot(session) {
   const dot   = document.createElement('div');
   const color = SESSION_COLORS[session.type] || '#888';
   if (session.status === 'unavailable') {
-    dot.className = 'session-dot unavailable';
+    dot.className = session.parked ? 'session-dot unavailable parked' : 'session-dot unavailable';
   } else if (session.status === 'skipped') {
     dot.className = 'session-dot muted';
   } else if (session.status === 'completed') {
@@ -136,10 +136,12 @@ function makeBlock(session) {
   else if (session.status === 'completed') style = 'solid';
 
   block.className = `session-block ${style}`;
+  if (session.parked) block.classList.add('parked');
   block.dataset.sessionId = session.id;
   block.textContent = session.type === 'Rest' || !session.duration
     ? session.type
     : `${session.type} · ${session.duration}`;
+  if (session.parked) block.textContent = `⏸ ${block.textContent}`;
 
   if (style === 'outline') { block.style.borderColor = color; block.style.color = color; }
   if (style === 'solid')   { block.style.background = color; block.style.color = '#0a0a0a'; }

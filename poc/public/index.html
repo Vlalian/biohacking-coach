@@ -502,6 +502,19 @@
     .session-block { touch-action: none; user-select: none; }
     .session-block.dragging { opacity: 0.45; }
     .drop-hover { outline: 1.5px dashed var(--accent); outline-offset: -1px; border-radius: 6px; }
+    /* Displacement — parked sessions */
+    .session-block.parked { border: 1.5px dashed #8b5050; color: #8b5050; background: transparent; }
+    .session-dot.parked   { border-style: dashed; }
+    .sd-parked {
+      margin: 12px 0 4px;
+      padding: 10px 12px;
+      background: rgba(139,32,32,0.08);
+      border: 1px solid #553333;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #b08585;
+      line-height: 1.55;
+    }
     .tp-expand-all {
       background: none;
       border: 1px solid var(--border);

@@ -95,9 +95,14 @@ function renderSessionContent(panel, sessionId) {
   const isPast        = session.dateKey < todayKey;
   const isToday       = session.dateKey === todayKey;
 
+  const isParked      = session.parked === true;
+
   const canRate        = !isRest && !isSkipped && !isUnavailable && (isPast || isToday);
   const canSkip        = !isRest && !isSkipped && !isUnavailable && !hasRated;
   const canMarkUnavail = !isRest && !isUnavailable && !isSkipped && !hasRated && !isPast;
+  // A parked session's way back is a move (or the Weekly Session) — the
+  // undo button would just re-park it against the Rest still on the day.
+  const canUndoUnavail = isUnavailable && !isParked;
 
   const label = isUnavailable ? t('statusUnavailable')
               : isSkipped     ? t('statusSkipped')
@@ -117,13 +122,14 @@ function renderSessionContent(panel, sessionId) {
     <div class="sd-date">${fullDate(session.dateKey)}</div>
     ${duration || zone ? `<div class="sd-meta">${[duration, zone].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>` : ''}
     ${note ? `<p class="sd-note">${note}</p>` : ''}
+    ${isParked ? `<div class="sd-parked">${t('parkedExplain')}</div>` : ''}
     ${hasRated ? feedbackDisplay(session.feedback) : ''}
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
       ${canRate        ? `<button class="btn-rate" style="${BTN_STYLE}">${hasRated ? t('rateSessionEdit') : t('rateSession')}</button>` : ''}
       ${canSkip        ? `<button class="btn-skip" style="${BTN_STYLE}">${t('markSkipped')}</button>` : ''}
       ${isSkipped      ? `<button class="btn-undo-skip" style="${BTN_STYLE}">${t('undoSkipped')}</button>` : ''}
       ${canMarkUnavail ? `<button class="btn-unavail" style="${WARN_STYLE}">${t('markUnavailable')}</button>` : ''}
-      ${isUnavailable  ? `<button class="btn-undo-unavail" style="${BTN_STYLE}">${t('undoUnavailable')}</button>` : ''}
+      ${canUndoUnavail ? `<button class="btn-undo-unavail" style="${BTN_STYLE}">${t('undoUnavailable')}</button>` : ''}
       <button class="btn-discuss" style="width:100%;padding:10px 0;background:#c9a96e;color:#000;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;opacity:0.9;">${t('discussCoach')}</button>
     </div>`;
 
@@ -139,7 +145,7 @@ function renderSessionContent(panel, sessionId) {
   if (canSkip)        panel.querySelector('.btn-skip').addEventListener('click',         () => { updateSession(session.id, { status: 'skipped' }); refresh(); });
   if (isSkipped)      panel.querySelector('.btn-undo-skip').addEventListener('click',    () => { updateSession(session.id, { status: 'planned' }); refresh(); });
   if (canMarkUnavail) panel.querySelector('.btn-unavail').addEventListener('click',      () => { updateSession(session.id, { status: 'unavailable' }); refresh(); });
-  if (isUnavailable)  panel.querySelector('.btn-undo-unavail').addEventListener('click', () => { updateSession(session.id, { status: 'planned' }); refresh(); });
+  if (canUndoUnavail) panel.querySelector('.btn-undo-unavail').addEventListener('click', () => { updateSession(session.id, { status: 'planned' }); refresh(); });
 }
 
 export function openSessionDrawer(sessionId, { onChange } = {}) {

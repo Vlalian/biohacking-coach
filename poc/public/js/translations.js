@@ -28,6 +28,8 @@ const STRINGS = {
     // Expanded Week
     expandAll:          'Expand all',
     collapseAll:        'Collapse all',
+    // Displacement (Rest dominance)
+    parkedExplain:      'A Rest day took this spot, so this session is set aside for now. Drag it to another day to keep it in your week, or leave it — you and your Coach can sort it out at the Weekly Session.',
     // Calendar expansion
     markUnavailable:    'Mark as unavailable',
     undoUnavailable:    'Undo',
@@ -250,6 +252,8 @@ const STRINGS = {
     // Expanded Week
     expandAll:          'Udvid alle',
     collapseAll:        'Luk alle',
+    // Displacement (Rest dominance)
+    parkedExplain:      'En hviledag optog denne plads, så sessionen er sat til side indtil videre. Træk den til en anden dag for at beholde den i din uge, eller lad den ligge — du og din coach kan afklare det ved den ugentlige session.',
     // Calendar expansion
     markUnavailable:    'Marker som utilgængelig',
     undoUnavailable:    'Fortryd',

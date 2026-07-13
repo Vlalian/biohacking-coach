@@ -69,3 +69,43 @@ describe('applyMove — stories', () => {
     ]);
   });
 });
+
+describe('applyMove — Displacement stories', () => {
+  it('park → Rest leaves → auto-restore, in one flow', () => {
+    const training = createSession({ dateKey: nextWed, type: 'Endurance', origin: 'coach' });
+    const rest     = createSession({ dateKey: nextMon, type: 'Rest', origin: 'coach' });
+
+    expect(applyMove(rest.id, nextWed)).toBe('move');
+    expect(getSession(training.id)).toMatchObject({ status: 'unavailable', parked: true, dateKey: nextWed });
+    expect(getSession(rest.id)).toMatchObject({ dateKey: nextWed, status: 'planned' });
+
+    const friday = addDays(nextMon, 4);
+    expect(applyMove(rest.id, friday)).toBe('move');
+    expect(getSession(training.id)).toMatchObject({ status: 'planned', parked: false, dateKey: nextWed });
+  });
+
+  it('training dropped on a Rest day lands parked; the Rest is untouched', () => {
+    const rest     = createSession({ dateKey: nextWed, type: 'Rest', origin: 'coach' });
+    const training = createSession({ dateKey: nextMon, type: 'Tempo', origin: 'coach' });
+    expect(applyMove(training.id, nextWed)).toBe('move');
+    expect(getSession(training.id)).toMatchObject({ dateKey: nextWed, status: 'unavailable', parked: true });
+    expect(getSession(rest.id)).toMatchObject({ dateKey: nextWed, status: 'planned', parked: false });
+  });
+
+  it('moving a parked session to a free day revives it to planned', () => {
+    const rest     = createSession({ dateKey: nextWed, type: 'Rest', origin: 'coach' });
+    const training = createSession({ dateKey: nextMon, type: 'Tempo', origin: 'coach' });
+    applyMove(training.id, nextWed); // parks
+    expect(applyMove(training.id, nextTue)).toBe('move');
+    expect(getSession(training.id)).toMatchObject({ dateKey: nextTue, status: 'planned', parked: false });
+  });
+
+  it('Rest onto Rest bounces: nothing changes, nothing is logged', () => {
+    const restA = createSession({ dateKey: nextMon, type: 'Rest', origin: 'coach' });
+    const restB = createSession({ dateKey: nextWed, type: 'Rest', origin: 'coach' });
+    expect(applyMove(restA.id, nextWed)).toBe('bounce');
+    expect(getSession(restA.id).dateKey).toBe(nextMon);
+    expect(getSession(restB.id).dateKey).toBe(nextWed);
+    expect(getMoveLog()).toHaveLength(0);
+  });
+});

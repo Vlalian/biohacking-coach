@@ -71,3 +71,51 @@ describe('resolveDrop — non-Rest conflict cells', () => {
     expect(resolveDrop(training('Recovery'), occupants).displaceIds).toEqual([]);
   });
 });
+
+describe('resolveDrop — Rest conflict cells (Displacement)', () => {
+  const rest = () => session({ type: 'Rest', isTraining: false });
+
+  it('Rest onto a training day displaces the training: parked in place, Rest lands active', () => {
+    const r = resolveDrop(rest(), [session({ id: 'tr1', type: 'Endurance' })]);
+    expect(r.incomingStatus).toBe('planned');
+    expect(r.parkIncoming).toBe(false);
+    expect(r.displaceIds).toEqual(['tr1']);
+  });
+
+  it('Rest onto a multi-occupant day parks every training session on it', () => {
+    const occupants = [
+      session({ id: 'a', type: 'Endurance' }),
+      session({ id: 'b', type: 'Intensity', status: 'skipped' }),
+    ];
+    expect(resolveDrop(rest(), occupants).displaceIds).toEqual(['a', 'b']);
+  });
+
+  it('Rest never displaces a completed session — the record is immutable', () => {
+    const occupants = [session({ id: 'done', status: 'completed' })];
+    expect(resolveDrop(rest(), occupants).displaceIds).toEqual([]);
+  });
+
+  it('Rest onto Rest is a no-op — Rest days cannot be part of a Double', () => {
+    const r = resolveDrop(rest(), [session({ id: 'r2', type: 'Rest', isTraining: false })]);
+    expect(r.noop).toBe(true);
+  });
+
+  it('training onto a Rest day parks the incoming session; the Rest is untouched', () => {
+    const r = resolveDrop(session(), [session({ id: 'r', type: 'Rest', isTraining: false })]);
+    expect(r.parkIncoming).toBe(true);
+    expect(r.incomingStatus).toBe('unavailable');
+    expect(r.displaceIds).toEqual([]);
+  });
+
+  it('a non-load session coexists with Rest — no displacement, no parking', () => {
+    const mobility = session({ type: 'Mobility', isTraining: false });
+    const r = resolveDrop(mobility, [session({ id: 'r', type: 'Rest', isTraining: false })]);
+    expect(r.parkIncoming).toBe(false);
+    expect(r.incomingStatus).toBe('planned');
+  });
+
+  it('Rest onto a day holding a non-load session leaves it alone', () => {
+    const occupants = [session({ id: 'mob', type: 'Mobility', isTraining: false })];
+    expect(resolveDrop(rest(), occupants).displaceIds).toEqual([]);
+  });
+});
