@@ -1,5 +1,5 @@
 import { t } from './translations.js';
-import { sessionsForDay, rateDay } from './store.js';
+import { sessionsForDay, rateDay, updateSession } from './store.js';
 
 function rpeLabel(val) {
   return (t('rpeLabels') || [])[val] || '';
@@ -42,10 +42,28 @@ function rpeRow(dim, label, existing) {
     </div>`;
 }
 
+// Day-keyed prompt (single-session semantics): rates the day's primary
+// session, minting a completed entity when the day is empty.
 export function showFeedbackPrompt(dateKey, sessionType, onSubmit, { preload = true } = {}) {
+  const existing = preload ? (primarySession(dateKey)?.feedback || {}) : {};
+  buildFeedbackModal(sessionType, existing, data => {
+    rateDay(dateKey, sessionType, data);
+    onSubmit(data);
+  });
+}
+
+// Entity-keyed prompt: rates one specific session — the header names its type.
+export function showSessionFeedbackPrompt(session, onSubmit, { preload = true } = {}) {
+  const existing = preload ? (session.feedback || {}) : {};
+  buildFeedbackModal(session.type, existing, data => {
+    updateSession(session.id, { status: 'completed', feedback: data });
+    onSubmit(data);
+  });
+}
+
+function buildFeedbackModal(sessionType, existing, onSave) {
   document.getElementById('bh-feedback-modal')?.remove();
 
-  const existing = preload ? (primarySession(dateKey)?.feedback || {}) : {};
   const selected = { body: existing.body || 0, mind: existing.mind || 0 };
 
   const overlay = document.createElement('div');
@@ -108,9 +126,8 @@ export function showFeedbackPrompt(dateKey, sessionType, onSubmit, { preload = t
   modal.querySelector('#bh-fb-save').addEventListener('click', () => {
     const comment = modal.querySelector('#bh-feedback-comment').value.trim();
     const data    = { body: selected.body, mind: selected.mind, comment };
-    rateDay(dateKey, sessionType, data);
     overlay.remove();
-    onSubmit(data);
+    onSave(data);
   });
 
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });

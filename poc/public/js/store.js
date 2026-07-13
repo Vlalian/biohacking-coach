@@ -8,6 +8,7 @@ const LS_SESSIONS = 'bh_sessions';
 const LS_VERSION  = 'bh_store_version';
 const LS_REPORT   = 'bh_migration_report';
 const LS_UNAVAIL  = 'bh_unavailable_dates';
+const LS_MOVELOG  = 'bh_move_log';
 
 const STORE_VERSION = 1;
 const HORIZON_WEEKS = 4;
@@ -16,6 +17,14 @@ const DOW_OFFSETS = { Monday: 0, Tuesday: 1, Wednesday: 2, Thursday: 3, Friday: 
 
 // Types that never count as training load. Other carries its own toggle.
 const NON_TRAINING_TYPES = ['Rest', 'Mobility'];
+
+export const SESSION_COLORS = {
+  Endurance: '#4a90d9',
+  Intensity: '#e05555',
+  Tempo:     '#c9a96e',
+  Recovery:  '#6db36d',
+  Rest:      '#8a8a8a',
+};
 
 export const SESSION_DEFAULTS = {
   Endurance: { duration: '90 min', zone: 'Zone 2',   note: 'Aerobic foundation — keep HR conversational and resist the urge to push.' },
@@ -144,6 +153,33 @@ export function sessionsForWeek(dateKey) {
   return loadSessions()
     .filter(s => s.dateKey >= start && s.dateKey <= end)
     .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || a.dayOrder - b.dayOrder);
+}
+
+// Relocates a session to another day: dayOrder is minted fresh, appended at
+// the end of the target day (gaps left on the source day are fine).
+export function moveSession(id, targetDateKey) {
+  const sessions = loadSessions();
+  const idx = sessions.findIndex(s => s.id === id);
+  if (idx === -1) return null;
+  const others = sessions.filter(s => s.id !== id);
+  sessions[idx] = { ...sessions[idx], dateKey: targetDateKey, dayOrder: nextDayOrder(others, targetDateKey) };
+  saveSessions(sessions);
+  return sessions[idx];
+}
+
+// ── Silent move log ───────────────────────────────────────────────────────────
+// Every Session Move is logged internally; nothing is surfaced to the athlete.
+// The log feeds Pattern Insight and reaches the Coach at the Weekly Session.
+
+export function appendMoveLog(entry) {
+  const log = getMoveLog();
+  log.push(entry);
+  localStorage.setItem(LS_MOVELOG, JSON.stringify(log));
+}
+
+export function getMoveLog() {
+  try { return JSON.parse(localStorage.getItem(LS_MOVELOG) || '[]'); }
+  catch { return []; }
 }
 
 // ── Unavailable dates (date-level, distinct from unavailable sessions) ────────

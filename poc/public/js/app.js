@@ -6,8 +6,8 @@ import {
   discussWithCoach, startWeeklySession, sendWeeklyMessage, agreeWeeklyPlan,
   startCoachChat, sendChatMessage, endCoachChat,
 } from './conversation.js';
-import { showFeedbackPrompt } from './feedback.js';
-import { initStore, getMigrationReport, dismissMigrationReport, getLastWeekFeedback, getSkippedSessions } from './store.js';
+import { showFeedbackPrompt, showSessionFeedbackPrompt } from './feedback.js';
+import { initStore, getMigrationReport, dismissMigrationReport, getLastWeekFeedback, getSkippedSessions, sessionsForDay } from './store.js';
 import { isOnboarded, getOnboardedProfile, beginOnboarding } from './onboarding.js';
 import { t, applyStaticTranslations } from './translations.js';
 
@@ -440,16 +440,24 @@ window.resetOnboarding = () => {
 
 // Prototype trigger — simulates app opening after a detected workout completion.
 // In production this fires automatically via the wearable/fitness API integration.
+// Targets today's first session by dayOrder; with no session planned, the
+// rating mints a completed entity typed from the current phase.
 window.simulateWorkoutComplete = () => {
-  const today      = new Date();
-  const dateKey    = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const phase      = document.getElementById('phase')?.value || 'Base Building';
-  const typeMap    = {
+  const today   = new Date();
+  const dateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const target = sessionsForDay(dateKey).find(s => s.type !== 'Rest');
+  if (target) {
+    showSessionFeedbackPrompt(target, () => {}, { preload: false });
+    return;
+  }
+
+  const phase   = document.getElementById('phase')?.value || 'Base Building';
+  const typeMap = {
     'Early Base Building': 'Endurance', 'Base Building': 'Endurance',
     'Build Phase': 'Intensity', 'Peak Phase': 'Intensity',
     'Taper': 'Endurance', 'Recovery': 'Recovery',
     'Return to Training': 'Endurance', 'Off-season Maintenance': 'Endurance',
   };
-  const sessionType = typeMap[phase] || 'Endurance';
-  showFeedbackPrompt(dateKey, sessionType, () => {}, { preload: false });
+  showFeedbackPrompt(dateKey, typeMap[phase] || 'Endurance', () => {}, { preload: false });
 };

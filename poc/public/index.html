@@ -409,31 +409,61 @@
     }
     .session-dot.outline { background: transparent; border: 1.5px solid; }
     .session-dot.muted   { background: #555; }
-    .cal-expansion {
-      grid-column: 1 / -1;
-      background: var(--surface-2);
-      border-radius: 8px;
-      padding: 12px 14px;
-      margin: 2px 0 4px;
-      animation: expIn 0.16s ease;
-    }
     @keyframes expIn {
       from { opacity: 0; transform: translateY(-4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .cal-exp-row  { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-    .cal-exp-type { font-size: 13px; font-weight: 600; }
-    .cal-exp-badge {
-      font-size: 10px; padding: 2px 7px; border-radius: 10px;
+    /* Session Drawer — mirrors the Navigation Drawer, from the right */
+    .session-drawer-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 90;
     }
-    .cal-exp-badge.completed { background: rgba(109,179,109,0.18); color: #6db36d; }
-    .cal-exp-badge.planned   { background: rgba(74,144,217,0.18);  color: #4a90d9; }
-    .cal-exp-badge.skipped      { background: rgba(140,140,140,0.18); color: #888; }
-    .cal-exp-badge.unavailable  { background: rgba(139,32,32,0.15);  color: #8b5050; }
+    .session-drawer-overlay.open { display: block; }
+    .session-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+      width: 300px;
+      max-width: 85vw;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      z-index: 95;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      padding: 24px 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    .session-drawer.open { transform: translateX(0); }
+    .sd-close {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .sd-close:hover { color: var(--text); }
+    .sd-row  { display: flex; align-items: center; gap: 10px; margin: 20px 0 6px; }
+    .sd-type { font-size: 15px; font-weight: 700; }
+    .sd-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; }
+    .sd-badge.completed   { background: rgba(109,179,109,0.18); color: #6db36d; }
+    .sd-badge.planned     { background: rgba(74,144,217,0.18);  color: #4a90d9; }
+    .sd-badge.skipped     { background: rgba(140,140,140,0.18); color: #888; }
+    .sd-badge.unavailable { background: rgba(139,32,32,0.15);   color: #8b5050; }
+    .sd-date { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .sd-meta { font-size: 12px; color: var(--text); opacity: 0.9; margin-bottom: 8px; }
+    .sd-note { font-size: 13px; color: var(--text); line-height: 1.55; margin: 0 0 4px; }
     .session-dot.unavailable    { background: #3a2a2a; border: 1.5px solid #553333; }
     .session-dot.planning       { background: #c9a96e; width: 5px; height: 5px; opacity: 0.75; }
     .session-dot.constraint     { background: transparent; border: 1.5px solid #553333; width: 5px; height: 5px; opacity: 0.6; }
-    .cal-day.selected           { outline: 1px solid var(--accent); border-radius: 4px; }
     /* Multi-dot collapsed days */
     .dots-row { display: flex; gap: 3px; justify-content: center; align-items: center; }
     .dots-row .session-dot { margin: 4px 0 0; flex: none; }
@@ -489,8 +519,6 @@
     .gloss-section dl { padding:12px 0 4px; display:flex; flex-direction:column; gap:12px; }
     .gloss-section dt { font-size:13px; font-weight:600; color:var(--accent); margin-bottom:2px; }
     .gloss-section dd { font-size:13px; color:var(--muted); line-height:1.6; margin:0; }
-    .cal-exp-meta { font-size: 12px; color: var(--text); opacity: 0.9; margin-bottom: 6px; }
-    .cal-exp-note { font-size: 12px; color: var(--text); line-height: 1.5; margin: 0; }
     .btn-discuss {
       margin-top: 10px;
       width: 100%;
