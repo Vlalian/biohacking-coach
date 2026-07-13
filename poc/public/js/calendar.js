@@ -1,4 +1,4 @@
-import { sessionsForDay, weekStartOf, getDateKey as storeDateKey, SESSION_COLORS } from './store.js';
+import { sessionsForDay, weekStartOf, getDateKey, SESSION_COLORS } from './store.js';
 import { openSessionDrawer, openPlanningDrawer, openCreateDrawer } from './drawer.js';
 import { applyMove } from './moves.js';
 import { isFrozen } from './rules.js';
@@ -8,10 +8,6 @@ const DOW_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 function getProfile() {
   try { return JSON.parse(localStorage.getItem('bh_athlete_profile') || 'null'); } catch { return null; }
-}
-
-function getDateKey(dateObj) {
-  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
 }
 
 // ── View state ────────────────────────────────────────────────────────────────
@@ -95,7 +91,7 @@ function clearDropHover() {
 }
 
 function onBlockPointerDown(e, session) {
-  if (isFrozen(session, storeDateKey(new Date()))) return; // frozen blocks cannot be lifted
+  if (isFrozen(session, getDateKey(new Date()))) return; // frozen blocks cannot be lifted
   drag = { sessionId: session.id, el: e.currentTarget, startX: e.clientX, startY: e.clientY, active: false };
   e.currentTarget.setPointerCapture?.(e.pointerId);
 }

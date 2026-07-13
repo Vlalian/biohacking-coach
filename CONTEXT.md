@@ -163,6 +163,9 @@ _Avoid_: ratings data, review scores, session log
 
 **RPE (Rate of Perceived Exertion)** — the 1–10 scale used for Body Feedback and Mind Feedback. Industry standard in sports coaching for self-assessment of training sessions. 1 = minimal effort/impact, 10 = maximum. Both dimensions use this scale so ratings are consistent with the language athletes and coaches already use.
 
+**Week Activity** — the current week's Session Moves and Athlete Session creations, sent with the Weekly Session request and injected into the Coach's prompt as silent background context (Pattern Insight material, never challenged in the moment). Rendered as natural references — date + Session Type, a position qualifier only for same-type Doubles — entity ids never appear in prompts. A retro-log performed this week counts as this week's activity even though the session sits on a past date.
+_Avoid_: audit trail, change log, edit history
+
 **Athlete Profile** — the accumulating model of the individual athlete. Seeded during the Onboarding Session and deepened continuously through Check-ins, Session Reflections, and Session Negotiation history. Also holds durable preferences: Communication Style, Athlete Language, Fixed Constraints, and Weekly Session Day.
 
 **Fixed Constraint** — a recurring day-of-week the athlete cannot train (e.g. "no training Thursdays"), stored in the Athlete Profile and injected into every Coach prompt so plans silently avoid those days. Captured during the Onboarding Session or detected in conversation — the Coach asks one clarifying question to distinguish a Fixed Constraint ("every week") from a single-instance unavailable date. Fixed-constraint days remain valid Session Move drop targets: the constraint marker stays visible so the clash is self-evident, but no friction is added.

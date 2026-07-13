@@ -116,7 +116,7 @@ describe('Athlete Sessions — create, edit, delete, retro-log', () => {
     const { getCreationLog } = await import('../public/js/store.js');
     const s = createAthleteSession({ dateKey: nextTue, type: 'Strength', duration: '30 min', note: 'Hips.' });
     expect(s).toMatchObject({ origin: 'athlete', type: 'Strength', status: 'planned', isTraining: true, dateKey: nextTue });
-    expect(getCreationLog()).toEqual([{ sessionId: s.id, sessionType: 'Strength', dateKey: nextTue, retro: false }]);
+    expect(getCreationLog()).toEqual([{ sessionId: s.id, sessionType: 'Strength', dateKey: nextTue, retro: false, createdOn: todayKey }]);
   });
 
   it('Mobility is fixed not-training; Other takes its toggle', async () => {

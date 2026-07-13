@@ -159,7 +159,8 @@ describe('migration — preservation', () => {
 
   it('unavailable marker without a session becomes an unavailable date', () => {
     const freeDay = addDays(todayKey, 3);
-    seedLegacyState({ weekPlan: false, feedback: { [freeDay]: { unavailable: true } } });
+    // no plan data at all — otherwise horizon seeding may occupy freeDay
+    seedLegacyState({ weekPlan: false, history: false, feedback: { [freeDay]: { unavailable: true } } });
     initStore();
     expect(getUnavailableDates()).toContain(freeDay);
     expect(sessionsForDay(freeDay)).toHaveLength(0);
@@ -400,5 +401,23 @@ describe('getWeekActivity — current-week moves and creations for the Coach', (
     const s = createSession({ dateKey: todayKey, type: 'Endurance', origin: 'coach' });
     appendMoveLog({ sessionId: s.id, sessionType: 'Endurance', from: thisMonday, to: todayKey });
     expect(getWeekActivity().moves[0].position).toBe(2);
+  });
+});
+
+describe('review fixes — seeding gate and retro-log week activity', () => {
+  it('a user with plan history but no current week plan still gets the horizon seeded', () => {
+    seedLegacyState({ weekPlan: false, history: true });
+    localStorage.setItem('bca_phase', 'Base Building');
+    const report = initStore();
+    expect(report.seededWeeks).toBe(4);
+    expect(sessionsForWeek(nextMonday).length).toBeGreaterThan(0);
+  });
+
+  it('a retro-log performed this week onto a past date counts as this week\'s activity', async () => {
+    const { getWeekActivity, appendCreationLog } = await import('../public/js/store.js');
+    initStore();
+    const lastThursday = addDays(lastMonday, 3);
+    appendCreationLog({ sessionId: 'r1', sessionType: 'Strength', dateKey: lastThursday, retro: true, createdOn: todayKey });
+    expect(getWeekActivity().creations).toEqual([{ sessionType: 'Strength', dateKey: lastThursday, retro: true }]);
   });
 });

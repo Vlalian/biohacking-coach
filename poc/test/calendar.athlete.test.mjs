@@ -171,3 +171,23 @@ describe('retro-log', () => {
     expect(drawer().querySelector('.btn-delete-session')).toBeNull();
   });
 });
+
+describe('review fix — dismissed retro-log rating', () => {
+  it('a completed-but-unrated session reads Completed, offers Rate, and cannot be skipped', () => {
+    render();
+    expandWeekOf(TODAY);
+    addButtonFor(THIS_TUE).click();
+    drawer().querySelector('[data-type="Strength"]').click();
+    drawer().querySelector('#sd-save').click();
+    // dismiss the rating prompt instead of saving it
+    document.querySelector('#bh-fb-skip').click();
+    const created = allSessions().find(s => s.origin === 'athlete');
+    expect(created).toMatchObject({ status: 'completed', feedback: null });
+
+    document.querySelector(`.session-block[data-session-id="${created.id}"]`).click();
+    expect(drawer().textContent).toContain('Completed');
+    expect(drawer().querySelector('.btn-rate')).not.toBeNull();
+    expect(drawer().querySelector('.btn-skip')).toBeNull();
+    expect(drawer().querySelector('.btn-unavail')).toBeNull();
+  });
+});

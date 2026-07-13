@@ -7,3 +7,8 @@ The draggable calendar (Expanded Week + Session Move) lets athletes freely restr
 - Sessions become identity-bearing entities, not attributes of a day — required by Doubles, Displacement limbo, and per-session Session Reflection. The POC's date-keyed storage (`bh_week_plan`, `bh_session_feedback`) must be refactored.
 - Future weeks must hold real, athlete-mutable Planned Sessions — the POC's phase-template mock data for future weeks no longer suffices.
 - The domain expert has not yet validated Rest dominance, unlimited Doubles, or athlete-owned Strength sessions — see `.scratch/mvp/domain-expert-questions.md` section 9.
+
+## Amendments
+
+- **2026-07-12 — Cross-Week Move and Move Checkpoint retired before build** (round-2 expert answer, applied by the [Calendar Implementation Route](../../.scratch/calendar-implementation-route/MAP.md)): the week is the planning unit and catch-up belongs in the Weekly Session, so Session Moves are within-week only and a drop toward another week bounces like a drop on a past day. The checkpoint friction described above was never built. The rest of the model stands as recorded; Rest dominance was confirmed by the expert as the right default for age-groupers (level-dependent, revisit with the human coach at V1).
+- **2026-07-13 — model implemented** across `poc/public/js/store.js` (entities, migration), `rules.js` (move legality + Displacement), `moves.js` (orchestrator, Athlete Sessions), and the calendar/drawer UI; the silent move log reaches the Coach as Week Activity.

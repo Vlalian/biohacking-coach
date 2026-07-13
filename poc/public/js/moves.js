@@ -51,14 +51,17 @@ function restoreParkedOn(dateKey) {
 // reality). Creation is silently logged and never challenged in the moment.
 
 export function createAthleteSession({ dateKey, type, isTraining, title, duration, note }) {
-  const retro = dateKey < getDateKey(new Date());
+  const todayKey = getDateKey(new Date());
+  const retro    = dateKey < todayKey;
   const session = createSession({
     dateKey, type, title, duration, note,
     origin:     'athlete',
     isTraining: type === 'Strength' ? true : type === 'Mobility' ? false : !!isTraining,
     status:     retro ? 'completed' : 'planned',
   });
-  appendCreationLog({ sessionId: session.id, sessionType: type, dateKey, retro });
+  // createdOn records when the athlete acted — a retro-log done this week
+  // belongs to this week's activity even though the session sits in the past.
+  appendCreationLog({ sessionId: session.id, sessionType: type, dateKey, retro, createdOn: todayKey });
   return session;
 }
 

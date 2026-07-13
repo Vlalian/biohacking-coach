@@ -76,9 +76,13 @@ function todayKey() {
 
 // ── Persistence primitives ────────────────────────────────────────────────────
 
+function readJson(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || fallback); }
+  catch { return JSON.parse(fallback); }
+}
+
 function loadSessions() {
-  try { return JSON.parse(localStorage.getItem(LS_SESSIONS) || '[]'); }
-  catch { return []; }
+  return readJson(LS_SESSIONS, '[]');
 }
 
 function saveSessions(sessions) {
@@ -183,8 +187,7 @@ export function appendMoveLog(entry) {
 }
 
 export function getMoveLog() {
-  try { return JSON.parse(localStorage.getItem(LS_MOVELOG) || '[]'); }
-  catch { return []; }
+  return readJson(LS_MOVELOG, '[]');
 }
 
 // Athlete Session creations are logged the same silent way.
@@ -195,8 +198,17 @@ export function appendCreationLog(entry) {
 }
 
 export function getCreationLog() {
-  try { return JSON.parse(localStorage.getItem(LS_CREATELOG) || '[]'); }
-  catch { return []; }
+  return readJson(LS_CREATELOG, '[]');
+}
+
+// 1-based position of a session among same-type sessions on its day — the
+// natural-reference qualifier, present only when date + type is ambiguous
+// (a same-type Double). Returns null otherwise.
+function sameTypePosition(sessions, session) {
+  const sameType = sessions
+    .filter(o => o.dateKey === session.dateKey && o.type === session.type)
+    .sort((a, b) => a.dayOrder - b.dayOrder);
+  return sameType.length > 1 ? sameType.findIndex(o => o.id === session.id) + 1 : null;
 }
 
 // The current week's Session Moves and Athlete Session creations, shaped as
@@ -212,17 +224,15 @@ export function getWeekActivity() {
   const moves = getMoveLog().filter(m => inWeek(m.to)).map(m => {
     const ref = { sessionType: m.sessionType, from: m.from, to: m.to };
     const s = sessions.find(x => x.id === m.sessionId);
-    if (s) {
-      const sameType = sessions
-        .filter(o => o.dateKey === s.dateKey && o.type === s.type)
-        .sort((a, b) => a.dayOrder - b.dayOrder);
-      if (sameType.length > 1) ref.position = sameType.findIndex(o => o.id === s.id) + 1;
-    }
+    const position = s && sameTypePosition(sessions, s);
+    if (position) ref.position = position;
     return ref;
   });
 
+  // A retro-log performed this week lands on a past date — filter by when the
+  // athlete acted (createdOn), not where the session sits.
   const creations = getCreationLog()
-    .filter(c => inWeek(c.dateKey))
+    .filter(c => inWeek(c.createdOn ?? c.dateKey))
     .map(({ sessionType, dateKey, retro }) => ({ sessionType, dateKey, retro }));
 
   return { moves, creations };
@@ -231,8 +241,7 @@ export function getWeekActivity() {
 // ── Unavailable dates (date-level, distinct from unavailable sessions) ────────
 
 function loadUnavailableDates() {
-  try { return JSON.parse(localStorage.getItem(LS_UNAVAIL) || '[]'); }
-  catch { return []; }
+  return readJson(LS_UNAVAIL, '[]');
 }
 
 function addUnavailableDate(dateKey) {
@@ -278,11 +287,9 @@ export function getSkippedSessions() {
     .filter(s => s.status === 'skipped' && s.dateKey >= cutoff)
     .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || a.dayOrder - b.dayOrder)
     .map(s => {
-      const sameType = sessions
-        .filter(o => o.dateKey === s.dateKey && o.type === s.type)
-        .sort((a, b) => a.dayOrder - b.dayOrder);
       const ref = { date: s.dateKey, sessionType: s.type };
-      if (sameType.length > 1) ref.position = sameType.findIndex(o => o.id === s.id) + 1;
+      const position = sameTypePosition(sessions, s);
+      if (position) ref.position = position;
       return ref;
     });
 }
@@ -372,11 +379,6 @@ function seedHorizon() {
 
 // ── Migration ─────────────────────────────────────────────────────────────────
 
-function parseLegacy(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || fallback); }
-  catch { return JSON.parse(fallback); }
-}
-
 // Status and feedback for a legacy feedback record.
 function legacyStatus(record) {
   if (!record) return { status: 'planned', feedback: null };
@@ -405,11 +407,11 @@ export function initStore() {
   if (version >= STORE_VERSION) return null;
 
   const weekPlan = (() => {
-    const p = parseLegacy('bh_week_plan', 'null');
+    const p = readJson('bh_week_plan', 'null');
     return (p && p.weekStart && p.sessions) ? p : null;
   })();
-  const history  = parseLegacy('bh_plan_history', '[]');
-  const feedback = parseLegacy('bh_session_feedback', '{}');
+  const history  = readJson('bh_plan_history', '[]');
+  const feedback = readJson('bh_session_feedback', '{}');
 
   const sessions = loadSessions();
   const consumedFeedback = new Set();
@@ -460,7 +462,9 @@ export function initStore() {
   });
 
   saveSessions(sessions);
-  if (weekPlan) counts.seededWeeks = seedHorizon();
+  // Seed the horizon for anyone with real plan data. A truly fresh athlete
+  // (nothing agreed, nothing recorded) keeps an honest empty calendar.
+  if (weekPlan || history.length > 0) counts.seededWeeks = seedHorizon();
   localStorage.setItem(LS_VERSION, String(STORE_VERSION));
 
   const hadLegacyState = counts.sessions > 0 || counts.unavailable > 0 || counts.unmatched > 0;
@@ -473,8 +477,7 @@ export function initStore() {
 }
 
 export function getMigrationReport() {
-  try { return JSON.parse(localStorage.getItem(LS_REPORT) || 'null'); }
-  catch { return null; }
+  return readJson(LS_REPORT, 'null');
 }
 
 export function dismissMigrationReport() {

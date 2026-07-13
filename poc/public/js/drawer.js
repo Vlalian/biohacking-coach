@@ -92,24 +92,26 @@ function renderSessionContent(panel, sessionId) {
   const isRest        = session.type === 'Rest';
   const isSkipped     = session.status === 'skipped';
   const isUnavailable = session.status === 'unavailable';
-  const hasRated      = session.status === 'completed' && !!session.feedback;
-  const now           = new Date();
-  const todayKey      = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isCompleted   = session.status === 'completed';
+  // Completed without feedback happens when a retro-log's rating prompt was
+  // dismissed — the session stays done, the rating stays on offer.
+  const hasRated      = isCompleted && !!session.feedback;
+  const todayKey      = getDateKey(new Date());
   const isPast        = session.dateKey < todayKey;
   const isToday       = session.dateKey === todayKey;
 
   const isParked      = session.parked === true;
 
   const canRate        = !isRest && !isSkipped && !isUnavailable && (isPast || isToday);
-  const canSkip        = !isRest && !isSkipped && !isUnavailable && !hasRated;
-  const canMarkUnavail = !isRest && !isUnavailable && !isSkipped && !hasRated && !isPast;
+  const canSkip        = !isRest && session.status === 'planned';
+  const canMarkUnavail = !isRest && session.status === 'planned' && !isPast;
   // A parked session's way back is a move (or the Weekly Session) — the
   // undo button would just re-park it against the Rest still on the day.
   const canUndoUnavail = isUnavailable && !isParked;
 
   const label = isUnavailable ? t('statusUnavailable')
               : isSkipped     ? t('statusSkipped')
-              : hasRated      ? t('statusCompleted')
+              : isCompleted   ? t('statusCompleted')
               : t('statusPlanned');
 
   // Athlete Sessions are the athlete's territory: editable and deletable —
