@@ -9,3 +9,9 @@ The product's identity is the accessible alternative to a human coach, yet Coach
 - The Coach gains two new conversational duties: narrating Head Coach actions to the athlete with attribution, and answering Head Coach interrogation via the Coach Briefing within Link Visibility bounds.
 - The Concept Story is amended, not replaced: "can't afford a human coach" remains the core segment; coached athletes are an extension where the product strengthens an existing human relationship instead of substituting for one.
 - Domain expert validation pending — see `.scratch/mvp/domain-expert-questions.md` section 10.
+
+## Amendment 2026-07-13 — In-app messaging reopened as the Coaching Channel
+
+The original consequence *"no in-app athlete↔Head Coach messaging in the first version"* is reopened. A `grill-with-docs` session (2026-07-13) settled the **Coaching Channel**: one persistent three-party conversation (athlete + Head Coach + AI Coach) on a Coaching Link, context-bound via References, surfaced through a right-side non-modal Messaging Drawer and a Messaging View. The AI participates as a guard-railed voice (narrow proactive triggers, Head-Coach-controlled dial, suggests-not-applies) and speaks only within Link Visibility — freely on coach-visible data, never surfacing private Coach Chat or unshared fields. Coach Chat stays the athlete's separate private space.
+
+**Status:** design-approved, **pending Head Coach validation** (interview guide §12). Unchanged: athlete-first, server-side-shared-state, ships V1. This round produces a V1-targeted PRD plus a throwaway prototype of the interaction feel — no POC build (Coached Mode still needs server state).

@@ -176,6 +176,7 @@ Where the current build has taken a design position, it's noted as **→ Current
 - **→ Current position:** The AI drafts the week plan; you edit, add, or override at will, and the AI never touches your sessions without asking — it only *suggests*. Right division of labor, or would you rather author from scratch?
 - How would an AI second-guessing your programming land with you — useful analyst or backseat driver? What tone would make the difference?
 - **→ Athlete said** in-app chat with the human coach is a must ("everything gathered in one place"). Would you *want* athlete conversations inside a coaching app, or is that a channel you'd rather keep on your own terms?
+- **→ Design position (2026-07-13):** we've designed that in-app channel as a *three-party* **Coaching Channel** — you, the athlete, and the AI Coach in one shared thread, where the AI can be asked questions and can proactively offer recommendations. How proactive should the AI be in *your* channel — silent unless asked, or free to flag things? What tone keeps it a useful analyst rather than a backseat driver, and would you want a dial to turn its interjections up or down?
 - Should a coach be able to edit or delete sessions the athlete added themselves (extra strength, stretching), or is view-and-comment the right boundary?
 - What would make you adopt an app like this for your whole roster — and what would make you refuse outright? (Pricing, fear of replacement, liability, data trust?)
 - Do you coach anyone fully remotely? What changes when you never see the athlete in person?
