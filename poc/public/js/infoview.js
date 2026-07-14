@@ -1,13 +1,15 @@
 // Information View — thin orchestrator.
 //
-// Renders the Panel Catalog × dataset into #information-view as an index
-// rail (grouped by panel family) beside a single-column feed of large
-// panels — the layout the prototype verdict picked (issue 09). Panels come
-// from panels.js (pure), data from infodata.js (the synthetic seam), labels
-// from translations.js. Keeps no domain logic of its own.
+// Renders the Panel Catalog × dataset × layout into #information-view as an
+// index rail (★ Favorites first, then panel families) beside a single-column
+// feed of large panels — the layout the prototype verdict picked (issue 09).
+// Panels come from panels.js (pure), data from infodata.js (the synthetic
+// seam), Favorites from infolayout.js, labels from translations.js. Keeps no
+// domain logic of its own.
 
 import { PANELS, availablePanels } from './panels.js';
 import { getDataset, DATASET_STATES } from './infodata.js';
+import { loadFavorites, saveFavorites, promote, demote, isFavorite } from './infolayout.js';
 import { t } from './translations.js';
 
 let dataState = 'rich'; // POC dataset state, switched by the prototype banner
@@ -31,6 +33,14 @@ export function jumpToPanel(id) {
   return el;
 }
 
+// Exported click handler: star = promote into Favorites, unstar = demote.
+export function toggleFavorite(id) {
+  const validIds = PANELS.map(p => p.id);
+  const favs = loadFavorites(validIds);
+  saveFavorites(isFavorite(favs, id) ? demote(favs, id) : promote(favs, id));
+  renderInformation();
+}
+
 // Family groups in catalog order of first appearance, available panels only.
 function familyGroups(panels) {
   const groups = [];
@@ -42,23 +52,32 @@ function familyGroups(panels) {
   return groups;
 }
 
-function panelCard(p, dataset) {
+function starBtn(id, fav) {
+  const title = t(fav ? 'infoRemoveFavorite' : 'infoAddFavorite');
+  return `<button class="iv-star ${fav ? 'on' : ''}" data-star="${id}" title="${title}" aria-label="${title}">${fav ? '★' : '☆'}</button>`;
+}
+
+function panelCard(p, dataset, fav) {
   return `<div class="iv-panel" data-panel="${p.id}">
     <div class="iv-phead">
       <span class="iv-ptitle">${t(p.titleKey)}</span>
+      <span class="iv-pacts">${starBtn(p.id, fav)}</span>
     </div>
     <div class="iv-pbody">${p.render(dataset, { t })}</div>
   </div>`;
 }
 
-function railItem(p) {
-  return `<button class="iv-railitem" data-jump="${p.id}"><span>${t(p.titleKey)}</span></button>`;
+function railItem(p, fav) {
+  return `<button class="iv-railitem ${fav ? 'fav' : ''}" data-jump="${p.id}">
+    <span>${t(p.titleKey)}</span>${starBtn(p.id, fav)}</button>`;
 }
 
 function bindOnce(view) {
   if (bound) return;
   bound = true;
   view.addEventListener('click', e => {
+    const star = e.target.closest('[data-star]');
+    if (star) { toggleFavorite(star.dataset.star); return; }
     const dk = e.target.closest('[data-datakind]');
     if (dk) { setDataState(dk.dataset.datakind); return; }
     const jump = e.target.closest('[data-jump]');
@@ -70,8 +89,17 @@ export function renderInformation() {
   const view = document.getElementById('information-view');
   if (!view) return;
   const dataset = getDataset(dataState);
-  const panels = availablePanels(dataset);
-  const groups = familyGroups(panels);
+  const available = availablePanels(dataset);
+  const storedFavs = loadFavorites(PANELS.map(p => p.id));
+
+  // The layout is a preference; what renders is gated by data availability.
+  const favPanels = storedFavs
+    .map(id => available.find(p => p.id === id))
+    .filter(Boolean);
+  const restPanels = available.filter(p => !storedFavs.includes(p.id));
+  const groups = familyGroups(restPanels);
+  const feed = [...favPanels, ...restPanels];
+
   view.innerHTML = `
     <div class="iv-container">
       <div class="header">
@@ -86,17 +114,19 @@ export function renderInformation() {
         </span>
       </div>
       <div class="iv-topbar">
-        <span class="iv-hint">${t('infoReadingCount').replace('{n}', panels.length).replace('{total}', PANELS.length)}</span>
+        <span class="iv-hint">${t('infoReadingCount').replace('{n}', available.length).replace('{total}', PANELS.length)}</span>
       </div>
       <div class="iv-railwrap">
         <div class="iv-rail">
+          ${favPanels.length ? `<div class="iv-railgroup iv-railgroup-fav" data-family="favorites">★ ${t('infoFavorites')}</div>` +
+            favPanels.map(p => railItem(p, true)).join('') : ''}
           ${groups.map(g =>
             `<div class="iv-railgroup" data-family="${g.familyKey}">${t(g.familyKey)}</div>` +
-            g.panels.map(railItem).join('')
+            g.panels.map(p => railItem(p, false)).join('')
           ).join('')}
         </div>
         <div class="iv-feed">
-          ${panels.map(p => `<div id="iv-anchor-${p.id}">${panelCard(p, dataset)}</div>`).join('')}
+          ${feed.map(p => `<div id="iv-anchor-${p.id}">${panelCard(p, dataset, storedFavs.includes(p.id))}</div>`).join('')}
         </div>
       </div>
     </div>`;

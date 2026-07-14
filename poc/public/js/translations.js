@@ -48,6 +48,9 @@ const STRINGS = {
     infoDataBanner:      'Synthetic data — switch the athlete’s history depth',
     infoStateFresh:      'New athlete',
     infoStateRich:       '6 months in',
+    infoFavorites:       'Favorites',
+    infoAddFavorite:     'Add to Favorites',
+    infoRemoveFavorite:  'Remove from Favorites',
     // Main coach page buttons
     startWeeklySession: 'Start Weekly Session',
     chatWithCoach:      'Chat with Coach',
@@ -328,6 +331,9 @@ const STRINGS = {
     infoDataBanner:      'Syntetiske data — skift atletens historikdybde',
     infoStateFresh:      'Ny atlet',
     infoStateRich:       '6 måneder inde',
+    infoFavorites:       'Favoritter',
+    infoAddFavorite:     'Tilføj til favoritter',
+    infoRemoveFavorite:  'Fjern fra favoritter',
     // Main coach page buttons
     startWeeklySession: 'Start ugentlig session',
     chatWithCoach:      'Chat med Coach',

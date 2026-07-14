@@ -72,11 +72,11 @@ describe('renderInformation', () => {
 });
 
 describe('index rail', () => {
-  it('rail groups match panel families and contain only available panels', async () => {
+  it('rail groups are ★ Favorites then panel families, available panels only', async () => {
     const { setDataState } = await import('../public/js/infoview.js');
     renderInformation();
     const groups = [...document.querySelectorAll('.iv-railgroup')].map(g => g.dataset.family);
-    expect(groups).toEqual(['infoFamilyFormLoad', 'infoFamilyBodyMind', 'infoFamilyVolume', 'infoFamilyPeaks']);
+    expect(groups).toEqual(['favorites', 'infoFamilyFormLoad', 'infoFamilyBodyMind', 'infoFamilyVolume', 'infoFamilyPeaks']);
     expect(document.querySelectorAll('.iv-railitem').length)
       .toBe(document.querySelectorAll('.iv-feed .iv-panel').length);
 
@@ -113,5 +113,67 @@ describe('index rail', () => {
     Element.prototype.scrollIntoView = vi.fn();
     expect(jumpToPanel('load')).not.toBeNull();
     expect(jumpToPanel('nonexistent')).toBeNull();
+  });
+});
+
+describe('Favorites', () => {
+  const favIds  = () => [...document.querySelectorAll('.iv-railitem.fav')].map(b => b.dataset.jump);
+  const feedIds = () => [...document.querySelectorAll('.iv-feed .iv-panel')].map(p => p.dataset.panel);
+
+  it('first run shows the default Favorites set, pinned first in rail and feed', () => {
+    renderInformation();
+    expect(favIds()).toEqual(['ffnow', 'load', 'bodymind', 'sleep']);
+    expect(feedIds().slice(0, 4)).toEqual(['ffnow', 'load', 'bodymind', 'sleep']);
+  });
+
+  it('starring promotes into the ★ group; unstarring returns the panel to its family', () => {
+    renderInformation();
+    document.querySelector('.iv-feed [data-star="race"]').click();
+    expect(favIds()).toEqual(['ffnow', 'load', 'bodymind', 'sleep', 'race']);
+    expect(feedIds()[4]).toBe('race');
+
+    document.querySelector('.iv-rail [data-star="race"]').click();
+    expect(favIds()).toEqual(['ffnow', 'load', 'bodymind', 'sleep']);
+    // back in its family group, still reachable — no hide anywhere
+    expect(document.querySelector('.iv-railitem[data-jump="race"]')).not.toBeNull();
+    expect(feedIds()).toContain('race');
+  });
+
+  it('membership survives a reload (fresh module import, same localStorage)', async () => {
+    renderInformation();
+    document.querySelector('.iv-feed [data-star="race"]').click();
+
+    vi.resetModules();
+    document.body.innerHTML = `<div id="information-view"></div>`;
+    const fresh = await import('../public/js/infoview.js');
+    fresh.renderInformation();
+    expect(favIds()).toEqual(['ffnow', 'load', 'bodymind', 'sleep', 'race']);
+  });
+
+  it('a favorited panel without a reading is absent from display but kept in the stored layout', async () => {
+    const { setDataState } = await import('../public/js/infoview.js');
+    renderInformation();
+    document.querySelector('.iv-feed [data-star="peaks-power"]').click();
+    expect(favIds()).toContain('peaks-power');
+
+    setDataState('fresh');
+    expect(favIds()).not.toContain('peaks-power');
+    expect(document.querySelector('.iv-panel[data-panel="peaks-power"]')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('bh_info_layout')).favorites).toContain('peaks-power');
+
+    setDataState('rich');
+    expect(favIds()).toContain('peaks-power');
+  });
+
+  it('every available panel is always in rail and feed — demote never hides', () => {
+    renderInformation();
+    // demote everything
+    for (const id of ['ffnow', 'load', 'bodymind', 'sleep']) {
+      document.querySelector(`.iv-rail [data-star="${id}"]`).click();
+    }
+    expect(favIds()).toEqual([]);
+    expect(document.querySelectorAll('.iv-feed .iv-panel').length)
+      .toBe(document.querySelectorAll('.iv-railitem').length);
+    expect(document.querySelector('.iv-railgroup-fav')).toBeNull();
   });
 });

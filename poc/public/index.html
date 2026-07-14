@@ -793,6 +793,14 @@
       font-size: 12px; font-family: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer;
     }
     .iv-railitem:hover { background: var(--surface-2); }
+    .iv-railitem.fav > span:first-child { color: var(--accent); }
+    .iv-pacts { display: flex; gap: 4px; }
+    .iv-star {
+      background: none; border: none; color: var(--muted); font-size: 15px;
+      cursor: pointer; padding: 2px 4px; line-height: 1;
+    }
+    .iv-star.on { color: var(--accent); }
+    .iv-star:hover { color: var(--text); }
     @media (max-width: 820px) {
       .iv-railwrap { flex-direction: column; }
       .iv-rail { width: 100%; position: static; max-height: none; }
