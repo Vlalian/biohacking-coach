@@ -745,6 +745,37 @@
     .iv-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 10px; color: var(--muted); }
     .iv-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
     .iv-note { font-size: 10px; color: var(--muted); margin-top: 6px; }
+    .iv-databanner {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      margin-bottom: 14px; padding: 10px 14px;
+      background: #0f1a0f; border: 1px dashed #2a4a2a; border-radius: 10px;
+      font-size: 11px; color: var(--muted);
+    }
+    .iv-databtns { display: flex; gap: 6px; }
+    .iv-databtn {
+      font-size: 11px; color: var(--muted); background: none; font-family: inherit;
+      border: 1px solid transparent; border-radius: 11px; padding: 3px 10px; cursor: pointer;
+    }
+    .iv-databtn.on { color: var(--accent); border-color: var(--accent-dim); }
+    .iv-topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .iv-hint { font-size: 11px; color: var(--muted); }
+    .iv-ffrow { display: flex; gap: 10px; }
+    .iv-ffbox { flex: 1; text-align: center; border: 1px solid; border-radius: 8px; padding: 10px 4px; }
+    .iv-ffval { font-size: 26px; font-weight: 700; }
+    .iv-fflab { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+    .iv-race { text-align: center; padding: 6px 0; }
+    .iv-minigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .iv-mini { background: var(--surface-2); border-radius: 7px; padding: 8px 10px; }
+    .iv-minihead { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .iv-donutrow { display: flex; align-items: center; gap: 16px; }
+    .iv-donutleg { font-size: 12px; color: var(--text); display: flex; flex-direction: column; gap: 6px; }
+    .iv-donutleg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+    .iv-donutleg span { color: var(--muted); font-size: 11px; }
+    .iv-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .iv-table th { text-align: right; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+    .iv-table td { text-align: right; color: var(--text); padding: 4px 6px; }
+    .iv-table td:first-child, .iv-table th:first-child { text-align: left; color: var(--muted); }
+    .iv-table tr.iv-hl td { color: var(--accent); font-weight: 600; }
   </style>
 </head>
 <body>

@@ -33,7 +33,7 @@ describe('renderInformation', () => {
   it('labels follow the Athlete Language (Danish)', () => {
     localStorage.setItem('bca_language', 'Dansk');
     renderInformation();
-    expect(document.querySelector('.iv-ptitle').textContent).toBe('Krop & Hoved-feedback');
+    expect(document.querySelector('.iv-panel[data-panel="bodymind"] .iv-ptitle').textContent).toBe('Krop & Hoved-feedback');
     expect(document.querySelector('#information-view h1').textContent).toBe('Information');
   });
 
@@ -42,5 +42,31 @@ describe('renderInformation', () => {
     const first = document.querySelectorAll('.iv-panel').length;
     renderInformation();
     expect(document.querySelectorAll('.iv-panel').length).toBe(first);
+  });
+
+  it('one-reading growth: fresh shows fewer panels than rich, and the count says so', async () => {
+    const { setDataState } = await import('../public/js/infoview.js');
+    renderInformation();
+    const richCount = document.querySelectorAll('.iv-panel').length;
+    expect(document.querySelector('.iv-hint').textContent).toContain(`${richCount} of`);
+
+    setDataState('fresh');
+    const freshCount = document.querySelectorAll('.iv-panel').length;
+    expect(freshCount).toBeLessThan(richCount);
+    expect(freshCount).toBeGreaterThan(0);
+    expect(document.querySelector('.iv-hint').textContent).toContain(`${freshCount} of`);
+    expect(document.querySelector('.iv-panel[data-panel="zones"]')).toBeNull();
+
+    setDataState('rich');
+    expect(document.querySelectorAll('.iv-panel').length).toBe(richCount);
+  });
+
+  it('the banner buttons switch the dataset state', () => {
+    renderInformation();
+    document.querySelector('[data-datakind="fresh"]').click();
+    expect(document.querySelector('[data-datakind="fresh"]').classList.contains('on')).toBe(true);
+    expect(document.querySelector('.iv-panel[data-panel="peaks-power"]')).toBeNull();
+    document.querySelector('[data-datakind="rich"]').click();
+    expect(document.querySelector('.iv-panel[data-panel="peaks-power"]')).not.toBeNull();
   });
 });

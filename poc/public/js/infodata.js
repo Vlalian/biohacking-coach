@@ -98,7 +98,8 @@ export function getDataset(state, { today } = {}) {
       week: w, tss: weekTss, min: weekMin, kj: weekKj, done, skipped,
       fitness: Math.round(fitness), fatigue: Math.round(fatigue),
       form: Math.round(fitness - fatigue),
-      zones: recovery ? [55, 30, 10, 4, 1] : [38, 27, 17, 12, 6], // % z1..z5
+      // Zone distribution is wearable-derived: null in 'fresh' (no strap data yet).
+      zones: state !== 'rich' ? null : recovery ? [55, 30, 10, 4, 1] : [38, 27, 17, 12, 6], // % z1..z5
       longest: Math.max(0, ...D.sessions.filter(x => x.week === w && x.status === 'done').map(x => x.durMin)),
     });
 

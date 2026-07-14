@@ -10,15 +10,52 @@ const rich = getDataset('rich', { today: TODAY });
 
 // One synthetic reading per panel id — the minimal dataset that must make the
 // panel's predicate flip true. Every new panel MUST add its row here.
+const ONE_SESSION = {
+  id: 's0', date: TODAY, week: 0, title: 'Easy Run', sport: 'run', type: 'Recovery',
+  durMin: 30, km: 5, tss: 20, power: null, hr: null, kj: null,
+  body: 6, mind: 7, comment: '', status: 'done',
+};
+const ONE_WEEK = {
+  week: 0, tss: 20, min: 30, kj: 0, done: 1, skipped: 0,
+  fitness: 3, fatigue: 8, form: -5, zones: null, longest: 30,
+};
+const ONE_PEAK = { label: 'Jul', '5s': 700, '1m': 350, '5m': 260, '20m': 220, '60m': 195 };
+
 function oneReadingFor(id) {
   const D = emptyDataset();
   switch (id) {
     case 'bodymind':
-      D.sessions.push({
-        id: 's0', date: TODAY, week: 0, title: 'Easy Run', sport: 'run', type: 'Recovery',
-        durMin: 30, km: 5, tss: 20, power: null, hr: null, kj: null,
-        body: 6, mind: 7, comment: '', status: 'done',
-      });
+    case 'split-dur':
+    case 'split-dist':
+      D.sessions.push({ ...ONE_SESSION });
+      return D;
+    case 'ffnow':
+    case 'load':
+    case 'consistency':
+    case 'hours':
+    case 'longest':
+      D.weekly.push({ ...ONE_WEEK });
+      return D;
+    case 'work':
+      D.weekly.push({ ...ONE_WEEK, kj: 270 });
+      return D;
+    case 'zones':
+      D.weekly.push({ ...ONE_WEEK, zones: [40, 30, 15, 10, 5] });
+      return D;
+    case 'race':
+      D.weeksToRace = 24; D.raceName = 'Assundman 70.3';
+      return D;
+    case 'checkin':
+      D.checkins.push({ week: 0, energy: 7, sleepq: 6, mood: 8, motivation: 9 });
+      return D;
+    case 'sleep':
+      D.sleep.push({ day: 0, hours: 7.2, feeling: 4 });
+      return D;
+    case 'peaks-power':
+      D.peaksPower.push({ ...ONE_PEAK });
+      return D;
+    case 'peaks-hr':
+      D.peaksHr.push({ label: 'Jul', '5s': 190, '1m': 182, '5m': 176, '20m': 170, '60m': 162 });
       return D;
     default:
       throw new Error(`No one-reading fixture for panel '${id}' — add one to panels.test.mjs`);
@@ -60,7 +97,32 @@ describe('availablePanels', () => {
   it('returns nothing for an empty dataset — no dead panels', () => {
     expect(availablePanels(emptyDataset())).toHaveLength(0);
   });
-  it('returns panels with readings for rich data', () => {
-    expect(availablePanels(rich).map(p => p.id)).toContain('bodymind');
+  it('rich data renders the full catalog', () => {
+    expect(availablePanels(rich)).toHaveLength(PANELS.length);
+  });
+  it('fresh data excludes wearable-dependent panels (zones, peaks)', () => {
+    const fresh = getDataset('fresh', { today: TODAY });
+    const ids = availablePanels(fresh).map(p => p.id);
+    expect(ids).not.toContain('zones');
+    expect(ids).not.toContain('peaks-power');
+    expect(ids).not.toContain('peaks-hr');
+    expect(ids).toContain('bodymind');
+    expect(ids.length).toBeLessThan(PANELS.length);
+  });
+});
+
+describe('catalog integrity', () => {
+  it('every panel has id, familyKey, titleKey, has, render', () => {
+    for (const p of PANELS) {
+      expect(p.id).toBeTruthy();
+      expect(p.familyKey).toMatch(/^infoFamily/);
+      expect(p.titleKey).toMatch(/^infoPanel/);
+      expect(typeof p.has).toBe('function');
+      expect(typeof p.render).toBe('function');
+    }
+  });
+  it('panel ids are unique', () => {
+    const ids = PANELS.map(p => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
