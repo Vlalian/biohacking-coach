@@ -57,17 +57,18 @@ function closeDrawer() {
   document.getElementById('navDrawer').classList.remove('open');
   document.getElementById('navOverlay').classList.remove('open');
 }
-const VIEWS = ['coach', 'training-plan', 'equipment', 'glossary', 'settings', 'policy'];
+const VIEWS = ['coach', 'training-plan', 'information', 'equipment', 'glossary', 'settings', 'policy'];
 function switchView(view) {
   closeDrawer();
   VIEWS.forEach(v => {
     document.getElementById(v + '-view').style.display = v === view ? 'block' : 'none';
   });
-  ['navCoach', 'navTrainingPlan', 'navEquipment', 'navGlossary', 'navSettings', 'navPolicy'].forEach(id => {
+  ['navCoach', 'navTrainingPlan', 'navInformation', 'navEquipment', 'navGlossary', 'navSettings', 'navPolicy'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('active', id === 'nav' + view.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(''));
   });
   if (view === 'training-plan') renderCalendar();
+  if (view === 'information') window.renderInfoPrototype?.(); // PROTOTYPE hook — remove with infoview.prototype.js
   if (view === 'settings') renderSettings();
   if (view === 'equipment') renderEquipment();
   applyStaticTranslations();

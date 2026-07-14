@@ -1,5 +1,5 @@
-Status: round 2 ASKED 2026-07-12 — sections 9, 10, 11 answered by the athlete expert in a live in-chat grill session (in Danish). Full findings summary in PRD.md → Further Notes. Coach-side questions the athlete couldn't answer are compiled in section 12 for the newly recruited human coach (round 3, not yet asked).
-Last updated: 2026-07-12. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. See PRD.md → Further Notes for full summary.
+Status: round 2 ASKED 2026-07-12 — sections 9, 10, 11 answered by the athlete expert in a live in-chat grill session (in Danish). Full findings summary in PRD.md → Further Notes. Coach-side questions the athlete couldn't answer are compiled in section 12 for the newly recruited human coach (round 3, not yet asked). Round 4 (section 13, information-page usage — back to the athlete expert) prepared 2026-07-14 after the TrainingPeaks screenshot review, not yet asked.
+Last updated: 2026-07-14. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. Round 1 interviewed 2026-06-22 (in Danish); key findings incorporated into CONTEXT.md and PRD.md. See PRD.md → Further Notes for full summary.
 
 # Domain Expert Interview Guide
 
@@ -185,6 +185,45 @@ Where the current build has taken a design position, it's noted as **→ Current
 - Are there calculations you'd never want automated — where a formula's answer is worse than your judgment? (Return-to-training after illness, load progression after injury…) **→ Athlete said** "formulas are good, but a coach often knows more with a feeling."
 - What are your actual fueling rules of thumb — grams of carbs per hour by session length/intensity, race-week carb loading, fluid/sodium? Which published guidelines do you trust?
 - Do you need to see what an athlete actually eats (food logging), or is it enough to give targets and trust them? **→ Athlete said** both: computed targets as the core, optional logging to verify.
+
+## 13. The Information Page — how TrainingPeaks is actually used (round 4 — athlete expert, NOT YET ASKED)
+
+**Who this is for:** the athlete expert again — these are about *his own* TrainingPeaks account. Screenshots of all six surfaces (Home Today/Tomorrow, Legacy Dashboard, Workout Comparison, ATP, Calendar, Workout Library drawer) were reviewed 2026-07-14; the layout inventory lives in `.scratch/nav-training-plan/reference-app-review.md`. This section unblocks issue 09 (Bodily Information page).
+
+**What this drives in the app:** We're designing an information page for the Navigation Drawer where the athlete oversees their progress and body signals. **Scope was decided 2026-07-14 (STARTUP TRUTH, see `.scratch/nav-training-plan/reference-app-review.md`): TrainingPeaks parity for both athlete and Head Coach UIs, with per-user adjustability (move/favorite panels) and a compare feature (sessions and bodily information).** These questions therefore no longer decide *what to include* — they decide the **default layout** a new athlete starts with (which panels are favorited out of the box), validate that parity is worth the build, and tell us which panels real users actually open.
+
+**Usage — walk me through reality, not features:**
+- Which pages do you actually open in a normal training week, and roughly how often? (Home, Calendar, Dashboard, ATP)
+- When you open the Dashboard, what do you look at first? Which panels have you *never* looked at?
+- What do you check right after finishing a session? Before starting one?
+- Is there anything you check the morning after a hard day — sleep, readiness, anything body-related?
+
+**The load numbers:**
+- Fitness / Fatigue / Form — do you understand what they mean, and do you act on them? Or is that your coach's machinery that you just see the surface of?
+- The fitness ramp rates (7/28/90/365 days) — ever used them for a decision?
+- **→ Current position:** Our Coach uses load math internally but speaks natural language ("a genuinely easy week"), never raw scores. Knowing that — would you still want to *see* a number like Form somewhere, or is the translation genuinely enough?
+
+**Peaks and bests:**
+- Peak Performances (best 5-sec power, best 1-min HR, pace bests) — do these motivate you, or are they noise? Do you ever open the full peaks curves and Power Profile ladder?
+- Does seeing "your best efforts ranked World Champion → Fair" help or discourage an age-grouper?
+
+**The body panel:**
+- The Sleep Hours + Overall Feeling chart is the only body-signal panel on the whole dashboard. Do you use it? What's missing from it?
+- If the dashboard had a proper "body page" — sleep, energy, mood, motivation trends from your check-ins — what would you want on it, and what would you actually open it to find out?
+
+**ATP and season view:**
+- How often do you look at the ATP page? Is seeing the whole periodized season useful to you as the athlete, or is that coach territory and you only care about this week?
+- The weeks-to-event countdown — does it matter to you?
+
+**Calendar surroundings:**
+- The weekly summary column (totals, TSS, that week's Fitness/Fatigue/Form) — do you read it, or do you only look at the session cards?
+- Missed sessions show red on the calendar. Honest feedback or demotivating guilt wall? How should an app show a missed session?
+
+**The ballot (after the walkthrough):**
+- For OUR information page: go through the reference panels one by one — "copy this / skip this", must-have vs nice-to-have. (The agreed handoff format.)
+- **→ Current position:** Draft scope is This Month (sessions done/skipped, streak), Check-in Trends (7-day energy/sleep/mood/motivation), and Body Signals Today — with pattern insights deliberately excluded to protect the invisible coaching model. What's missing? What's in there that you'd never open?
+- Mirror or mirror-plus-scoreboard: should the page show ONLY what your body has been telling us (check-ins, sleep), or also light training-consistency facts (done/skipped, streak, a simple load readout)?
+- For each item you want: where should the data come from — already collected by our app, manual entry, or new collection (wearable integration)?
 
 ## Notes for the conversation
 
