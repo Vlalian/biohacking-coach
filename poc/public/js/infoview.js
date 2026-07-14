@@ -9,7 +9,7 @@
 
 import { PANELS, availablePanels } from './panels.js';
 import { getDataset, DATASET_STATES } from './infodata.js';
-import { loadFavorites, saveFavorites, promote, demote, isFavorite } from './infolayout.js';
+import { loadFavorites, saveFavorites, promote, demote, isFavorite, reorder } from './infolayout.js';
 import { t } from './translations.js';
 
 let dataState = 'rich'; // POC dataset state, switched by the prototype banner
@@ -39,6 +39,69 @@ export function toggleFavorite(id) {
   const favs = loadFavorites(validIds);
   saveFavorites(isFavorite(favs, id) ? demote(favs, id) : promote(favs, id));
   renderInformation();
+}
+
+// ── Favorites drag-reorder — pointer-event drag (Session Move pattern) ───────
+// Drag is scoped to the ★ group: both the dragged id and the target must be
+// favorites, otherwise the drop bounces silently. The gesture is verified
+// manually in the browser — tests invoke handleFavoriteDrop directly.
+
+let drag = null;         // { id, el, startX, startY, active }
+let justDragged = false; // suppresses the jump-click that follows a completed drag
+
+// Applies a ★-group reorder and re-renders on success. Exported for tests.
+export function handleFavoriteDrop(dragId, targetId) {
+  const favs = loadFavorites(PANELS.map(p => p.id));
+  if (!favs.includes(dragId) || !favs.includes(targetId) || dragId === targetId) return 'bounce';
+  saveFavorites(reorder(favs, dragId, targetId));
+  renderInformation();
+  return 'reorder';
+}
+
+function favTargetAt(x, y) {
+  return document.elementFromPoint(x, y)?.closest?.('.iv-railitem.fav') || null;
+}
+
+function clearDropHover() {
+  document.querySelectorAll('.iv-railitem.drop-hover').forEach(el => el.classList.remove('drop-hover'));
+}
+
+function onFavPointerDown(e) {
+  drag = { id: e.currentTarget.dataset.jump, el: e.currentTarget, startX: e.clientX, startY: e.clientY, active: false };
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+}
+
+function onFavPointerMove(e) {
+  if (!drag) return;
+  if (!drag.active) {
+    if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
+    drag.active = true;
+    drag.el.classList.add('dragging');
+  }
+  clearDropHover();
+  const target = favTargetAt(e.clientX, e.clientY);
+  if (target && target.dataset.jump !== drag.id) target.classList.add('drop-hover');
+}
+
+function onFavPointerUp(e) {
+  if (!drag) return;
+  const { id, el, active } = drag;
+  drag = null;
+  clearDropHover();
+  el.classList.remove('dragging');
+  if (!active) return; // a plain tap — the click handler jumps to the panel
+  justDragged = true;
+  const target = favTargetAt(e.clientX, e.clientY);
+  if (target) handleFavoriteDrop(id, target.dataset.jump);
+}
+
+function bindRailDrag(view) {
+  view.querySelectorAll('.iv-railitem.fav').forEach(item => {
+    item.addEventListener('pointerdown', onFavPointerDown);
+    item.addEventListener('pointermove', onFavPointerMove);
+    item.addEventListener('pointerup', onFavPointerUp);
+    item.addEventListener('pointercancel', () => { drag?.el.classList.remove('dragging'); drag = null; clearDropHover(); });
+  });
 }
 
 // Family groups in catalog order of first appearance, available panels only.
@@ -81,7 +144,10 @@ function bindOnce(view) {
     const dk = e.target.closest('[data-datakind]');
     if (dk) { setDataState(dk.dataset.datakind); return; }
     const jump = e.target.closest('[data-jump]');
-    if (jump) jumpToPanel(jump.dataset.jump);
+    if (jump) {
+      if (justDragged) { justDragged = false; return; }
+      jumpToPanel(jump.dataset.jump);
+    }
   });
 }
 
@@ -131,4 +197,5 @@ export function renderInformation() {
       </div>
     </div>`;
   bindOnce(view);
+  bindRailDrag(view);
 }

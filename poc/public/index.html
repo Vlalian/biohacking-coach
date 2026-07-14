@@ -794,6 +794,9 @@
     }
     .iv-railitem:hover { background: var(--surface-2); }
     .iv-railitem.fav > span:first-child { color: var(--accent); }
+    .iv-railitem.fav { touch-action: none; }
+    .iv-railitem.dragging { opacity: 0.4; }
+    .iv-railitem.drop-hover { outline: 2px dashed var(--accent-dim); outline-offset: -2px; }
     .iv-pacts { display: flex; gap: 4px; }
     .iv-star {
       background: none; border: none; color: var(--muted); font-size: 15px;

@@ -177,3 +177,41 @@ describe('Favorites', () => {
     expect(document.querySelector('.iv-railgroup-fav')).toBeNull();
   });
 });
+
+describe('Favorites drag-reorder (exported drop handler)', () => {
+  let handleFavoriteDrop;
+  const favIds  = () => [...document.querySelectorAll('.iv-railitem.fav')].map(b => b.dataset.jump);
+  const feedIds = () => [...document.querySelectorAll('.iv-feed .iv-panel')].map(p => p.dataset.panel);
+
+  beforeEach(async () => {
+    ({ handleFavoriteDrop } = await import('../public/js/infoview.js'));
+    renderInformation();
+  });
+
+  it('dropping a favorite onto another favorite reorders rail, feed, and storage', () => {
+    // default order: ffnow, load, bodymind, sleep
+    expect(handleFavoriteDrop('sleep', 'ffnow')).toBe('reorder');
+    expect(favIds()).toEqual(['sleep', 'ffnow', 'load', 'bodymind']);
+    expect(feedIds().slice(0, 4)).toEqual(['sleep', 'ffnow', 'load', 'bodymind']);
+    expect(JSON.parse(localStorage.getItem('bh_info_layout')).favorites)
+      .toEqual(['sleep', 'ffnow', 'load', 'bodymind']);
+  });
+
+  it('drops outside the ★ group bounce: family targets, non-favorite drags, self-drops', () => {
+    const before = favIds();
+    expect(handleFavoriteDrop('sleep', 'race')).toBe('bounce');   // target not a favorite
+    expect(handleFavoriteDrop('race', 'sleep')).toBe('bounce');   // dragged id not a favorite
+    expect(handleFavoriteDrop('sleep', 'sleep')).toBe('bounce');  // self-drop
+    expect(favIds()).toEqual(before);
+    expect(localStorage.getItem('bh_info_layout')).toBeNull();    // nothing was written
+  });
+
+  it('the new order survives a reload', async () => {
+    handleFavoriteDrop('bodymind', 'ffnow');
+    vi.resetModules();
+    document.body.innerHTML = `<div id="information-view"></div>`;
+    const fresh = await import('../public/js/infoview.js');
+    fresh.renderInformation();
+    expect(favIds()).toEqual(['bodymind', 'ffnow', 'load', 'sleep']);
+  });
+});

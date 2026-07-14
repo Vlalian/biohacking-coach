@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-14). Note: the pointer gesture follows the Session Move pattern and is verified via the exported handler + live-module invocation; a by-hand drag in the browser is worth one manual pass (same caveat as the calendar's drag).
 
 # 05 — Favorites drag-reorder
 
