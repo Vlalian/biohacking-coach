@@ -3,10 +3,16 @@ const STRINGS = {
     // Navigation
     navCoach:         'Coach',
     navTrainingPlan:  'Training Plan',
+    navInformation:   'Information',
     navEquipment:     'Equipment',
     navGlossary:      'Glossary',
     navSettings:      'Settings',
     navPolicy:        'Privacy & Terms',
+    // Information View
+    infoSubtitle:        'Your training and bodily information',
+    infoPanelBodyMind:   'Body & Mind Feedback',
+    infoWeeklyAvgNote:   'weekly averages, RPE 1–10',
+    infoFamilyBodyMind:  'Body & Mind',
     // Main coach page buttons
     startWeeklySession: 'Start Weekly Session',
     chatWithCoach:      'Chat with Coach',
@@ -242,10 +248,16 @@ const STRINGS = {
     // Navigation
     navCoach:         'Coach',
     navTrainingPlan:  'Træningsplan',
+    navInformation:   'Information',
     navEquipment:     'Udstyr',
     navGlossary:      'Ordbog',
     navSettings:      'Indstillinger',
     navPolicy:        'Privatliv & Vilkår',
+    // Information View
+    infoSubtitle:        'Din træning og kropslige information',
+    infoPanelBodyMind:   'Krop & Hoved-feedback',
+    infoWeeklyAvgNote:   'ugentlige gennemsnit, RPE 1–10',
+    infoFamilyBodyMind:  'Krop & Hoved',
     // Main coach page buttons
     startWeeklySession: 'Start ugentlig session',
     chatWithCoach:      'Chat med Coach',

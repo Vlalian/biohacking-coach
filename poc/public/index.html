@@ -729,6 +729,22 @@
       color: var(--green);
       margin-bottom: 10px;
     }
+
+    /* ── Information View ─────────────────────────────────────────────── */
+    #information-view .iv-container { max-width: 1060px; margin: 0 auto; }
+    .iv-feed { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .iv-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      min-width: 0;
+    }
+    .iv-phead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .iv-ptitle { font-size: 12px; font-weight: 600; color: var(--text); }
+    .iv-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; font-size: 10px; color: var(--muted); }
+    .iv-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+    .iv-note { font-size: 10px; color: var(--muted); margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -744,7 +760,7 @@
   <div class="nav-drawer-label">Menu</div>
   <button class="nav-item active" id="navCoach" onclick="switchView('coach')" data-i18n="navCoach">Coach</button>
   <button class="nav-item" id="navTrainingPlan" onclick="switchView('training-plan')" data-i18n="navTrainingPlan">Training Plan</button>
-  <button class="nav-item" id="navInformation" onclick="switchView('information')">Information</button>
+  <button class="nav-item" id="navInformation" onclick="switchView('information')" data-i18n="navInformation">Information</button>
   <button class="nav-item" id="navEquipment" onclick="switchView('equipment')" data-i18n="navEquipment">Equipment</button>
   <button class="nav-item" id="navGlossary" onclick="switchView('glossary')" data-i18n="navGlossary">Glossary</button>
   <div style="margin-top:auto; border-top:1px solid var(--border); padding-top:8px; display:flex; flex-direction:column; gap:2px;">
@@ -1181,10 +1197,9 @@
   </div>
 </div>
 
-<!-- PROTOTYPE — Information View (delete with js/infoview.prototype.js) -->
-<div id="information-view" style="display:none; padding:48px 20px 110px;"></div>
+<!-- Information View -->
+<div id="information-view" style="display:none; padding:48px 20px 80px;"></div>
 
 <script type="module" src="js/app.js"></script>
-<script type="module" src="js/infoview.prototype.js"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 import { render as renderCalendar, navigateMonth } from './calendar.js';
+import { renderInformation } from './infoview.js';
 import { save, restore, activeHistoryKey } from './persistence.js';
 import { PERSONAS, HISTORY_SCENARIOS, HISTORY_LABELS } from './personas.js';
 import {
@@ -68,7 +69,7 @@ function switchView(view) {
     if (el) el.classList.toggle('active', id === 'nav' + view.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(''));
   });
   if (view === 'training-plan') renderCalendar();
-  if (view === 'information') window.renderInfoPrototype?.(); // PROTOTYPE hook — remove with infoview.prototype.js
+  if (view === 'information') renderInformation();
   if (view === 'settings') renderSettings();
   if (view === 'equipment') renderEquipment();
   applyStaticTranslations();
