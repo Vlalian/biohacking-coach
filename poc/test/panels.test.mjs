@@ -111,6 +111,29 @@ describe('availablePanels', () => {
   });
 });
 
+describe('period compare (opts.compare on compare-capable panels)', () => {
+  const compareCapable = PANELS.filter(p => p.compare);
+
+  it('load, bodymind, sleep, hours declare the capability', () => {
+    expect(compareCapable.map(p => p.id).sort()).toEqual(['bodymind', 'hours', 'load', 'sleep']);
+  });
+
+  for (const p of compareCapable) {
+    it(`${p.id}: compare renders a dashed previous window on rich data`, () => {
+      const html = p.render(rich, { t: k => k, compare: true });
+      expect(html).toContain('stroke-dasharray="5,4"');
+      expect(html).toContain('infoVsPrev');
+      expect(html).not.toContain('NaN');
+    });
+    it(`${p.id}: compare degrades gracefully with a single reading (no previous window, no error)`, () => {
+      const html = p.render(oneReadingFor(p.id), { t: k => k, compare: true });
+      expect(html).not.toContain('stroke-dasharray="5,4"');
+      expect(html).not.toContain('NaN');
+      expect(html.length).toBeGreaterThan(0);
+    });
+  }
+});
+
 describe('catalog integrity', () => {
   it('every panel has id, familyKey, titleKey, has, render', () => {
     for (const p of PANELS) {

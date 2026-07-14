@@ -69,6 +69,8 @@ const STRINGS = {
     infoDistance:        'Distance',
     infoAvgPower:        'Avg power',
     infoAvgHr:           'Avg HR',
+    infoPeriodCompare:   'Compare vs previous period',
+    infoVsPrev:          'dashed = previous period',
     // Main coach page buttons
     startWeeklySession: 'Start Weekly Session',
     chatWithCoach:      'Chat with Coach',
@@ -370,6 +372,8 @@ const STRINGS = {
     infoDistance:        'Distance',
     infoAvgPower:        'Gns. watt',
     infoAvgHr:           'Gns. puls',
+    infoPeriodCompare:   'Sammenlign med forrige periode',
+    infoVsPrev:          'stiplet = forrige periode',
     // Main coach page buttons
     startWeeklySession: 'Start ugentlig session',
     chatWithCoach:      'Chat med Coach',

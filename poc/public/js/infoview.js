@@ -40,6 +40,16 @@ export function jumpToPanel(id) {
   return el;
 }
 
+// Period Comparison toggle state — per panel, a viewing mode: deliberately
+// NOT persisted (resets on reload), unlike the Favorites layout.
+const periodCompare = {};
+
+// Exported click handler: ⇄ on compare-capable panels.
+export function togglePeriodCompare(id) {
+  periodCompare[id] = !periodCompare[id];
+  renderInformation();
+}
+
 // Exported click handler: star = promote into Favorites, unstar = demote.
 export function toggleFavorite(id) {
   const validIds = PANELS.map(p => p.id);
@@ -186,12 +196,16 @@ function starBtn(id, fav) {
 }
 
 function panelCard(p, dataset, fav) {
+  const cmpOn = !!periodCompare[p.id];
+  const cmpBtn = p.compare
+    ? `<button class="iv-cbtn ${cmpOn ? 'on' : ''}" data-periodcmp="${p.id}" title="${t('infoPeriodCompare')}" aria-label="${t('infoPeriodCompare')}">⇄</button>`
+    : '';
   return `<div class="iv-panel" data-panel="${p.id}">
     <div class="iv-phead">
       <span class="iv-ptitle">${t(p.titleKey)}</span>
-      <span class="iv-pacts">${starBtn(p.id, fav)}</span>
+      <span class="iv-pacts">${cmpBtn}${starBtn(p.id, fav)}</span>
     </div>
-    <div class="iv-pbody">${p.render(dataset, { t })}</div>
+    <div class="iv-pbody">${p.render(dataset, { t, compare: cmpOn })}</div>
   </div>`;
 }
 
@@ -206,6 +220,8 @@ function bindOnce(view) {
   view.addEventListener('click', e => {
     const star = e.target.closest('[data-star]');
     if (star) { toggleFavorite(star.dataset.star); return; }
+    const pcmp = e.target.closest('[data-periodcmp]');
+    if (pcmp) { togglePeriodCompare(pcmp.dataset.periodcmp); return; }
     const dk = e.target.closest('[data-datakind]');
     if (dk) { setDataState(dk.dataset.datakind); return; }
     if (e.target.closest('[data-cmpopen]'))  { cmp.open = true;  cmp.show = false; cmp.sel.clear(); renderInformation(); return; }

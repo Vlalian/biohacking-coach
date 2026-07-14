@@ -178,6 +178,42 @@ describe('Favorites', () => {
   });
 });
 
+describe('Period Comparison (⇄ toggle)', () => {
+  beforeEach(() => renderInformation());
+
+  it('⇄ appears only on compare-capable panels', () => {
+    expect(document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]')).not.toBeNull();
+    expect(document.querySelector('.iv-panel[data-panel="ffnow"] [data-periodcmp]')).toBeNull();
+    expect(document.querySelector('.iv-panel[data-panel="zones"] [data-periodcmp]')).toBeNull();
+  });
+
+  it('toggling overlays the previous period dashed and toggling again removes it', () => {
+    const panelHtml = () => document.querySelector('.iv-panel[data-panel="load"]').innerHTML;
+    expect(panelHtml()).not.toContain('stroke-dasharray="5,4"');
+    document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').click();
+    expect(panelHtml()).toContain('stroke-dasharray="5,4"');
+    expect(document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').classList.contains('on')).toBe(true);
+    document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').click();
+    expect(panelHtml()).not.toContain('stroke-dasharray="5,4"');
+  });
+
+  it('degrades gracefully in fresh state (single week: current only, no error)', async () => {
+    const { setDataState } = await import('../public/js/infoview.js');
+    document.querySelector('.iv-panel[data-panel="hours"] [data-periodcmp]').click();
+    setDataState('fresh');
+    const panel = document.querySelector('.iv-panel[data-panel="hours"]');
+    expect(panel).not.toBeNull();
+    expect(panel.innerHTML).not.toContain('NaN');
+    setDataState('rich');
+  });
+
+  it('toggle state is a viewing mode — not written to localStorage', () => {
+    document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').click();
+    expect(localStorage.getItem('bh_info_layout')).toBeNull();
+    expect(Object.keys(localStorage).filter(k => k.includes('period'))).toEqual([]);
+  });
+});
+
 describe('Session Comparison overlay', () => {
   beforeEach(() => renderInformation());
 
