@@ -70,3 +70,48 @@ describe('renderInformation', () => {
     expect(document.querySelector('.iv-panel[data-panel="peaks-power"]')).not.toBeNull();
   });
 });
+
+describe('index rail', () => {
+  it('rail groups match panel families and contain only available panels', async () => {
+    const { setDataState } = await import('../public/js/infoview.js');
+    renderInformation();
+    const groups = [...document.querySelectorAll('.iv-railgroup')].map(g => g.dataset.family);
+    expect(groups).toEqual(['infoFamilyFormLoad', 'infoFamilyBodyMind', 'infoFamilyVolume', 'infoFamilyPeaks']);
+    expect(document.querySelectorAll('.iv-railitem').length)
+      .toBe(document.querySelectorAll('.iv-feed .iv-panel').length);
+
+    setDataState('fresh');
+    // Peaks & Zones family disappears entirely when none of its panels have a reading
+    const freshGroups = [...document.querySelectorAll('.iv-railgroup')].map(g => g.dataset.family);
+    expect(freshGroups).not.toContain('infoFamilyPeaks');
+    expect(document.querySelectorAll('.iv-railitem').length)
+      .toBe(document.querySelectorAll('.iv-feed .iv-panel').length);
+    setDataState('rich');
+  });
+
+  it('feed order matches rail order', () => {
+    renderInformation();
+    const railIds = [...document.querySelectorAll('.iv-railitem')].map(b => b.dataset.jump);
+    const feedIds = [...document.querySelectorAll('.iv-feed .iv-panel')].map(p => p.dataset.panel);
+    expect(feedIds).toEqual(railIds);
+  });
+
+  it('clicking a rail entry scrolls its panel into view (exported handler)', () => {
+    renderInformation();
+    const spy = vi.fn();
+    Element.prototype.scrollIntoView = spy;
+    document.querySelector('.iv-railitem[data-jump="sleep"]').click();
+    expect(spy).toHaveBeenCalledTimes(1);
+    const anchor = document.getElementById('iv-anchor-sleep');
+    expect(spy.mock.instances?.[0] ?? anchor).toBeTruthy();
+    expect(anchor.querySelector('.iv-panel[data-panel="sleep"]')).not.toBeNull();
+  });
+
+  it('jumpToPanel returns the anchor element for a rendered panel and null-ish otherwise', async () => {
+    const { jumpToPanel } = await import('../public/js/infoview.js');
+    renderInformation();
+    Element.prototype.scrollIntoView = vi.fn();
+    expect(jumpToPanel('load')).not.toBeNull();
+    expect(jumpToPanel('nonexistent')).toBeNull();
+  });
+});

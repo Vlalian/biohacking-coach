@@ -776,6 +776,27 @@
     .iv-table td { text-align: right; color: var(--text); padding: 4px 6px; }
     .iv-table td:first-child, .iv-table th:first-child { text-align: left; color: var(--muted); }
     .iv-table tr.iv-hl td { color: var(--accent); font-weight: 600; }
+    .iv-railwrap { display: flex; gap: 18px; align-items: flex-start; }
+    .iv-rail {
+      width: 210px; flex: none; position: sticky; top: 20px;
+      max-height: calc(100vh - 40px); overflow-y: auto;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 8px;
+    }
+    .iv-railgroup {
+      font-size: 9.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--accent); padding: 10px 8px 4px;
+    }
+    .iv-railitem {
+      display: flex; justify-content: space-between; align-items: center; width: 100%;
+      text-align: left; background: none; border: none; color: var(--text);
+      font-size: 12px; font-family: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+    }
+    .iv-railitem:hover { background: var(--surface-2); }
+    @media (max-width: 820px) {
+      .iv-railwrap { flex-direction: column; }
+      .iv-rail { width: 100%; position: static; max-height: none; }
+    }
   </style>
 </head>
 <body>
