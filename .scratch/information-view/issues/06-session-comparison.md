@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-14)
 
 # 06 — Session Comparison
 

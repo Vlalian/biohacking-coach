@@ -178,6 +178,71 @@ describe('Favorites', () => {
   });
 });
 
+describe('Session Comparison overlay', () => {
+  beforeEach(() => renderInformation());
+
+  const open = () => document.querySelector('[data-cmpopen]').click();
+  const checkboxes = () => [...document.querySelectorAll('[data-cmpsel]')];
+
+  it('open → select 2 → compare renders one column per session, Body/Mind always visible', () => {
+    open();
+    expect(document.querySelector('.iv-overlay')).not.toBeNull();
+    expect(document.querySelector('[data-cmpgo]').disabled).toBe(true);
+
+    checkboxes()[0].click();
+    expect(document.querySelector('[data-cmpgo]').disabled).toBe(true); // still below threshold
+    checkboxes().find(c => !c.checked).click();
+    expect(document.querySelector('[data-cmpgo]').disabled).toBe(false);
+
+    document.querySelector('[data-cmpgo]').click();
+    const cols = document.querySelectorAll('.iv-cmpcol');
+    expect(cols.length).toBe(2);
+    for (const col of cols) {
+      expect(col.textContent).toContain('Body');
+      expect(col.textContent).toContain('Mind');
+      expect(col.textContent).toContain('TSS');
+    }
+  });
+
+  it('back returns to the picker with the selection intact; close removes the overlay', () => {
+    open();
+    checkboxes()[0].click();
+    checkboxes().find(c => !c.checked).click();
+    document.querySelector('[data-cmpgo]').click();
+    document.querySelector('[data-cmpback]').click();
+    expect(document.querySelectorAll('[data-cmpsel]:checked').length).toBe(2);
+    document.querySelector('[data-cmpclose]').click();
+    expect(document.querySelector('.iv-overlay')).toBeNull();
+  });
+
+  it('filters compose and the selection survives filter changes', () => {
+    open();
+    checkboxes()[0].click();
+    const sportSel = document.querySelector('[data-cmpf="sport"]');
+    sportSel.value = 'bike';
+    sportSel.dispatchEvent(new Event('change', { bubbles: true }));
+    const rows = [...document.querySelectorAll('.iv-picker tr')].slice(1);
+    expect(rows.length).toBeGreaterThan(0);
+    // selection made before filtering still counts toward the threshold
+    expect(document.querySelector('[data-cmpgo]').textContent).toContain('(1)');
+  });
+
+  it('sessions without power omit the row instead of showing blanks', () => {
+    open();
+    // pick two run sessions (runs never carry power in the synthetic data)
+    const sportSel = document.querySelector('[data-cmpf="sport"]');
+    sportSel.value = 'run';
+    sportSel.dispatchEvent(new Event('change', { bubbles: true }));
+    const boxes = [...document.querySelectorAll('[data-cmpsel]')];
+    boxes[0].click();
+    [...document.querySelectorAll('[data-cmpsel]')].find(c => !c.checked).click();
+    document.querySelector('[data-cmpgo]').click();
+    for (const col of document.querySelectorAll('.iv-cmpcol')) {
+      expect(col.textContent).not.toContain('Avg power');
+    }
+  });
+});
+
 describe('Favorites drag-reorder (exported drop handler)', () => {
   let handleFavoriteDrop;
   const favIds  = () => [...document.querySelectorAll('.iv-railitem.fav')].map(b => b.dataset.jump);

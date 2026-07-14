@@ -10,7 +10,12 @@
 import { PANELS, availablePanels } from './panels.js';
 import { getDataset, DATASET_STATES } from './infodata.js';
 import { loadFavorites, saveFavorites, promote, demote, isFavorite, reorder } from './infolayout.js';
+import { filterSessions, canCompare, extractColumns } from './infocompare.js';
 import { t } from './translations.js';
+
+const TYPE_COLOR  = { Endurance: '#4a90d9', Intensity: '#e05555', Tempo: '#c9a96e', Recovery: '#6db36d' };
+const SPORT_COLOR = { swim: '#4fa3d9', bike: '#c9a96e', run: '#6db36d' };
+const SPORT_KEY   = { swim: 'infoSwim', bike: 'infoBike', run: 'infoRun' };
 
 let dataState = 'rich'; // POC dataset state, switched by the prototype banner
 let bound = false;
@@ -21,6 +26,8 @@ export function currentDataState() { return dataState; }
 export function setDataState(state) {
   if (!DATASET_STATES.includes(state)) return;
   dataState = state;
+  cmp.sel.clear(); // session ids are dataset-specific
+  cmp.show = false;
   renderInformation();
 }
 
@@ -104,6 +111,64 @@ function bindRailDrag(view) {
   });
 }
 
+// ── Session Comparison overlay ────────────────────────────────────────────────
+const cmp = {
+  open: false, show: false,
+  sel: new Set(),
+  filter: { sport: 'all', type: 'all' },
+};
+
+function rpeChip(v, color) {
+  return v == null ? '—' : `<span class="iv-rpe" style="background:${color}22;color:${color};border:1px solid ${color}55">${v}/10</span>`;
+}
+
+function compareOverlay(dataset) {
+  const done = filterSessions(dataset.sessions, cmp.filter);
+  const all  = filterSessions(dataset.sessions, {});
+  const sel  = all.filter(s => cmp.sel.has(s.id));
+
+  if (cmp.show && canCompare([...cmp.sel])) {
+    const cols = extractColumns(sel);
+    return `<div class="iv-overlay"><div class="iv-sheet">
+      <div class="iv-sheethead"><b>${t('infoCompareResultTitle')}</b>
+        <span><button class="iv-btn" data-cmpback="1">${t('infoCompareBack')}</button>
+        <button class="iv-btn" data-cmpclose="1">${t('infoCompareClose')}</button></span></div>
+      <div class="iv-cmpcols">
+        ${cols.map(c => `<div class="iv-cmpcol" style="border-top:3px solid ${TYPE_COLOR[c.type] || 'var(--border)'}">
+          <div class="iv-cmptitle">${c.title}</div>
+          <div class="iv-cmpdate">${c.date} · <span style="color:${SPORT_COLOR[c.sport] || 'inherit'}">${t(SPORT_KEY[c.sport] || c.sport)}</span> · ${c.type}</div>
+          ${c.rows.map(([k, v]) => `<div class="iv-cmprow"><span>${k === 'TSS' ? 'TSS' : t(k)}</span><b>${v}</b></div>`).join('')}
+          <div class="iv-cmprow"><span>${t('feedbackBodyShort')}</span><b>${rpeChip(c.body, '#6db36d')}</b></div>
+          <div class="iv-cmprow"><span>${t('feedbackMindShort')}</span><b>${rpeChip(c.mind, '#9a7bd0')}</b></div>
+          ${c.comment ? `<div class="iv-cmpcomment">“${c.comment}”</div>` : ''}
+        </div>`).join('')}
+      </div>
+      <div class="iv-note" style="padding:0 18px 14px;">${t('infoCompareNote')}</div>
+    </div></div>`;
+  }
+
+  const SPORTS = ['swim', 'bike', 'run'];
+  return `<div class="iv-overlay"><div class="iv-sheet">
+    <div class="iv-sheethead"><b>${t('infoCompareTitle')}</b><button class="iv-btn" data-cmpclose="1">${t('infoCompareClose')}</button></div>
+    <div class="iv-cmpfilters">
+      <select data-cmpf="sport"><option value="all">${t('infoAllSports')}</option>${SPORTS.map(s => `<option value="${s}" ${cmp.filter.sport === s ? 'selected' : ''}>${t(SPORT_KEY[s])}</option>`).join('')}</select>
+      <select data-cmpf="type"><option value="all">${t('infoAllTypes')}</option>${Object.keys(TYPE_COLOR).map(ty => `<option value="${ty}" ${cmp.filter.type === ty ? 'selected' : ''}>${ty}</option>`).join('')}</select>
+      <span class="iv-hint">${t('infoCompareHint')}</span>
+    </div>
+    <div class="iv-cmplist">
+      <table class="iv-table iv-picker"><tr><th></th><th>${t('infoColDate')}</th><th>${t('infoColSession')}</th><th>${t('infoColSport')}</th><th>${t('infoColType')}</th><th>Min</th><th>TSS</th><th>${t('feedbackBodyShort')}</th><th>${t('feedbackMindShort')}</th></tr>
+      ${done.slice(0, 40).map(s => `<tr class="${cmp.sel.has(s.id) ? 'iv-hl' : ''}">
+        <td><input type="checkbox" data-cmpsel="${s.id}" ${cmp.sel.has(s.id) ? 'checked' : ''}></td>
+        <td>${s.date}</td><td>${s.title}</td>
+        <td style="color:${SPORT_COLOR[s.sport] || 'inherit'}">${t(SPORT_KEY[s.sport] || s.sport)}</td>
+        <td style="color:${TYPE_COLOR[s.type] || 'inherit'}">${s.type}</td>
+        <td>${s.durMin}</td><td>${s.tss}</td><td>${s.body ?? '—'}</td><td>${s.mind ?? '—'}</td></tr>`).join('')}
+      </table>
+    </div>
+    <div class="iv-sheetfoot"><button class="iv-btn iv-btn-go" data-cmpgo="1" ${canCompare([...cmp.sel]) ? '' : 'disabled'}>${t('infoCompareGo').replace('{n}', cmp.sel.size)}</button></div>
+  </div></div>`;
+}
+
 // Family groups in catalog order of first appearance, available panels only.
 function familyGroups(panels) {
   const groups = [];
@@ -143,11 +208,25 @@ function bindOnce(view) {
     if (star) { toggleFavorite(star.dataset.star); return; }
     const dk = e.target.closest('[data-datakind]');
     if (dk) { setDataState(dk.dataset.datakind); return; }
+    if (e.target.closest('[data-cmpopen]'))  { cmp.open = true;  cmp.show = false; cmp.sel.clear(); renderInformation(); return; }
+    if (e.target.closest('[data-cmpclose]')) { cmp.open = false; renderInformation(); return; }
+    if (e.target.closest('[data-cmpgo]'))    { if (canCompare([...cmp.sel])) { cmp.show = true; renderInformation(); } return; }
+    if (e.target.closest('[data-cmpback]'))  { cmp.show = false; renderInformation(); return; }
     const jump = e.target.closest('[data-jump]');
     if (jump) {
       if (justDragged) { justDragged = false; return; }
       jumpToPanel(jump.dataset.jump);
     }
+  });
+  view.addEventListener('change', e => {
+    const selBox = e.target.closest('[data-cmpsel]');
+    if (selBox) {
+      selBox.checked ? cmp.sel.add(selBox.dataset.cmpsel) : cmp.sel.delete(selBox.dataset.cmpsel);
+      renderInformation();
+      return;
+    }
+    const filt = e.target.closest('[data-cmpf]');
+    if (filt) { cmp.filter[filt.dataset.cmpf] = filt.value; renderInformation(); }
   });
 }
 
@@ -180,6 +259,7 @@ export function renderInformation() {
         </span>
       </div>
       <div class="iv-topbar">
+        <button class="iv-btn" data-cmpopen="1">${t('infoCompareOpen')}</button>
         <span class="iv-hint">${t('infoReadingCount').replace('{n}', available.length).replace('{total}', PANELS.length)}</span>
       </div>
       <div class="iv-railwrap">
@@ -195,7 +275,8 @@ export function renderInformation() {
           ${feed.map(p => `<div id="iv-anchor-${p.id}">${panelCard(p, dataset, storedFavs.includes(p.id))}</div>`).join('')}
         </div>
       </div>
-    </div>`;
+    </div>
+    ${cmp.open ? compareOverlay(dataset) : ''}`;
   bindOnce(view);
   bindRailDrag(view);
 }
