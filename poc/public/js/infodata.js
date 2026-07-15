@@ -126,6 +126,22 @@ export function getDataset(state, { today } = {}) {
       D.peaksPower.push({ label: m, '5s': Math.round(680 + g * 190 + rnd() * 30), '1m': Math.round(340 + g * 80 + rnd() * 20), '5m': Math.round(255 + g * 50 + rnd() * 15), '20m': Math.round(215 + g * 40 + rnd() * 10), '60m': Math.round(190 + g * 35 + rnd() * 10) });
       D.peaksHr.push({ label: m, '5s': Math.round(186 + rnd() * 8), '1m': Math.round(180 + rnd() * 6), '5m': Math.round(174 + rnd() * 5), '20m': Math.round(168 + rnd() * 5), '60m': Math.round(160 + rnd() * 5) });
     });
+
+    // Recent personal bests — dated PB events, newest first.
+    const BEST_KINDS = [
+      ['infoBestPower5s', 'bike', v => `${Math.round(820 + v * 60)} W`],
+      ['infoBestPower1m', 'bike', v => `${Math.round(400 + v * 30)} W`],
+      ['infoBestHr5s',    'run',  v => `${Math.round(192 + v * 6)} bpm`],
+      ['infoBestRun400',  'run',  v => `${(78 - v * 5).toFixed(1)} s`],
+      ['infoBestSwim100', 'swim', v => `${(92 - v * 6).toFixed(1)} s`],
+    ];
+    const bestWeeks = [0, 1, 1, 3, 5, 8, 12];
+    bestWeeks.forEach((w, i) => {
+      const [metricKey, sport, fmt] = BEST_KINDS[i % BEST_KINDS.length];
+      const d = new Date(ref); d.setDate(d.getDate() - (w * 7 + Math.floor(rnd() * 6)));
+      D.bests.push({ date: d.toISOString().slice(0, 10), week: w, metricKey, sport, value: fmt(rnd()) });
+    });
+    D.bests.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   // The generation loop runs w = oldest → current, so weekly/checkins are

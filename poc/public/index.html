@@ -801,6 +801,15 @@
     .iv-table td { text-align: right; color: var(--text); padding: 4px 6px; }
     .iv-table td:first-child, .iv-table th:first-child { text-align: left; color: var(--muted); }
     .iv-table tr.iv-hl td { color: var(--accent); font-weight: 600; }
+    .iv-bestrow {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text); padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .iv-bestrow:last-child { border-bottom: none; }
+    .iv-bestdate { color: var(--muted); font-size: 10.5px; flex: none; }
+    .iv-bestdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .iv-bestlabel { flex: 1; min-width: 0; }
     .iv-railwrap { display: flex; gap: 18px; align-items: flex-start; }
     .iv-rail {
       width: 210px; flex: none; position: sticky; top: 20px;

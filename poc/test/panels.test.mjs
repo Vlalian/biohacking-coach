@@ -54,6 +54,9 @@ function oneReadingFor(id) {
     case 'peaks-power':
       D.peaksPower.push({ ...ONE_PEAK });
       return D;
+    case 'bests':
+      D.bests.push({ date: TODAY, week: 0, metricKey: 'infoBestPower5s', sport: 'bike', value: '850 W' });
+      return D;
     case 'peaks-hr':
       D.peaksHr.push({ label: 'Jul', '5s': 190, '1m': 182, '5m': 176, '20m': 170, '60m': 162 });
       return D;
@@ -100,14 +103,23 @@ describe('availablePanels', () => {
   it('rich data renders the full catalog', () => {
     expect(availablePanels(rich)).toHaveLength(PANELS.length);
   });
-  it('fresh data excludes wearable-dependent panels (zones, peaks)', () => {
+  it('fresh data excludes wearable-dependent panels (zones, peaks, bests)', () => {
     const fresh = getDataset('fresh', { today: TODAY });
     const ids = availablePanels(fresh).map(p => p.id);
     expect(ids).not.toContain('zones');
     expect(ids).not.toContain('peaks-power');
     expect(ids).not.toContain('peaks-hr');
+    expect(ids).not.toContain('bests');
     expect(ids).toContain('bodymind');
     expect(ids.length).toBeLessThan(PANELS.length);
+  });
+
+  it('bests render newest-first, capped at 6 rows', () => {
+    const html = panelById('bests').render(rich, { t: k => k });
+    const dates = [...html.matchAll(/iv-bestdate">([\d-]+)</g)].map(m => m[1]);
+    expect(dates.length).toBeLessThanOrEqual(6);
+    expect(dates.length).toBeGreaterThan(1);
+    expect([...dates].sort().reverse()).toEqual(dates);
   });
 });
 

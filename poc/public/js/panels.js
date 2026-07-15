@@ -284,6 +284,19 @@ export const PANELS = [
     },
   },
   {
+    // A feed of the moments, not a table of the numbers. Data only:
+    // celebrating a PB is the Coach's job in conversation, not the panel's.
+    id: 'bests', familyKey: FAMILY.peaks, titleKey: 'infoPanelBests',
+    has: D => D.bests.length > 0,
+    render: (D, { t = k => k } = {}) => D.bests.slice(0, 6).map(b =>
+      `<div class="iv-bestrow">
+        <span class="iv-bestdate">${b.date}</span>
+        <i class="iv-bestdot" style="background:${SPORT_COLOR[b.sport] || 'var(--muted)'}"></i>
+        <span class="iv-bestlabel">${t(b.metricKey)}</span>
+        <b>${b.value}</b>
+      </div>`).join(''),
+  },
+  {
     id: 'peaks-power', familyKey: FAMILY.peaks, titleKey: 'infoPanelPeakPower',
     has: D => D.peaksPower.length > 0,
     render: D => peaksTable(D.peaksPower),
