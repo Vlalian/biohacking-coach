@@ -82,6 +82,31 @@ Terminology note: "Limiters" = per-discipline qualities the week targets. Our ph
 3. **Raw metric soup** — TSS/hrTSS/rTSS/IF/NGP columns; our Coach translates numbers into language (athlete hears "a genuinely easy week").
 4. **Body signals as an afterthought** — one small panel among twenty. Our page inverts this ratio.
 
+## Second mining pass (2026-07-15) — improvement candidates, all ruled on by Mads
+
+A deliberate re-read of all six screenshots after the Information View route shipped. Mads agreed with all twelve dispositions.
+
+**Near-term build (promoted to issues 08–10 in `.scratch/information-view/issues/`):**
+1. **Time-range selector** — the dashboard's date range governs every panel; our page always shows all history. Ranked first: it changes what every panel means and multiplies the Comparison Graph.
+2. **Recent Bests feed** — their Peak Performances list is a chronological feed of new personal bests with dates. Pure Achievement Motivation; the moments, not just the numbers.
+3. **Ramp-rate tiles** — fitness change over 7/28/90/365 days as glanceable tiles with sparklines: "building or fading."
+
+**Build when their data/module arrives (pre-registered, not built):**
+4. **Planned vs. completed hours** — the compliance story in hours, not just session counts (needs planned-hours data per week).
+5. **Sleep architecture panel** — deep/light/REM/awake, body battery, resting HR, stress; wearable-gated, appears via the one-reading rule when a wearable connects.
+6. **My Zones panel** — read-only zone tables per discipline; display surface for the deterministic calc module ("Numbers the Coach Can Trust").
+7. **Weekly summary beside the Training Plan calendar** — per-week totals/TSS/F-F-F rail; belongs to the Training Plan, not the Information View.
+8. **Session structure thumbnails** — interval-silhouette minis on Session Blocks/Drawer; needs structured session steps.
+
+**Parking lot / expert questions (added to interview guide § 13):**
+9. **Race-day projection curve** — forward fitness projection is deterministic math but flirts with Trajectory Projection (deliberately Coach-conversational, V1). Flagged, not built.
+10. **Goals** — athlete-entered goals visible to the coach; a new domain concept touching the Weekly Session, not a panel. Parked.
+11. **Notes on the calendar** — visible week notes ("time available", "Birthday!") vs. our conversational constraint capture; expert question.
+
+**Deliberately not taken:** Power Profile ranking ladder (world-ranking framing cuts against personal-progression; expert question on motivation vs. discouragement); red missed sessions (contradicts US-3 skipped-session safety); hrTSS/rTSS/IF/NGP metric variants — **kept as a possible later addition** once the calc module exists (Mads, 2026-07-15), not panel material before then.
+
+**12. NEW idea (Mads, 2026-07-15): front-page information selection.** Adjustability should extend beyond this page: the athlete chooses which information/graphs from the Information View also surface on the app's front page (the Coach view / home surface) — chosen and managed *from* the Information View, e.g. via the existing star/favorites mechanism or a separate "pin to front page" control. Essentially the prototype's Glance Strip variant reborn on the home surface. Needs a short design pass (which surface, which control, tile form) before building — issue 11 stub filed as future.
+
 ## Open question the screenshots can't answer
 
 What the athlete actually *uses*. Which panels get looked at, how often, and which are noise — this decides mirror vs. mirror+scoreboard for our page. Mads explicitly deferred this to the expert (2026-07-14): questions prepared as § 13 of the interview guide.

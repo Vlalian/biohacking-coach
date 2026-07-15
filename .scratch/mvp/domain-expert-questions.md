@@ -219,6 +219,13 @@ Where the current build has taken a design position, it's noted as **→ Current
 - The weekly summary column (totals, TSS, that week's Fitness/Fatigue/Form) — do you read it, or do you only look at the session cards?
 - Missed sessions show red on the calendar. Honest feedback or demotivating guilt wall? How should an app show a missed session?
 
+**Second-pass additions (2026-07-15, after the Information View shipped):**
+- What time window do you actually think in when you look at your data — last month, the training block, the whole season? How often do you change the dashboard's date range?
+- The Power Profile ladder ranks your best efforts from "World Champion" down to "Fair — Cat 5". Honestly: does that motivate you or discourage you? Would you want it in a coaching app?
+- Your calendar carries visible notes ("time for training this week", "Birthday!"). Do you and your coach actually use those, or is that context better captured in conversation? Would you miss visible notes?
+- A "recent personal bests" feed (best 5-sec power on a date, fastest split on a date) — motivating, or noise?
+- If a few of your chosen graphs/numbers could sit on the app's front page next to the Coach conversation — what would you pin there? Anything you'd explicitly NOT want staring at you every day?
+
 **The ballot (after the walkthrough):**
 - For OUR information page: go through the reference panels one by one — "copy this / skip this", must-have vs nice-to-have. (The agreed handoff format.)
 - **→ Current position:** Draft scope is This Month (sessions done/skipped, streak), Check-in Trends (7-day energy/sleep/mood/motivation), and Body Signals Today — with pattern insights deliberately excluded to protect the invisible coaching model. What's missing? What's in there that you'd never open?
