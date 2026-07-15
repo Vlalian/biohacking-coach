@@ -1,7 +1,7 @@
 // Comparison logic — filter matrix, selection threshold, attribute
 // extraction, and period-split math. Pure node: no DOM, no storage.
 import { describe, it, expect } from 'vitest';
-import { filterSessions, canCompare, extractColumns, splitPeriods } from '../public/js/infocompare.js';
+import { filterSessions, canCompare, extractColumns, normalize } from '../public/js/infocompare.js';
 
 const S = (id, over = {}) => ({
   id, date: '2026-07-01', week: 0, title: 'T', sport: 'run', type: 'Endurance',
@@ -68,18 +68,23 @@ describe('extractColumns', () => {
   });
 });
 
-describe('splitPeriods', () => {
+describe('normalize — Comparison Graph scaling', () => {
   const rows = [
-    // [name, input, previous, current]
-    ['even length',      [1, 2, 3, 4], [1, 2], [3, 4]],
-    ['odd length: extra point goes to current', [1, 2, 3, 4, 5], [1, 2], [3, 4, 5]],
-    ['two points',       [1, 2],       [1],    [2]],
-    ['single reading: no previous window', [1], [], [1]],
-    ['empty',            [],           [],     []],
+    // [name, input, expected]
+    ['scales to 0–1 over the series range', [10, 20, 30], [0, 0.5, 1]],
+    ['negative ranges work (Form can be negative)', [-10, 0, 10], [0, 0.5, 1]],
+    ['flat series maps to the midline, not a crash', [7, 7, 7], [0.5, 0.5, 0.5]],
+    ['single reading maps to the midline', [42], [0.5]],
+    ['empty stays empty', [], []],
   ];
-  for (const [name, input, previous, current] of rows) {
+  for (const [name, input, expected] of rows) {
     it(name, () => {
-      expect(splitPeriods(input)).toEqual({ previous, current });
+      expect(normalize(input)).toEqual(expected);
     });
   }
+  it('never yields NaN or Infinity', () => {
+    for (const input of [[0], [0, 0], [1e9, -1e9], [0.0001, 0.0002]]) {
+      for (const v of normalize(input)) expect(Number.isFinite(v)).toBe(true);
+    }
+  });
 });

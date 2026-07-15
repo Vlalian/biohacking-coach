@@ -43,15 +43,13 @@ export function extractColumns(sessions) {
   }));
 }
 
-// Period Comparison split: current window = the last half of the series,
-// previous window = the equal-length half before it. Odd lengths give the
-// extra element to the current window. Fewer than 2 points → no previous
-// window (the panel degrades gracefully to current-only).
-export function splitPeriods(values) {
-  if (values.length < 2) return { current: [...values], previous: [] };
-  const half = Math.floor(values.length / 2);
-  return {
-    previous: values.slice(0, half),
-    current:  values.slice(half),
-  };
+// Comparison Graph normalization: scale a series to 0–1 over its own range,
+// so series with different units (hours, RPE, TSS, kJ) can share one chart —
+// the comparison is of shapes over time, not absolute values. A flat series
+// (or a single reading) maps to 0.5 — a midline, not a crash.
+export function normalize(values) {
+  if (!values.length) return [];
+  const mn = Math.min(...values), mx = Math.max(...values);
+  if (mx === mn) return values.map(() => 0.5);
+  return values.map(v => (v - mn) / (mx - mn));
 }

@@ -7,10 +7,10 @@
 // seam), Favorites from infolayout.js, labels from translations.js. Keeps no
 // domain logic of its own.
 
-import { PANELS, availablePanels } from './panels.js';
+import { PANELS, availablePanels, svgOpen, line } from './panels.js';
 import { getDataset, DATASET_STATES } from './infodata.js';
 import { loadFavorites, saveFavorites, promote, demote, isFavorite, reorder } from './infolayout.js';
-import { filterSessions, canCompare, extractColumns } from './infocompare.js';
+import { filterSessions, canCompare, extractColumns, normalize } from './infocompare.js';
 import { t } from './translations.js';
 
 const TYPE_COLOR  = { Endurance: '#4a90d9', Intensity: '#e05555', Tempo: '#c9a96e', Recovery: '#6db36d' };
@@ -40,13 +40,28 @@ export function jumpToPanel(id) {
   return el;
 }
 
-// Period Comparison toggle state — per panel, a viewing mode: deliberately
-// NOT persisted (resets on reload), unlike the Favorites layout.
-const periodCompare = {};
+// Comparison Graph — the set of panels whose series the athlete has added
+// to the combined chart. A viewing mode: deliberately NOT persisted.
+const graphSet = new Set();
 
-// Exported click handler: ⇄ on compare-capable panels.
-export function togglePeriodCompare(id) {
-  periodCompare[id] = !periodCompare[id];
+// Enlarged panels — span the full row for closer analysis. Also a viewing
+// mode, not persisted.
+const enlarged = new Set();
+
+// Exported click handler: ⇄ adds/removes a panel's series on the Comparison Graph.
+export function toggleCompareGraph(id) {
+  graphSet.has(id) ? graphSet.delete(id) : graphSet.add(id);
+  renderInformation();
+}
+
+export function clearCompareGraph() {
+  graphSet.clear();
+  renderInformation();
+}
+
+// Exported click handler: ⛶ toggles a panel between normal and full-row size.
+export function toggleEnlarge(id) {
+  enlarged.has(id) ? enlarged.delete(id) : enlarged.add(id);
   renderInformation();
 }
 
@@ -196,22 +211,55 @@ function starBtn(id, fav) {
 }
 
 function panelCard(p, dataset, fav) {
-  const cmpOn = !!periodCompare[p.id];
-  const cmpBtn = p.compare
-    ? `<button class="iv-cbtn ${cmpOn ? 'on' : ''}" data-periodcmp="${p.id}" title="${t('infoPeriodCompare')}" aria-label="${t('infoPeriodCompare')}">⇄</button>`
+  const inGraph = graphSet.has(p.id);
+  const big = enlarged.has(p.id);
+  const cmpBtn = p.series
+    ? `<button class="iv-cbtn ${inGraph ? 'on' : ''}" data-graphadd="${p.id}" title="${t('infoAddToGraph')}" aria-label="${t('infoAddToGraph')}">⇄</button>`
     : '';
+  const bigBtn = `<button class="iv-cbtn ${big ? 'on' : ''}" data-enlarge="${p.id}" title="${t('infoEnlarge')}" aria-label="${t('infoEnlarge')}">⛶</button>`;
   return `<div class="iv-panel" data-panel="${p.id}">
     <div class="iv-phead">
       <span class="iv-ptitle">${t(p.titleKey)}</span>
-      <span class="iv-pacts">${cmpBtn}${starBtn(p.id, fav)}</span>
+      <span class="iv-pacts">${cmpBtn}${bigBtn}${starBtn(p.id, fav)}</span>
     </div>
-    <div class="iv-pbody">${p.render(dataset, { t, compare: cmpOn })}</div>
+    <div class="iv-pbody">${p.render(dataset, { t })}</div>
   </div>`;
 }
 
-function railItem(p, fav) {
-  return `<button class="iv-railitem ${fav ? 'fav' : ''}" data-jump="${p.id}">
-    <span>${t(p.titleKey)}</span>${starBtn(p.id, fav)}</button>`;
+// The rail is pure navigation: no stars, no favorite highlighting — the
+// ★ group heading alone says where the favorites are. The `fav` class is
+// functional only (scopes drag-reorder), never styled.
+function railItem(p, fav = false) {
+  return `<button class="iv-railitem ${fav ? 'fav' : ''}" data-jump="${p.id}"><span>${t(p.titleKey)}</span></button>`;
+}
+
+// ── Comparison Graph — one big chart collecting user-picked panels ───────────
+function comparisonGraph(dataset) {
+  const picked = [...graphSet].map(id => availablePanels(dataset).find(p => p.id === id)).filter(Boolean);
+  if (!picked.length) return '';
+  const entries = picked.flatMap(p =>
+    p.series(dataset).map(s => ({ panel: p, ...s })));
+  let svg = svgOpen(600, 200);
+  for (const e of entries) svg += line(normalize(e.values), 600, 200, e.color);
+  svg += '</svg>';
+  return `<div class="iv-anchor iv-span2"><div class="iv-panel iv-graphpanel" data-panel="comparison-graph">
+    <div class="iv-phead">
+      <span class="iv-ptitle">${t('infoGraphTitle')}</span>
+      <button class="iv-btn" data-graphclear="1">${t('infoGraphClear')}</button>
+    </div>
+    <div class="iv-graphchips">
+      ${picked.map(p => `<span class="iv-chiptag">${t(p.titleKey)}<button data-graphremove="${p.id}" title="${t('infoGraphRemove')}" aria-label="${t('infoGraphRemove')}">✕</button></span>`).join('')}
+    </div>
+    <div class="iv-pbody">${svg}
+      ${legendFor(entries)}
+      <div class="iv-note">${t('infoGraphNote')}</div>
+    </div>
+  </div></div>`;
+}
+
+function legendFor(entries) {
+  return `<div class="iv-legend">${entries.map(e =>
+    `<span><i style="background:${e.color}"></i>${t(e.panel.titleKey)} — ${t(e.labelKey)}</span>`).join('')}</div>`;
 }
 
 function bindOnce(view) {
@@ -220,8 +268,13 @@ function bindOnce(view) {
   view.addEventListener('click', e => {
     const star = e.target.closest('[data-star]');
     if (star) { toggleFavorite(star.dataset.star); return; }
-    const pcmp = e.target.closest('[data-periodcmp]');
-    if (pcmp) { togglePeriodCompare(pcmp.dataset.periodcmp); return; }
+    const gadd = e.target.closest('[data-graphadd]');
+    if (gadd) { toggleCompareGraph(gadd.dataset.graphadd); return; }
+    const grem = e.target.closest('[data-graphremove]');
+    if (grem) { toggleCompareGraph(grem.dataset.graphremove); return; }
+    if (e.target.closest('[data-graphclear]')) { clearCompareGraph(); return; }
+    const big = e.target.closest('[data-enlarge]');
+    if (big) { toggleEnlarge(big.dataset.enlarge); return; }
     const dk = e.target.closest('[data-datakind]');
     if (dk) { setDataState(dk.dataset.datakind); return; }
     if (e.target.closest('[data-cmpopen]'))  { cmp.open = true;  cmp.show = false; cmp.sel.clear(); renderInformation(); return; }
@@ -284,11 +337,12 @@ export function renderInformation() {
             favPanels.map(p => railItem(p, true)).join('') : ''}
           ${groups.map(g =>
             `<div class="iv-railgroup" data-family="${g.familyKey}">${t(g.familyKey)}</div>` +
-            g.panels.map(p => railItem(p, false)).join('')
+            g.panels.map(p => railItem(p)).join('')
           ).join('')}
         </div>
         <div class="iv-feed">
-          ${feed.map(p => `<div id="iv-anchor-${p.id}">${panelCard(p, dataset, storedFavs.includes(p.id))}</div>`).join('')}
+          ${comparisonGraph(dataset)}
+          ${feed.map(p => `<div id="iv-anchor-${p.id}" class="iv-anchor ${enlarged.has(p.id) ? 'iv-span2' : ''}">${panelCard(p, dataset, storedFavs.includes(p.id))}</div>`).join('')}
         </div>
       </div>
     </div>

@@ -732,7 +732,26 @@
 
     /* ── Information View ─────────────────────────────────────────────── */
     #information-view .iv-container { max-width: 1060px; margin: 0 auto; }
-    .iv-feed { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    /* Two panels per row; rail + feed together fill the container width
+       (the same width as the data banner above). */
+    .iv-feed {
+      flex: 1; display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; min-width: 0; align-items: start;
+    }
+    .iv-anchor { min-width: 0; }
+    .iv-span2 { grid-column: 1 / -1; }
+    .iv-graphpanel { border-color: var(--accent-dim); }
+    .iv-graphchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .iv-chiptag {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+      padding: 3px 10px; font-size: 11px; color: var(--text);
+    }
+    .iv-chiptag button {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 10px; padding: 0; line-height: 1;
+    }
+    .iv-chiptag button:hover { color: var(--text); }
     .iv-panel {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -793,8 +812,7 @@
       font-size: 12px; font-family: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer;
     }
     .iv-railitem:hover { background: var(--surface-2); }
-    .iv-railitem.fav > span:first-child { color: var(--accent); }
-    .iv-railitem.fav { touch-action: none; }
+    .iv-railitem.fav { touch-action: none; } /* .fav is functional (drag scope), never styled */
     .iv-railitem.dragging { opacity: 0.4; }
     .iv-railitem.drop-hover { outline: 2px dashed var(--accent-dim); outline-offset: -2px; }
     .iv-pacts { display: flex; gap: 4px; }
@@ -813,6 +831,7 @@
     @media (max-width: 820px) {
       .iv-railwrap { flex-direction: column; }
       .iv-rail { width: 100%; position: static; max-height: none; }
+      .iv-feed { grid-template-columns: 1fr; }
     }
     .iv-btn {
       padding: 7px 13px; background: var(--surface-2); border: 1px solid var(--border);

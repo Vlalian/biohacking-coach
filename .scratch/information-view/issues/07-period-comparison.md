@@ -1,4 +1,4 @@
-Status: done (2026-07-14)
+Status: done (2026-07-14) — SUPERSEDED 2026-07-15: Mads reviewed the built page and replaced Period Comparison with the **Comparison Graph** (athlete-composed: ⇄ adds any series-bearing panel's series to one large combined normalized chart; chips remove, Clear empties). The vs-previous-window overlay never reached a user; splitPeriods was removed with it. See CONTEXT.md → Comparison.
 
 # 07 — Period Comparison
 

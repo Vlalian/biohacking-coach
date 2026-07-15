@@ -65,6 +65,8 @@ Cross-cutting:
 
 ## Further Notes
 
+**Post-build amendment (Mads, 2026-07-15), after reviewing the implemented page:** (1) feed lays out two panels per row, rail + feed filling the container width; (2) the rail is pure navigation — no stars, no favorite highlighting (stars live on panel cards; this also fixed an invalid nested-`<button>` bug the rail stars caused in real browsers); (3) **Period Comparison is replaced by the Comparison Graph** — the athlete composes one large combined chart by pressing ⇄ on any series-bearing panel (series normalized to their own range; chips to remove; Clear); (4) new **enlarge** control (⛶) on every panel spans it full-row with a proportionally taller chart. CONTEXT.md and issue 07 updated accordingly.
+
 - Prototype verdict (2026-07-14): Index Rail won over Two-Zone Wall and Glance Strip; the winning layout is live in the POC on synthetic data as `infoview.prototype.js` — treat it as a visual spec, not as code to promote (written under prototype constraints: no persistence, no i18n, no tests).
 - Open design question carried from the prototype: under the one-reading rule a week-1 athlete already sees 12 of 15 panels. If that reads as a wall rather than honest growth, the levers are a smaller default Favorites set or a collapsed-by-default rail for non-favorite families — decide during build or after expert § 13 answers.
 - The expert's § 13 answers (interview guide) tune the default Favorites set and validate panel priorities; they do not change what is included (startup truth: everything is available and shown).

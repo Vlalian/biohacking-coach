@@ -132,7 +132,7 @@ describe('Favorites', () => {
     expect(favIds()).toEqual(['ffnow', 'load', 'bodymind', 'sleep', 'race']);
     expect(feedIds()[4]).toBe('race');
 
-    document.querySelector('.iv-rail [data-star="race"]').click();
+    document.querySelector('.iv-feed [data-star="race"]').click();
     expect(favIds()).toEqual(['ffnow', 'load', 'bodymind', 'sleep']);
     // back in its family group, still reachable — no hide anywhere
     expect(document.querySelector('.iv-railitem[data-jump="race"]')).not.toBeNull();
@@ -169,7 +169,7 @@ describe('Favorites', () => {
     renderInformation();
     // demote everything
     for (const id of ['ffnow', 'load', 'bodymind', 'sleep']) {
-      document.querySelector(`.iv-rail [data-star="${id}"]`).click();
+      document.querySelector(`.iv-feed [data-star="${id}"]`).click();
     }
     expect(favIds()).toEqual([]);
     expect(document.querySelectorAll('.iv-feed .iv-panel').length)
@@ -178,39 +178,81 @@ describe('Favorites', () => {
   });
 });
 
-describe('Period Comparison (⇄ toggle)', () => {
+describe('Comparison Graph (⇄ add graphs to one big chart)', () => {
   beforeEach(() => renderInformation());
 
-  it('⇄ appears only on compare-capable panels', () => {
-    expect(document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]')).not.toBeNull();
-    expect(document.querySelector('.iv-panel[data-panel="ffnow"] [data-periodcmp]')).toBeNull();
-    expect(document.querySelector('.iv-panel[data-panel="zones"] [data-periodcmp]')).toBeNull();
+  const graph = () => document.querySelector('.iv-panel[data-panel="comparison-graph"]');
+
+  it('⇄ appears only on panels with series; tiles, tables, and donuts have none', () => {
+    expect(document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]')).not.toBeNull();
+    expect(document.querySelector('.iv-panel[data-panel="sleep"] [data-graphadd]')).not.toBeNull();
+    expect(document.querySelector('.iv-panel[data-panel="ffnow"] [data-graphadd]')).toBeNull();
+    expect(document.querySelector('.iv-panel[data-panel="zones"] [data-graphadd]')).toBeNull();
   });
 
-  it('toggling overlays the previous period dashed and toggling again removes it', () => {
-    const panelHtml = () => document.querySelector('.iv-panel[data-panel="load"]').innerHTML;
-    expect(panelHtml()).not.toContain('stroke-dasharray="5,4"');
-    document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').click();
-    expect(panelHtml()).toContain('stroke-dasharray="5,4"');
-    expect(document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').classList.contains('on')).toBe(true);
-    document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').click();
-    expect(panelHtml()).not.toContain('stroke-dasharray="5,4"');
+  it('no graph until something is added; adding two panels combines their series full-width', () => {
+    expect(graph()).toBeNull();
+    document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]').click();
+    expect(graph()).not.toBeNull();
+    expect(graph().closest('.iv-anchor').classList.contains('iv-span2')).toBe(true);
+    expect(graph().querySelectorAll('.iv-chiptag').length).toBe(1);
+    expect(graph().querySelectorAll('svg path').length).toBe(3); // fitness, fatigue, form
+
+    document.querySelector('.iv-panel[data-panel="sleep"] [data-graphadd]').click();
+    expect(graph().querySelectorAll('.iv-chiptag').length).toBe(2);
+    expect(graph().querySelectorAll('svg path').length).toBe(5); // + hours, feeling
+    expect(graph().innerHTML).not.toContain('NaN');
   });
 
-  it('degrades gracefully in fresh state (single week: current only, no error)', async () => {
-    const { setDataState } = await import('../public/js/infoview.js');
-    document.querySelector('.iv-panel[data-panel="hours"] [data-periodcmp]').click();
-    setDataState('fresh');
-    const panel = document.querySelector('.iv-panel[data-panel="hours"]');
-    expect(panel).not.toBeNull();
-    expect(panel.innerHTML).not.toContain('NaN');
-    setDataState('rich');
+  it('a chip ✕ removes one panel; Clear removes the graph entirely', () => {
+    document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]').click();
+    document.querySelector('.iv-panel[data-panel="sleep"] [data-graphadd]').click();
+    graph().querySelector('[data-graphremove="load"]').click();
+    expect(graph().querySelectorAll('.iv-chiptag').length).toBe(1);
+    graph().querySelector('[data-graphclear]').click();
+    expect(graph()).toBeNull();
   });
 
-  it('toggle state is a viewing mode — not written to localStorage', () => {
-    document.querySelector('.iv-panel[data-panel="load"] [data-periodcmp]').click();
+  it('the panel ⇄ toggles: pressing again removes it from the graph', () => {
+    document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]').click();
+    expect(document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]').classList.contains('on')).toBe(true);
+    document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]').click();
+    expect(graph()).toBeNull();
+  });
+
+  it('is a viewing mode — nothing written to localStorage', () => {
+    document.querySelector('.iv-panel[data-panel="load"] [data-graphadd]').click();
     expect(localStorage.getItem('bh_info_layout')).toBeNull();
-    expect(Object.keys(localStorage).filter(k => k.includes('period'))).toEqual([]);
+  });
+});
+
+describe('Enlarge (⛶)', () => {
+  beforeEach(() => renderInformation());
+
+  it('every panel has the button; toggling spans the panel across the full row and back', () => {
+    expect(document.querySelectorAll('[data-enlarge]').length)
+      .toBe(document.querySelectorAll('.iv-feed .iv-panel').length);
+    const anchor = () => document.getElementById('iv-anchor-load');
+    expect(anchor().classList.contains('iv-span2')).toBe(false);
+    document.querySelector('.iv-panel[data-panel="load"] [data-enlarge]').click();
+    expect(anchor().classList.contains('iv-span2')).toBe(true);
+    expect(document.querySelector('.iv-panel[data-panel="load"] [data-enlarge]').classList.contains('on')).toBe(true);
+    document.querySelector('.iv-panel[data-panel="load"] [data-enlarge]').click();
+    expect(anchor().classList.contains('iv-span2')).toBe(false);
+  });
+
+  it('is a viewing mode — nothing written to localStorage', () => {
+    document.querySelector('.iv-panel[data-panel="load"] [data-enlarge]').click();
+    expect(localStorage.getItem('bh_info_layout')).toBeNull();
+  });
+});
+
+describe('rail is pure navigation', () => {
+  it('no stars and no favorite styling in the rail', () => {
+    renderInformation();
+    expect(document.querySelectorAll('.iv-rail [data-star]').length).toBe(0);
+    // the ★ group heading exists, but items carry no styled fav marker
+    expect(document.querySelector('.iv-railgroup-fav')).not.toBeNull();
   });
 });
 

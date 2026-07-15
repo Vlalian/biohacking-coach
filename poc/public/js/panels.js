@@ -14,17 +14,16 @@
 // Peaks & Zones. Technical sports terms (TSS, RPE, W, bpm, kJ, Z1–Z5,
 // Fatigue/Fitness/Form) stay in English in every Athlete Language.
 //
-// Panels with `compare: true` accept opts.compare (Period Comparison): the
-// series splits into current + previous equal-length windows and the
-// previous renders dashed behind the current. Insufficient history degrades
-// gracefully — splitPeriods yields an empty previous window and only the
-// current data draws.
-
-import { splitPeriods } from './infocompare.js';
+// Panels with a `series(dataset)` method expose their time series for the
+// Comparison Graph: [{ labelKey, color, values }]. The orchestrator collects
+// series from user-picked panels into one combined normalized chart.
 
 // ── SVG helpers ───────────────────────────────────────────────────────────────
+// Charts scale with their container: aspect-ratio keeps the viewBox
+// proportions, so a panel spanning a wider grid cell renders taller too
+// (this is what makes the enlarge feature work without per-panel sizes).
 export function svgOpen(w, h) {
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block;">`;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:auto;aspect-ratio:${w}/${h};display:block;">`;
 }
 
 function pathFor(vals, w, h, pad = 4) {
@@ -134,29 +133,27 @@ export const PANELS = [
       <div class="iv-fflab">${t('infoWeeksUntil')}<br>${D.raceName}</div></div>`,
   },
   {
-    id: 'load', familyKey: FAMILY.formLoad, titleKey: 'infoPanelLoad', compare: true,
+    id: 'load', familyKey: FAMILY.formLoad, titleKey: 'infoPanelLoad',
     has: D => D.weekly.length > 0,
-    render: (D, { t = k => k, compare = false } = {}) => {
+    series: D => [
+      { labelKey: 'Fitness', color: FF_COLORS.fitness, values: D.weekly.map(w => w.fitness) },
+      { labelKey: 'Fatigue', color: FF_COLORS.fatigue, values: D.weekly.map(w => w.fatigue) },
+      { labelKey: 'Form',    color: FF_COLORS.form,    values: D.weekly.map(w => w.form) },
+    ],
+    render: (D, { t = k => k } = {}) => {
       let s = svgOpen(300, 110);
-      const tss = compare ? splitPeriods(D.weekly.map(w => w.tss)).current : D.weekly.map(w => w.tss);
-      s += bars(tss, 300, 110, 'rgba(107,107,107,0.25)');
-      for (const k of ['fitness', 'fatigue', 'form']) {
-        const vals = D.weekly.map(w => w[k]);
-        if (compare) {
-          const { previous, current } = splitPeriods(vals);
-          s += line(previous, 300, 110, FF_COLORS[k], true) + line(current, 300, 110, FF_COLORS[k]);
-        } else {
-          s += line(vals, 300, 110, FF_COLORS[k]);
-        }
-      }
+      s += bars(D.weekly.map(w => w.tss), 300, 110, 'rgba(107,107,107,0.25)');
+      for (const k of ['fitness', 'fatigue', 'form']) s += line(D.weekly.map(w => w[k]), 300, 110, FF_COLORS[k]);
       s += '</svg>';
-      return s + legend([['Fitness', FF_COLORS.fitness], ['Fatigue', FF_COLORS.fatigue], ['Form', FF_COLORS.form], [t('infoWeeklyTss'), 'rgba(107,107,107,0.5)']])
-        + (compare ? `<div class="iv-note">${t('infoVsPrev')}</div>` : '');
+      return s + legend([['Fitness', FF_COLORS.fitness], ['Fatigue', FF_COLORS.fatigue], ['Form', FF_COLORS.form], [t('infoWeeklyTss'), 'rgba(107,107,107,0.5)']]);
     },
   },
   {
     id: 'consistency', familyKey: FAMILY.formLoad, titleKey: 'infoPanelConsistency',
     has: D => D.weekly.length > 0,
+    series: D => [
+      { labelKey: 'statusCompleted', color: BODY_COLOR, values: D.weekly.map(w => w.done) },
+    ],
     render: (D, { t = k => k } = {}) => {
       let s = svgOpen(300, 90);
       const mx = Math.max(...D.weekly.map(w => w.done + w.skipped), 1);
@@ -175,28 +172,31 @@ export const PANELS = [
 
   // ── Body & Mind ──
   {
-    id: 'bodymind', familyKey: FAMILY.bodyMind, titleKey: 'infoPanelBodyMind', compare: true,
+    id: 'bodymind', familyKey: FAMILY.bodyMind, titleKey: 'infoPanelBodyMind',
     has: D => D.sessions.some(s => s.body != null || s.mind != null),
-    render: (D, { t = k => k, compare = false } = {}) => {
+    series: D => [
+      { labelKey: 'feedbackBodyShort', color: BODY_COLOR, values: weeklyAvg(D, 'body') },
+      { labelKey: 'feedbackMindShort', color: MIND_COLOR, values: weeklyAvg(D, 'mind') },
+    ],
+    render: (D, { t = k => k } = {}) => {
+      const body = weeklyAvg(D, 'body'), mind = weeklyAvg(D, 'mind');
       let s = svgOpen(300, 100);
-      for (const [key, color] of [['body', BODY_COLOR], ['mind', MIND_COLOR]]) {
-        const vals = weeklyAvg(D, key);
-        if (compare) {
-          const { previous, current } = splitPeriods(vals);
-          s += line(previous, 300, 100, color, true) + line(current, 300, 100, color);
-        } else {
-          s += line(vals, 300, 100, color);
-        }
-      }
+      s += line(body, 300, 100, BODY_COLOR) + line(mind, 300, 100, MIND_COLOR);
       s += '</svg>';
       return s
         + legend([[t('feedbackBodyShort'), BODY_COLOR], [t('feedbackMindShort'), MIND_COLOR]])
-        + `<div class="iv-note">${t('infoWeeklyAvgNote')}${compare ? ' — ' + t('infoVsPrev') : ''}</div>`;
+        + `<div class="iv-note">${t('infoWeeklyAvgNote')}</div>`;
     },
   },
   {
     id: 'checkin', familyKey: FAMILY.bodyMind, titleKey: 'infoPanelCheckin',
     has: D => D.checkins.length > 0,
+    series: D => [
+      { labelKey: 'infoEnergy',       color: '#4fa3d9',  values: D.checkins.map(x => x.energy) },
+      { labelKey: 'infoSleepQuality', color: MIND_COLOR, values: D.checkins.map(x => x.sleepq) },
+      { labelKey: 'infoMood',         color: BODY_COLOR, values: D.checkins.map(x => x.mood) },
+      { labelKey: 'infoMotivation',   color: '#c9a96e',  values: D.checkins.map(x => x.motivation) },
+    ],
     render: (D, { t = k => k } = {}) => `<div class="iv-minigrid">${[['energy', 'infoEnergy', '#4fa3d9'], ['sleepq', 'infoSleepQuality', MIND_COLOR], ['mood', 'infoMood', BODY_COLOR], ['motivation', 'infoMotivation', '#c9a96e']]
       .map(([k, labKey, c]) => {
         const vals = D.checkins.map(x => x[k]);
@@ -205,23 +205,18 @@ export const PANELS = [
       }).join('')}</div>`,
   },
   {
-    id: 'sleep', familyKey: FAMILY.bodyMind, titleKey: 'infoPanelSleep', compare: true,
+    id: 'sleep', familyKey: FAMILY.bodyMind, titleKey: 'infoPanelSleep',
     has: D => D.sleep.length > 0,
-    render: (D, { t = k => k, compare = false } = {}) => {
-      const hours = D.sleep.map(x => x.hours), feeling = D.sleep.map(x => x.feeling * 2);
+    series: D => [
+      { labelKey: 'infoSleepHours', color: MIND_COLOR, values: D.sleep.map(x => x.hours) },
+      { labelKey: 'infoFeeling',    color: '#c9a96e',  values: D.sleep.map(x => x.feeling) },
+    ],
+    render: (D, { t = k => k } = {}) => {
       let s = svgOpen(300, 100);
-      if (compare) {
-        const h = splitPeriods(hours), f = splitPeriods(feeling);
-        s += bars(h.current, 300, 100, 'rgba(154,123,208,0.45)');
-        s += line(h.previous, 300, 100, MIND_COLOR, true);
-        s += line(f.current, 300, 100, '#c9a96e');
-      } else {
-        s += bars(hours, 300, 100, 'rgba(154,123,208,0.45)');
-        s += line(feeling, 300, 100, '#c9a96e');
-      }
+      s += bars(D.sleep.map(x => x.hours), 300, 100, 'rgba(154,123,208,0.45)');
+      s += line(D.sleep.map(x => x.feeling * 2), 300, 100, '#c9a96e');
       s += '</svg>';
-      return s + legend([[t('infoSleepHours'), MIND_COLOR], [t('infoFeeling'), '#c9a96e']])
-        + (compare ? `<div class="iv-note">${t('infoVsPrev')}</div>` : '');
+      return s + legend([[t('infoSleepHours'), MIND_COLOR], [t('infoFeeling'), '#c9a96e']]);
     },
   },
 
@@ -237,26 +232,24 @@ export const PANELS = [
     render: (D, { t = k => k } = {}) => sportSplit(D, 'km', v => Math.round(v) + ' km', t),
   },
   {
-    id: 'hours', familyKey: FAMILY.volume, titleKey: 'infoPanelHours', compare: true,
+    id: 'hours', familyKey: FAMILY.volume, titleKey: 'infoPanelHours',
     has: D => D.weekly.length > 0,
-    render: (D, { t = k => k, compare = false } = {}) => {
+    series: D => [
+      { labelKey: 'infoPanelHours', color: '#4a90d9', values: D.weekly.map(w => +(w.min / 60).toFixed(1)) },
+    ],
+    render: (D, { t = k => k } = {}) => {
       const vals = D.weekly.map(w => +(w.min / 60).toFixed(1));
-      let s = svgOpen(300, 90);
-      if (compare) {
-        const { previous, current } = splitPeriods(vals);
-        s += bars(current, 300, 90, 'rgba(74,144,217,0.75)');
-        s += line(previous, 300, 90, '#e2e2e2', true);
-      } else {
-        s += bars(vals, 300, 90, 'rgba(74,144,217,0.75)');
-      }
-      s += '</svg>';
+      let s = svgOpen(300, 90) + bars(vals, 300, 90, 'rgba(74,144,217,0.75)') + '</svg>';
       const avg = (vals.reduce((a, v) => a + v, 0) / (vals.length || 1)).toFixed(1);
-      return s + `<div class="iv-note">${t('infoAvgPerWeek').replace('{avg}', avg)}${compare ? ' — ' + t('infoVsPrev') : ''}</div>`;
+      return s + `<div class="iv-note">${t('infoAvgPerWeek').replace('{avg}', avg)}</div>`;
     },
   },
   {
     id: 'longest', familyKey: FAMILY.volume, titleKey: 'infoPanelLongest',
     has: D => D.weekly.some(w => w.longest > 0),
+    series: D => [
+      { labelKey: 'infoPanelLongest', color: '#4fa3d9', values: D.weekly.map(w => w.longest) },
+    ],
     render: (D, { t = k => k } = {}) => {
       const s = svgOpen(300, 90) + bars(D.weekly.map(w => w.longest), 300, 90, 'rgba(79,163,217,0.75)') + '</svg>';
       return s + `<div class="iv-note">${t('infoLongestNote')}</div>`;
@@ -265,6 +258,9 @@ export const PANELS = [
   {
     id: 'work', familyKey: FAMILY.volume, titleKey: 'infoPanelWork',
     has: D => D.weekly.some(w => w.kj > 0),
+    series: D => [
+      { labelKey: 'infoPanelWork', color: '#6b6b6b', values: D.weekly.map(w => w.kj) },
+    ],
     render: D => svgOpen(300, 90) + bars(D.weekly.map(w => w.kj), 300, 90, 'rgba(107,107,107,0.6)') + '</svg>',
   },
 

@@ -111,25 +111,32 @@ describe('availablePanels', () => {
   });
 });
 
-describe('period compare (opts.compare on compare-capable panels)', () => {
-  const compareCapable = PANELS.filter(p => p.compare);
+describe('series() — Comparison Graph capability', () => {
+  const seriesCapable = PANELS.filter(p => p.series);
 
-  it('load, bodymind, sleep, hours declare the capability', () => {
-    expect(compareCapable.map(p => p.id).sort()).toEqual(['bodymind', 'hours', 'load', 'sleep']);
+  it('the time-series panels declare it; tiles, tables, and donuts do not', () => {
+    expect(seriesCapable.map(p => p.id).sort()).toEqual(
+      ['bodymind', 'checkin', 'consistency', 'hours', 'load', 'longest', 'sleep', 'work']);
+    for (const id of ['ffnow', 'race', 'split-dur', 'split-dist', 'zones', 'peaks-power', 'peaks-hr']) {
+      expect(PANELS.find(p => p.id === id).series).toBeUndefined();
+    }
   });
 
-  for (const p of compareCapable) {
-    it(`${p.id}: compare renders a dashed previous window on rich data`, () => {
-      const html = p.render(rich, { t: k => k, compare: true });
-      expect(html).toContain('stroke-dasharray="5,4"');
-      expect(html).toContain('infoVsPrev');
-      expect(html).not.toContain('NaN');
+  for (const p of seriesCapable) {
+    it(`${p.id}: series(rich) yields labeled, colored, finite numeric values`, () => {
+      const entries = p.series(rich);
+      expect(entries.length).toBeGreaterThan(0);
+      for (const e of entries) {
+        expect(e.labelKey).toBeTruthy();
+        expect(e.color).toBeTruthy();
+        expect(e.values.length).toBeGreaterThan(0);
+        for (const v of e.values) expect(Number.isFinite(v)).toBe(true);
+      }
     });
-    it(`${p.id}: compare degrades gracefully with a single reading (no previous window, no error)`, () => {
-      const html = p.render(oneReadingFor(p.id), { t: k => k, compare: true });
-      expect(html).not.toContain('stroke-dasharray="5,4"');
-      expect(html).not.toContain('NaN');
-      expect(html.length).toBeGreaterThan(0);
+    it(`${p.id}: series works on a one-reading dataset`, () => {
+      for (const e of p.series(oneReadingFor(p.id))) {
+        for (const v of e.values) expect(Number.isFinite(v)).toBe(true);
+      }
     });
   }
 });
