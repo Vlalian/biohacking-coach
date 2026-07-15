@@ -1,12 +1,13 @@
 // Synthetic data provider — determinism and shape invariants.
-// Pure node: no DOM, no storage.
+// Pure node: no DOM, no storage. The 'mine' state needs localStorage and is
+// covered in garmin.mine.test.mjs under jsdom.
 import { describe, it, expect } from 'vitest';
-import { getDataset, emptyDataset, windowDataset, DATASET_STATES } from '../public/js/infodata.js';
+import { getDataset, emptyDataset, windowDataset, SYNTHETIC_STATES } from '../public/js/infodata.js';
 
 const TODAY = '2026-07-14';
 
 describe('getDataset — determinism', () => {
-  for (const state of DATASET_STATES) {
+  for (const state of SYNTHETIC_STATES) {
     it(`same state + same reference date → identical dataset (${state})`, () => {
       const a = getDataset(state, { today: TODAY });
       const b = getDataset(state, { today: TODAY });

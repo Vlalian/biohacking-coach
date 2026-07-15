@@ -947,6 +947,14 @@
       <button class="tp-arrow" onclick="navigateMonth(1)">&#8250;</button>
       <button id="tpExpandAll" class="tp-expand-all"></button>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;margin:10px 0 14px;">
+      <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:transparent;border:1px dashed #282828;border-radius:8px;color:#a0a0a0;font-size:12px;cursor:pointer;">
+        <span aria-hidden="true">&#8682;</span>
+        <span data-i18n="tpUploadWorkout">Upload workout</span>
+        <input id="tpUploadInput" type="file" accept=".fit,.gpx" multiple style="display:none;" onchange="uploadWorkoutFiles(this)"/>
+      </label>
+      <span id="tpUploadResult" style="font-size:12px;color:#6b6b6b;"></span>
+    </div>
     <div class="card">
       <div id="calGrid" class="cal-grid"></div>
     </div>

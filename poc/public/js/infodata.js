@@ -7,6 +7,8 @@
 // dataset. All values are synthetic — the 2026-07-09 privacy rule applies to
 // fixtures as much as to docs.
 
+import { allSessions, getStreams, weekStartOf, getDateKey } from './store.js';
+
 const SPORTS = ['swim', 'bike', 'run'];
 
 const TITLES = {
@@ -24,7 +26,10 @@ function mulberry32(a) {
   };
 }
 
-export const DATASET_STATES = ['fresh', 'rich'];
+// PRNG demo states; 'mine' (real data from the store) joins them as a valid
+// state but needs browser storage — node tests loop SYNTHETIC_STATES only.
+export const SYNTHETIC_STATES = ['fresh', 'rich'];
+export const DATASET_STATES = [...SYNTHETIC_STATES, 'mine'];
 
 // The canonical (empty) dataset shape. Panel predicates and renderers may
 // rely on every key existing; tests build one-reading datasets from this.
@@ -46,6 +51,7 @@ export function emptyDataset() {
 export function getDataset(state, { today } = {}) {
   if (!DATASET_STATES.includes(state)) throw new Error(`Unknown dataset state: ${state}`);
   const ref = today ? new Date(today) : new Date();
+  if (state === 'mine') return buildMineDataset(ref);
   const rnd = mulberry32(state === 'rich' ? 42 : 7);
   const weeks = state === 'rich' ? 26 : 1;
   const D = emptyDataset();
@@ -146,6 +152,171 @@ export function getDataset(state, { today } = {}) {
 
   // The generation loop runs w = oldest → current, so weekly/checkins are
   // already oldest → newest. (week numbers count DOWN toward now: 25 = oldest.)
+  return D;
+}
+
+// ── 'mine' — real data from the entity store and streams ─────────────────────
+// The same dataset shape, built from bh_sessions + bh_stream_* instead of the
+// seeded PRNG. TSS-family values (tss, fitness, fatigue, form) stay null until
+// the calc module exists — panels gated on them simply don't render.
+
+const SPORT_FROM_RAW = {
+  running: 'run', trail_running: 'run', treadmill_running: 'run',
+  cycling: 'bike', biking: 'bike', virtual_ride: 'bike',
+  swimming: 'swim', open_water: 'swim', lap_swimming: 'swim',
+};
+
+// Rolling-mean peak windows in 10 s bins. The '5s' column is approximated by a
+// single 10 s bin — the stream resolution floor; honest enough for the POC.
+const PEAK_WINDOWS = [['5s', 1], ['1m', 6], ['5m', 30], ['20m', 120], ['60m', 360]];
+
+export function hasMineData() {
+  return allSessions().some(s => s.source === 'garmin');
+}
+
+function parseDurMin(duration) {
+  const n = parseInt(duration, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function bestRollingMean(values, win) {
+  const vals = values.map(v => (typeof v === 'number' ? v : 0));
+  if (vals.length < win) return null;
+  let sum = 0, best = -Infinity;
+  for (let i = 0; i < vals.length; i++) {
+    sum += vals[i];
+    if (i >= win) sum -= vals[i - win];
+    if (i >= win - 1) best = Math.max(best, sum / win);
+  }
+  return Math.round(best);
+}
+
+function buildMineDataset(ref) {
+  const D = emptyDataset();
+  D.kind = 'mine';
+
+  const todayKey = getDateKey(ref);
+  const refWeekStart = new Date(weekStartOf(todayKey) + 'T00:00:00').getTime();
+  const weekIndex = dateKey =>
+    Math.max(0, Math.round((refWeekStart - new Date(weekStartOf(dateKey) + 'T00:00:00').getTime()) / (7 * 86400000)));
+
+  const entities = allSessions().filter(s =>
+    s.dateKey <= todayKey &&
+    (s.status === 'completed' || s.status === 'skipped') &&
+    s.isTraining !== false
+  );
+  if (entities.length === 0) return D;
+
+  const streamsById = {};
+  for (const e of entities) {
+    if (e.source === 'garmin') {
+      const st = getStreams(e.id);
+      if (st?.t?.length) streamsById[e.id] = st;
+    }
+  }
+
+  // Observed max HR across everything — the zone-band anchor. POC stand-in:
+  // real zones come from field tests via the future calc module.
+  let maxHr = 0;
+  for (const st of Object.values(streamsById)) {
+    for (const v of st.hr || []) if (typeof v === 'number' && v > maxHr) maxHr = v;
+  }
+  for (const e of entities) if (e.summary?.maxHr > maxHr) maxHr = e.summary.maxHr;
+
+  for (const e of entities.slice().sort((a, b) => a.dateKey.localeCompare(b.dateKey))) {
+    const durMin = parseDurMin(e.duration);
+    const power  = e.summary?.avgPowerW ?? null;
+    D.sessions.push({
+      id: e.id, date: e.dateKey, week: weekIndex(e.dateKey),
+      title: e.title || null,
+      sport: SPORT_FROM_RAW[(e.sport || '').toLowerCase()] || null,
+      type: e.type, durMin,
+      km: e.summary?.distanceM != null ? +(e.summary.distanceM / 1000).toFixed(1) : null,
+      tss: null,
+      power,
+      hr: e.summary?.avgHr ?? null,
+      kj: power != null && durMin != null ? Math.round((power * durMin * 60) / 1000) : null,
+      // Smiley feedback is 1–5; the panel axis is RPE-style 1–10 (POC mapping ×2).
+      body: e.feedback?.body ? e.feedback.body * 2 : null,
+      mind: e.feedback?.mind ? e.feedback.mind * 2 : null,
+      comment: e.feedback?.comment || '',
+      status: e.status === 'skipped' ? 'skipped' : 'done',
+    });
+  }
+
+  const maxWeek = Math.max(...D.sessions.map(s => s.week));
+  for (let w = maxWeek; w >= 0; w--) {
+    const inWeek = D.sessions.filter(s => s.week === w);
+    const done   = inWeek.filter(s => s.status === 'done');
+    const kj     = done.reduce((a, s) => a + (s.kj || 0), 0);
+
+    // Zone distribution from HR streams of this week's imported sessions.
+    let zones = null;
+    if (maxHr > 0) {
+      const bands = [0, 0, 0, 0, 0];
+      let n = 0;
+      for (const s of inWeek) {
+        const hr = streamsById[s.id]?.hr;
+        if (!hr) continue;
+        for (const v of hr) {
+          if (typeof v !== 'number') continue;
+          const pct = v / maxHr;
+          bands[pct < 0.6 ? 0 : pct < 0.7 ? 1 : pct < 0.8 ? 2 : pct < 0.9 ? 3 : 4]++;
+          n++;
+        }
+      }
+      if (n > 0) zones = bands.map(b => Math.round((b / n) * 100));
+    }
+
+    D.weekly.push({
+      week: w,
+      tss: null,
+      min: done.reduce((a, s) => a + (s.durMin || 0), 0),
+      kj: kj > 0 ? kj : null,
+      done: done.length,
+      skipped: inWeek.filter(s => s.status === 'skipped').length,
+      fitness: null, fatigue: null, form: null,
+      zones,
+      longest: Math.max(0, ...done.map(s => s.durMin || 0)),
+    });
+  }
+
+  // Peaks: best rolling means per month, oldest → newest. Bests: the dated
+  // moment each all-time peak was set, newest first.
+  const monthly = { power: new Map(), hr: new Map() };
+  const alltime = {};
+  const sessionsByDate = D.sessions.slice().sort((a, b) => a.date.localeCompare(b.date));
+  for (const s of sessionsByDate) {
+    const st = streamsById[s.id];
+    if (!st) continue;
+    const month = new Date(s.date + 'T00:00:00').toLocaleString('en', { month: 'short' });
+    for (const [chan, key] of [['powerW', 'power'], ['hr', 'hr']]) {
+      if (!st[chan]) continue;
+      if (!monthly[key].has(month)) monthly[key].set(month, {});
+      const row = monthly[key].get(month);
+      for (const [label, win] of PEAK_WINDOWS) {
+        const best = bestRollingMean(st[chan], win);
+        if (best == null) continue;
+        if (row[label] == null || best > row[label]) row[label] = best;
+        const atKey = `${key}-${label}`;
+        if (!alltime[atKey] || best > alltime[atKey].value) {
+          alltime[atKey] = { value: best, date: s.date, week: s.week, sport: s.sport };
+        }
+      }
+    }
+  }
+  D.peaksPower = [...monthly.power.entries()].map(([label, row]) => ({ label, ...row }));
+  D.peaksHr    = [...monthly.hr.entries()].map(([label, row]) => ({ label, ...row }));
+
+  const BEST_METRIC_KEYS = { 'power-5s': 'infoBestPower5s', 'power-1m': 'infoBestPower1m', 'hr-5s': 'infoBestHr5s' };
+  for (const [atKey, metricKey] of Object.entries(BEST_METRIC_KEYS)) {
+    const b = alltime[atKey];
+    if (!b) continue;
+    const unit = atKey.startsWith('power') ? 'W' : 'bpm';
+    D.bests.push({ date: b.date, week: b.week, metricKey, sport: b.sport || 'run', value: `${b.value} ${unit}` });
+  }
+  D.bests.sort((a, b) => b.date.localeCompare(a.date));
+
   return D;
 }
 

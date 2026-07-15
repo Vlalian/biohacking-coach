@@ -12,6 +12,7 @@ import { initStore, getMigrationReport, dismissMigrationReport } from './migrati
 import { getLastWeekFeedback, getSkippedSessions, sessionsForDay } from './store.js';
 import { isOnboarded, getOnboardedProfile, beginOnboarding } from './onboarding.js';
 import { t, applyStaticTranslations } from './translations.js';
+import { uploadWorkoutFiles } from './garmin-import.js';
 
 // ── App-level state ───────────────────────────────────────────────────────────
 let experienceLevel = 'intermediate';
@@ -283,6 +284,7 @@ window.toggleDrawer   = () => {
 window.closeDrawer    = closeDrawer;
 window.switchView     = switchView;
 window.navigateMonth  = navigateMonth;
+window.uploadWorkoutFiles = uploadWorkoutFiles;
 window.loadPersona    = loadPersona;
 window.loadHistory    = loadHistory;
 window.sanitizeNumber = sanitizeNumber;

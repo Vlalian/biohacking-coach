@@ -112,6 +112,14 @@ function makeEntity(sessions, fields) {
     title:      fields.title    ?? null, // athlete's own name for the session
     dayOrder:   fields.dayOrder || nextDayOrder(sessions, fields.dateKey),
     feedback:   fields.feedback || null,
+    // Device-import provenance (garmin-sync route). Only present on imported
+    // sessions so pre-existing entities keep their exact shape.
+    ...(fields.source ? {
+      source:    fields.source,
+      startTime: fields.startTime || null,
+      sport:     fields.sport     || null,
+      summary:   fields.summary   || null,
+    } : {}),
   };
 }
 
@@ -144,6 +152,24 @@ export function updateSession(id, patch) {
 
 export function deleteSession(id) {
   saveSessions(loadSessions().filter(s => s.id !== id));
+  localStorage.removeItem(streamKey(id));
+}
+
+// ── Streams (garmin-sync) ─────────────────────────────────────────────────────
+// Per-sample data lives OUTSIDE bh_sessions — one key per session — so the hot
+// entity path never pays the stream weight. Columnar 10 s bins from garmin.js.
+
+export function streamKey(id) {
+  return 'bh_stream_' + id;
+}
+
+export function setStreams(id, streams) {
+  try { localStorage.setItem(streamKey(id), JSON.stringify(streams)); } catch {}
+}
+
+export function getStreams(id) {
+  try { return JSON.parse(localStorage.getItem(streamKey(id))) || null; }
+  catch { return null; }
 }
 
 export function sessionsForDay(dateKey) {

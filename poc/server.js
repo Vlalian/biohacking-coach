@@ -2,8 +2,7 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const path = require('path');
 const multer = require('multer');
-const FitParser = require('fit-file-parser').default;
-const { XMLParser } = require('fast-xml-parser');
+const { parseFit, parseGpx } = require('./garmin');
 
 const app = express();
 app.use(express.json());
@@ -512,54 +511,6 @@ app.post('/api/chat', async (req, res) => {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { files: 20, fileSize: 10 * 1024 * 1024 } });
 
-const SPORT_MAP = {
-  running: 'Endurance', cycling: 'Endurance', swimming: 'Endurance',
-  triathlon: 'Endurance', open_water: 'Endurance', rowing: 'Endurance',
-  strength_training: 'Strength', training: 'Strength',
-};
-
-function inferSessionType(sport = '') {
-  return SPORT_MAP[sport.toLowerCase()] || 'Endurance';
-}
-
-function parseFit(buffer) {
-  return new Promise((resolve) => {
-    const parser = new FitParser({ force: true, mode: 'list' });
-    parser.parse(buffer, (error, data) => {
-      if (error || !data) return resolve([]);
-      const sessions = (data.activity?.sessions || []);
-      resolve(sessions.map(s => ({
-        date:        s.start_time ? new Date(s.start_time).toISOString().slice(0, 10) : null,
-        sessionType: inferSessionType(s.sport || ''),
-        duration:    s.total_elapsed_time ? Math.round(s.total_elapsed_time / 60) : null,
-        body:        null,
-        mind:        null,
-        note:        `Imported from Garmin${s.sport ? ' · ' + s.sport : ''}`,
-      })).filter(s => s.date));
-    });
-  });
-}
-
-function parseGpx(buffer) {
-  const xml = buffer.toString('utf-8');
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
-  let gpx;
-  try { gpx = parser.parse(xml); } catch { return []; }
-  const tracks = gpx?.gpx?.trk;
-  const list   = Array.isArray(tracks) ? tracks : tracks ? [tracks] : [];
-  return list.map(trk => {
-    const segments = [].concat(trk.trkseg || []);
-    const points   = segments.flatMap(seg => [].concat(seg.trkpt || []));
-    const times    = points.map(p => p.time).filter(Boolean);
-    const date     = times.length > 0 ? new Date(times[0]).toISOString().slice(0, 10) : null;
-    const firstTs  = times.length > 0 ? new Date(times[0]).getTime() : 0;
-    const lastTs   = times.length > 0 ? new Date(times[times.length - 1]).getTime() : 0;
-    const duration = firstTs && lastTs ? Math.round((lastTs - firstTs) / 60000) : null;
-    const typeName = trk.type || trk.name || '';
-    return { date, sessionType: inferSessionType(typeName), duration, body: null, mind: null, note: `Imported from GPX${typeName ? ' · ' + typeName : ''}` };
-  }).filter(s => s.date);
-}
-
 const SIX_MONTHS_AGO = () => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString().slice(0, 10); };
 
 app.post('/api/garmin/upload', upload.array('files', 20), async (req, res) => {
@@ -587,4 +538,4 @@ if (require.main === module) {
     console.log('Enter your Anthropic API key in the UI');
   });
 }
-module.exports = { buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt, buildPlanExtractionPrompt, formatSkippedSessions, formatWeekActivity };
+module.exports = { app, buildWeeklyContext, renderWeeklyPrompt, buildCoachContext, renderPrompt, buildChatPrompt, buildPlanExtractionPrompt, formatSkippedSessions, formatWeekActivity };

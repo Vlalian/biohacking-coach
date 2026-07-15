@@ -8,7 +8,7 @@
 // domain logic of its own.
 
 import { PANELS, availablePanels, svgOpen, line } from './panels.js';
-import { getDataset, windowDataset, DATASET_STATES } from './infodata.js';
+import { getDataset, windowDataset, DATASET_STATES, hasMineData } from './infodata.js';
 import { loadFavorites, saveFavorites, promote, demote, isFavorite, reorder, RANGES, loadRange, saveRange } from './infolayout.js';
 import { filterSessions, canCompare, extractColumns, normalize } from './infocompare.js';
 import { t } from './translations.js';
@@ -334,6 +334,7 @@ export function renderInformation() {
         <span class="iv-databtns">
           <button class="iv-databtn ${dataState === 'fresh' ? 'on' : ''}" data-datakind="fresh">${t('infoStateFresh')}</button>
           <button class="iv-databtn ${dataState === 'rich' ? 'on' : ''}" data-datakind="rich">${t('infoStateRich')}</button>
+          ${hasMineData() ? `<button class="iv-databtn ${dataState === 'mine' ? 'on' : ''}" data-datakind="mine">${t('infoStateMine')}</button>` : ''}
         </span>
       </div>
       <div class="iv-topbar">

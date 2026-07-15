@@ -135,7 +135,8 @@ export const PANELS = [
   // ── Form & Load ──
   {
     id: 'ffnow', familyKey: FAMILY.formLoad, titleKey: 'infoPanelFormToday',
-    has: D => D.weekly.length > 0,
+    // Fitness/fatigue are TSS-derived: null on real data until the calc module.
+    has: D => D.weekly.some(w => w.fitness != null),
     render: (D) => {
       const l = D.weekly[D.weekly.length - 1];
       return `<div class="iv-ffrow">
@@ -152,7 +153,7 @@ export const PANELS = [
   },
   {
     id: 'load', familyKey: FAMILY.formLoad, titleKey: 'infoPanelLoad',
-    has: D => D.weekly.length > 0,
+    has: D => D.weekly.some(w => w.fitness != null),
     series: D => [
       { labelKey: 'Fitness', color: FF_COLORS.fitness, values: D.weekly.map(w => w.fitness) },
       { labelKey: 'Fatigue', color: FF_COLORS.fatigue, values: D.weekly.map(w => w.fatigue) },
@@ -170,7 +171,7 @@ export const PANELS = [
     // "Building or fading?" — arithmetic only: the sign and color are math,
     // never judgment or advice.
     id: 'ramp', familyKey: FAMILY.formLoad, titleKey: 'infoPanelRamp',
-    has: D => D.weekly.length > 0,
+    has: D => D.weekly.some(w => w.fitness != null),
     render: (D) => {
       const tiles = rampRates(D.weekly.map(w => w.fitness));
       return `<div class="iv-ramprow">${tiles.map(tl => {
