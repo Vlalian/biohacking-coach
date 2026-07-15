@@ -776,8 +776,14 @@
       border: 1px solid transparent; border-radius: 11px; padding: 3px 10px; cursor: pointer;
     }
     .iv-databtn.on { color: var(--accent); border-color: var(--accent-dim); }
-    .iv-topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .iv-topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
     .iv-hint { font-size: 11px; color: var(--muted); }
+    .iv-ranges { display: flex; gap: 4px; }
+    .iv-rangebtn {
+      font-size: 11px; color: var(--muted); background: none; font-family: inherit;
+      border: 1px solid transparent; border-radius: 11px; padding: 3px 10px; cursor: pointer;
+    }
+    .iv-rangebtn.on { color: var(--accent); border-color: var(--accent-dim); }
     .iv-ffrow { display: flex; gap: 10px; }
     .iv-ffbox { flex: 1; text-align: center; border: 1px solid; border-radius: 8px; padding: 10px 4px; }
     .iv-ffval { font-size: 26px; font-weight: 700; }

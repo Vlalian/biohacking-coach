@@ -35,15 +35,36 @@ export function reorder(favorites, id, targetId) {
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
+// One layout object under one key; every save merges so favorites and the
+// time range never clobber each other.
+function readLayout() {
+  try { return JSON.parse(localStorage.getItem(KEY) || 'null') || {}; } catch { return {}; }
+}
+function writeLayout(patch) {
+  localStorage.setItem(KEY, JSON.stringify({ ...readLayout(), ...patch }));
+}
+
 // validIds: known panel ids — unknown ids in a stored layout are ignored
 // without error (forward compatibility across catalog changes).
 export function loadFavorites(validIds) {
-  let stored;
-  try { stored = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { stored = null; }
-  if (!stored || !Array.isArray(stored.favorites)) return [...DEFAULT_FAVORITES];
+  const stored = readLayout();
+  if (!Array.isArray(stored.favorites)) return [...DEFAULT_FAVORITES];
   return stored.favorites.filter(id => validIds.includes(id));
 }
 
 export function saveFavorites(favorites) {
-  localStorage.setItem(KEY, JSON.stringify({ favorites }));
+  writeLayout({ favorites });
+}
+
+// Time range: 'r4' | 'r12' | 'all' — a lasting preference like the layout.
+export const RANGES = { r4: 4, r12: 12, all: null }; // → weeks for windowDataset
+
+export function loadRange() {
+  const stored = readLayout();
+  return Object.hasOwn(RANGES, stored.range) ? stored.range : 'all';
+}
+
+export function saveRange(range) {
+  if (!Object.hasOwn(RANGES, range)) return;
+  writeLayout({ range });
 }

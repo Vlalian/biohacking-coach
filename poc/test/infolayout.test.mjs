@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   DEFAULT_FAVORITES, promote, demote, reorder, isFavorite,
-  loadFavorites, saveFavorites,
+  loadFavorites, saveFavorites, RANGES, loadRange, saveRange,
 } from '../public/js/infolayout.js';
 
 const VALID = ['ffnow', 'load', 'bodymind', 'sleep', 'race', 'hours'];
@@ -58,5 +58,30 @@ describe('storage round-trip', () => {
   it('an emptied Favorites list stays empty — not reset to default', () => {
     saveFavorites([]);
     expect(loadFavorites(VALID)).toEqual([]);
+  });
+});
+
+describe('time range preference', () => {
+  it('defaults to all history', () => {
+    expect(loadRange()).toBe('all');
+    expect(RANGES.all).toBeNull();
+  });
+  it('save then load round-trips', () => {
+    saveRange('r4');
+    expect(loadRange()).toBe('r4');
+    expect(RANGES.r4).toBe(4);
+  });
+  it('unknown stored values fall back to all; unknown saves are ignored', () => {
+    localStorage.setItem('bh_info_layout', JSON.stringify({ range: 'r99' }));
+    expect(loadRange()).toBe('all');
+    saveRange('bogus');
+    expect(loadRange()).toBe('all');
+  });
+  it('favorites and range never clobber each other', () => {
+    saveFavorites(['sleep']);
+    saveRange('r12');
+    saveFavorites(['sleep', 'ffnow']);
+    expect(loadRange()).toBe('r12');
+    expect(loadFavorites(VALID)).toEqual(['sleep', 'ffnow']);
   });
 });

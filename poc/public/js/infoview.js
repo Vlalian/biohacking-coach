@@ -8,8 +8,8 @@
 // domain logic of its own.
 
 import { PANELS, availablePanels, svgOpen, line } from './panels.js';
-import { getDataset, DATASET_STATES } from './infodata.js';
-import { loadFavorites, saveFavorites, promote, demote, isFavorite, reorder } from './infolayout.js';
+import { getDataset, windowDataset, DATASET_STATES } from './infodata.js';
+import { loadFavorites, saveFavorites, promote, demote, isFavorite, reorder, RANGES, loadRange, saveRange } from './infolayout.js';
 import { filterSessions, canCompare, extractColumns, normalize } from './infocompare.js';
 import { t } from './translations.js';
 
@@ -28,6 +28,12 @@ export function setDataState(state) {
   dataState = state;
   cmp.sel.clear(); // session ids are dataset-specific
   cmp.show = false;
+  renderInformation();
+}
+
+// Exported click handler: time-range button — a lasting preference.
+export function setRange(range) {
+  saveRange(range);
   renderInformation();
 }
 
@@ -275,6 +281,8 @@ function bindOnce(view) {
     if (e.target.closest('[data-graphclear]')) { clearCompareGraph(); return; }
     const big = e.target.closest('[data-enlarge]');
     if (big) { toggleEnlarge(big.dataset.enlarge); return; }
+    const rng = e.target.closest('[data-range]');
+    if (rng) { setRange(rng.dataset.range); return; }
     const dk = e.target.closest('[data-datakind]');
     if (dk) { setDataState(dk.dataset.datakind); return; }
     if (e.target.closest('[data-cmpopen]'))  { cmp.open = true;  cmp.show = false; cmp.sel.clear(); renderInformation(); return; }
@@ -302,7 +310,8 @@ function bindOnce(view) {
 export function renderInformation() {
   const view = document.getElementById('information-view');
   if (!view) return;
-  const dataset = getDataset(dataState);
+  const range = loadRange();
+  const dataset = windowDataset(getDataset(dataState), RANGES[range]);
   const available = availablePanels(dataset);
   const storedFavs = loadFavorites(PANELS.map(p => p.id));
 
@@ -329,6 +338,10 @@ export function renderInformation() {
       </div>
       <div class="iv-topbar">
         <button class="iv-btn" data-cmpopen="1">${t('infoCompareOpen')}</button>
+        <span class="iv-ranges">
+          ${['r4', 'r12', 'all'].map(r =>
+            `<button class="iv-rangebtn ${range === r ? 'on' : ''}" data-range="${r}">${t('infoRange_' + r)}</button>`).join('')}
+        </span>
         <span class="iv-hint">${t('infoReadingCount').replace('{n}', available.length).replace('{total}', PANELS.length)}</span>
       </div>
       <div class="iv-railwrap">

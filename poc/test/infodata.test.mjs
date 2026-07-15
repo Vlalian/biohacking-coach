@@ -1,7 +1,7 @@
 // Synthetic data provider — determinism and shape invariants.
 // Pure node: no DOM, no storage.
 import { describe, it, expect } from 'vitest';
-import { getDataset, emptyDataset, DATASET_STATES } from '../public/js/infodata.js';
+import { getDataset, emptyDataset, windowDataset, DATASET_STATES } from '../public/js/infodata.js';
 
 const TODAY = '2026-07-14';
 
@@ -68,5 +68,48 @@ describe('getDataset — shape invariants', () => {
     expect(empty.sessions).toHaveLength(0);
     expect(empty.weekly).toHaveLength(0);
     expect(empty.weeksToRace).toBeNull();
+  });
+});
+
+describe('windowDataset — time-range clipping', () => {
+  const rich = getDataset('rich', { today: TODAY });
+
+  it('null weeks = all history, untouched', () => {
+    expect(windowDataset(rich, null)).toEqual(rich);
+  });
+
+  const rows = [
+    // [weeks, expected weekly rows, expected peaks rows]
+    [4,  4,  1],
+    [12, 12, 3],
+    [52, 26, 6], // window larger than history: everything, no padding
+  ];
+  for (const [weeks, weeklyRows, peaksRows] of rows) {
+    it(`last ${weeks} weeks → ${weeklyRows} weekly rows, ${peaksRows} peaks rows`, () => {
+      const w = windowDataset(rich, weeks);
+      expect(w.weekly).toHaveLength(weeklyRows);
+      expect(w.checkins).toHaveLength(weeklyRows);
+      expect(w.peaksPower).toHaveLength(peaksRows);
+      expect(w.weekly.every(x => x.week < weeks)).toBe(true);
+      expect(w.sessions.every(x => x.week < weeks)).toBe(true);
+      expect(w.sleep.every(x => x.day < weeks * 7)).toBe(true);
+    });
+  }
+
+  it('keeps the newest entries, oldest → newest order intact', () => {
+    const w = windowDataset(rich, 4);
+    expect(w.weekly.map(x => x.week)).toEqual([3, 2, 1, 0]);
+  });
+
+  it('race facts are about the future and never clipped', () => {
+    const w = windowDataset(rich, 4);
+    expect(w.weeksToRace).toBe(rich.weeksToRace);
+    expect(w.raceName).toBe(rich.raceName);
+  });
+
+  it('a window with no readings empties the collection — panels then disappear', () => {
+    const D = emptyDataset();
+    D.sessions.push({ id: 's', date: '2026-05-01', week: 10, title: 'Old Run', sport: 'run', type: 'Endurance', durMin: 60, km: 10, tss: 40, power: null, hr: null, kj: null, body: 5, mind: 5, comment: '', status: 'done' });
+    expect(windowDataset(D, 4).sessions).toHaveLength(0);
   });
 });

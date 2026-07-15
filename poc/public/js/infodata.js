@@ -37,6 +37,7 @@ export function emptyDataset() {
     sleep: [],       // { day, hours, feeling } oldest → newest
     peaksPower: [],  // { label, '5s', '1m', '5m', '20m', '60m' }
     peaksHr: [],
+    bests: [],       // { date, week, metricKey, value, sport } newest first (issue 09)
     weeksToRace: null,
     raceName: '',
   };
@@ -130,4 +131,26 @@ export function getDataset(state, { today } = {}) {
   // The generation loop runs w = oldest → current, so weekly/checkins are
   // already oldest → newest. (week numbers count DOWN toward now: 25 = oldest.)
   return D;
+}
+
+// ── Time-range windowing ──────────────────────────────────────────────────────
+// Clips a dataset to the last `weeks` weeks. The single place windowing
+// happens — panels and the Comparison Graph render whatever they're given.
+// Week numbers count down toward now (0 = current), so "last N weeks" keeps
+// entries with week < N. Sleep is daily (day counts down too); peaks are
+// monthly bests, clipped to ~one row per 4 weeks of window. Race facts
+// (weeksToRace, raceName) are about the future and never clipped.
+export function windowDataset(dataset, weeks) {
+  if (weeks == null) return dataset; // 'all history'
+  const months = Math.max(1, Math.ceil(weeks / 4));
+  return {
+    ...dataset,
+    sessions: dataset.sessions.filter(s => s.week < weeks),
+    weekly:   dataset.weekly.filter(w => w.week < weeks),
+    checkins: dataset.checkins.filter(c => c.week < weeks),
+    sleep:    dataset.sleep.filter(d => d.day < weeks * 7),
+    peaksPower: dataset.peaksPower.slice(-months),
+    peaksHr:    dataset.peaksHr.slice(-months),
+    bests:      dataset.bests.filter(b => b.week < weeks),
+  };
 }

@@ -247,6 +247,33 @@ describe('Enlarge (⛶)', () => {
   });
 });
 
+describe('time-range selector', () => {
+  beforeEach(() => renderInformation());
+
+  const panelCount = () => document.querySelectorAll('.iv-feed .iv-panel').length;
+  const hint = () => document.querySelector('.iv-hint').textContent;
+
+  it('switching range re-renders every panel from the windowed dataset', () => {
+    const allCount = panelCount();
+    document.querySelector('[data-range="r4"]').click();
+    expect(document.querySelector('[data-range="r4"]').classList.contains('on')).toBe(true);
+    // 4 weeks of rich data still feeds all panels, but with clipped series
+    expect(panelCount()).toBeGreaterThan(0);
+    expect(hint()).toContain(`${panelCount()} of`);
+    document.querySelector('[data-range="all"]').click();
+    expect(panelCount()).toBe(allCount);
+  });
+
+  it('the selected range survives a reload; unknown stored values fall back to all', async () => {
+    document.querySelector('[data-range="r12"]').click();
+    vi.resetModules();
+    document.body.innerHTML = `<div id="information-view"></div>`;
+    const fresh = await import('../public/js/infoview.js');
+    fresh.renderInformation();
+    expect(document.querySelector('[data-range="r12"]').classList.contains('on')).toBe(true);
+  });
+});
+
 describe('rail is pure navigation', () => {
   it('no stars and no favorite styling in the rail', () => {
     renderInformation();
