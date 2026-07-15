@@ -105,6 +105,24 @@ const SPORT_COLOR = { swim: '#4fa3d9', bike: '#c9a96e', run: '#6db36d', strength
 const SPORT_KEY   = { swim: 'infoSwim', bike: 'infoBike', run: 'infoRun' };
 const ZONE_COLORS = ['#6db36d', '#4a90d9', '#c9a96e', '#e08b55', '#e05555'];
 
+// Ramp rates: fitness change over trailing windows (in weeks of the weekly
+// series). A window renders only when the series fully covers it; when no
+// window fits (single reading), one tile shows the shortest window with no
+// delta — present, honest, empty of judgment. Exported for table tests.
+export function rampRates(values) {
+  const WINDOWS = [[1, '7d'], [4, '28d'], [13, '90d'], [52, '365d']];
+  const len = values.length;
+  const tiles = WINDOWS
+    .filter(([w]) => len - 1 >= w)
+    .map(([w, label]) => ({
+      label,
+      delta: +(values[len - 1] - values[len - 1 - w]).toFixed(0),
+      spark: values.slice(len - 1 - w),
+    }));
+  if (!tiles.length && len) return [{ label: '7d', delta: null, spark: [...values] }];
+  return tiles;
+}
+
 const FAMILY = {
   formLoad: 'infoFamilyFormLoad',
   bodyMind: 'infoFamilyBodyMind',
@@ -146,6 +164,24 @@ export const PANELS = [
       for (const k of ['fitness', 'fatigue', 'form']) s += line(D.weekly.map(w => w[k]), 300, 110, FF_COLORS[k]);
       s += '</svg>';
       return s + legend([['Fitness', FF_COLORS.fitness], ['Fatigue', FF_COLORS.fatigue], ['Form', FF_COLORS.form], [t('infoWeeklyTss'), 'rgba(107,107,107,0.5)']]);
+    },
+  },
+  {
+    // "Building or fading?" — arithmetic only: the sign and color are math,
+    // never judgment or advice.
+    id: 'ramp', familyKey: FAMILY.formLoad, titleKey: 'infoPanelRamp',
+    has: D => D.weekly.length > 0,
+    render: (D) => {
+      const tiles = rampRates(D.weekly.map(w => w.fitness));
+      return `<div class="iv-ramprow">${tiles.map(tl => {
+        const color = tl.delta == null ? 'var(--muted)' : tl.delta > 0 ? '#6db36d' : tl.delta < 0 ? '#e05555' : 'var(--muted)';
+        const text  = tl.delta == null ? '—' : `${tl.delta > 0 ? '+' : ''}${tl.delta}`;
+        return `<div class="iv-ramptile">
+          <div class="iv-ffval" style="color:${color};font-size:20px;">${text}</div>
+          <div class="iv-fflab">${tl.label}</div>
+          ${tl.spark.length > 1 ? svgOpen(90, 22) + line(tl.spark, 90, 22, color) + '</svg>' : ''}
+        </div>`;
+      }).join('')}</div>`;
     },
   },
   {

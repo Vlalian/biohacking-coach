@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-15). Range interplay decided during build: tiles clip to the selected time range (they read the windowed weekly series like every other panel), so "last 4 weeks" shows only the 7d and 28d tiles — consistent with the windowing model.
 
 # 10 — Ramp-rate tiles
 

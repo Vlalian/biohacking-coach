@@ -2,7 +2,7 @@
 // EVERY panel in the catalog. Pure node: no DOM, no storage, no translations
 // (labels via identity t).
 import { describe, it, expect } from 'vitest';
-import { PANELS, availablePanels, panelById } from '../public/js/panels.js';
+import { PANELS, availablePanels, panelById, rampRates } from '../public/js/panels.js';
 import { getDataset, emptyDataset } from '../public/js/infodata.js';
 
 const TODAY = '2026-07-14';
@@ -31,6 +31,7 @@ function oneReadingFor(id) {
       return D;
     case 'ffnow':
     case 'load':
+    case 'ramp':
     case 'consistency':
     case 'hours':
     case 'longest':
@@ -151,6 +152,32 @@ describe('series() — Comparison Graph capability', () => {
       }
     });
   }
+});
+
+describe('rampRates — delta math', () => {
+  const rows = [
+    // [name, values, expected tiles as [label, delta]]
+    ['26 weeks: all four windows', Array.from({ length: 53 }, (_, i) => i), [['7d', 1], ['28d', 4], ['90d', 13], ['365d', 52]]],
+    ['5 weeks: 7d + 28d only',     [10, 12, 11, 14, 16],                    [['7d', 2], ['28d', 6]]],
+    ['negative deltas (fading)',   [30, 28, 25],                            [['7d', -3]]],
+    ['flat is ±0, not hidden',     [20, 20],                                [['7d', 0]]],
+  ];
+  for (const [name, values, expected] of rows) {
+    it(name, () => {
+      expect(rampRates(values).map(tl => [tl.label, tl.delta])).toEqual(expected);
+    });
+  }
+  it('a single reading yields one honest delta-less tile', () => {
+    expect(rampRates([15])).toEqual([{ label: '7d', delta: null, spark: [15] }]);
+  });
+  it('empty series yields no tiles', () => {
+    expect(rampRates([])).toEqual([]);
+  });
+  it('sparklines cover exactly their window', () => {
+    const tiles = rampRates([1, 2, 3, 4, 5, 6]);
+    expect(tiles.find(tl => tl.label === '7d').spark).toEqual([5, 6]);
+    expect(tiles.find(tl => tl.label === '28d').spark).toEqual([2, 3, 4, 5, 6]);
+  });
 });
 
 describe('catalog integrity', () => {
