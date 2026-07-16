@@ -1,0 +1,33 @@
+Status: ready-for-agent
+Label: wayfinder:task
+
+# 05 — Session Move, with the rules enforced server-side
+
+## Parent
+
+`.scratch/eval-mvp-build/PRD.md`
+
+## What to build
+
+The athlete moves a session to another day within its week, and the move is allowed, bounced, or refused according to the Move rules — decided on the server, not the client.
+
+**This slice ports real code.** `poc/public/js/rules.js` is pure, storage-free, DOM-free, and its table-driven tests in `poc/test/rules.test.mjs` *are* the rule matrix. Port both to TypeScript with the matrix intact: `frozen` (completed sessions and everything in past weeks — the training record is immutable), `bounce` (past days, the session's own day, any day outside its own Mon–Sun week — the Cross-Week Move is retired), `move` (a silent within-week Session Move). See [ADR 0002](../../../docs/adr/0002-calendar-authority-model.md).
+
+The rules module stays pure. The server calls it; the client asks the server. A client-side check may drive affordances (what looks draggable), but it is never the authority — [ADR 0006](../../../docs/adr/0006-server-authoritative-architecture.md) puts truth on the server.
+
+Brings the `events` table. A successful move records a `session_moved` event with its actor. This is the audit half of ticket 05's ballot 3 — the unified event stream that Week Activity and Pattern Insight later read. Narration is **benched** for the eval (ticket 02, amended): record the event with attribution, leave `narrated_at` null, announce nothing.
+
+## Acceptance criteria
+
+- [ ] The Move rules are ported to TypeScript as a pure module, with the table-driven test matrix carried across and passing
+- [ ] The athlete can move a planned session to another day in its own week
+- [ ] A completed session cannot be moved; a session in a past week cannot be moved
+- [ ] Moves to a past day, to the session's own day, or outside its own week bounce — nothing changes
+- [ ] The server is the authority: a request that violates the rules is refused regardless of what the client sent
+- [ ] The `events` table exists via migration; a successful move records a `session_moved` event with actor and payload, `narrated_at` null
+- [ ] Nothing is announced to the athlete about the event
+- [ ] Tests cover the rule matrix and the server refusing a client-forged illegal move
+
+## Blocked by
+
+`.scratch/eval-mvp-build/issues/04-calendar-renders-real-sessions.md`
