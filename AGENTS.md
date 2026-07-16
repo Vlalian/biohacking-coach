@@ -12,6 +12,22 @@ This is an instruction, not an enforced hook: no hook can verify a skill ran, on
 
 CodeRabbit reviews every PR on GitHub as well. That is the second pair of eyes, not the first: it runs after the code is pushed, and the point of this rule is to not push work you already know is wrong.
 
+### One worktree per implementation session
+
+An implementation session gets its own **git worktree**, not just its own branch. Mads's standing instruction, 2026-07-16.
+
+    git worktree add ../biohacking-coach-<slice> -b build/<NN>-<slug>
+
+Then work in that directory. Claude Code can do this directly: agents take `isolation: "worktree"`, and there is an `EnterWorktree` tool.
+
+**A branch is not isolation.** Every session in this directory shares one `.git` and one working tree, and the current branch is a single file — `.git/HEAD`. Running `git checkout -b` moves *every* session in the directory onto the new branch, mid-work, without telling them. On 2026-07-16 that happened three times: commits from a parallel session landed on branches it never chose, and a review had to be re-scoped to isolate one session's work from another's. The branching *caused* it.
+
+Rules that follow:
+
+- Do not `git checkout` or `git checkout -b` in the shared directory while another session may be working. Check for recent file mtimes first; if another session is live, use a worktree or wait.
+- Never `git add -A` when a parallel session has uncommitted work — you will commit theirs as yours. Stage the specific files you changed.
+- If you find uncommitted work you did not write, stop and surface it. Do not commit it, do not revert it.
+
 ## Agent skills
 
 ### Issue tracker
