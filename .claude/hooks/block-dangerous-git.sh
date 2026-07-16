@@ -10,8 +10,9 @@ else
   COMMAND="$INPUT"
 fi
 
+# "git push" removed 2026-07-16 at Mads's request — plain pushes are allowed;
+# force pushes remain blocked via the "push --force" pattern below.
 DANGEROUS_PATTERNS=(
-  "git push"
   "git reset --hard"
   "git clean -fd"
   "git clean -f"
