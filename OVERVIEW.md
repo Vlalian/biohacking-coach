@@ -2,8 +2,6 @@
 
 An AI coaching product for Ironman trainees. The **Coach** — an LLM agent holding full athlete context — runs a weekly training ritual: it reads the athlete's Check-in and Session Reflections, builds the Week Plan, and negotiates it as a peer backed by training science. An optional human **Head Coach** can oversee linked athletes (Coached Mode, V1).
 
-> **Folder name warning**: this directory is called `Trader-proj` by historical accident — nothing here is trading-related. A rename to a truthful name is decided but deferred (it requires migrating Claude project-memory keying): [Decide the project folder's name](.scratch/project-ground-truth/issues/06-decide-the-project-folder-name.md).
-
 ## Orientation — where truth lives
 
 | Surface | What it holds |
@@ -14,10 +12,10 @@ An AI coaching product for Ironman trainees. The **Coach** — an LLM agent hold
 | [.scratch/](.scratch/) | The local-markdown issue tracker — one directory per feature holding a `PRD.md` and `issues/`. Conventions: [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), labels: [docs/agents/triage-labels.md](docs/agents/triage-labels.md). |
 | [AGENTS.md](AGENTS.md) | Pointer file agents read first: tracker, labels, domain-doc layout. |
 
-## Current state (2026-07-08)
+## Current state (2026-07-16)
 
 - The POC implements the **Weekly Session** loop (Check-in → Review → Planning), the monthly **Training Plan** calendar, **MCQ onboarding**, and RPE-based **Session Reflections**. Daily Session Negotiation was retired as the primary loop in June 2026 — the Weekly Session replaced it.
-- Git history starts at the 2026-07-08 baseline commit. Local repo only, no remote.
+- Git history starts at the 2026-07-08 baseline commit. The repo lives at [Vlalian/biohacking-coach](https://github.com/Vlalian/biohacking-coach) (private, since 2026-07-16). `main` is protected: work lands through pull requests, reviewed by CodeRabbit. Agent sessions may push branches; opening and merging the PR is Mads's call.
 - Product discovery with a domain expert is ongoing — open questions in [.scratch/mvp/domain-expert-questions.md](.scratch/mvp/domain-expert-questions.md).
 - A cleanup effort, [Project Ground Truth](.scratch/project-ground-truth/MAP.md), is bringing the repo's orientation surfaces in line with reality.
 
