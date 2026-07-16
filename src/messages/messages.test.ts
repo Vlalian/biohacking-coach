@@ -43,20 +43,25 @@ describe('message catalogues', () => {
 
   it('leaves no string untranslated by copy-paste', () => {
     // A Danish value identical to its English one is usually a forgotten
-    // translation. Technical sports terms (RPE, FTP, CSS, Zone 2, Ironman)
-    // are the legitimate exception — they stay English in every language, per
-    // the Athlete Language effort — and they appear *inside* sentences, so
-    // this matches anywhere in the string rather than anchoring the whole of
-    // it: "Zone 2 pace" is identical in both languages on purpose.
-    const technicalTerm = /\b(RPE|FTP|CSS|Zone \d|Ironman)\b/;
+    // translation. Technical sports terms are the legitimate exception — they
+    // stay English in every language, per the Athlete Language effort.
+    //
+    // Exempt the *terms*, not the messages that contain them: skipping any
+    // string holding "Zone 2" would wave through "Welcome back, Zone 2"
+    // untranslated. So strip the terms and compare what remains — a message
+    // that is nothing but technical terms has no translatable text and is the
+    // only thing legitimately identical in both languages.
+    const technicalTerms = /\b(RPE|FTP|CSS|Zone \d|Ironman)\b/g;
+    const translatable = (message: string) => message.replace(technicalTerms, '').trim();
 
     const english = new Map(entries(en));
 
     for (const [path, danish] of entries(da)) {
-      if (technicalTerm.test(danish)) continue;
+      const danishText = translatable(danish);
+      if (danishText === '') continue;
 
-      expect(danish, `"${path}" is identical in Danish and English`).not.toBe(
-        english.get(path),
+      expect(danishText, `"${path}" is identical in Danish and English`).not.toBe(
+        translatable(english.get(path) ?? ''),
       );
     }
   });

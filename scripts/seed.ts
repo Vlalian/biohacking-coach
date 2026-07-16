@@ -13,25 +13,37 @@ import { athlete } from '../src/db/schema';
  * user and row, one active Coaching Link, and the shallow synthetic athletes
  * that give the Roster contrast.
  */
+
+/**
+ * Mads's athlete row has a fixed id so the seed converges on the same row
+ * every run, whatever else is in the table.
+ *
+ * The obvious alternative — "insert unless the table has any athlete" — is
+ * wrong twice over: one unrelated row (a synthetic athlete, say) would skip
+ * the fixture entirely, and two runs racing each other could both find an
+ * empty table and insert. A fixed id lets the primary key settle both, since
+ * the database decides rather than a read that has already gone stale.
+ */
+const MADS_ATHLETE_ID = 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213';
+
 async function seed() {
-  const existing = await getDb().select().from(athlete).limit(1);
-
-  if (existing.length > 0) {
-    console.log(`Athlete already present (${existing[0].displayName}) — nothing to do.`);
-    return;
-  }
-
   const [created] = await getDb()
     .insert(athlete)
     .values({
+      id: MADS_ATHLETE_ID,
       displayName: 'Mads',
       // userId stays null until slice 02 brings better-auth. An athlete row
       // without a user is exactly what a synthetic athlete is, so this is the
       // real shape, not a placeholder.
     })
+    .onConflictDoNothing({ target: athlete.id })
     .returning();
 
-  console.log(`Seeded athlete: ${created.displayName} (${created.id})`);
+  console.log(
+    created
+      ? `Seeded athlete: ${created.displayName} (${created.id})`
+      : `Athlete ${MADS_ATHLETE_ID} already present — nothing to do.`,
+  );
 }
 
 seed()
