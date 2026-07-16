@@ -9,11 +9,12 @@ import da from './da.json';
  * that — the app compiles and the page renders. So it is a test.
  */
 
-function keyPaths(obj: unknown, prefix = ''): string[] {
-  if (typeof obj !== 'object' || obj === null) return [prefix];
+/** Walks a catalogue into [dotted.path, string] pairs. */
+function entries(value: unknown, path = ''): Array<[string, string]> {
+  if (typeof value === 'string') return [[path, value]];
 
-  return Object.entries(obj).flatMap(([key, value]) =>
-    keyPaths(value, prefix ? `${prefix}.${key}` : key),
+  return Object.entries(value as object).flatMap(([key, child]) =>
+    entries(child, path ? `${path}.${key}` : key),
   );
 }
 
@@ -27,12 +28,16 @@ describe('message catalogues', () => {
   });
 
   it('every locale defines exactly the same keys', () => {
-    const reference = keyPaths(en).sort();
+    const reference = entries(en)
+      .map(([path]) => path)
+      .sort();
 
     for (const locale of routing.locales) {
-      expect(keyPaths(catalogues[locale]).sort(), `locale "${locale}" has drifted`).toEqual(
-        reference,
-      );
+      const paths = entries(catalogues[locale])
+        .map(([path]) => path)
+        .sort();
+
+      expect(paths, `locale "${locale}" has drifted`).toEqual(reference);
     }
   });
 
@@ -40,22 +45,18 @@ describe('message catalogues', () => {
     // A Danish value identical to its English one is usually a forgotten
     // translation. Technical sports terms (RPE, FTP, CSS, Zone 2, Ironman)
     // are the legitimate exception — they stay English in every language, per
-    // the Athlete Language effort — so this asserts on whole strings only.
-    const technicalTerms = /^(RPE|FTP|CSS|Zone \d|Ironman)$/;
+    // the Athlete Language effort — and they appear *inside* sentences, so
+    // this matches anywhere in the string rather than anchoring the whole of
+    // it: "Zone 2 pace" is identical in both languages on purpose.
+    const technicalTerm = /\b(RPE|FTP|CSS|Zone \d|Ironman)\b/;
 
-    const flatten = (obj: unknown, prefix = ''): Array<[string, string]> =>
-      typeof obj === 'string'
-        ? [[prefix, obj]]
-        : Object.entries(obj as object).flatMap(([k, v]) =>
-            flatten(v, prefix ? `${prefix}.${k}` : k),
-          );
+    const english = new Map(entries(en));
 
-    const enStrings = new Map(flatten(en));
+    for (const [path, danish] of entries(da)) {
+      if (technicalTerm.test(danish)) continue;
 
-    for (const [path, daValue] of flatten(da)) {
-      if (technicalTerms.test(daValue)) continue;
-      expect(daValue, `"${path}" is identical in Danish and English`).not.toBe(
-        enStrings.get(path),
+      expect(danish, `"${path}" is identical in Danish and English`).not.toBe(
+        english.get(path),
       );
     }
   });

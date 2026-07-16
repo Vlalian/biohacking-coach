@@ -1,5 +1,5 @@
 import { setRequestLocale, getTranslations } from 'next-intl/server';
-import { getFirstAthlete } from '@/features/athlete/athlete-repository';
+import { getCurrentAthlete } from '@/features/athlete/athlete-repository';
 
 // Read per-athlete data at request time, never at build time. Slice 02 makes
 // this inherently dynamic anyway (the page depends on who is signed in), and
@@ -15,7 +15,7 @@ export default async function AthletePage({
   setRequestLocale(locale);
 
   const t = await getTranslations('AthletePage');
-  const athlete = await getFirstAthlete();
+  const athlete = await getCurrentAthlete();
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-3 p-12">

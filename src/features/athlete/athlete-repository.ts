@@ -1,21 +1,16 @@
 import { getDb } from '@/db';
-import { athlete, type Athlete } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { athlete } from '@/db/schema';
+import { toAthlete, type Athlete } from './athlete';
 
 /**
  * The only place the app reads athletes out of Postgres.
  *
- * Slice 01 has no login, so "the athlete" means the first row — the one the
- * seed script creates. Slice 02 replaces this with a lookup by the signed-in
- * user, and this seam is what makes that a one-file change rather than a hunt
- * through components.
+ * Slice 01 has no login, so "the current athlete" means the single seeded row.
+ * Slice 02 replaces the query with a lookup by the signed-in user; because
+ * callers depend on this function and the domain type rather than on the row,
+ * that stays a change to this file.
  */
-export async function getFirstAthlete(): Promise<Athlete | undefined> {
+export async function getCurrentAthlete(): Promise<Athlete | undefined> {
   const rows = await getDb().select().from(athlete).limit(1);
-  return rows[0];
-}
-
-export async function getAthleteById(id: string): Promise<Athlete | undefined> {
-  const rows = await getDb().select().from(athlete).where(eq(athlete.id, id)).limit(1);
-  return rows[0];
+  return rows[0] ? toAthlete(rows[0]) : undefined;
 }

@@ -31,5 +31,13 @@ export const athlete = pgTable('athlete', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-export type Athlete = typeof athlete.$inferSelect;
-export type NewAthlete = typeof athlete.$inferInsert;
+/**
+ * The stored shape, not the app's shape.
+ *
+ * Named `Row` on purpose: only the repository may touch it. The app consumes
+ * the domain type from the athlete feature, converted at that boundary, so a
+ * column rename stays a repository change rather than a rewrite of every
+ * component that happened to read the row.
+ */
+export type AthleteRow = typeof athlete.$inferSelect;
+export type NewAthleteRow = typeof athlete.$inferInsert;

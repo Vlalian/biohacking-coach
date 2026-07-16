@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../src/db/load-env';
 import { getDb } from '../src/db';
 import { athlete } from '../src/db/schema';
 
