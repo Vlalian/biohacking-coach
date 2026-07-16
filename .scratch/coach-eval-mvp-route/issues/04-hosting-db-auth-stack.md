@@ -1,5 +1,6 @@
 Label: wayfinder:research
-Status: ready-for-human
+Status: done
+Assignee: Claude + Mads (research agent + ballot 2026-07-16)
 
 # Choose the hosting + database + auth stack
 
@@ -26,4 +27,14 @@ What remains for this ticket:
 
 ## Blocked by
 
-03 — the architecture fork determines what the server must actually do.
+03 — the architecture fork determines what the server must actually do. (Resolved: server-authoritative, ADR 0006.)
+
+## Resolution (2026-07-16)
+
+The three coherent choices, all decided:
+
+- **Auth = better-auth, database = Postgres, framework = Next.js** — settled by [ADR 0005](../../../docs/adr/0005-nextjs-better-auth-neon-stack.md) (see Amendment above).
+- **Postgres host = Neon, Frankfurt (`aws-eu-central-1`)** — verified against this ticket's three criteria by [postgres-host-eu-residency-dpa.md](../../research/postgres-host-eu-residency-dpa.md): true EU region with data pinned to it; DPA **auto-incorporated** via the Databricks MCSA §1.1.4.1 (post-acquisition, Neon LLC is a Databricks affiliate — the paperwork is Databricks', SCCs 2021/914 attached); public subprocessor page; pgvector free on every plan. One empirical check remains at signup: confirm the free plan offers Frankfurt in the project-creation UI (no doc promises it explicitly).
+- **App host = Vercel Pro ($20/mo)** — Mads's ballot 2026-07-16 over Railway (~$5, Amsterdam, DocuSign DPA) and Hetzner (cleanest GDPR, most ops). Reasoning: least operational overhead (ticket's own bias), Next.js golden path, most AI-legible deploy target, EU function region (`fra1`), DPA auto-incorporated **on Pro** — the free Hobby tier is disqualified twice over (non-commercial only, and the DPA explicitly excludes it), so $20/mo is the eval's honest and only running cost.
+
+Sequencing note for the build: conclude both DPAs (Neon/Databricks auto-applies with the terms; Vercel's applies on Pro) **before** real athlete data lands. Special-category (GDPR Art. 9) question handed to the map's GDPR fog item.
