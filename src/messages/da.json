@@ -1,0 +1,7 @@
+{
+  "AthletePage": {
+    "greeting": "Velkommen tilbage, {name}",
+    "tagline": "Din Coach er klar, når du er.",
+    "noAthlete": "Ingen atlet fundet. Er seed-scriptet kørt?"
+  }
+}
