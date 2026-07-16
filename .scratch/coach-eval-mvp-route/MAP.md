@@ -1,0 +1,52 @@
+# Coach-Evaluation MVP Route
+
+Label: wayfinder:map
+Status: charting — destination named 2026-07-16
+Created: 2026-07-16
+
+## Destination
+
+A single, decided implementation route to a **hosted web-login eval-MVP**: Mads as the sole real athlete (his real Garmin data) plus an optional synthetic roster, with **both athlete and Head-Coach roles logging into a shared hosted backend**, the Coached Mode surface (per [ADR 0003](../../docs/adr/0003-coached-mode-authority.md), MVP-scoped), Tier-1 security hardening, and a right-sized consent/GDPR posture — such that the recruited human coach can evaluate the *real experience* with real data. The map is done when the architecture, stack, data model, feature scope, security, and GDPR decisions are locked and expressed as an ordered set of PRDs/issues a build session can pick up. **Plan-only**: this map decides the route; building happens in the feature issues afterward.
+
+## Notes
+
+- **Locked before this map** (Mads): **web-login**, not Electron/desktop or phone packaging (a separate later effort); ~~**build on the hardened vanilla POC**, not a Lovable rebuild (the POC becomes the client of the hosted backend)~~ **AMENDED 2026-07-16 (Mads, Option B ruling):** the eval client is a **React/Next.js rebuild** per [ADR 0005](../../docs/adr/0005-nextjs-better-auth-neon-stack.md) — the vanilla POC becomes the *specification* for it, not the client. Rationale: Mads's stated learning goal (direct agentic workflows, not hand-coding) makes the AI-legible stack the foundation everything builds on; hardening the vanilla POC would be duplicated throwaway work.
+- **Standing scope principle** (Mads, 2026-07-16): the eval has Mads as the *sole real athlete*; the **full multi-real-athlete product is the pre-launch end goal but is OUT OF SCOPE for this map**. Every architecture / data-model / GDPR decision here should *extend toward* that future — prefer foundations a real roster can grow into over shortcuts a rebuild would rip out.
+- **No execution override**: tickets resolve decisions. Editing tracker files (writing PRDs, issues, updating ADRs / gdpr-decisions.md to record a decision) *is* recording those decisions and is in scope; writing product code is not.
+- **Governing design**: [CONTEXT.md](../../CONTEXT.md) Coaching Hierarchy terms (Hyper Intelligence, Head Coach, Roster, Coaching Link, Link Visibility, Coached Mode, Coach Briefing, Roster View, Prescribed Session) — use exactly. ADRs: [0003 Coached Mode authority](../../docs/adr/0003-coached-mode-authority.md) primary; [0004 Information View parity](../../docs/adr/0004-information-view-parity-and-adjustability.md) (coach reaches the Info View via Roster View, Link-Visibility-gated); [0002 calendar authority](../../docs/adr/0002-calendar-authority-model.md). GDPR log: [gdpr-decisions.md](../mvp/gdpr-decisions.md).
+- **Prior context**: the security/architecture evaluation earlier in this conversation enumerated the work (backend migration, accounts, Coached Mode, GDPR escalation, Tier-1 hardening); the [garmin-sync route](../garmin-sync/PRD.md) just landed real per-sample streams on-device (localStorage) — that data now has to survive the move to a server.
+- **Grilling format** (Mads): brief before the ballot — the problem with a concrete example, each option's practical consequences, and the recommendation with its reasoning. One decision at a time; plain language; no jargon-dense batches; a mockup when the question is visual.
+- **Skills for ticket sessions**: `/grilling` + `/domain-modeling` by default; `/research` for external facts (Anthropic DPA/terms, hosting/auth options); `/prototype` if a UI or flow question needs a concrete artifact.
+- **Wayfinding operations on this local-markdown tracker**:
+  - The map is this file. Tickets are `issues/NN-<slug>.md` in this directory.
+  - Ticket labels: `Label: wayfinder:<research|prototype|grilling|task>` near the top.
+  - **Claim** = set an `Assignee:` line before any work. Open + unassigned = unclaimed.
+  - **Blocking** = a `Blocked by: NN, NN` line in the body. Unblocked when every listed ticket has `Status: done`.
+  - **Frontier** = tickets with `Status: ready-for-agent` or `ready-for-human`, no assignee, and no open blockers.
+  - **Resolve** = append the answer under `## Resolution`, set `Status: done`, add one line to Decisions so far below.
+
+## Decisions so far
+
+<!-- one line per closed ticket: gist + link -->
+
+- [01 Anthropic data-processing facts](issues/01-anthropic-data-processing-facts.md) — the premise was false: Commercial Terms already forbid training on our content, and the DPA (with EU SCCs) is free and auto-incorporated — no enterprise tier, no signature. We are the Controller, Anthropic the Processor. Real exposure is the 30-day retention window (ZDR needs a sales call) and a flagged-content tail no arrangement removes; **EU residency doesn't exist** (`us` +10% or `global`). GDPR work is disclosure, not acquisition. Facts sheet: [anthropic-data-processing-facts.md](../research/anthropic-data-processing-facts.md)
+- **Stack decided out-of-band 2026-07-16** (conversation ruling, not a ticket): **Next.js + React + better-auth + Postgres** per [ADR 0005](../../docs/adr/0005-nextjs-better-auth-neon-stack.md), and the eval builds on it directly (Option B — see amended lock in Notes). This narrows [04](issues/04-hosting-db-auth-stack.md) to: hosting choice + verifying the Postgres host's EU residency and DPA (Neon is the ADR's default but its EU story is unverified — see the amendment in the ticket). ~~04 stays blocked by 03~~ 03 is now done — 04 is unblocked.
+- [03 Client↔server architecture](issues/03-client-server-architecture.md) — **server-authoritative** ([ADR 0006](../../docs/adr/0006-server-authoritative-architecture.md)): Postgres owns all truth, browser holds nothing durable, no offline in the eval; privacy translates (EU region, identity separation via opaque athlete IDs, prompt discipline unchanged, honest disclosure replaces locality); API key becomes a server secret.
+
+## Not yet specified
+
+<!-- in-scope fog: real questions coming, not yet sharp enough to ticket; graduates as the frontier advances -->
+
+- **GDPR posture for the eval** — lawful basis for two consenting adults, the minimum viable consent artifact, and the [gdpr-decisions.md](../mvp/gdpr-decisions.md) updates for server-side + multi-party health-adjacent data (Garmin streams now included, contradicting decision 5's "no wearable biometric streams"). Now much better lit by [01 Anthropic data-processing facts](issues/01-anthropic-data-processing-facts.md) — still waiting on the server data model to sharpen. Known sub-questions it must swallow: **rewrite decisions 6 and C** (both factually wrong — no training by default, DPA already in force, no EU residency) and answer open question 5 (controller = us); decide **`inference_geo` `global` vs `us` (+10%)**; decide **whether to email sales for ZDR** (shrinks the 30-day window; costs us Fable 5 / Mythos 5); write a consent artifact that names Anthropic as processor and discloses US/global-under-SCCs, 30-day retention, and the flagged-content tail **without over-promising "zero retention"**; and take a view on whether the DPA's "special categories: None" declaration bites.
+- **Security hardening consolidation** — HTTPS hosting, CORS lockdown, rate limiting on Claude-calling routes, security headers, FIT/GPX file-metadata sanitization (prompt-injection surface), and the server-side Anthropic key, folded into one concrete decision/checklist. Sharpens once the stack is chosen. [01](issues/01-anthropic-data-processing-facts.md) adds: ZDR orgs can't use CORS at all (the Express proxy is required regardless — reinforces the server-side key), and defending decision 1 (no real identity in prompts) through the server migration is load-bearing for the whole GDPR posture, not just tidiness.
+- **Final route sequencing** — fold every decision into ordered PRDs/issues the build picks up (the capstone / destination-reaching ticket). Graduates once the decisions above are locked.
+
+## Out of scope
+
+<!-- ruled beyond this map's destination; returns only as a fresh effort if the destination is redrawn -->
+
+- **The full multi-real-athlete product** — real invite flows for third-party athletes, full multi-party GDPR (production DPA, data-subject rights at scale, self-serve onboarding). The pre-launch end goal; a fresh effort once this eval validates the experience. Architecture here should *extend toward* it (see Notes), but it is neither built nor decided in this map.
+- **Electron/desktop packaging and the phone app** — deferred by locked decision; separate future efforts.
+- **Lovable frontend rebuild** — ~~deferred by locked decision; the hardened vanilla POC is the eval client~~ superseded 2026-07-16: the eval client is the React/Next.js rebuild (ADR 0005, Option B ruling — see Notes). Lovable itself remains optional tooling for visual iteration, not a locked-out path and not a decision this map owns.
+- **V2 coach surfaces** — Roster Briefing (roster-wide AI analysis) and coach analytics dashboards (ADR 0004 defers these).
+- **Implementing the feature issues** — this map decides the route; product code happens in the feature issues afterward.
