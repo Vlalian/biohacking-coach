@@ -24,9 +24,12 @@ Brings the `events` table. A successful move records a `session_moved` event wit
 - [ ] A completed session cannot be moved; a session in a past week cannot be moved
 - [ ] Moves to a past day, to the session's own day, or outside its own week bounce — nothing changes
 - [ ] The server is the authority: a request that violates the rules is refused regardless of what the client sent
-- [ ] The `events` table exists via migration; a successful move records a `session_moved` event with actor and payload, `narrated_at` null
+- [ ] The acting athlete is derived from the authenticated server session, never from the request body; the server verifies the athlete owns the target session before applying any move
+- [ ] A move against another athlete's session is refused, even when the request is otherwise legal under the Move rules
+- [ ] The `events` table exists via migration; a successful move records a `session_moved` event with actor and payload, `narrated_at` null. The actor is the authenticated athlete, not a client-supplied one
+- [ ] The session update and its `session_moved` event are written in one transaction: both land, or neither does
 - [ ] Nothing is announced to the athlete about the event
-- [ ] Tests cover the rule matrix and the server refusing a client-forged illegal move
+- [ ] Tests cover the rule matrix, the server refusing a client-forged illegal move, and the cross-athlete move refusal
 
 ## Blocked by
 

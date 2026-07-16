@@ -35,7 +35,7 @@ Re-verify every candidate yourself. `ready-for-agent` is triage's opinion, forme
 
 Hard exclusions, in order:
 
-1. **`Label: wayfinder:grilling`** — a grilling session *is* a conversation with Mads. Never AFK-safe.
+1. **The label gate** — only `wayfinder:task` clears it outright. `wayfinder:grilling` is a conversation with Mads, so never. `wayfinder:map` is route-mapping, which is deciding, so no. `wayfinder:research` only when the deliverable is a document, not a decision. No label at all means triage never classified it — no.
 2. **Unresolved `## Blocked by`** — the blocker's Status token must be `done`. Follow chains transitively: a task whose blocker is blocked is blocked.
 3. **Anything needing Mads's hands or judgment** — signups, credentials, accounts, API keys, billing, an open decision, a domain-expert answer. Usually flagged in the notes as `HITL:`, but not always. Read for it, don't grep for it.
 4. **Too thin to derive a test list from** — if the acceptance criteria won't yield a `/tdd` behavior list, an agent will guess. Guessing AFK is how you come back to confident nonsense.

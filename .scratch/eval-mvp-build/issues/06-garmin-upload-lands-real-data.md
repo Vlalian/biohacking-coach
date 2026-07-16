@@ -23,11 +23,13 @@ Parsing an uploaded file is untrusted input. FIT/GPX **metadata sanitisation** i
 
 - [ ] Garmin `.fit`/`.gpx` parsing is ported to TypeScript with its test files carried across and passing
 - [ ] Mads uploads a file and a session appears on his calendar with `origin: garmin`
+- [ ] The session's owning athlete is derived from the authenticated server session, never from the upload request
+- [ ] Parsing and validation complete before anything is persisted; the session, its `session_streams`, its provenance, and the `garmin_imported` event are written in one transaction
 - [ ] `session_streams` exists via migration, keyed by session ID, cascade-deleting with its session
 - [ ] Samples persist in the columnar shape `{t, hr, speedMps, altM, powerW, cadenceRpm}`
 - [ ] Garmin provenance (`start_time`, `sport`, `summary`) is populated
 - [ ] A `garmin_imported` event is recorded
-- [ ] A malformed or truncated file fails cleanly with a message, and writes nothing
+- [ ] A malformed or truncated file fails cleanly with a message, and writes nothing — no orphaned session, streams, or event survives a failure
 - [ ] Raw file metadata never reaches a prompt
 - [ ] Tests cover parsing, the session+streams write, and the malformed-file path
 

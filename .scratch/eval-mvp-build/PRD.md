@@ -22,6 +22,8 @@ Work lands as thin vertical slices, each demoable on its own and sized for revie
 
 **Deferred to a second pass** — the two decisions still unresolved on the route map: the **GDPR posture** (lawful basis, consent artifact, Art. 9 health data, deletion path) and the **security hardening consolidation** (CORS, rate limiting, security headers, FIT/GPX metadata sanitisation). Both contain build work; neither is ticketed yet. Their slices join this directory once they lock.
 
+**Deferring those decisions gates real data, not the port.** The slices below may be built and demoed against synthetic or otherwise non-production data while the two decisions are open — that is the whole point of sequencing them now. But **Mads's real Garmin data must not land on hosted infrastructure, and the eval must not be deployed for the recruited coach, until both the GDPR posture and the security hardening are decided and their controls are in place.** Slice 06 is where that line is crossed first (its notes already require both DPAs concluded); slice 11 is where a second real person arrives. Neither ships ahead of the gate.
+
 **Not a port.** [ADR 0005](../../docs/adr/0005-nextjs-better-auth-neon-stack.md) lists "the deterministic calc module" among the survivors, but no such module exists in `poc/` — `rules.js` is the Move rules matrix and `infodata.js` is a seeded synthetic-data provider. The calc module is planned new construction with vetted MIT sources to mine, not code to carry across. ADR 0005 wants correcting on this point.
 
 **Out of scope** — everything the route map ruled out: the full multi-real-athlete product, Electron/desktop and phone packaging, V2 coach surfaces (Roster Briefing, analytics dashboards), and the RAG/Knowledge Oracle.

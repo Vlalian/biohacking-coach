@@ -28,7 +28,7 @@ Bare `/run-afk` sweeps all `.scratch/`. An argument narrows it: `/run-afk eval-m
 ### 2. Filter
 Re-verify every candidate yourself. `ready-for-agent` is triage's opinion that the spec is *clear* — it was never asked whether a human is *needed*. Hard exclusions:
 
-1. **`Label: wayfinder:grilling`** — a grilling session is a conversation with Mads. Never AFK-safe. (`wayfinder:research` only if the deliverable is a document, not a decision; `wayfinder:map` is planning, so no.)
+1. **The label gate** — only `wayfinder:task` clears it. `wayfinder:grilling` is a conversation with Mads, never AFK-safe; `wayfinder:map` is planning, so no; `wayfinder:research` only if the deliverable is a document, not a decision; unlabeled means triage never classified it, so no.
 2. **Unresolved `## Blocked by`** — blocker's Status token must be `done`. Follow chains **transitively**.
 3. **Needs Mads's hands or judgment** — signups, credentials, keys, billing, open decisions, expert answers, real-world acts. Often marked `HITL:`; its absence proves nothing. Read for it, don't grep for it.
 4. **Too thin for a test list** — if the acceptance criteria won't yield a `/tdd` behavior list, an agent will guess. No criteria, no queue.

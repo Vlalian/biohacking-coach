@@ -28,11 +28,13 @@ Retention and deletion of conversations are GDPR-track questions, not schema —
 - [ ] The athlete completes a Weekly Session: Check-in → Review → Planning, and it produces a Week Plan
 - [ ] The Coach reads existing Session Reflections when reviewing
 - [ ] The full transcript persists and is still there after a refresh
+- [ ] Every conversation and message read or write resolves its owning athlete from the authenticated server session; a client-supplied conversation or athlete ID is checked against that owner, never trusted
+- [ ] Asking for another athlete's conversation ID is refused server-side
 - [ ] Messages carry `role` and `seq`; ordering is stable
 - [ ] The Anthropic key is read server-side from an environment variable; it appears nowhere in client code or the UI
 - [ ] No real name or email reaches a prompt — only the opaque athlete ID and training data
 - [ ] The Coach responds in the athlete's language; technical sports terms stay English
-- [ ] Tests cover prompt rendering, transcript persistence, and the no-identity-in-prompts rule
+- [ ] Tests cover prompt rendering, transcript persistence, the no-identity-in-prompts rule, and the refusal of another athlete's conversation ID
 
 ## Blocked by
 

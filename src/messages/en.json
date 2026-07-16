@@ -1,4 +1,7 @@
 {
+  "Metadata": {
+    "description": "An AI coaching product for Ironman trainees"
+  },
   "AthletePage": {
     "greeting": "Welcome back, {name}",
     "tagline": "Your Coach is ready when you are.",

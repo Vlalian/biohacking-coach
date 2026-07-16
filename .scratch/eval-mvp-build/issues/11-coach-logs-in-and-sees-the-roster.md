@@ -33,7 +33,7 @@ The Roster is MVP-trimmed (ticket 02): shallow synthetic athletes give contrast,
 - [ ] A coach cannot reach an athlete they have no active link to — a forged request is refused server-side
 - [ ] A severed link revokes access
 - [ ] One person holding both a coach row and an athlete row works in both capacities
-- [ ] Tests cover each visibility gate and the no-link refusal
+- [ ] Tests cover each visibility gate, the no-link refusal, the severed-link revocation, and the dual-role person operating in both capacities
 
 ## Blocked by
 
