@@ -1,7 +1,15 @@
-Status: ready-for-agent
+Status: done
 Label: wayfinder:task
 
 # 01 — Walking skeleton: a real athlete row on a localized page
+
+> **Done 2026-07-16** — built, reviewed, and merged (PR #4, `build/01-migration-and-seed`). Status flipped 2026-07-17: it had been left at `ready-for-agent` after the merge, and since [slice 02](02-login-with-better-auth.md) is blocked by this ticket, the map's unblocked-when-every-blocker-is-`done` rule made the **entire build read as stalled** to a cold agent. Nothing was wrong but the bookkeeping.
+>
+> **Two things this slice built are already superseded — do not treat its text as current:**
+> - The `athlete` column names it built are corrected by [route 06](../../coach-eval-mvp-route/issues/06-display-name-vs-identity-separation.md) and [07](../../coach-eval-mvp-route/issues/07-schema-names-vs-glossary.md); [slice 02](02-login-with-better-auth.md) applies them.
+> - This page renders `display_name`, which becomes `synthetic_label` and goes null for real athletes. After slice 02 a real name resolves through better-auth's `user.name`.
+>
+> The slice-01 code review is what raised route tickets 06, 07 and 08 — the build finding faults in the planning, which is the point of a walking skeleton.
 
 ## Parent
 
