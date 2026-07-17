@@ -1,6 +1,11 @@
 node_modules/
 .fallow/
 .claude/settings.local.json
+
+# The skills CLI mirrors .agents/skills/ here as symlinks holding absolute paths
+# into whichever checkout ran the install. The skills themselves are tracked
+# under .agents/skills/; these links are per-checkout and portable to nobody.
+.claude/skills/
 *.log
 .DS_Store
 Thumbs.db
