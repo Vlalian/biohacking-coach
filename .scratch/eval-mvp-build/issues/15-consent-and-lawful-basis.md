@@ -56,9 +56,13 @@ Every fact below was verified against Anthropic's primary sources on 2026-07-17 
 - **Server custody is *better* custody than localStorage** (ADR 0006) — say so plainly rather than apologising. The browser-clear wipe was always an undisclosed data-loss risk.
 - **Deletion** is an operator script for the eval (ADR 0006). Describe it honestly; don't imply a self-serve flow that doesn't exist.
 
-**5. Do not let real identity into a prompt.**
+**5. Do not let real identity into a prompt — and note this is new construction, not a port.**
 
-GDPR decision 1 has held since the POC and is now **load-bearing for the whole posture**, not tidiness: it is what keeps the DPA's "special categories: None" mismatch small. The port must defend it, not quietly drop it.
+~~GDPR decision 1 has held since the POC~~ **GDPR decision 1 never held.** Found 2026-07-17 while grilling [route 10](../../coach-eval-mvp-route/issues/10-security-hardening.md): the POC has a settings field labelled **Name** (placeholder "Your name") whose value flows through `buildWeeklyContext` — the very function decision 1 named as its enforcement point — into `renderWeeklyPrompt`, which sends `athlete=<name>` to Anthropic. Corrected in [gdpr-decisions.md decision 1](../../mvp/gdpr-decisions.md).
+
+So this slice does not *defend* decision 1; **it establishes it.** That matters because [route 09](../../coach-eval-mvp-route/issues/09-gdpr-posture.md) rests two things on it: the DPA's "special categories: None" mismatch stays small only if prompts are pseudonymous, and **the consent artifact tells the coach that no name reaches Anthropic**. The criterion below is what makes that sentence true. If the test doesn't pass, the disclosure is a lie.
+
+Concretely: **do not port `personaName` into any prompt context.** It carries the test-persona names *and* the athlete's real name, which is how a real-name field on it went unnoticed for so long. If the Coach addresses the athlete by name, that is a client-side render against `user.name` — never a prompt field. An instruction in a system prompt ("never use the athlete's real name") is not a control; the POC has one and it did nothing.
 
 ## Acceptance criteria
 
@@ -70,7 +74,7 @@ GDPR decision 1 has held since the POC and is now **load-bearing for the whole p
 - [ ] The text never uses the phrase "zero retention" or equivalent, and states the 30-day ceiling and the 2-year flagged tail
 - [ ] Without a consent record, the athlete cannot reach a flow that sends their data to Anthropic — the gate is enforced server-side, not by hiding a button
 - [ ] A withdrawal path exists and the disclosure describes it truthfully
-- [ ] No prompt carries a name or email — a test covers the prompt-rendering seam
+- [ ] **No prompt carries a name or email — a test covers the prompt-rendering seam.** Load-bearing, not a formality: this is the criterion that makes the consent artifact's "no name reaches Anthropic" true (route 09, and decision 1 corrected 2026-07-17). `personaName` is not ported into any prompt context
 - [ ] Tests cover the gate (no consent → no processing), the version recording, and the `inference_geo` assertion
 
 ## Blocked by

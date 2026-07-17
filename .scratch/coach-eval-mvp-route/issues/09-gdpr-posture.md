@@ -41,7 +41,15 @@ different places:
 - **What crosses the Atlantic** — a prompt, assembled fresh per Coach interaction:
   Training Phase, experience level, session counts, RPE scores, Check-in values
   *including resting pulse*, plus athlete free text (Coach Chat, reflection comments).
-  No name, no email — GDPR decision 1 has enforced that since the POC.
+  ~~No name, no email — GDPR decision 1 has enforced that since the POC.~~
+
+  **CORRECTED 2026-07-17, hours later, while grilling [10](10-security-hardening.md).** The struck sentence is **false, and this ticket leaned on it twice.** GDPR decision 1 is an *intention the POC never implemented*: `index.html` has a settings field labelled **Name** ("Your name"), and `buildWeeklyContext` — the function decision 1 names as its enforcement point — passes it through to `renderWeeklyPrompt`, which sends `athlete=<name>` to Anthropic. Corrected in [gdpr-decisions.md decision 1](../../mvp/gdpr-decisions.md); no ticket filed (Mads) — the fix is mechanical and its build criterion already exists. Now a working rule in [AGENTS.md](../../../AGENTS.md): check a document's claim about the code against the code.
+
+  **What this changes here: the reasoning, not the rulings.** Every ballot below stands — none of them depended on it. But two claims in this ticket were future tense pretending to be past tense, and must be read that way:
+  - the DPA "special categories: None" mismatch is kept small by pseudonymity **that the rebuild must establish**, not that the POC already provided;
+  - the consent artifact's promise that no name reaches Anthropic **becomes true when [slice 15](../../eval-mvp-build/issues/15-consent-and-lawful-basis.md)'s prompt-seam test passes** — not before. That criterion is now load-bearing for the disclosure's honesty rather than a formality.
+
+  **So the accurate statement is:** no name and no email *will* reach Anthropic, because the rebuild will not send them — and `personaName` must not be ported into any prompt context. If the Coach addresses the athlete by name, that is a client-side render.
 
 So the scariest data stays home, and the US transfer carries the pseudonymous subset
 under SCCs that are already executed. That is a materially better starting position

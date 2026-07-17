@@ -11,10 +11,25 @@ The app collects and processes data about athletes' physical state, training beh
 
 ## Decisions implemented (POC / MVP)
 
-### 1. No real identity in AI prompts
-The athlete's name, email, date of birth, location, or any other direct identifier is **never sent to the Anthropic API**. The system prompt refers to "the athlete" throughout in second person. The API receives only pseudonymous training signals: phase, experience level, session counts, feedback scores, and check-in values (body/mental/energy/sleep/pulse).
+### 1. ~~No real identity in AI prompts~~ No real identity in AI prompts — **AN INTENTION THE POC NEVER IMPLEMENTED**
+~~The athlete's name, email, date of birth, location, or any other direct identifier is **never sent to the Anthropic API**. The system prompt refers to "the athlete" throughout in second person. The API receives only pseudonymous training signals: phase, experience level, session counts, feedback scores, and check-in values (body/mental/energy/sleep/pulse).~~
 
-**Where enforced:** `poc/server.js` — all `buildCoachContext`, `buildWeeklyContext`, and `buildChatPrompt` functions. Also instructed in the Coach Chat system prompt: "Never use or reference the athlete's real name."
+~~**Where enforced:** `poc/server.js` — all `buildCoachContext`, `buildWeeklyContext`, and `buildChatPrompt` functions. Also instructed in the Coach Chat system prompt: "Never use or reference the athlete's real name."~~
+
+**CORRECTED 2026-07-17** (found while grilling [route ticket 10](../coach-eval-mvp-route/issues/10-security-hardening.md); no ticket filed, Mads — the fix is mechanical and its build criterion already exists). **The struck text is false, and was false from the start.** The POC asks the athlete for their real name and sends it to Anthropic:
+
+- `poc/public/index.html` — a settings field labelled **Name**, placeholder **"Your name"**.
+- `poc/public/js/app.js` — `profile.personaName = nameEl.value.trim()`.
+- `poc/server.js` `buildWeeklyContext` — **one of the functions named above as the enforcement point** — passes `personaName` straight through.
+- `poc/server.js` `renderWeeklyPrompt` (and `renderPrompt`) interpolate it into the system prompt: `` `…pulse=${pulse}bpm${personaName ? ` athlete=${personaName}` : ''}` ``.
+
+So the API received `athlete=Mads`. **The named enforcement point is where the leak is.** And the Coach Chat instruction — "Never use or reference the athlete's real name" — is not a control: it asks the model to ignore a name we just handed it. `personaName` also carries the test-persona names, which is presumably why a real-name field on it went unnoticed.
+
+**The decision stands; only the claim of enforcement was false.** Pseudonymous prompts remain right, and [09](../coach-eval-mvp-route/issues/09-gdpr-posture.md) makes them load-bearing for the *lawful basis* — they are what keeps the DPA's "special categories: None" mismatch small, and what lets the consent artifact tell the coach that no name reaches Anthropic. **That sentence must be true in the built app before the artifact says it.**
+
+**So the rebuild establishes this rather than preserving it.** [Slice 15](../eval-mvp-build/issues/15-consent-and-lawful-basis.md) already carries the criterion — *"No prompt carries a name or email — a test covers the prompt-rendering seam"* — which is now the thing that makes the disclosure honest, not a formality. The POC's own leak dies with the POC; **do not port `personaName` into a prompt context.** If the Coach needs to address the athlete by name, that is a client-side render, not a prompt field.
+
+**Why this went uncaught, recorded so it doesn't recur:** this file said where it was enforced, and four documents repeated it in one session — [09](../coach-eval-mvp-route/issues/09-gdpr-posture.md), this file's decision 5, the [map](../coach-eval-mvp-route/MAP.md), and slice 15 — while ruling a posture that rested on it. Nobody opened the function. Now a working rule in [AGENTS.md](../../AGENTS.md): *check a document's claim about the code against the code*.
 
 **Risk note:** Training metrics alone are not directly identifying, but they could theoretically be re-identified if cross-referenced with public Ironman race results (which are publicly searchable by name, race time, and date). This linkability risk is documented but not yet mitigated. See deferred item below.
 
@@ -62,7 +77,7 @@ Only data necessary for the coaching function is collected and sent to the API:
 **REWRITTEN 2026-07-17** ([route ticket 09](../coach-eval-mvp-route/issues/09-gdpr-posture.md)). The struck sentence is now false: **wearable biometric streams are in scope.** The [garmin-sync route](../garmin-sync/PRD.md) landed real per-sample streams, and [eval-MVP slice 06](../eval-mvp-build/issues/06-garmin-upload-lands-real-data.md) puts them on a server. Minimisation survives, but the honest statement is now about *where each kind of data goes*, not about what we refuse to collect:
 
 - **Held in Neon Frankfurt (EU), never sent to Anthropic:** per-sample Garmin streams — heart rate every 10s, speed, altitude, power, cadence. The calc module reads them server-side. This is the most sensitive data in the system and it never leaves the EU.
-- **Sent to Anthropic:** a prompt assembled per interaction — Training Phase, experience level, session counts, RPE ratings (1–10 Body, 1–10 Mind), Check-in values (body readiness, mental state, energy, sleep, resting pulse), plus athlete free text. **No name, no email** (decision 1).
+- **Sent to Anthropic:** a prompt assembled per interaction — Training Phase, experience level, session counts, RPE ratings (1–10 Body, 1–10 Mind), Check-in values (body readiness, mental state, energy, sleep, resting pulse), plus athlete free text. ~~**No name, no email** (decision 1).~~ **No name, no email — in the rebuild, which must establish it** (corrected 2026-07-17; see decision 1, which the POC never implemented — it sends `athlete=<name>`). The eval's prompts are new construction and will not carry identity; the guarantee arrives with [slice 15](../eval-mvp-build/issues/15-consent-and-lawful-basis.md)'s prompt-seam test, not before.
 - **Still not collected:** demographic data beyond the Athlete Profile's training fields, location, medical records.
 
 Data minimisation now means *the prompt carries aggregates, not sample arrays* — a design property to defend in the port, not an absence to claim.
@@ -186,4 +201,4 @@ When the app integrates with a wearable API (Garmin, Apple Health, Strava, etc.)
 
 ### New question, raised by this ruling
 
-6. **Does the DPA's "Special categories of personal data: None" declaration bite?** Anthropic's standard DPA (Schedule 1, Part B.3) is written on the premise that customers send no Article 9 data. Decision 7 rules our data **is** Article 9 — so we are sending special-category data under a DPA that declares we don't. Pseudonymity shrinks the mismatch (no name or email reaches Anthropic; the raw streams never arrive at all) but does not erase it. A real question, a common situation, and not ours to resolve. It also raises the value of **never letting real identity into a prompt** — decision 1 is now load-bearing for the whole posture, not just tidiness.
+6. **Does the DPA's "Special categories of personal data: None" declaration bite?** Anthropic's standard DPA (Schedule 1, Part B.3) is written on the premise that customers send no Article 9 data. Decision 7 rules our data **is** Article 9 — so we are sending special-category data under a DPA that declares we don't. Pseudonymity shrinks the mismatch (~~no name or email reaches Anthropic~~ **no name or email will reach Anthropic once the rebuild honours decision 1 — the POC does not**; the raw streams never arrive at all) but does not erase it. A real question, a common situation, and not ours to resolve. It also raises the value of **never letting real identity into a prompt** — decision 1 is now load-bearing for the whole posture, not just tidiness. **And as of 2026-07-17 it is known to be unimplemented**, which turns that from a principle to defend into a thing to *build* and test ([slice 15](../eval-mvp-build/issues/15-consent-and-lawful-basis.md)). The mismatch is only small if that test passes.
