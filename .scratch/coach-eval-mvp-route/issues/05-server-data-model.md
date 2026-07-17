@@ -34,8 +34,23 @@ Output: the schema + migration plan the build implements. Keep it a shape a real
 
 **Identity (better-auth owns, Drizzle adapter, UUIDs):** `user`, auth `session`, `account`, `verification`. No training table references these directly (ADR 0006 identity separation).
 
-- **`athlete`** — `id` (opaque UUID, the key ALL training data uses), `user_id` FK → user, **nullable** (synthetic athletes = athlete rows with no login), `display_name` (athlete-chosen), `phase`, `experience_level`, `comm_style`, `race_target`, `weekly_session_count`, `profile` JSONB (onboarding answers), `equipment` JSONB, `info_layout` JSONB (favorites/order/range), timestamps.
-- **`coach`** — `id` UUID, `user_id` FK unique, `display_name`, `info_layout` JSONB (ONE layout across roster, per ADR 0004).
+- **`athlete`** — `id` (opaque UUID, the key ALL training data uses), `user_id` FK → user, **nullable** (synthetic athletes = athlete rows with no login), ~~`display_name` (athlete-chosen)~~, ~~`phase`~~, `experience_level`, ~~`comm_style`~~, `race_target`, ~~`weekly_session_count`~~, `profile` JSONB (onboarding answers), `equipment` JSONB, ~~`info_layout` JSONB (favorites/order/range)~~, timestamps.
+- **`coach`** — `id` UUID, `user_id` FK unique, ~~`display_name`~~, ~~`info_layout` JSONB~~ (ONE layout across roster, per ADR 0004).
+
+  **AMENDED 2026-07-17 (Mads, route tickets [06](06-display-name-vs-identity-separation.md) + [07](07-schema-names-vs-glossary.md)).** Both tickets landed on the `athlete` table the same session and are carried by one migration. Slice 01 had already built the struck-through names; [eval-mvp-build slice 02](../../eval-mvp-build/issues/02-login-with-better-auth.md) applies the corrections.
+
+  **Names — full glossary alignment (07).** `CONTEXT.md`'s use-these-terms-exactly rule gets no standing exemption for the schema. "Unambiguous in context" is precisely what a cold agent lacks:
+  - `phase` → **`training_phase`** (Training Phase)
+  - `comm_style` → **`communication_style`** (Communication Style)
+  - `info_layout` → **`information_view_layout`** (Information View — its Favorites, order, range). Same rename on `coach`.
+  - `weekly_session_count` → **`training_sessions_per_week`**. The old name was the only one that actively lied: it holds training sessions per week, but a **Weekly Session** is the once-weekly ritual, so the name claimed to count those — and the answer to that is always one. Long form over `sessions_per_week` because not every session is training (`sessions.is_training`).
+  - Unchanged, already canonical: `experience_level`, `race_target`, `equipment`, and `profile` (the Athlete Profile, on a table already called `athlete`).
+
+  **Identity (06).** `display_name` was signed off on `athlete` because synthetic athletes have no user row to hold a label — but it put a real name on the anchor row every training table keys off, breaking [ADR 0006](../../../docs/adr/0006-server-authoritative-architecture.md)'s "a leak of the training data alone names no one". The fix keeps the reason and drops the breakage:
+  - `athlete.display_name` → **`athlete.synthetic_label`**, now **nullable**, and set **only for athlete rows with no `user_id`**. Real athletes' names come from better-auth via `user_id`. Every name left in the training tables is fabricated, so ADR 0006's claim is true as written rather than weakened.
+  - Renamed rather than merely nulled because the column is null for every real athlete: `display_name` would name nobody nameable — 07's own failure mode.
+  - `coach.display_name` → **dropped**. `coach.user_id` is non-null (a coach always has a login), so the column duplicated better-auth's name and was the only copy of a real person's name outside the auth tables.
+  - Cost, accepted: rendering a real athlete's or coach's name is a join through `user_id`. That is the seam working.
 - **`coaching_link`** — `id`, `coach_id` FK, `athlete_id` FK, `status` (active|severed), `share_athlete_reports` bool default true, `share_ai_transcripts` bool default false, `created_at`, `severed_at`. **No calendar flag by construction** (always visible, ADR 0003). Unique active pair. Seeded for the eval; invite flow later creates the same row.
   **AMENDED 2026-07-17 (Mads, ballot on eval-mvp-build slice 11):** `share_training_data` renamed to **`share_athlete_reports`**, and what it governs is now written down. The old name claimed the whole of training data, but the calendar and sessions are the always-on section and were never the flag's business — the name caused a CodeRabbit review round to read slice 11 as self-contradictory. Two booleans collapse CONTEXT.md's six Link Visibility sections, so the mapping is stated rather than inferred:
   - **Always on, no flag, non-toggleable** — calendar, sessions, statuses, move log. "A Head Coach who can't see the plan isn't a coach; sever the link instead" (CONTEXT.md, Link Visibility).

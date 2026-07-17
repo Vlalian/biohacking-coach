@@ -26,7 +26,7 @@ Link Visibility is **enforced server-side**, not hidden client-side. If `share_a
 | Calendar, sessions (date, type, duration, zone, title, note), statuses, move log | **none — always on** | **Yes.** Non-toggleable. "A Head Coach who can't see the plan isn't a coach; sever the link instead" |
 | Session Reflections (Body/Mind RPE, comments, `rated_at`) | `share_athlete_reports` | No |
 | Check-in data | `share_athlete_reports` | No |
-| Athlete Profile training fields and stats (`phase`, `experience_level`, `race_target`, `weekly_session_count`, `profile`, `equipment`) | `share_athlete_reports` | No |
+| Athlete Profile training fields and stats (`training_phase`, `experience_level`, `race_target`, `training_sessions_per_week`, `profile`, `equipment`) | `share_athlete_reports` | No |
 | Coach Chat and Weekly Session transcripts | `share_ai_transcripts` | No |
 
 So `share_athlete_reports` false is **not** an empty Roster: the coach still sees the calendar, the sessions with their parameters, and the Information View panels built from them. What goes is what the athlete *reported about their own body*. That asymmetry is the doctor-patient model, not an oversight.
@@ -37,9 +37,19 @@ CONTEXT lists a sixth section, "Coach briefings (on)", that neither flag covers.
 
 The Roster is MVP-trimmed (ticket 02): shallow synthetic athletes give contrast, Mads is the only full profile. The invite flow is deferred — the seed script creates the Coaching Link directly, and a later invite flow will create the same row.
 
+**Where each name comes from** ([route 06](../../coach-eval-mvp-route/issues/06-display-name-vs-identity-separation.md), 2026-07-17). This is the slice where the two cases meet in one list, so state it rather than let it be inferred:
+
+- **The `coach` table carries no name column.** `coach.display_name` was dropped — `coach.user_id` is non-null, so the name lives in better-auth's `user.name` and is read through the join. Do not reintroduce it.
+- **A real athlete's name** (Mads) comes from `user.name` via `athlete.user_id`.
+- **A synthetic athlete's label** comes from `athlete.synthetic_label`, which is null for anyone with a login. Synthetic athletes have no user row — that null *is* the discriminator, not a missing value to code around.
+
+So the Roster renders `user.name ?? synthetic_label`, and every name it shows that belongs to a real person came out of the auth tables. That is what keeps ADR 0006's "a leak of the training data alone names no one" true.
+
 ## Acceptance criteria
 
 - [ ] `coach` and `coaching_link` exist via migration, with the unique-active-pair constraint and no calendar flag
+- [ ] `coach` carries **no** name column; the coach's name renders from `user.name` via `coach.user_id` (route 06)
+- [ ] The Roster renders real athletes' names from `user.name` and synthetic athletes' from `synthetic_label`, in one list
 - [ ] The seed script creates the coach user, coach row, one active Coaching Link to Mads, and the shallow synthetic athletes
 - [ ] The coach signs in and sees their Roster
 - [ ] The coach opens a linked athlete and reaches their Information View
