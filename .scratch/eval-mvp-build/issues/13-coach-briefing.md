@@ -13,7 +13,9 @@ The Coach Briefing: the Head Coach's own conversation with the Coach about a lin
 
 Ticket 02 scoped the Briefing **in** for the eval. It is a conversation like any other: `conversations.kind = coach_briefing`, with `coach_id` naming the briefing's owner (ticket 05, ballot 4). This is why the conversations table carries a nullable `coach_id` — a Briefing belongs to a coach, not only to an athlete.
 
-Link Visibility gates what the Briefing may draw on, and **both** flags gate it. If `share_ai_transcripts` is false, the athlete's Coach conversations are not the Briefing's material; if `share_training_data` is false, the training data slice 11 withholds from the Roster is likewise not the Briefing's material. The gate is server-side and it applies to what feeds a prompt, not just to what renders — withheld data must never be fetched into prompt inputs at all. A Briefing that quietly summarises what the coach is not permitted to read defeats the toggle.
+Link Visibility gates what the Briefing may draw on, and **both** flags gate it. If `share_ai_transcripts` is false, the athlete's Coach conversations are not the Briefing's material; if `share_athlete_reports` is false, the Session Reflections, Check-in data, and profile stats that slice 11 withholds from the Roster are likewise not the Briefing's material. Slice 11's field-level table is the contract — read it there, do not re-derive it. The gate is server-side and it applies to what feeds a prompt, not just to what renders: withheld data must never be fetched into prompt inputs at all. A Briefing that quietly summarises what the coach is not permitted to read defeats the toggle.
+
+Note the Briefing may always draw on the calendar and the sessions — those are the always-on section, unaffected by either flag.
 
 GDPR decision 1 holds here as everywhere: no real identity in prompts.
 
@@ -25,7 +27,7 @@ This is a V1 coach surface. The **Roster Briefing** — roster-wide AI analysis 
 - [ ] The Briefing persists as `conversations.kind = coach_briefing` with `coach_id` set
 - [ ] It survives a refresh
 - [ ] The Briefing draws only on data the Coaching Link permits — with `share_ai_transcripts` false, athlete transcripts do not feed the prompt
-- [ ] With `share_training_data` false, the training data slice 11 withholds is not fetched into prompt inputs either; the gate is server-side, not a filter applied after the fact
+- [ ] With `share_athlete_reports` false, the Reflections, Check-in data, and profile stats slice 11 withholds are not fetched into prompt inputs either; the gate is server-side, not a filter applied after the fact
 - [ ] A Head Coach cannot brief on an athlete they have no active link to
 - [ ] No real name or email reaches the prompt
 - [ ] No roster-wide briefing surface is built
