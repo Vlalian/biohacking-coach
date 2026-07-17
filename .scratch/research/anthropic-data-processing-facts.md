@@ -47,9 +47,20 @@ The standard DPA is written on the premise that customers do **not** send Articl
 
 ---
 
-## Retention: 30 days by default; ZDR needs a sales conversation
+## Retention: ~~30 days by default~~ not retained by default, 30-day ceiling; ZDR needs a sales conversation
 
-Default, without any special arrangement ([commercial retention policy](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)):
+> **CORRECTED 2026-07-17** ([route ticket 09](../coach-eval-mvp-route/issues/09-gdpr-posture.md)). **This section overstated the exposure**, and the overstatement propagated: implication 3 below called the 30-day window "the live exposure", and the route map repeated it. Both Anthropic sources, read together, say something narrower:
+>
+> - [Commercial retention policy](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data): *"we automatically delete inputs and outputs on our backend within 30 days of receipt or generation"* — **and**, on the same page, *"conversation content is not retained by default for API users."*
+> - [API and data retention](https://platform.claude.com/docs/en/manage-claude/api-and-data-retention): *"Conversation content (your prompts and Claude's outputs) is not retained by default; the exception is Covered Models, which require 30-day retention."* Covered Models are **Claude Fable 5 and Claude Mythos 5** only — we are on Sonnet 4.6, so the mandatory-retention exception does not apply to us.
+>
+> **The 30 days is a deletion ceiling for whatever does land on the backend — not a promise that our prompts sit there for a month.** The original reading (below) treated the ceiling as the default. It is the pessimistic reading, not the accurate one.
+>
+> **Consequence:** ZDR buys less than this sheet implied — it upgrades "not retained by default" to "contractually guaranteed not retained". Ruled 2026-07-17: **skipped**, nothing gated on it. The only durable exposure either way is the flagged-content tail below, which no arrangement removes.
+>
+> **For the consent artifact, state it so it is true under both readings:** *Anthropic does not retain conversation content by default; anything reaching their systems is deleted within 30 days; content flagged by automated safety systems may be kept up to 2 years.*
+
+Original text, as researched 2026-07-16 — default, without any special arrangement ([commercial retention policy](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data)):
 
 > "we automatically delete inputs and outputs on our backend within 30 days of receipt or generation"
 
@@ -108,8 +119,8 @@ Anthropic offers self-serve BAA execution in the Console for PHI. **This is US h
 
 1. **No blocker to real data from the training angle.** Commercial Terms already forbid training on our content. Decision 6 should be rewritten from "must implement ZDR" to "verify we stay on Commercial Terms and never opt in."
 2. **The DPA + SCCs are already in place.** Legally the eval is far better covered than the map assumed. The work is *disclosure*, not *acquisition*.
-3. **The live exposure is a 30-day retention window** on prompts, plus the flagged-content tail (2 years) that no arrangement removes. ZDR would shrink the first; it is worth one email to sales, but it is not a launch blocker for two consenting adults.
-4. **EU residency is unavailable** — don't design around a control that doesn't exist. Decide `"global"` vs `"us"` (+10%) as an explicit, cheap call.
+3. ~~**The live exposure is a 30-day retention window** on prompts, plus the flagged-content tail (2 years) that no arrangement removes. ZDR would shrink the first; it is worth one email to sales, but it is not a launch blocker for two consenting adults.~~ **CORRECTED 2026-07-17** (see the retention section above): conversation content **is not retained by default** for API users; the 30 days is a deletion ceiling, not a retention window. **The live exposure is the flagged-content tail** (2 years; scores 7 years), which no arrangement removes — including ZDR. ZDR **skipped**, nothing gated on it ([route 09](../coach-eval-mvp-route/issues/09-gdpr-posture.md), ballot 3).
+4. **EU residency is unavailable** — don't design around a control that doesn't exist. ~~Decide `"global"` vs `"us"` (+10%) as an explicit, cheap call.~~ **DECIDED 2026-07-17**: **`inference_geo: "us"`**, and — a control this sheet missed — enforced at the workspace via **`allowed_inference_geos: ["us"]`**, so a request that omits the parameter is rejected rather than quietly routed. The 1.1x is pennies at eval scale; what it buys is a consent artifact naming one country. Also missed here: **workspace geo (storage at rest) is `"us"` only and immutable after workspace creation** — worth knowing *before* the Anthropic workspace is created, since it cannot be changed afterwards.
 5. **The consent artifact must not over-promise.** It should name Anthropic as processor, disclose US/global processing under SCCs, and state the 30-day retention and flagged-content tail honestly.
 6. **Decision 1 (no real identity in prompts) is now doing more work than ever.** Because the prompts are pseudonymous, the special-category mismatch in the DPA and the retention window both stay small. That constraint is load-bearing and should be defended in the server migration, not quietly dropped.
 
