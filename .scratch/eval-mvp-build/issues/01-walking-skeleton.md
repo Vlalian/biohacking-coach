@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-17) — merged via PR #4. Two follow-ups were filed by the code review of this slice and remain open, both `ready-for-human`: [route 06](../../coach-eval-mvp-route/issues/06-display-name-vs-identity-separation.md) (`display_name` contradicts ADR 0006's identity separation) and [route 07](../../coach-eval-mvp-route/issues/07-schema-names-vs-glossary.md) (`weekly_session_count` reads as the opposite of what it holds).
 Label: wayfinder:task
 
 # 01 — Walking skeleton: a real athlete row on a localized page
