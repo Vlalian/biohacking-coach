@@ -9,9 +9,11 @@ Map: ../MAP.md
 
 Two signed-off decisions contradict each other, and slice 01 has already built one of them.
 
-[ADR 0006](../../../docs/adr/0006-server-authoritative-architecture.md) makes **identity separation** structural, and stakes the privacy posture on it:
+[ADR 0006](../../../docs/adr/0006-server-authoritative-architecture.md) makes **identity separation** structural, and stakes the privacy posture on it. From its decision text:
 
 > login identity (name, email) lives in better-auth's tables while all training data is keyed by an opaque athlete ID, **so a leak of the training data alone names no one**
+
+And from its Consequences:
 
 > The schema must enforce identity separation structurally: better-auth user rows link to athlete rows via opaque ID; **training tables never carry email or name columns**.
 
