@@ -1,5 +1,5 @@
 Label: wayfinder:task
-Status: ready-for-agent
+Status: done
 
 # Correct ADR 0005: the calc module is not a survivor
 
@@ -36,3 +36,19 @@ This is a factual correction with no decision in it, which is why it is `wayfind
 ## Blocked by
 
 None.
+
+## Resolution (2026-07-17)
+
+ADR 0005's Consequences amended in the repo's strike-through-and-date style — the
+original line stays visible as what was believed on 2026-07-16, with the correction
+beneath it. The corrected claim names the three real survivors (prompt rendering,
+Garmin `.fit`/`.gpx` parsing, and the **Move rules** — named as the Move rules, not
+as calculation) and states plainly that the deterministic calculations module is new
+construction with MIT sources vetted 2026-07-09, not code to carry across.
+
+`rules.js` is listed as a survivor rather than dropped: it does port, and leaving it
+unnamed would have invited the same invention from the other direction.
+
+No decision was taken here and none was needed — the ADR asserted a fact about `poc/`
+that is not true of `poc/`. The diff is surfaced rather than landed silently, per the
+ticket, because it edits an ADR.

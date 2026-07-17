@@ -9,7 +9,7 @@ Label: wayfinder:task
 
 ## What to build
 
-Deploy the authenticated skeleton to Vercel and confirm the whole path works from a real browser against a real URL: visit the deployment, sign in, see your athlete `display_name`.
+Deploy the authenticated skeleton to Vercel and confirm the whole path works from a real browser against a real URL: visit the deployment, sign in, see your own name (resolved from better-auth `user.name` through the athlete row — route 06).
 
 This closes the tracer bullet. After this slice, every subsequent one lands on infrastructure that is already proven — which is the point of doing it now rather than at the end, when a hosting surprise would land on top of a finished app.
 
@@ -21,7 +21,7 @@ The Anthropic key is **not** part of this slice — nothing calls Claude yet. It
 
 - [ ] The app is deployed to Vercel Pro and reachable at a URL
 - [ ] Functions are configured to an EU region
-- [ ] Mads can sign in on the deployment from a browser and see his athlete `display_name`
+- [ ] Mads can sign in on the deployment from a browser and see his own name, read from `user.name` via his athlete row (route 06)
 - [ ] The session survives a refresh against the deployed URL
 - [ ] The database connection string and auth secret are Vercel environment variables; neither appears in the repo or in client-side code
 - [ ] Pushing to `main` deploys; a pull request gets a preview deployment

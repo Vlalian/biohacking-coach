@@ -9,7 +9,7 @@ Label: wayfinder:task
 
 ## What to build
 
-The MCQ onboarding flow, rebuilt in React: a new athlete answers the question set and it produces their profile — `phase`, `experience_level`, `comm_style`, `race_target`, `weekly_session_count`, the `profile` JSONB of answers, and `equipment`.
+The MCQ onboarding flow, rebuilt in React: a new athlete answers the question set and it produces their profile — `training_phase`, `experience_level`, `communication_style`, `race_target`, `training_sessions_per_week`, the `profile` JSONB of answers, and `equipment`. (Column names per [route 07](../../coach-eval-mvp-route/issues/07-schema-names-vs-glossary.md), applied in slice 02.)
 
 The POC's `onboarding.js` (507 lines) and `onboarding.completion.test.mjs` are the specification. It is Coach-voice-only per [ADR 0001](../../../docs/adr/0001-coach-voice-only-guided-tour.md) — onboarding is the Coach talking, not a form wizard with a mascot. Read the ADR before designing the surface.
 

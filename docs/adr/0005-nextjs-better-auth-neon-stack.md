@@ -7,7 +7,16 @@ Alternatives considered (full analysis in [.scratch/research/auth-and-backend-op
 ## Consequences
 
 - The vanilla-JS frontend is not ported; it becomes the *specification* (screens, flows, behavior) for a React rebuild. Lovable may be used for visual iteration via two-way GitHub sync, with Claude Code doing integration work in the same repo — that split is itself the agentic workflow being practiced.
-- Server logic survives: prompt rendering, the deterministic calc module, and Garmin `.fit`/`.gpx` parsing port as plain TypeScript modules (per the pure-core rule in `.scratch/research/codebase-structure-guidelines.md`), now called from Next.js API routes / server actions instead of Express routes.
+- ~~Server logic survives: prompt rendering, the deterministic calc module, and Garmin `.fit`/`.gpx` parsing port as plain TypeScript modules (per the pure-core rule in `.scratch/research/codebase-structure-guidelines.md`), now called from Next.js API routes / server actions instead of Express routes.~~
+
+  **CORRECTED 2026-07-17 ([route ticket 08](../../.scratch/coach-eval-mvp-route/issues/08-adr-0005-names-a-module-that-does-not-exist.md)).** Factual error, no decision in it. The original text records what was believed on 2026-07-16 and stays above. **There is no deterministic calc module in `poc/` to port.** Checked while sequencing the rebuild:
+  - `poc/public/js/rules.js` (55 lines) is the **Move rules** matrix (`isFrozen`, `classifyMove`) — pure, tested, and it does port, but it is not calculation.
+  - `poc/public/js/infodata.js` (343 lines) is a **seeded-PRNG synthetic data provider** for the Information View; its own header calls it "the seam where real data sources plug in later". It fabricates data, it does not compute it.
+  - Nothing else in `poc/` computes training load, zones, or phase.
+
+  The corrected claim: **server logic that survives is prompt rendering, Garmin `.fit`/`.gpx` parsing, and the Move rules** — all porting as plain TypeScript modules (per the pure-core rule in `.scratch/research/codebase-structure-guidelines.md`), now called from Next.js API routes / server actions instead of Express routes. **The deterministic calculations module is new construction, not a port**: MIT sources to mine were vetted on 2026-07-09 (athlete-analytics for zones and training load; formulas cross-checked against Coggan/TrainingPeaks definitions). The [eval-MVP PRD](../../.scratch/eval-mvp-build/PRD.md) already records it under "Not a port" and excludes it from the port slices.
+
+  The risk this closes is invention, not confusion: an agent trusting the original line will find `rules.js` or `infodata.js`, conclude one of them must be the calc module, and port it under that name.
 - localStorage persistence (`bh_week_plan`, `bh_session_feedback`, …) is replaced by Postgres via an ORM; the entity refactor required by ADR 0002 happens as part of this migration, not before it.
 - better-auth owns the auth schema in Neon; Garmin OAuth tokens get a home in the same database when that integration lands.
 - Hosting: decided same day by [coach-eval ticket 04](../../.scratch/coach-eval-mvp-route/issues/04-hosting-db-auth-stack.md) — **Vercel Pro** ($20/mo; EU function region, DPA auto-incorporated on Pro — the free Hobby tier lacks both commercial use and the DPA). Neon's EU residency and DPA were verified the same day ([research](../../.scratch/research/postgres-host-eu-residency-dpa.md)): **Frankfurt region**, DPA auto-incorporated via the Databricks MCSA, pgvector free on all plans.
