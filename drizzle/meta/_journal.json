@@ -8,6 +8,13 @@
       "when": 1784237170031,
       "tag": "0000_nebulous_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784366580613,
+      "tag": "0001_slice02_login",
+      "breakpoints": true
     }
   ]
 }

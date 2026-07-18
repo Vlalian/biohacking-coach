@@ -6,5 +6,18 @@
     "greeting": "Velkommen tilbage, {name}",
     "tagline": "Din Coach er klar, når du er.",
     "noAthlete": "Ingen atlet fundet. Er seed-scriptet kørt?"
+  },
+  "Auth": {
+    "signInTitle": "Log ind",
+    "signUpTitle": "Opret konto",
+    "nameLabel": "Navn",
+    "emailLabel": "E-mail",
+    "passwordLabel": "Adgangskode",
+    "signInButton": "Log ind",
+    "signUpButton": "Opret konto",
+    "toSignIn": "Har du allerede en konto? Log ind",
+    "toSignUp": "Mangler du en konto? Opret en",
+    "signOut": "Log ud",
+    "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
   }
 }
