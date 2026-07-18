@@ -92,11 +92,6 @@ async function madsAthleteId(email: string): Promise<string> {
  */
 async function seedMadsWeekPlan(athleteId: string) {
   const db = getDb();
-  // Clear only the coach-planned sessions, so a re-seed refreshes the plan
-  // without touching athlete- or Garmin-origin rows once those exist.
-  await db
-    .delete(sessions)
-    .where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'coach')));
 
   const now = new Date();
   const mondayOffset = (now.getDay() + 6) % 7; // 0 = Monday
@@ -130,7 +125,15 @@ async function seedMadsWeekPlan(athleteId: string) {
     isTraining: s.isTraining ?? true,
   }));
 
-  await db.insert(sessions).values(rows);
+  // Atomic reseed: clear only the coach-planned sessions and insert the fresh
+  // week in one transaction, so a failure can never leave Mads with an empty
+  // plan. neon-http has no interactive transactions, but batch() is one.
+  await db.batch([
+    db
+      .delete(sessions)
+      .where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'coach'))),
+    db.insert(sessions).values(rows),
+  ]);
   console.log(`Seeded ${rows.length}-session Week Plan for Mads (${dayDate(0)}–${dayDate(6)}).`);
 }
 
