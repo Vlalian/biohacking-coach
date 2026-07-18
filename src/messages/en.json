@@ -5,7 +5,7 @@
   "AthletePage": {
     "greeting": "Welcome back, {name}",
     "tagline": "Your Coach is ready when you are.",
-    "noAthlete": "No athlete found. Has the seed script been run?"
+    "noAthlete": "We couldn't load your profile. Please sign out and try again."
   },
   "Auth": {
     "signInTitle": "Sign in",

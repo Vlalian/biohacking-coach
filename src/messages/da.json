@@ -5,7 +5,7 @@
   "AthletePage": {
     "greeting": "Velkommen tilbage, {name}",
     "tagline": "Din Coach er klar, når du er.",
-    "noAthlete": "Ingen atlet fundet. Er seed-scriptet kørt?"
+    "noAthlete": "Vi kunne ikke indlæse din profil. Log ud, og prøv igen."
   },
   "Auth": {
     "signInTitle": "Log ind",

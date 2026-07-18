@@ -21,9 +21,18 @@ export function SignOutButton() {
       disabled={pending}
       onClick={async () => {
         setPending(true);
-        await signOut();
-        router.push('/sign-in');
-        router.refresh();
+        try {
+          const result = await signOut();
+          // Only leave the page if the session actually ended; on failure stay
+          // put and re-enable the button rather than navigating to a page the
+          // still-valid session would just bounce back from.
+          if (!result.error) {
+            router.push('/sign-in');
+            router.refresh();
+          }
+        } finally {
+          setPending(false);
+        }
       }}
       className="text-sm text-neutral-500 underline disabled:opacity-50"
     >
