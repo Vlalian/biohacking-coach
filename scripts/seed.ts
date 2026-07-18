@@ -1,7 +1,10 @@
 import '../src/db/load-env';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '../src/db';
-import { athlete } from '../src/db/schema';
+import { athlete, sessions, type NewSessionRow } from '../src/db/schema';
+import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
+import { dateKey } from '../src/lib/date';
 
 /**
  * Seeds the database for local development and the eval.
@@ -43,7 +46,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function seedMads() {
+async function seedMads(): Promise<string> {
   const email = requireEnv('SEED_MADS_EMAIL');
   const password = requireEnv('SEED_MADS_PASSWORD');
 
@@ -57,10 +60,81 @@ async function seedMads() {
   } catch (err) {
     if (isDuplicateUser(err)) {
       console.log('Real athlete already present — nothing to do.');
-      return;
+    } else {
+      throw err;
     }
-    throw err;
   }
+
+  return madsAthleteId(email);
+}
+
+/** Resolves Mads's opaque athlete id through the user seam (never by name). */
+async function madsAthleteId(email: string): Promise<string> {
+  const [row] = await getDb()
+    .select({ id: athlete.id })
+    .from(athlete)
+    .innerJoin(user, eq(athlete.userId, user.id))
+    .where(eq(user.email, email))
+    .limit(1);
+
+  if (!row) {
+    throw new Error('Mads has no athlete row — the signup hook did not mint one.');
+  }
+  return row.id;
+}
+
+/**
+ * A plausible coach-planned week for Mads, laid across the current Mon–Sun so it
+ * lands in the calendar's current month. Re-seedable: his coach-origin sessions
+ * are cleared first, so re-running moves the plan to the new current week rather
+ * than piling weeks up. Athlete- and Garmin-origin sessions (none yet) are left
+ * untouched.
+ */
+async function seedMadsWeekPlan(athleteId: string) {
+  const db = getDb();
+
+  const now = new Date();
+  const mondayOffset = (now.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+  const dayDate = (offset: number) =>
+    dateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + offset));
+
+  // One session per day, Mon..Sun — a coach's prescribed week (origin 'coach',
+  // status 'planned'). Numbers/zones are the prescription; the language is a note.
+  const week: Array<Partial<NewSessionRow> & { day: number }> = [
+    { day: 0, type: 'Endurance', duration: 60, zone: 'Zone 2', title: 'Easy aerobic ride', note: 'Keep it conversational.' },
+    { day: 1, type: 'Intensity', duration: 45, zone: 'Zone 4', title: 'Threshold intervals', note: '4 x 6 min at threshold.' },
+    { day: 2, type: 'Recovery', duration: 40, zone: 'Zone 1', title: 'Easy swim', note: 'Technique focus, easy effort.' },
+    { day: 3, type: 'Tempo', duration: 60, zone: 'Zone 3', title: 'Tempo run', note: '20 min steady in the middle.' },
+    { day: 4, type: 'Rest', title: 'Rest day', isTraining: false },
+    { day: 5, type: 'Endurance', duration: 180, zone: 'Zone 2', title: 'Long ride', note: 'Fuel every 45 min.' },
+    { day: 6, type: 'Strength', duration: 45, title: 'Strength & mobility', note: 'Core and single-leg work.' },
+  ];
+
+  const rows: NewSessionRow[] = week.map(({ day, ...s }) => ({
+    athleteId,
+    date: dayDate(day),
+    origin: 'coach',
+    status: 'planned',
+    dayOrder: 0,
+    type: s.type!,
+    duration: s.duration ?? null,
+    zone: s.zone ?? null,
+    title: s.title ?? null,
+    note: s.note ?? null,
+    isTraining: s.isTraining ?? true,
+  }));
+
+  // Atomic reseed: clear only the coach-planned sessions and insert the fresh
+  // week in one transaction, so a failure can never leave Mads with an empty
+  // plan. neon-http has no interactive transactions, but batch() is one.
+  await db.batch([
+    db
+      .delete(sessions)
+      .where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'coach'))),
+    db.insert(sessions).values(rows),
+  ]);
+  console.log(`Seeded ${rows.length}-session Week Plan for Mads (${dayDate(0)}–${dayDate(6)}).`);
 }
 
 /**
@@ -98,7 +172,8 @@ async function seedSyntheticAthlete() {
 }
 
 async function seed() {
-  await seedMads();
+  const madsId = await seedMads();
+  await seedMadsWeekPlan(madsId);
   await seedSyntheticAthlete();
 }
 

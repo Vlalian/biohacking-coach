@@ -15,6 +15,13 @@
       "when": 1784366580613,
       "tag": "0001_slice02_login",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784388125175,
+      "tag": "0002_slice04_sessions",
+      "breakpoints": true
     }
   ]
 }

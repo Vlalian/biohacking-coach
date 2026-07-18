@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-18) — sessions table (migration 0002, full signed-off column set), seeded Week Plan, read-only React calendar reads athlete-scoped sessions server-side, ordered by day_order, EN+DA. Verified in browser; 14 tests. PR pending.
 Label: wayfinder:task
 
 # 04 — The Training Plan calendar renders real sessions from Postgres

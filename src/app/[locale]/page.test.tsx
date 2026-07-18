@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getSession, redirect, getAthleteByUserId, provisionAthlete } = vi.hoisted(
-  () => ({
+const { getSession, redirect, getAthleteByUserId, provisionAthlete, getSessionsForAthlete } =
+  vi.hoisted(() => ({
     getSession: vi.fn(),
     redirect: vi.fn(() => {
       // The real next-intl redirect() throws to stop rendering; the mock does too,
@@ -10,8 +10,8 @@ const { getSession, redirect, getAthleteByUserId, provisionAthlete } = vi.hoiste
     }),
     getAthleteByUserId: vi.fn(),
     provisionAthlete: vi.fn(),
-  }),
-);
+    getSessionsForAthlete: vi.fn(() => Promise.resolve([])),
+  }));
 
 vi.mock('next-intl/server', () => ({
   setRequestLocale: vi.fn(),
@@ -23,6 +23,7 @@ vi.mock('@/i18n/navigation', () => ({ redirect }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));
+vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
 // A client component pulling in better-auth/react; stub it out of the node test.
 vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));
 

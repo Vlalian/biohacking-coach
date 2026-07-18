@@ -5,7 +5,10 @@ import {
   integer,
   jsonb,
   timestamp,
+  date,
+  boolean,
   check,
+  index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
@@ -78,3 +81,83 @@ export const athlete = pgTable(
  */
 export type AthleteRow = typeof athlete.$inferSelect;
 export type NewAthleteRow = typeof athlete.$inferInsert;
+
+/**
+ * A training session — the POC's calendar entity, now a Postgres row.
+ *
+ * `athleteId` scopes every session to one athlete; the calendar query filters on
+ * it, so an athlete can only ever read their own rows (ADR 0006 — training data
+ * keys off the opaque athlete id, never a user identity).
+ *
+ * `origin` is the authority column every later slice guards on: a Prescribed
+ * Session is `origin = 'head_coach'`, a Garmin import is `'garmin'` and
+ * read-only by construction, and so on. Only seeded `coach`/`athlete` rows exist
+ * in this slice, but the column lands now — adding it later would cost a
+ * migration and a rewrite of the guards.
+ *
+ * `dayOrder` orders sessions within a single day (a Double is two sessions on
+ * one date); the calendar reads them in that order.
+ *
+ * Feedback lives inline as two 1–5 smiley scores plus a comment (Body + Mind,
+ * the POC's Session Feedback), written when the athlete rates a session. Garmin
+ * provenance (`startTime`, `sport`, `summary`) is null until slice 06 imports
+ * real files. None of it is read yet — this slice renders the plan — but the
+ * column set is the full signed-off shape so later slices add behaviour, not
+ * columns.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    type: text('type').notNull(),
+    origin: text('origin').notNull(),
+    status: text('status').notNull().default('planned'),
+    parked: boolean('parked').notNull().default(false),
+    isTraining: boolean('is_training').notNull().default(true),
+    duration: integer('duration'),
+    zone: text('zone'),
+    note: text('note'),
+    title: text('title'),
+    dayOrder: integer('day_order').notNull().default(0),
+    // Garmin provenance — populated by slice 06's import, null before it.
+    startTime: timestamp('start_time'),
+    sport: text('sport'),
+    summary: jsonb('summary'),
+    // Session Feedback — two 1–5 smiley scores and a comment, set on rating.
+    feedbackBody: integer('feedback_body'),
+    feedbackMind: integer('feedback_mind'),
+    feedbackComment: text('feedback_comment'),
+    ratedAt: timestamp('rated_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // The calendar always reads sessions for one athlete; index that path.
+    index('sessions_athlete_date_idx').on(table.athleteId, table.date),
+    // Guard columns hold closed value sets — encode them so a bad write fails at
+    // the database, not silently downstream in an authority check.
+    check(
+      'sessions_origin_valid',
+      sql`${table.origin} IN ('coach', 'athlete', 'garmin', 'head_coach')`,
+    ),
+    check(
+      'sessions_status_valid',
+      sql`${table.status} IN ('planned', 'completed', 'skipped')`,
+    ),
+    check(
+      'sessions_feedback_body_range',
+      sql`${table.feedbackBody} IS NULL OR ${table.feedbackBody} BETWEEN 1 AND 5`,
+    ),
+    check(
+      'sessions_feedback_mind_range',
+      sql`${table.feedbackMind} IS NULL OR ${table.feedbackMind} BETWEEN 1 AND 5`,
+    ),
+  ],
+);
+
+export type SessionRow = typeof sessions.$inferSelect;
+export type NewSessionRow = typeof sessions.$inferInsert;
