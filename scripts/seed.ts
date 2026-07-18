@@ -53,10 +53,10 @@ async function seedMads() {
     await auth.api.signUpEmail({
       body: { name: 'Mads', email, password },
     });
-    console.log(`Seeded real athlete: Mads (${email}) — name on user.name, synthetic_label null.`);
+    console.log('Seeded real athlete: Mads — name on user.name, synthetic_label null.');
   } catch (err) {
     if (isDuplicateUser(err)) {
-      console.log(`Real athlete ${email} already present — nothing to do.`);
+      console.log('Real athlete already present — nothing to do.');
       return;
     }
     throw err;

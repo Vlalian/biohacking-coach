@@ -30,28 +30,32 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
     setFailed(false);
     setPending(true);
 
-    const result = isSignUp
-      ? await signUp.email({ name, email, password })
-      : await signIn.email({ email, password });
+    try {
+      const result = isSignUp
+        ? await signUp.email({ name, email, password })
+        : await signIn.email({ email, password });
 
-    setPending(false);
+      if (result.error) {
+        setFailed(true);
+        return;
+      }
 
-    if (result.error) {
+      router.push('/');
+      router.refresh();
+    } catch {
+      // A thrown request (network, etc.) is a failure like any other; show the
+      // generic message rather than leaving the form wedged.
       setFailed(true);
-      return;
+    } finally {
+      // Always re-enable the form — without finally, a throw would leave the
+      // submit button disabled with no way forward.
+      setPending(false);
     }
-
-    router.push('/');
-    router.refresh();
   }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-12">
-      <form
-        onSubmit={onSubmit}
-        className="flex w-full max-w-sm flex-col gap-4"
-        noValidate
-      >
+      <form onSubmit={onSubmit} className="flex w-full max-w-sm flex-col gap-4">
         <h1 className="text-2xl font-semibold">
           {isSignUp ? t('signUpTitle') : t('signInTitle')}
         </h1>

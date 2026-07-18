@@ -6,6 +6,7 @@ import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
 import { SignOutButton } from './sign-out-button';
 
 // Read per-request: the page depends on who is signed in, so it can never be
@@ -30,9 +31,16 @@ export default async function AthletePage({
 
     // The name comes from better-auth's user record, reached through the session
     // — never from a training table (ADR 0006, route 06). The athlete row is
-    // fetched only to confirm the user resolves to one; once the signup hook has
-    // run, it always does.
-    const athlete = await getAthleteByUserId(session.user.id);
+    // fetched only to confirm the user resolves to one.
+    let athlete = await getAthleteByUserId(session.user.id);
+
+    if (!athlete) {
+      // Recovery: normally the signup hook has already minted this row, but if it
+      // failed the user would be stranded here forever with no way to a profile.
+      // Provisioning is idempotent, so heal it on read and re-fetch once.
+      await provisionAthlete(session.user.id);
+      athlete = await getAthleteByUserId(session.user.id);
+    }
 
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 p-12">
@@ -42,11 +50,13 @@ export default async function AthletePage({
               {t('greeting', { name: session.user.name })}
             </h1>
             <p className="text-neutral-500">{t('tagline')}</p>
-            <SignOutButton />
           </>
         ) : (
           <p className="text-neutral-500">{t('noAthlete')}</p>
         )}
+        {/* Sign-out stays reachable even when provisioning could not recover, so
+            a stranded account is never a dead end. */}
+        <SignOutButton />
       </main>
     );
   }
