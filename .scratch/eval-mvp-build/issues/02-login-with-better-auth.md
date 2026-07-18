@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-18) — merged via PR #7. better-auth wired; signup mints one athlete row; identity separation structural (name on user.name, synthetic_label nullable + CHECK); routes 06/07 renames carried in migration 0001.
 Label: wayfinder:task
 
 # 02 — Logging in reaches your own athlete row

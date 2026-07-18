@@ -19,5 +19,8 @@
     "toSignUp": "Mangler du en konto? Opret en",
     "signOut": "Log ud",
     "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
+  },
+  "Calendar": {
+    "empty": "Ingen sessioner planlagt endnu."
   }
 }

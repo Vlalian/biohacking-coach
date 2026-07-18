@@ -19,5 +19,8 @@
     "toSignUp": "Need an account? Sign up",
     "signOut": "Sign out",
     "error": "That didn't work. Check your details and try again."
+  },
+  "Calendar": {
+    "empty": "No sessions planned yet."
   }
 }
