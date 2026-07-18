@@ -5,6 +5,19 @@
   "AthletePage": {
     "greeting": "Welcome back, {name}",
     "tagline": "Your Coach is ready when you are.",
-    "noAthlete": "No athlete found. Has the seed script been run?"
+    "noAthlete": "We couldn't load your profile. Please sign out and try again."
+  },
+  "Auth": {
+    "signInTitle": "Sign in",
+    "signUpTitle": "Create account",
+    "nameLabel": "Name",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "signInButton": "Sign in",
+    "signUpButton": "Create account",
+    "toSignIn": "Already have an account? Sign in",
+    "toSignUp": "Need an account? Sign up",
+    "signOut": "Sign out",
+    "error": "That didn't work. Check your details and try again."
   }
 }
