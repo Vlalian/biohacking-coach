@@ -51,7 +51,9 @@ export function GarminUpload() {
           accept=".fit,.gpx"
           disabled={pending}
           onChange={(e) => onFile(e.target.files?.[0])}
-          className="hidden"
+          // sr-only, not hidden: visually gone but still focusable, so the
+          // picker is reachable by keyboard (a display:none input is not).
+          className="sr-only"
         />
       </label>
 

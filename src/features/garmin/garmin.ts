@@ -184,7 +184,11 @@ type FitSession = {
 };
 
 function fitSession(s: FitSession, allRecords: FitRecord[]): ParsedSession | null {
-  const start = s.start_time ? new Date(s.start_time) : null;
+  const parsedStart = s.start_time ? new Date(s.start_time) : null;
+  // A malformed start_time is an invalid Date; toISOString() on it throws, so
+  // treat it as no start at all rather than let the module throw.
+  const start =
+    parsedStart && !Number.isNaN(parsedStart.getTime()) ? parsedStart : null;
   let records: SampleRecord[] = [];
   if (start) {
     const startMs = start.getTime();
@@ -333,10 +337,17 @@ export function parseGpx(buffer: Buffer): ParsedSession[] {
         ([] as GpxPoint[]).concat((seg as { trkpt?: GpxPoint | GpxPoint[] }).trkpt || []),
       );
       const times = points.map((p) => p.time).filter(Boolean) as string[];
-      const date = times.length > 0 ? new Date(times[0]).toISOString().slice(0, 10) : null;
+      // Derive everything from the parsed epoch, which is NaN for a malformed
+      // <time>. toISOString() on an invalid Date throws, so guard on a finite
+      // firstTs rather than call it on a raw string — the module never throws.
       const firstTs = times.length > 0 ? new Date(times[0]).getTime() : 0;
       const lastTs = times.length > 0 ? new Date(times[times.length - 1]).getTime() : 0;
-      const duration = firstTs && lastTs ? Math.round((lastTs - firstTs) / 60000) : null;
+      const hasStart = Number.isFinite(firstTs) && firstTs > 0;
+      const date = hasStart ? new Date(firstTs).toISOString().slice(0, 10) : null;
+      const duration =
+        hasStart && Number.isFinite(lastTs) && lastTs > 0
+          ? Math.round((lastTs - firstTs) / 60000)
+          : null;
       const typeName = (trk.type || trk.name || '') as string;
       const records = firstTs ? gpxRecords(points, firstTs) : [];
       return {
@@ -344,7 +355,7 @@ export function parseGpx(buffer: Buffer): ParsedSession[] {
         sessionType: inferSessionType(typeName),
         duration,
         note: `Imported from GPX${typeName ? ' · ' + typeName : ''}`,
-        startTime: firstTs ? new Date(firstTs).toISOString() : null,
+        startTime: hasStart ? new Date(firstTs).toISOString() : null,
         sport: typeName || null,
         summary: summarizeRecords(records),
         streams: downsampleRecords(records),

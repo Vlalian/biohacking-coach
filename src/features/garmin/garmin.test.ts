@@ -142,4 +142,10 @@ describe('parseGpx', () => {
     const noTime = `<gpx><trk><trkseg><trkpt lat="55" lon="12"><ele>10</ele></trkpt></trkseg></trk></gpx>`;
     expect(parseGpx(Buffer.from(noTime))).toEqual([]);
   });
+
+  it('drops a track with an unparseable time without throwing', () => {
+    const badTime = `<gpx><trk><trkseg><trkpt lat="55" lon="12"><ele>10</ele><time>not-a-date</time></trkpt></trkseg></trk></gpx>`;
+    expect(() => parseGpx(Buffer.from(badTime))).not.toThrow();
+    expect(parseGpx(Buffer.from(badTime))).toEqual([]);
+  });
 });
