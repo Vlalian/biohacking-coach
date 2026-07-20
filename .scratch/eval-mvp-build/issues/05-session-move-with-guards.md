@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-18) — Move rules ported as a pure TS module with the matrix; server-authoritative move (actor from auth session, ownership checked, rules re-run against server today); events table (migration 0003); update+event atomic via db.batch; narration benched (narrated_at null). Browser-verified a real drag persisted + recorded the event; 34 tests. resolveDrop/Displacement scoped out (not in this slice's criteria). PR pending.
 Label: wayfinder:task
 
 # 05 — Session Move, with the rules enforced server-side

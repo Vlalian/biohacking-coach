@@ -11,3 +11,21 @@ export function dateKey(d: Date): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+/** Adds (or subtracts) whole days to a 'YYYY-MM-DD' key, returning a key. */
+export function addDays(key: string, days: number): string {
+  const d = new Date(`${key}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return dateKey(d);
+}
+
+/**
+ * The Monday of the week a day belongs to, as a 'YYYY-MM-DD' key.
+ *
+ * The Mon–Sun week is the planning unit (ADR 0002): a Session Move is legal only
+ * within it, so "same week" is "same weekStartOf".
+ */
+export function weekStartOf(key: string): string {
+  const day = new Date(`${key}T00:00:00`).getDay(); // 0 = Sunday
+  return addDays(key, -(day === 0 ? 6 : day - 1));
+}

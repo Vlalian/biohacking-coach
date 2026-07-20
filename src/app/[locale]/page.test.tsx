@@ -24,8 +24,10 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
-// A client component pulling in better-auth/react; stub it out of the node test.
+// Client components / server actions pulling in browser + auth deps; stub them
+// out of the node test — the page's own wiring is what's under test here.
 vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));
+vi.mock('./calendar', () => ({ Calendar: () => null }));
 
 const { default: AthletePage } = await import('./page');
 
