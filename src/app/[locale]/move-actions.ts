@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { moveSession, type MoveResult } from '@/features/session/session-move';
-import { dateKey } from '@/lib/date';
+import { dateKey, isValidDateKey } from '@/lib/date';
 
 /**
  * Server action for a Session Move.
@@ -20,6 +20,10 @@ export async function moveSessionAction(
   sessionId: string,
   targetDate: string,
 ): Promise<MoveResult> {
+  // The target date is untrusted client input; reject anything that is not a
+  // real 'YYYY-MM-DD' before it reaches the rules or the database.
+  if (!isValidDateKey(targetDate)) return { ok: false, reason: 'bounce' };
+
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, reason: 'not-authenticated' };
 
