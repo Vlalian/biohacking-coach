@@ -161,3 +161,42 @@ export const sessions = pgTable(
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
+
+/**
+ * The unified event stream (ticket 05, ballot 3).
+ *
+ * One append-only log of things that happened to an athlete's plan — a Session
+ * Move, a creation, a coach action — that Week Activity and Pattern Insight read
+ * later. It replaces the POC's separate move/creation logs.
+ *
+ * `actorType` says who acted; `actorId` is their opaque id where they have one
+ * (an athlete or coach id — polymorphic, so no single foreign key) and null for
+ * `system`. `narratedAt` is the un-bench hook: narration of coach actions is
+ * benched for the eval (ticket 02, amended), so events are recorded with
+ * attribution but nothing is announced, and this column stays null.
+ */
+export const events = pgTable(
+  'events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    actorType: text('actor_type').notNull(),
+    actorId: uuid('actor_id'),
+    type: text('type').notNull(),
+    payload: jsonb('payload'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    narratedAt: timestamp('narrated_at'),
+  },
+  (table) => [
+    index('events_athlete_idx').on(table.athleteId, table.createdAt),
+    check(
+      'events_actor_type_valid',
+      sql`${table.actorType} IN ('athlete', 'head_coach', 'coach_ai', 'system')`,
+    ),
+  ],
+);
+
+export type EventRow = typeof events.$inferSelect;
+export type NewEventRow = typeof events.$inferInsert;

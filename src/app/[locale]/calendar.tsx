@@ -1,6 +1,12 @@
-import { getTranslations, getFormatter } from 'next-intl/server';
+'use client';
+
+import { useState, useTransition } from 'react';
+import { useTranslations, useFormatter } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import type { Session } from '@/features/session/session';
 import { dateKey } from '@/lib/date';
+import { classifyMove, isFrozen } from '@/features/session/move-rules';
+import { moveSessionAction } from './move-actions';
 
 // Session dot colours by type, carried over from the POC's SESSION_COLORS. The
 // names are the training vocabulary and stay as-is; only the values live here.
@@ -25,10 +31,9 @@ type DaySlot = {
   sessions: Session[];
 };
 
-function buildMonth(reference: Date, byDate: Map<string, Session[]>): DaySlot[] {
+function buildMonth(reference: Date, todayKey: string, byDate: Map<string, Session[]>): DaySlot[] {
   const year = reference.getFullYear();
   const month = reference.getMonth();
-  const todayKey = dateKey(reference);
 
   const first = new Date(year, month, 1);
   // Monday-first grid: how many leading days from the previous month to show.
@@ -50,7 +55,6 @@ function buildMonth(reference: Date, byDate: Map<string, Session[]>): DaySlot[] 
 
   for (let i = leading; i > 0; i--) push(new Date(year, month, 1 - i), false);
   for (let d = 1; d <= daysInMonth; d++) push(new Date(year, month, d), true);
-  // Trailing days to complete the final week row.
   while (slots.length % 7 !== 0) {
     const last = slots[slots.length - 1];
     const [y, m, dd] = last.key.split('-').map(Number);
@@ -59,34 +63,37 @@ function buildMonth(reference: Date, byDate: Map<string, Session[]>): DaySlot[] 
   return slots;
 }
 
-function Dot({ session }: { session: Session }) {
+function dotStyle(session: Session): React.CSSProperties {
   const color = TYPE_COLORS[session.type] ?? DEFAULT_COLOR;
-  const base = 'inline-block h-2.5 w-2.5 rounded-full';
-
-  if (session.status === 'completed') {
-    return <span className={base} style={{ backgroundColor: color }} />;
-  }
-  if (session.status === 'skipped') {
-    return <span className={`${base} opacity-40`} style={{ backgroundColor: color }} />;
-  }
+  if (session.status === 'completed') return { backgroundColor: color };
+  if (session.status === 'skipped') return { backgroundColor: color, opacity: 0.4 };
   // planned — an outline; it was planned, not proven done.
-  return (
-    <span
-      className={base}
-      style={{ border: `2px solid ${color}`, backgroundColor: 'transparent' }}
-    />
-  );
+  return { border: `2px solid ${color}`, backgroundColor: 'transparent' };
 }
 
 /**
- * The read-only Training Plan calendar: the current month as a Monday-first
- * grid, one dot per session coloured by type. Sessions arrive already scoped to
- * the signed-in athlete and ordered by date then day_order, so grouping by date
- * preserves the within-day order.
+ * The Training Plan calendar with Session Move. A month grid (Monday-first), one
+ * dot per session coloured by type; a planned, movable session can be dragged to
+ * another day in its own week. The client uses the Move rules only to shape the
+ * gesture (what looks draggable, which drop is worth sending) — the server
+ * re-decides and is the authority (ADR 0006).
+ *
+ * `todayKey` is the server's day, passed in so the grid and the client's
+ * affordance check agree with the clock the move is judged against.
  */
-export async function Calendar({ sessions }: { sessions: Session[] }) {
-  const t = await getTranslations('Calendar');
-  const format = await getFormatter();
+export function Calendar({
+  sessions,
+  todayKey,
+}: {
+  sessions: Session[];
+  todayKey: string;
+}) {
+  const t = useTranslations('Calendar');
+  const format = useFormatter();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [hoverDay, setHoverDay] = useState<string | null>(null);
 
   const byDate = new Map<string, Session[]>();
   for (const s of sessions) {
@@ -95,21 +102,33 @@ export async function Calendar({ sessions }: { sessions: Session[] }) {
     else byDate.set(s.date, [s]);
   }
 
-  const now = new Date();
-  const slots = buildMonth(now, byDate);
-
-  // Weekday headers, localized: a known Monday..Sunday run formatted short.
+  const reference = new Date(`${todayKey}T00:00:00`);
+  const slots = buildMonth(reference, todayKey, byDate);
   const weekdays = Array.from({ length: 7 }, (_, i) =>
     format.dateTime(new Date(2024, 0, 1 + i), { weekday: 'short' }),
   );
 
-  const weeks: DaySlot[][] = [];
-  for (let i = 0; i < slots.length; i += 7) weeks.push(slots.slice(i, i + 7));
+  function onDrop(targetDate: string) {
+    const id = draggingId;
+    setDraggingId(null);
+    setHoverDay(null);
+    if (!id) return;
+
+    const moving = sessions.find((s) => s.id === id);
+    // Client-side affordance check only — the server re-runs this and decides.
+    // Skipping a doomed request keeps the UI honest; it is not the gate.
+    if (!moving || classifyMove(moving, targetDate, todayKey) !== 'move') return;
+
+    startTransition(async () => {
+      await moveSessionAction(id, targetDate);
+      router.refresh();
+    });
+  }
 
   return (
-    <section className="w-full max-w-3xl">
+    <section className="w-full max-w-3xl" aria-busy={pending}>
       <h2 className="mb-3 text-lg font-semibold">
-        {format.dateTime(now, { month: 'long', year: 'numeric' })}
+        {format.dateTime(reference, { month: 'long', year: 'numeric' })}
       </h2>
 
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded border border-neutral-200 bg-neutral-200 text-sm dark:border-neutral-700 dark:bg-neutral-700">
@@ -122,13 +141,22 @@ export async function Calendar({ sessions }: { sessions: Session[] }) {
           </div>
         ))}
 
-        {weeks.flat().map((slot) => (
+        {slots.map((slot) => (
           <div
             key={slot.key}
+            data-date={slot.key}
+            onDragOver={(e) => {
+              if (draggingId) {
+                e.preventDefault();
+                setHoverDay(slot.key);
+              }
+            }}
+            onDrop={() => onDrop(slot.key)}
             className={[
               'min-h-16 bg-white p-1.5 dark:bg-neutral-950',
               slot.inMonth ? '' : 'opacity-40',
               slot.isToday ? 'ring-2 ring-inset ring-blue-500' : '',
+              hoverDay === slot.key ? 'bg-blue-50 dark:bg-blue-950' : '',
             ].join(' ')}
           >
             <div
@@ -138,9 +166,24 @@ export async function Calendar({ sessions }: { sessions: Session[] }) {
             </div>
             {slot.sessions.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
-                {slot.sessions.map((s) => (
-                  <Dot key={s.id} session={s} />
-                ))}
+                {slot.sessions.map((s) => {
+                  const movable = !isFrozen(s, todayKey);
+                  return (
+                    <span
+                      key={s.id}
+                      data-session-id={s.id}
+                      draggable={movable}
+                      onDragStart={() => setDraggingId(s.id)}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setHoverDay(null);
+                      }}
+                      title={s.title ?? s.type}
+                      className={`inline-block h-2.5 w-2.5 rounded-full ${movable ? 'cursor-grab' : ''} ${draggingId === s.id ? 'opacity-50' : ''}`}
+                      style={dotStyle(s)}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

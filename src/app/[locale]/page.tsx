@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
+import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
 import { Calendar } from './calendar';
 
@@ -61,7 +62,7 @@ export default async function AthletePage({
               </h1>
               <p className="text-sm text-neutral-500">{t('tagline')}</p>
             </header>
-            <Calendar sessions={trainingSessions} />
+            <Calendar sessions={trainingSessions} todayKey={dateKey(new Date())} />
           </>
         ) : (
           <p className="text-neutral-500">{t('noAthlete')}</p>
