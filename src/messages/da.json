@@ -22,5 +22,11 @@
   },
   "Calendar": {
     "empty": "Ingen sessioner planlagt endnu."
+  },
+  "Garmin": {
+    "upload": "Upload Garmin-fil",
+    "uploading": "Uploader…",
+    "imported": "{count, plural, one {# session importeret} other {# sessioner importeret}}",
+    "error": "Kunne ikke læse filen. Prøv en .fit- eller .gpx-eksport."
   }
 }
