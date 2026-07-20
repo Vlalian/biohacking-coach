@@ -22,5 +22,11 @@
   },
   "Calendar": {
     "empty": "No sessions planned yet."
+  },
+  "Garmin": {
+    "upload": "Upload Garmin file",
+    "uploading": "Uploading…",
+    "imported": "{count, plural, one {# session imported} other {# sessions imported}}",
+    "error": "Couldn't read that file. Try a .fit or .gpx export."
   }
 }

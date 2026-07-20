@@ -200,3 +200,26 @@ export const events = pgTable(
 
 export type EventRow = typeof events.$inferSelect;
 export type NewEventRow = typeof events.$inferInsert;
+
+/**
+ * Per-sample streams for a session, behind the session-ID seam (ticket 05,
+ * ballot 2).
+ *
+ * Kept out of the `sessions` row on purpose: a session is small and read often,
+ * a stream is large and read rarely. `samples` is the columnar shape the parser
+ * emits and the calc module will consume — `{ t, hr, speedMps, altM, powerW,
+ * cadenceRpm }`, arrays binned to `sampleIntervalS` seconds. JSONB now; the seam
+ * is what survives a move to blob storage later without touching callers.
+ *
+ * Cascade-deletes with its session — the streams have no meaning without it.
+ */
+export const sessionStreams = pgTable('session_streams', {
+  sessionId: uuid('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  samples: jsonb('samples').notNull(),
+  sampleIntervalS: integer('sample_interval_s').notNull().default(10),
+});
+
+export type SessionStreamRow = typeof sessionStreams.$inferSelect;
+export type NewSessionStreamRow = typeof sessionStreams.$inferInsert;

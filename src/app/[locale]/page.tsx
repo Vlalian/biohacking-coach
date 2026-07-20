@@ -11,6 +11,7 @@ import { getSessionsForAthlete } from '@/features/session/session-repository';
 import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
 import { Calendar } from './calendar';
+import { GarminUpload } from './garmin-upload';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -63,6 +64,7 @@ export default async function AthletePage({
               <p className="text-sm text-neutral-500">{t('tagline')}</p>
             </header>
             <Calendar sessions={trainingSessions} todayKey={dateKey(new Date())} />
+            <GarminUpload />
           </>
         ) : (
           <p className="text-neutral-500">{t('noAthlete')}</p>

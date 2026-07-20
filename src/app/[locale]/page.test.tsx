@@ -28,6 +28,7 @@ vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete 
 // out of the node test — the page's own wiring is what's under test here.
 vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));
 vi.mock('./calendar', () => ({ Calendar: () => null }));
+vi.mock('./garmin-upload', () => ({ GarminUpload: () => null }));
 
 const { default: AthletePage } = await import('./page');
 
