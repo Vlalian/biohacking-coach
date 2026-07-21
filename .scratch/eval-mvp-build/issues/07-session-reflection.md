@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-18) — Session Reflection: rate body+mind (RPE 1-5) + comment on completed session; server-authoritative (athlete from auth session, ownership checked, scores validated) writing feedback columns + rated_at; re-rate updates timestamp; rated ring indicator + modal pre-fill; EN+DA. Browser-verified rate/re-rate/refresh both locales; 58 tests. PR pending.
 Label: wayfinder:task
 
 # 07 — The athlete rates a session and it sticks
