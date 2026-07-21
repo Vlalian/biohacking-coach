@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-18) — Garmin FIT/GPX parsing ported to TS with tests; upload server action (athlete from auth session) parses then writes session (origin garmin) + session_streams + provenance + garmin_imported event in one db.batch; malformed files write nothing; columnar streams behind the session-ID seam (migration 0004). Built + browser-verified on synthetic GPX (real-data ship gated on DPAs/deploy). 51 tests. PR pending. Deferred: startTime dedup + day_order for multi-session days.
 Label: wayfinder:task
 
 # 06 — A real Garmin file becomes a session with per-sample streams

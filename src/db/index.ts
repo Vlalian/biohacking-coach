@@ -1,6 +1,13 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
-import * as schema from './schema';
+import * as appSchema from './schema';
+import * as authSchema from './auth-schema';
+
+// One drizzle schema for the whole database: the app's tables plus the ones
+// better-auth owns. The auth adapter looks its tables up by name off the drizzle
+// instance, so `user`, `session`, `account`, and `verification` must be here or
+// login cannot query them.
+const schema = { ...appSchema, ...authSchema };
 
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 

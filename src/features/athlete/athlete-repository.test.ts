@@ -2,78 +2,70 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AthleteRow } from '@/db/schema';
 
 const limit = vi.fn();
+const where = vi.fn(() => ({ limit }));
 
 vi.mock('@/db', () => ({
   getDb: () => ({
-    select: () => ({ from: () => ({ limit }) }),
+    select: () => ({ from: () => ({ where }) }),
   }),
 }));
 
-const { getCurrentAthlete } = await import('./athlete-repository');
+const { getAthleteByUserId } = await import('./athlete-repository');
 
 function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
   return {
     id: 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213',
-    userId: null,
-    displayName: 'Mads',
-    phase: null,
+    userId: 'user_abc',
+    syntheticLabel: null,
+    trainingPhase: null,
     experienceLevel: null,
-    commStyle: null,
+    communicationStyle: null,
     raceTarget: null,
-    weeklySessionCount: null,
+    trainingSessionsPerWeek: null,
     profile: null,
     equipment: null,
-    infoLayout: null,
+    informationViewLayout: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
   };
 }
 
-describe('getCurrentAthlete', () => {
+describe('getAthleteByUserId', () => {
   beforeEach(() => {
     limit.mockReset();
+    where.mockClear();
   });
 
-  it('returns the athlete when one exists', async () => {
+  it('resolves the athlete a user owns', async () => {
     limit.mockResolvedValue([row()]);
 
-    const athlete = await getCurrentAthlete();
+    const athlete = await getAthleteByUserId('user_abc');
 
     expect(athlete).toEqual({
       id: 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213',
-      displayName: 'Mads',
+      syntheticLabel: null,
     });
   });
 
-  it('returns undefined on an unseeded database rather than throwing', async () => {
-    // The page renders a "has the seed run?" message off this. If the seam
-    // threw instead, an empty database would be a 500 rather than a hint.
+  it('returns undefined when the user has no athlete rather than throwing', async () => {
+    // The page treats this as "signed in but unprovisioned" and shows a hint. If
+    // the seam threw instead, that state would be a 500.
     limit.mockResolvedValue([]);
 
-    await expect(getCurrentAthlete()).resolves.toBeUndefined();
+    await expect(getAthleteByUserId('user_nobody')).resolves.toBeUndefined();
   });
 
   it('exposes only the domain shape, never the stored row', async () => {
     // ADR 0006 keeps identity out of training data, and the guidelines keep
     // storage types out of the app. Both hold only while this boundary
-    // converts — if the raw row leaks through, every component starts
-    // depending on the column layout and slice 02 stops being a one-file
-    // change. That claim is in this module's docstring, so it is tested.
+    // converts — if the raw row leaked through, every component would start
+    // depending on the column layout. That claim is in the module's docstring,
+    // so it is tested.
     limit.mockResolvedValue([row({ profile: { secret: 'onboarding answers' } })]);
 
-    const athlete = await getCurrentAthlete();
+    const athlete = await getAthleteByUserId('user_abc');
 
-    expect(Object.keys(athlete!).sort()).toEqual(['displayName', 'id']);
-  });
-
-  it('is an athlete even with no login — synthetic athletes have no user', async () => {
-    // Route ticket 05, ballot 1: roles are rows you have. A null userId is the
-    // mechanism for synthetic athletes, not a broken record to filter out.
-    limit.mockResolvedValue([row({ userId: null, displayName: 'Synthetic A' })]);
-
-    await expect(getCurrentAthlete()).resolves.toMatchObject({
-      displayName: 'Synthetic A',
-    });
+    expect(Object.keys(athlete!).sort()).toEqual(['id', 'syntheticLabel']);
   });
 });

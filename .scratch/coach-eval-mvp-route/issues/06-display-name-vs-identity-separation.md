@@ -1,5 +1,5 @@
 Label: wayfinder:grilling
-Status: ready-for-human
+Status: done
 
 # Reconcile `display_name` with ADR 0006's identity separation
 
@@ -37,3 +37,47 @@ Cheap now — one table, one migration, one row. Expensive once eleven tables ke
 ## Blocked by
 
 None. Likely resolved alongside the route's **GDPR posture** item (see MAP.md, Not yet specified) — the consent artifact depends on the answer.
+
+## Resolution (Mads, 2026-07-17)
+
+**The column survives, but only synthetic athletes may use it — and it is renamed to say so.**
+
+Real athletes' names come from better-auth via `user_id`. `athlete.synthetic_label`
+(was `display_name`) becomes **nullable** and holds a label only for athlete rows
+with **no user** — the synthetic roster. Every name left in the training tables is
+therefore fabricated, and ADR 0006's promise stays literally true rather than being
+weakened to "names no one unless the athlete chose to be named".
+
+Chosen over the two cheaper options because it makes the promise **structural rather
+than conventional**. Keeping the column and amending the ADR would have weakened the
+disclosure the consent artifact rests on. Seeding a non-identifying handle would have
+held the promise by convention only — true until the first person types their real
+name in, and false silently from then on. The route's standing scope principle asks
+for foundations a real roster grows into, and this is as cheap as it will ever be:
+one table, one row, eleven tables still unbuilt.
+
+**Renamed, not just nullable** (same session, follow-on ballot). After this ruling the
+column is null for *every real athlete*, so a column called `display_name` would hold
+a name for nobody nameable — the exact failure [07](07-schema-names-vs-glossary.md)
+rules against, in the same table, in the same migration. `synthetic_label` states the
+constraint: this labels an athlete who has no login. The null-for-real-athletes rule
+becomes self-evident instead of tribal knowledge.
+
+### Consequences
+
+- **Rendering a real athlete's name is a join** through `user_id` to better-auth's
+  `user.name`. Accepted; it is not a real cost, and it is the seam doing its job.
+- **`coach.display_name` is dropped entirely.** Unlike `athlete`, `coach.user_id` is
+  non-null — a coach always has a login — so the column was a straight duplicate of
+  the name better-auth already holds, and the only copy of a real person's name
+  outside the auth tables. The Roster View pays the same join. Recorded as a
+  consequence, not a separate ballot: it follows mechanically from this ruling.
+- **Slice 01 built the old shape** — `display_name text NOT NULL`, with a doc comment
+  above it already asserting "no training table ever carries a name or an email".
+  The comment was true of the intent and false of the column beneath it. Applying this
+  is a build task, filed as [eval-mvp-build slice 02](../../eval-mvp-build/issues/02-login-with-better-auth.md).
+- **ADR 0006 needs no amendment.** Its claim was the one thing here that was already
+  right; it was the schema that had drifted. A clarifying line names the one label
+  column and says why a fabricated label does not break the claim.
+- The **GDPR posture** item can now describe a leak honestly: a dump of the training
+  tables yields opaque IDs, fabricated synthetic labels, and no real name.

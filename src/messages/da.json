@@ -5,6 +5,28 @@
   "AthletePage": {
     "greeting": "Velkommen tilbage, {name}",
     "tagline": "Din Coach er klar, når du er.",
-    "noAthlete": "Ingen atlet fundet. Er seed-scriptet kørt?"
+    "noAthlete": "Vi kunne ikke indlæse din profil. Log ud, og prøv igen."
+  },
+  "Auth": {
+    "signInTitle": "Log ind",
+    "signUpTitle": "Opret konto",
+    "nameLabel": "Navn",
+    "emailLabel": "E-mail",
+    "passwordLabel": "Adgangskode",
+    "signInButton": "Log ind",
+    "signUpButton": "Opret konto",
+    "toSignIn": "Har du allerede en konto? Log ind",
+    "toSignUp": "Mangler du en konto? Opret en",
+    "signOut": "Log ud",
+    "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
+  },
+  "Calendar": {
+    "empty": "Ingen sessioner planlagt endnu."
+  },
+  "Garmin": {
+    "upload": "Upload Garmin-fil",
+    "uploading": "Uploader…",
+    "imported": "{count, plural, one {# session importeret} other {# sessioner importeret}}",
+    "error": "Kunne ikke læse filen. Prøv en .fit- eller .gpx-eksport."
   }
 }
