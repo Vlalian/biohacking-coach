@@ -8,6 +8,7 @@ An AI coaching product for Ironman trainees. The **Coach** — an LLM agent hold
 |---|---|
 | [CONTEXT.md](CONTEXT.md) | The domain glossary. Canonical terms (Weekly Session, Week Plan, Session Reflection, Coached Mode, ...) — use them exactly, don't drift to synonyms. |
 | [docs/adr/](docs/adr/) | Architecture decision records: Coach-voice-only guided tour, calendar authority model, Coached Mode authority. |
+| [docs/nfr.md](docs/nfr.md) | Nonfunctional requirements: the quality bars (security, privacy/GDPR, safety, reliability, latency) each with a measurable fit criterion. |
 | [poc/](poc/) | The working browser POC of the Coach interaction loop. Run instructions in [poc/README.md](poc/README.md). |
 | [.scratch/](.scratch/) | The local-markdown issue tracker — one directory per feature holding a `PRD.md` and `issues/`. Conventions: [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), labels: [docs/agents/triage-labels.md](docs/agents/triage-labels.md). |
 | [AGENTS.md](AGENTS.md) | Pointer file agents read first: tracker, labels, domain-doc layout. |
