@@ -28,5 +28,8 @@
     "uploading": "Uploading…",
     "imported": "{count, plural, one {# session imported} other {# sessions imported}}",
     "error": "Couldn't read that file. Try a .fit or .gpx export."
+  },
+  "ThemeToggle": {
+    "switch": "Switch theme: light, dark, or system"
   }
 }
