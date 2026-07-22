@@ -85,10 +85,24 @@ describe('getSessionsForAthlete', () => {
     const result = await getSessionsForAthlete('athlete_1');
 
     expect(result.map((s) => s.id)).toEqual(['a', 'b']);
-    // Domain shape only — the authority, feedback, and Garmin columns stay in
-    // the repository and never reach the calendar.
+    // Domain shape only — the authority and Garmin columns stay in the
+    // repository; feedback comes through because the calendar renders and
+    // pre-fills it.
     expect(Object.keys(result[0]).sort()).toEqual(
-      ['date', 'dayOrder', 'duration', 'id', 'note', 'status', 'title', 'type', 'zone'].sort(),
+      [
+        'date',
+        'dayOrder',
+        'duration',
+        'feedbackBody',
+        'feedbackComment',
+        'feedbackMind',
+        'id',
+        'note',
+        'status',
+        'title',
+        'type',
+        'zone',
+      ].sort(),
     );
   });
 });

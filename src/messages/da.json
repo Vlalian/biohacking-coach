@@ -21,7 +21,8 @@
     "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
   },
   "Calendar": {
-    "empty": "Ingen sessioner planlagt endnu."
+    "empty": "Ingen sessioner planlagt endnu.",
+    "rate": "Bedøm {type}-session"
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",
@@ -31,5 +32,16 @@
   },
   "ThemeToggle": {
     "switch": "Skift tema: lyst, mørkt eller system"
+  },
+  "Reflection": {
+    "title": "Sessionsrefleksion",
+    "subtitle": "{type} — hvordan føltes det?",
+    "body": "Krop",
+    "mind": "Sind",
+    "comment": "Kommentar",
+    "commentPlaceholder": "Noget værd at notere?",
+    "save": "Gem",
+    "skip": "Spring over",
+    "error": "Det blev ikke gemt. Prøv igen."
   }
 }

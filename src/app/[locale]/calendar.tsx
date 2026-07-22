@@ -7,6 +7,7 @@ import type { Session } from '@/features/session/session';
 import { dateKey } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
 import { moveSessionAction } from './move-actions';
+import { RatingModal } from './rating-modal';
 
 // Session dot colours by type, carried over from the POC's SESSION_COLORS. The
 // names are the training vocabulary and stay as-is; only the values live here.
@@ -94,6 +95,7 @@ export function Calendar({
   const [pending, startTransition] = useTransition();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoverDay, setHoverDay] = useState<string | null>(null);
+  const [ratingSession, setRatingSession] = useState<Session | null>(null);
 
   const byDate = new Map<string, Session[]>();
   for (const s of sessions) {
@@ -167,6 +169,32 @@ export function Calendar({
             {slot.sessions.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
                 {slot.sessions.map((s) => {
+                  // A completed session is rateable — click opens the Session
+                  // Reflection. It is a real button, so it is keyboard-operable
+                  // (a completed session is frozen, so it never drags anyway).
+                  if (s.status === 'completed') {
+                    const rated = s.feedbackBody != null;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        data-session-id={s.id}
+                        data-rated={rated}
+                        onClick={() => setRatingSession(s)}
+                        title={s.title ?? s.type}
+                        aria-label={t('rate', { type: s.type })}
+                        // Padded to a ~24px tap target around the 10px dot,
+                        // pulled back with negative margin so the layout is
+                        // unchanged — the dot stays small, the hit area does not.
+                        className="-m-1.5 inline-flex cursor-pointer items-center justify-center p-1.5"
+                      >
+                        <span
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${rated ? 'ring-1 ring-neutral-600 ring-offset-1 dark:ring-neutral-300' : ''}`}
+                          style={dotStyle(s)}
+                        />
+                      </button>
+                    );
+                  }
                   const movable = !isFrozen(s, todayKey);
                   return (
                     <span
@@ -192,6 +220,13 @@ export function Calendar({
 
       {sessions.length === 0 && (
         <p className="mt-3 text-sm text-neutral-500">{t('empty')}</p>
+      )}
+
+      {ratingSession && (
+        <RatingModal
+          session={ratingSession}
+          onClose={() => setRatingSession(null)}
+        />
       )}
     </section>
   );

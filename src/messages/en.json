@@ -21,7 +21,8 @@
     "error": "That didn't work. Check your details and try again."
   },
   "Calendar": {
-    "empty": "No sessions planned yet."
+    "empty": "No sessions planned yet.",
+    "rate": "Rate {type} session"
   },
   "Garmin": {
     "upload": "Upload Garmin file",
@@ -31,5 +32,16 @@
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"
+  },
+  "Reflection": {
+    "title": "Session Reflection",
+    "subtitle": "{type} — how did it feel?",
+    "body": "Body",
+    "mind": "Mind",
+    "comment": "Comment",
+    "commentPlaceholder": "Anything worth noting?",
+    "save": "Save",
+    "skip": "Skip",
+    "error": "That didn't save. Try again."
   }
 }
