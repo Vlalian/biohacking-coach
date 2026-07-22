@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import type { Session } from '@/features/session/session';
@@ -27,7 +27,7 @@ function ScoreRow({
       <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
         {label}
       </span>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5" role="group" aria-label={label}>
         {SCORES.map((n) => {
           const active = value === n;
           const hue = rpeHue(n);
@@ -72,6 +72,41 @@ export function RatingModal({
   const [mind, setMind] = useState(session.feedbackMind ?? 0);
   const [comment, setComment] = useState(session.feedbackComment ?? '');
   const [failed, setFailed] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Focus management: move focus into the dialog on open, close on Escape, keep
+  // Tab inside the panel, and restore focus to the trigger on close.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+        'button, textarea, [href], input, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      opener?.focus();
+    };
+  }, [onClose]);
 
   function onSave() {
     if (body < 1 || mind < 1) return;
@@ -96,7 +131,9 @@ export function RatingModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-6 dark:bg-neutral-900"
+        ref={panelRef}
+        tabIndex={-1}
+        className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-6 outline-none dark:bg-neutral-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div>

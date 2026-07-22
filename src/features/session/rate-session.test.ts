@@ -26,7 +26,7 @@ describe('rateSession — server authority', () => {
   });
 
   it('writes the rating and stamps rated_at for an owned session', async () => {
-    limit.mockResolvedValue([{ athleteId: OWNER }]);
+    limit.mockResolvedValue([{ athleteId: OWNER, status: 'completed' }]);
 
     const result = await rateSession({
       athleteId: OWNER,
@@ -49,7 +49,7 @@ describe('rateSession — server authority', () => {
   });
 
   it('stores a blank comment as null, not an empty string', async () => {
-    limit.mockResolvedValue([{ athleteId: OWNER }]);
+    limit.mockResolvedValue([{ athleteId: OWNER, status: 'completed' }]);
 
     await rateSession({ athleteId: OWNER, sessionId: 'sess_1', body: 2, mind: 2, comment: '   ' });
 
@@ -59,7 +59,7 @@ describe('rateSession — server authority', () => {
   });
 
   it('re-rates: a second rating overwrites the first', async () => {
-    limit.mockResolvedValue([{ athleteId: OWNER }]);
+    limit.mockResolvedValue([{ athleteId: OWNER, status: 'completed' }]);
 
     await rateSession({ athleteId: OWNER, sessionId: 'sess_1', body: 1, mind: 1, comment: null });
     await rateSession({ athleteId: OWNER, sessionId: 'sess_1', body: 5, mind: 4, comment: null });
@@ -80,6 +80,21 @@ describe('rateSession — server authority', () => {
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-owner' });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to rate a session that is not completed', async () => {
+    limit.mockResolvedValue([{ athleteId: OWNER, status: 'planned' }]);
+
+    const result = await rateSession({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      body: 3,
+      mind: 3,
+      comment: null,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'not-completed' });
     expect(update).not.toHaveBeenCalled();
   });
 

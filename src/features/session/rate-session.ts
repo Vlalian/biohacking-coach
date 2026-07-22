@@ -4,7 +4,7 @@ import { sessions } from '@/db/schema';
 
 export type RateResult =
   | { ok: true }
-  | { ok: false; reason: 'invalid' | 'not-found' | 'not-owner' };
+  | { ok: false; reason: 'invalid' | 'not-found' | 'not-owner' | 'not-completed' };
 
 /** RPE 1–5, whole numbers — the Session Reflection scale (the DB check mirrors this). */
 function isValidScore(n: number): boolean {
@@ -36,15 +36,20 @@ export async function rateSession(params: {
 
   const db = getDb();
   const [row] = await db
-    .select({ athleteId: sessions.athleteId })
+    .select({ athleteId: sessions.athleteId, status: sessions.status })
     .from(sessions)
     .where(eq(sessions.id, sessionId))
     .limit(1);
 
   if (!row) return { ok: false, reason: 'not-found' };
   if (row.athleteId !== athleteId) return { ok: false, reason: 'not-owner' };
+  // A Reflection is post-session — only a completed session is rateable, on the
+  // server, not just in the UI. A forged rating of a planned session is refused.
+  if (row.status !== 'completed') return { ok: false, reason: 'not-completed' };
 
-  const trimmed = comment?.trim();
+  // comment is typed string|null, but a forged request could send anything;
+  // guard the runtime type before trimming so it can never throw.
+  const trimmed = typeof comment === 'string' ? comment.trim() : undefined;
   await db
     .update(sessions)
     .set({

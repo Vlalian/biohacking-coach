@@ -183,9 +183,16 @@ export function Calendar({
                         onClick={() => setRatingSession(s)}
                         title={s.title ?? s.type}
                         aria-label={t('rate', { type: s.type })}
-                        className={`inline-block h-2.5 w-2.5 cursor-pointer rounded-full ${rated ? 'ring-1 ring-neutral-600 ring-offset-1 dark:ring-neutral-300' : ''}`}
-                        style={dotStyle(s)}
-                      />
+                        // Padded to a ~24px tap target around the 10px dot,
+                        // pulled back with negative margin so the layout is
+                        // unchanged — the dot stays small, the hit area does not.
+                        className="-m-1.5 inline-flex cursor-pointer items-center justify-center p-1.5"
+                      >
+                        <span
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${rated ? 'ring-1 ring-neutral-600 ring-offset-1 dark:ring-neutral-300' : ''}`}
+                          style={dotStyle(s)}
+                        />
+                      </button>
                     );
                   }
                   const movable = !isFrozen(s, todayKey);
