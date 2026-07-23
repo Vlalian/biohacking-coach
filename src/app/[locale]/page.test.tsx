@@ -1,17 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getSession, redirect, getAthleteByUserId, provisionAthlete, getSessionsForAthlete } =
-  vi.hoisted(() => ({
-    getSession: vi.fn(),
-    redirect: vi.fn(() => {
-      // The real next-intl redirect() throws to stop rendering; the mock does too,
-      // so the page cannot fall through to reading a null session.
-      throw new Error('REDIRECT');
-    }),
-    getAthleteByUserId: vi.fn(),
-    provisionAthlete: vi.fn(),
-    getSessionsForAthlete: vi.fn(() => Promise.resolve([])),
-  }));
+const {
+  getSession,
+  redirect,
+  getAthleteByUserId,
+  provisionAthlete,
+  getSessionsForAthlete,
+  getUnavailableDates,
+} = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  redirect: vi.fn(() => {
+    // The real next-intl redirect() throws to stop rendering; the mock does too,
+    // so the page cannot fall through to reading a null session.
+    throw new Error('REDIRECT');
+  }),
+  getAthleteByUserId: vi.fn(),
+  provisionAthlete: vi.fn(),
+  getSessionsForAthlete: vi.fn(() => Promise.resolve([])),
+  getUnavailableDates: vi.fn(() => Promise.resolve([])),
+}));
 
 vi.mock('next-intl/server', () => ({
   setRequestLocale: vi.fn(),
@@ -24,6 +31,7 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
+vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 // Client components / server actions pulling in browser + auth deps; stub them
 // out of the node test — the page's own wiring is what's under test here.
 vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));

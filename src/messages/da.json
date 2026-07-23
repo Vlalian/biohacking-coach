@@ -22,7 +22,11 @@
   },
   "Calendar": {
     "empty": "Ingen sessioner planlagt endnu.",
-    "rate": "Bedøm {type}-session"
+    "rate": "Bedøm {type}-session",
+    "markUnavailable": "Marker {date} som utilgængelig",
+    "clearUnavailable": "Gør {date} tilgængelig igen",
+    "unavailableDay": "Utilgængelig — kan ikke træne denne dag",
+    "parked": "Parkeret — afventer ny placering"
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",

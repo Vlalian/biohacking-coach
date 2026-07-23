@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
+import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
 import { Calendar } from './calendar';
@@ -53,6 +54,12 @@ export default async function AthletePage({
       ? await getSessionsForAthlete(athlete.id)
       : [];
 
+    // The athlete's Unavailable Dates, scoped to their id like the sessions —
+    // rendered as day markers and the source of the mark/clear affordance.
+    const unavailableDates = athlete
+      ? await getUnavailableDates(athlete.id)
+      : [];
+
     return (
       <main className="flex min-h-screen flex-col items-center gap-6 p-8">
         {athlete ? (
@@ -63,7 +70,11 @@ export default async function AthletePage({
               </h1>
               <p className="text-sm text-neutral-500">{t('tagline')}</p>
             </header>
-            <Calendar sessions={trainingSessions} todayKey={dateKey(new Date())} />
+            <Calendar
+              sessions={trainingSessions}
+              unavailableDates={unavailableDates}
+              todayKey={dateKey(new Date())}
+            />
             <GarminUpload />
           </>
         ) : (
