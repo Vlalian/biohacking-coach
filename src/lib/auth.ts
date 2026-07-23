@@ -34,8 +34,14 @@ import { provisionAthlete } from '../features/athlete/athlete-provisioning';
  */
 function resolveBaseURL(): string | undefined {
   if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+  // VERCEL_PROJECT_PRODUCTION_URL holds the *production* origin on every
+  // deployment, previews included — so a preview must use its own VERCEL_URL,
+  // or auth would sign against production and break on the branch URL. Switch on
+  // VERCEL_ENV to pick the right one.
   const vercelHost =
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+    process.env.VERCEL_ENV === 'production'
+      ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+      : process.env.VERCEL_URL;
   return vercelHost ? `https://${vercelHost}` : undefined;
 }
 

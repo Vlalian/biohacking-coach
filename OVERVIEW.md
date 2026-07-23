@@ -22,7 +22,7 @@ An AI coaching product for Ironman trainees. The **Coach** — an LLM agent hold
 
 ## Deployment
 
-The eval MVP is hosted on **Vercel Pro**, functions pinned to the **Frankfurt (`fra1`)** region for EU data residency alongside the Neon Frankfurt database (`vercel.json`).
+The eval MVP is hosted on **Vercel Pro**. Serverless **functions** are pinned to the **Frankfurt (`fra1`)** region (`vercel.json`) so request handling runs in the EU alongside the Neon Frankfurt database; static assets are still served from Vercel's global CDN.
 
 - **Production URL:** https://biohacking-coach-vlalians-projects.vercel.app
 - **Secrets** live only in Vercel environment variables (Production + Preview), never in the repo or client code: `DATABASE_URL` (Neon), `BETTER_AUTH_SECRET`, and `ANTHROPIC_API_KEY` (used from slice 08). `BETTER_AUTH_URL` is **not** a required secret — the auth base URL is derived at runtime from Vercel's `VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`, so production and branch previews each sign against their own origin.
