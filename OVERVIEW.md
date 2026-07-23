@@ -20,6 +20,14 @@ An AI coaching product for Ironman trainees. The **Coach** — an LLM agent hold
 - Product discovery with a domain expert is ongoing — open questions in [.scratch/mvp/domain-expert-questions.md](.scratch/mvp/domain-expert-questions.md).
 - A cleanup effort, [Project Ground Truth](.scratch/project-ground-truth/MAP.md), is bringing the repo's orientation surfaces in line with reality.
 
+## Deployment
+
+The eval MVP is hosted on **Vercel Pro**. Serverless **functions** are pinned to the **Frankfurt (`fra1`)** region (`vercel.json`) so request handling runs in the EU alongside the Neon Frankfurt database; static assets are still served from Vercel's global CDN.
+
+- **Production URL:** https://biohacking-coach-vlalians-projects.vercel.app
+- **Secrets** live only in Vercel environment variables (Production + Preview), never in the repo or client code: `DATABASE_URL` (Neon), `BETTER_AUTH_SECRET`, and `ANTHROPIC_API_KEY` (used from slice 08). `BETTER_AUTH_URL` is **not** a required secret — the auth base URL is derived at runtime from Vercel's `VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`, so production and branch previews each sign against their own origin.
+- Pushing to `main` deploys to production; a pull request gets its own preview deployment.
+
 ## Agent skills tooling
 
 The repo carries a Matt Pocock skills installation (`.agents/skills/`, `.claude/commands/`, pinned by `skills-lock.json`), configured with the local-markdown tracker, default triage vocabulary, and single-context domain docs. This is tooling that supports the project — it is not the project.
