@@ -40,5 +40,19 @@
     "save": "Gem",
     "skip": "Spring over",
     "error": "Det blev ikke gemt. Prøv igen."
+  },
+  "WeeklySession": {
+    "title": "Ugentlig session",
+    "intro": "Din ugentlige snak med din Coach — se ugen igennem, og planlæg den næste.",
+    "start": "Start ugentlig session",
+    "starting": "Starter…",
+    "thinking": "Coach tænker…",
+    "inputLabel": "Din besked til Coach",
+    "placeholder": "Skriv dit svar…",
+    "send": "Send svar",
+    "savePlan": "Gem denne plan",
+    "planned": "{count, plural, =0 {Plan gemt — en hvileuge} one {Plan gemt — # session i næste uge} other {Plan gemt — # sessioner i næste uge}}",
+    "ended": "Denne ugentlige session er færdig. Din plan ligger i kalenderen.",
+    "error": "Det virkede ikke. Prøv igen."
   }
 }
