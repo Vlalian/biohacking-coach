@@ -173,7 +173,7 @@ _Avoid_: ratings data, review scores, session log
 **Week Activity** — the current week's Session Moves and Athlete Session creations, sent with the Weekly Session request and injected into the Coach's prompt as silent background context (Pattern Insight material, never challenged in the moment). Rendered as natural references — date + Session Type, a position qualifier only for same-type Doubles — entity ids never appear in prompts. A retro-log performed this week counts as this week's activity even though the session sits on a past date.
 _Avoid_: audit trail, change log, edit history
 
-**Athlete Profile** — the accumulating model of the individual athlete. Seeded during the Onboarding Session and deepened continuously through Check-ins, Session Reflections, and Session Negotiation history. Also holds durable preferences: Communication Style, Athlete Language, Fixed Constraints, and Weekly Session Day.
+**Athlete Profile** — the accumulating model of the individual athlete. Seeded during the Onboarding Session and deepened continuously through Check-ins, Session Reflections, and Session Negotiation history. Also holds durable preferences: Communication Style, Fixed Constraints, and Weekly Session Day (Athlete Language lives with the user, not here — see its entry).
 
 **Fixed Constraint** — a recurring day-of-week the athlete cannot train (e.g. "no training Thursdays"), stored in the Athlete Profile and injected into every Coach prompt so plans silently avoid those days. Captured during the Onboarding Session or detected in conversation — the Coach asks one clarifying question to distinguish a Fixed Constraint ("every week") from a single-instance unavailable date. Fixed-constraint days remain valid Session Move drop targets: the constraint marker stays visible so the clash is self-evident, but no friction is added.
 _Avoid_: blocked day, blackout date, recurring unavailability
@@ -183,7 +183,7 @@ _Avoid_: blocked, busy, day off
 
 ## Language
 
-**Athlete Language** — the language the athlete selects during the Onboarding Session. Applies to both the Coach's conversation and all UI labels, buttons, and navigation text. Set during Onboarding, stored in the Athlete Profile, and changeable at any time in the Settings view. Default: English. Supported in MVP: English and Danish. Technical sports terminology (RPE, Zone 2, VO2max, FTP, etc.) is not translated — it remains in English regardless of language setting, as this is standard practice in Danish sports coaching. The Knowledge Oracle RAG handles the nuance of when English terms are used within Danish-language coaching.
+**Athlete Language** — the language the athlete selects during the Onboarding Session. Applies to both the Coach's conversation and all UI labels, buttons, and navigation text. Set during Onboarding, stored with the user (`ui_prefs` on the better-auth user — a person's preference is identity-side, not training data; ticket 05 placed it there, build slice 09 chose the JSONB mechanism), and changeable at any time in the Settings view. Default: English. Supported in MVP: English and Danish. Technical sports terminology (RPE, Zone 2, VO2max, FTP, etc.) is not translated — it remains in English regardless of language setting, as this is standard practice in Danish sports coaching. The Knowledge Oracle RAG handles the nuance of when English terms are used within Danish-language coaching.
 
 ## UI Navigation
 

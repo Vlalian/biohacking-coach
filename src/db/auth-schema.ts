@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, index, jsonb } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -7,6 +7,12 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  // UI preferences — the athlete's chosen language lives here (ticket 05 placed
+  // it on the user; ticket 09 decided the mechanism: a ui_prefs JSONB, not
+  // better-auth additional-fields, so the auth library's config stays untouched).
+  // Identity-side by design: a language is a person's preference, not training
+  // data, and the Coach reads it through the user seam.
+  uiPrefs: jsonb("ui_prefs"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

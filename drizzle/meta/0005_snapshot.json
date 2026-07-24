@@ -1,5 +1,5 @@
 {
-  "id": "eea0f359-f37b-4aac-88c5-af14c9a30387",
+  "id": "4f485d32-54de-464d-8f97-ba6c5d54081d",
   "prevId": "e90e47ff-42e6-442b-8c48-77a7612437c5",
   "version": "7",
   "dialect": "postgresql",
@@ -125,6 +125,104 @@
       },
       "isRLSEnabled": false
     },
+    "public.conversations": {
+      "name": "conversations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "athlete_id": {
+          "name": "athlete_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "coach_id": {
+          "name": "coach_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weekly_session_number": {
+          "name": "weekly_session_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "conversations_athlete_idx": {
+          "name": "conversations_athlete_idx",
+          "columns": [
+            {
+              "expression": "athlete_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "conversations_athlete_id_athlete_id_fk": {
+          "name": "conversations_athlete_id_athlete_id_fk",
+          "tableFrom": "conversations",
+          "tableTo": "athlete",
+          "columnsFrom": [
+            "athlete_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "conversations_kind_valid": {
+          "name": "conversations_kind_valid",
+          "value": "\"conversations\".\"kind\" IN ('weekly_session', 'coach_chat', 'negotiation', 'reflection', 'onboarding', 'coach_briefing')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.events": {
       "name": "events",
       "schema": "",
@@ -225,6 +323,98 @@
         "events_actor_type_valid": {
           "name": "events_actor_type_valid",
           "value": "\"events\".\"actor_type\" IN ('athlete', 'head_coach', 'coach_ai', 'system')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.messages": {
+      "name": "messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "messages_conversation_seq_idx": {
+          "name": "messages_conversation_seq_idx",
+          "columns": [
+            {
+              "expression": "conversation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "seq",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "messages_conversation_id_conversations_id_fk": {
+          "name": "messages_conversation_id_conversations_id_fk",
+          "tableFrom": "messages",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "messages_role_valid": {
+          "name": "messages_role_valid",
+          "value": "\"messages\".\"role\" IN ('athlete', 'coach_ai', 'head_coach')"
         }
       },
       "isRLSEnabled": false
@@ -467,7 +657,7 @@
         },
         "sessions_status_valid": {
           "name": "sessions_status_valid",
-          "value": "\"sessions\".\"status\" IN ('planned', 'completed', 'skipped', 'unavailable')"
+          "value": "\"sessions\".\"status\" IN ('planned', 'completed', 'skipped')"
         },
         "sessions_feedback_body_range": {
           "name": "sessions_feedback_body_range",
@@ -478,60 +668,6 @@
           "value": "\"sessions\".\"feedback_mind\" IS NULL OR \"sessions\".\"feedback_mind\" BETWEEN 1 AND 5"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.unavailable_dates": {
-      "name": "unavailable_dates",
-      "schema": "",
-      "columns": {
-        "athlete_id": {
-          "name": "athlete_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "date": {
-          "name": "date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "unavailable_dates_athlete_id_athlete_id_fk": {
-          "name": "unavailable_dates_athlete_id_athlete_id_fk",
-          "tableFrom": "unavailable_dates",
-          "tableTo": "athlete",
-          "columnsFrom": [
-            "athlete_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "unavailable_dates_athlete_id_date_pk": {
-          "name": "unavailable_dates_athlete_id_date_pk",
-          "columns": [
-            "athlete_id",
-            "date"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.account": {

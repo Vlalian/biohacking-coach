@@ -6,26 +6,16 @@ import { useRouter } from '@/i18n/navigation';
 import type { Session } from '@/features/session/session';
 import { dateKey } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
+import {
+  DEFAULT_TYPE_COLOR as DEFAULT_COLOR,
+  TYPE_COLORS,
+} from '@/features/session/type-colors';
 import { moveSessionAction } from './move-actions';
 import {
   markUnavailableDateAction,
   clearUnavailableDateAction,
 } from './availability-actions';
 import { RatingModal } from './rating-modal';
-
-// Session dot colours by type, carried over from the POC's SESSION_COLORS. The
-// names are the training vocabulary and stay as-is; only the values live here.
-const TYPE_COLORS: Record<string, string> = {
-  Endurance: '#4a90d9',
-  Intensity: '#e05555',
-  Tempo: '#c9a96e',
-  Recovery: '#6db36d',
-  Rest: '#8a8a8a',
-  Strength: '#9b6dd6',
-  Mobility: '#4db6ac',
-  Other: '#9e9e9e',
-};
-const DEFAULT_COLOR = '#8a8a8a';
 
 type DaySlot = {
   key: string;

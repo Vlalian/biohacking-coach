@@ -10,6 +10,7 @@ import {
   check,
   index,
   primaryKey,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
@@ -224,6 +225,95 @@ export const sessionStreams = pgTable('session_streams', {
 
 export type SessionStreamRow = typeof sessionStreams.$inferSelect;
 export type NewSessionStreamRow = typeof sessionStreams.$inferInsert;
+
+/**
+ * A Coach conversation, persisted server-side (ticket 05, ballot 4).
+ *
+ * Every kind of Coach exchange lands here uniformly — the Weekly Session, Coach
+ * Chat, a Session Negotiation, a Session Reflection, MCQ onboarding, the Coach
+ * Briefing — so a refresh never loses a transcript and the Briefing and the
+ * ai-transcripts toggle become real later. This slice writes `weekly_session`
+ * and reads it back; the `kind` set is deliberately the full six so the table is
+ * not narrowed to one and re-migrated for every later slice.
+ *
+ * `athleteId` scopes a conversation to its owner. Every read and write resolves
+ * that owner from the authenticated session; a client-supplied conversation id is
+ * checked against it, never trusted (ADR 0006).
+ *
+ * `coachId` is the Briefing owner — a coach, not an athlete. The coach roster and
+ * its foreign key land with slice 11; the column is a plain nullable uuid until
+ * then, the same way guard columns landed ahead of the code that reads them.
+ *
+ * `weeklySessionNumber` is the 1-based ordinal that selects the Weekly Session's
+ * conversational arc (Session 1 welcomes, Session 4+ reviews); null for kinds
+ * that have no such arc.
+ *
+ * Retention and deletion of conversations are a GDPR-track question, not schema —
+ * deliberately not decided here.
+ */
+export const conversations = pgTable(
+  'conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    coachId: uuid('coach_id'),
+    weeklySessionNumber: integer('weekly_session_number'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    endedAt: timestamp('ended_at'),
+  },
+  (table) => [
+    index('conversations_athlete_idx').on(table.athleteId, table.createdAt),
+    // The six conversation kinds are a closed set — encode it so a bad write
+    // fails at the database, not silently downstream.
+    check(
+      'conversations_kind_valid',
+      sql`${table.kind} IN ('weekly_session', 'coach_chat', 'negotiation', 'reflection', 'onboarding', 'coach_briefing')`,
+    ),
+  ],
+);
+
+export type ConversationRow = typeof conversations.$inferSelect;
+export type NewConversationRow = typeof conversations.$inferInsert;
+
+/**
+ * One message in a conversation (ticket 05, ballot 4).
+ *
+ * `role` says who spoke — the athlete, the Coach AI, or a Head Coach. `seq` is
+ * the per-conversation ordering key: messages are read back in `seq` order so a
+ * transcript is stable regardless of write timing. Cascade-deletes with its
+ * conversation — a message has no meaning without one.
+ */
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    content: text('content').notNull(),
+    seq: integer('seq').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // Read path is always "this conversation's messages in order"; index it and
+    // make (conversation, seq) unique so ordering can never collide.
+    uniqueIndex('messages_conversation_seq_idx').on(
+      table.conversationId,
+      table.seq,
+    ),
+    check(
+      'messages_role_valid',
+      sql`${table.role} IN ('athlete', 'coach_ai', 'head_coach')`,
+    ),
+  ],
+);
+
+export type MessageRow = typeof messages.$inferSelect;
+export type NewMessageRow = typeof messages.$inferInsert;
 
 /**
  * An Unavailable Date — a specific day the athlete has declared they cannot

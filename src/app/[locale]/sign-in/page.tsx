@@ -2,6 +2,11 @@ import { setRequestLocale } from 'next-intl/server';
 import { AuthForm } from '../auth-form';
 import { ThemeToggle } from '@/components/theme-toggle';
 
+// Not prerendered: an auth page has nothing static to cache, and prerendering it
+// evaluates the better-auth server module at build time — which must never gate
+// the build on a deploy-time URL (slice 03).
+export const dynamic = 'force-dynamic';
+
 export default async function SignInPage({
   params,
 }: {

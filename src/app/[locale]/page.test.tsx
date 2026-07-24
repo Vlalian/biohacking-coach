@@ -7,6 +7,8 @@ const {
   provisionAthlete,
   getSessionsForAthlete,
   getUnavailableDates,
+  getLatestOpenConversation,
+  getMessages,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -18,6 +20,8 @@ const {
   provisionAthlete: vi.fn(),
   getSessionsForAthlete: vi.fn(() => Promise.resolve([])),
   getUnavailableDates: vi.fn(() => Promise.resolve([])),
+  getLatestOpenConversation: vi.fn(() => Promise.resolve(null)),
+  getMessages: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -26,17 +30,22 @@ vi.mock('next-intl/server', () => ({
     vals ? `${key}:${vals.name}` : key,
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
-vi.mock('@/i18n/navigation', () => ({ redirect }));
+vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
+vi.mock('@/features/coach/conversation-repository', () => ({
+  getLatestOpenConversation,
+  getMessages,
+}));
 // Client components / server actions pulling in browser + auth deps; stub them
 // out of the node test — the page's own wiring is what's under test here.
 vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));
 vi.mock('./calendar', () => ({ Calendar: () => null }));
 vi.mock('./garmin-upload', () => ({ GarminUpload: () => null }));
+vi.mock('./weekly-session', () => ({ WeeklySession: () => null }));
 
 const { default: AthletePage } = await import('./page');
 
