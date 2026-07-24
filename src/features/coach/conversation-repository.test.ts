@@ -74,6 +74,19 @@ beforeEach(() => {
   insertRows = [];
   insertedValues = null;
   vi.clearAllMocks();
+  // clearAllMocks wipes recorded calls but keeps implementations, so a test that
+  // makes a mock reject would leak into the next one. Re-seat the whole chain.
+  limit.mockImplementation(() => Promise.resolve(selectRows));
+  orderBy.mockImplementation(() => ({ limit }));
+  where.mockImplementation(() => ({ orderBy, limit }));
+  from.mockImplementation(() => ({ where }));
+  select.mockImplementation(() => ({ from }));
+  returning.mockImplementation(() => Promise.resolve(insertRows));
+  values.mockImplementation((v: unknown) => {
+    insertedValues = v;
+    return { returning };
+  });
+  insert.mockImplementation(() => ({ values }));
 });
 
 describe('createConversation', () => {
@@ -138,6 +151,55 @@ describe('appendMessages — ownership and seq', () => {
       { conversationId: 'c1', role: 'athlete', content: 'ping', seq: 5 },
       { conversationId: 'c1', role: 'coach_ai', content: 'pong', seq: 6 },
     ]);
+  });
+
+  it('re-reads and retries when a concurrent append takes the same seq', async () => {
+    // Reads in order: [1] ownership, [2] highest seq = 4 → tries 5 and loses the
+    // race, [3] highest seq is now 5 → lands at 6. The unique index turns the
+    // collision into a retry, not a corrupted transcript.
+    let read = 0;
+    limit.mockImplementation(() => {
+      read += 1;
+      if (read === 1) return Promise.resolve([cRow()]);
+      return Promise.resolve([mRow({ seq: read === 2 ? 4 : 5 })]);
+    });
+
+    let attempted = 0;
+    returning.mockImplementation(() => {
+      attempted += 1;
+      if (attempted === 1) {
+        return Promise.reject(
+          Object.assign(new Error('duplicate key value violates unique constraint'), {
+            code: '23505',
+          }),
+        );
+      }
+      return Promise.resolve([mRow({ seq: 6 })]);
+    });
+
+    const result = await appendMessages('athlete_1', 'c1', [
+      { role: 'athlete', content: 'ping' },
+    ]);
+
+    expect(result).toEqual([expect.objectContaining({ seq: 6 })]);
+    expect(insertedValues).toEqual([
+      { conversationId: 'c1', role: 'athlete', content: 'ping', seq: 6 },
+    ]);
+  });
+
+  it('rethrows an error that is not a seq conflict', async () => {
+    let read = 0;
+    limit.mockImplementation(() => {
+      read += 1;
+      return Promise.resolve(read === 1 ? [cRow()] : []);
+    });
+    returning.mockImplementation(() => Promise.reject(new Error('connection reset')));
+
+    await expect(
+      appendMessages('athlete_1', 'c1', [{ role: 'athlete', content: 'x' }]),
+    ).rejects.toThrow('connection reset');
+    // One attempt only — a connection error is not a race to retry.
+    expect(insert).toHaveBeenCalledTimes(1);
   });
 
   it('starts at seq 0 for the first message in a conversation', async () => {

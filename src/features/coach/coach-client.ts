@@ -20,6 +20,19 @@ export interface CoachMessage {
   content: string;
 }
 
+/**
+ * Fail before the platform does.
+ *
+ * The SDK's default timeout is ten minutes and scales up with `max_tokens` —
+ * far longer than a serverless function lives, so a slow call would be killed
+ * by the platform instead of returning a handled error the UI can show. Sixty
+ * seconds is comfortably above a normal Coach reply and well inside the
+ * function budget. Retries stay low for the same reason: two attempts at a
+ * minute each must still fit.
+ */
+const REQUEST_TIMEOUT_MS = 60_000;
+const MAX_RETRIES = 1;
+
 let cached: Anthropic | undefined;
 
 function getClient(): Anthropic {
@@ -32,7 +45,11 @@ function getClient(): Anthropic {
           'server secret — it must never ship to the browser.',
       );
     }
-    cached = new Anthropic({ apiKey });
+    cached = new Anthropic({
+      apiKey,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxRetries: MAX_RETRIES,
+    });
   }
   return cached;
 }

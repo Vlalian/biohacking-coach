@@ -153,9 +153,12 @@ export interface PlanItem {
  * a bad session.
  */
 export function parsePlanSessions(rawText: string): PlanItem[] | null {
+  // The label is optional as a whole: a reply may come back in a bare ``` fence
+  // or a ```json one. (`json?` would only make the trailing "n" optional and
+  // leave a bare fence unstripped — the plan would then read as unparseable.)
   const cleaned = rawText
     .trim()
-    .replace(/^```json?\s*/i, '')
+    .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim();
 

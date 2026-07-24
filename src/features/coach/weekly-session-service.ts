@@ -199,7 +199,12 @@ export async function finalizeWeeklyPlan(
   });
 
   const items = parsePlanSessions(raw);
-  if (!items) return { ok: false, reason: 'unparseable' };
+  // No items means the reply was not a plan, or every row was malformed — both
+  // are extraction failures. Writing through would clear the week's existing
+  // coach sessions and report success with nothing planned, silently losing the
+  // agreed plan. An all-Rest week is different: it yields seven Rest items and
+  // zero rows, which is a legitimate empty week and does write through.
+  if (!items || items.length === 0) return { ok: false, reason: 'unparseable' };
 
   const weekStart = weekStartOf(addDays(today, 7));
   const rows = planToNewSessionRows(items, weekStart, athlete.id);

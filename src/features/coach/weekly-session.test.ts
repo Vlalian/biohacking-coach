@@ -168,11 +168,15 @@ describe('parsePlanSessions', () => {
     ]);
   });
 
-  it('tolerates code fences', () => {
-    const items = parsePlanSessions('```json\n[{"dayOfWeek":"Tuesday","type":"Rest"}]\n```');
-    expect(items).toEqual([
+  it('tolerates code fences, labelled or bare', () => {
+    const labelled = parsePlanSessions('```json\n[{"dayOfWeek":"Tuesday","type":"Rest"}]\n```');
+    expect(labelled).toEqual([
       { dayOfWeek: 'Tuesday', type: 'Rest', duration: null, zone: null, note: null },
     ]);
+    // A bare fence carries no label — it must strip too, or the plan reads as
+    // unparseable when the model omits the language hint.
+    const bare = parsePlanSessions('```\n[{"dayOfWeek":"Tuesday","type":"Rest"}]\n```');
+    expect(bare).toEqual(labelled);
   });
 
   it('returns null when the text is not a JSON array', () => {
