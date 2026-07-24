@@ -237,7 +237,12 @@ function buildPeaksAndBests(D: InfoDataset, streams: StreamsInput): void {
   for (const s of byDate) {
     const st = streams[s.id];
     if (!st) continue;
-    const month = new Date(s.date + 'T00:00:00').toLocaleString('en', {
+    // Key by year-month, label by month. Keyed on the short name alone, the same
+    // month in two different years collapses into one row — reachable on the
+    // `all` range, where it silently corrupts the monthly progression. The key
+    // also sorts chronologically, so insertion order stays date order.
+    const monthKey = s.date.slice(0, 7); // YYYY-MM
+    const monthLabel = new Date(s.date + 'T00:00:00').toLocaleString('en', {
       month: 'short',
     });
     const channels: Array<['powerW' | 'hr', 'power' | 'hr']> = [
@@ -247,10 +252,10 @@ function buildPeaksAndBests(D: InfoDataset, streams: StreamsInput): void {
     for (const [chan, key] of channels) {
       const series = st[chan];
       if (!series) continue;
-      let row = monthly[key].get(month);
+      let row = monthly[key].get(monthKey);
       if (!row) {
-        row = { label: month };
-        monthly[key].set(month, row);
+        row = { label: monthLabel };
+        monthly[key].set(monthKey, row);
       }
       for (const [label, win] of PEAK_WINDOWS) {
         const best = bestRollingMean(series, win);
