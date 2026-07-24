@@ -3,6 +3,7 @@ import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
+import { ThemeProvider } from '@/components/theme-provider';
 import '../globals.css';
 
 // The product name is a proper noun and stays English in every locale; the
@@ -46,9 +47,20 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
 
   return (
-    <html lang={locale}>
+    // suppressHydrationWarning: next-themes sets the `class` and color-scheme on
+    // <html> before React hydrates, so the server-rendered markup deliberately
+    // differs from the first client paint. The warning is silenced for this one
+    // node only — not its subtree.
+    <html lang={locale} suppressHydrationWarning>
       <body>
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
