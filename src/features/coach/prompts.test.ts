@@ -8,6 +8,7 @@ import {
   buildPlanExtractionPrompt,
   formatSkippedSessions,
   formatWeekActivity,
+  formatWeekFeedback,
 } from './prompts';
 import type { CheckIn, Onboarding } from './check-in';
 
@@ -199,6 +200,21 @@ describe('skippedSessions — natural references', () => {
       [],
     );
     expect(renderWeeklyPrompt(ctx)).toContain('2nd Endurance');
+  });
+});
+
+describe('formatWeekFeedback — dates read the same as everywhere else', () => {
+  it('names the weekday from local midnight, matching the skipped/activity lines', () => {
+    // A bare 'YYYY-MM-DD' parses as UTC; behind UTC that renders the previous
+    // day. Both helpers must agree on the weekday for the same date.
+    const feedback = formatWeekFeedback([
+      { dateKey: '2026-07-15', sessionType: 'Endurance', body: 8, mind: 7 },
+    ]);
+    const skipped = formatSkippedSessions([
+      { date: '2026-07-15', sessionType: 'Endurance' },
+    ]);
+    expect(feedback).toContain('Wed');
+    expect(skipped).toContain('Wed');
   });
 });
 

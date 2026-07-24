@@ -30,6 +30,9 @@
     "imported": "{count, plural, one {# session importeret} other {# sessioner importeret}}",
     "error": "Kunne ikke læse filen. Prøv en .fit- eller .gpx-eksport."
   },
+  "ThemeToggle": {
+    "switch": "Skift tema: lyst, mørkt eller system"
+  },
   "Reflection": {
     "title": "Sessionsrefleksion",
     "subtitle": "{type} — hvordan føltes det?",

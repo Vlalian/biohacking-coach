@@ -373,7 +373,11 @@ export function formatWeekFeedback(
   if (!weekFeedback || weekFeedback.length === 0) return null;
   return weekFeedback
     .map((entry) => {
-      const date = new Date(entry.dateKey);
+      // Local midnight, like every other date helper here: a bare 'YYYY-MM-DD'
+      // parses as UTC, which in any runtime behind UTC renders the previous
+      // day — so the same date would show one weekday here and another in the
+      // skipped/activity lines.
+      const date = new Date(`${entry.dateKey}T00:00:00`);
       const dayName = date.toLocaleDateString('en-GB', {
         weekday: 'short',
         day: 'numeric',

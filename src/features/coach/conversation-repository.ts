@@ -157,24 +157,48 @@ export async function appendMessages(
   if (!owned) return null;
   if (entries.length === 0) return [];
 
-  const [last] = await getDb()
-    .select({ seq: messages.seq })
-    .from(messages)
-    .where(eq(messages.conversationId, conversationId))
-    .orderBy(desc(messages.seq))
-    .limit(1);
+  // Read-max-then-insert is not atomic: two concurrent appends to the same
+  // conversation can pick the same next seq. The unique (conversation_id, seq)
+  // index makes that a failed write rather than a corrupted transcript, so the
+  // loser simply re-reads and retries. Bounded, because a persistent failure is
+  // a real error and must surface rather than spin.
+  for (let attempt = 0; ; attempt++) {
+    const [last] = await getDb()
+      .select({ seq: messages.seq })
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.seq))
+      .limit(1);
 
-  const startSeq = nextSeq(last ? [last] : []);
-  const rows = await getDb()
-    .insert(messages)
-    .values(
-      entries.map((e, i) => ({
-        conversationId,
-        role: e.role,
-        content: e.content,
-        seq: startSeq + i,
-      })),
-    )
-    .returning();
-  return rows.map(toMessage);
+    const startSeq = nextSeq(last ? [last] : []);
+    try {
+      const rows = await getDb()
+        .insert(messages)
+        .values(
+          entries.map((e, i) => ({
+            conversationId,
+            role: e.role,
+            content: e.content,
+            seq: startSeq + i,
+          })),
+        )
+        .returning();
+      return rows.map(toMessage);
+    } catch (error) {
+      if (attempt >= SEQ_RETRIES || !isSeqConflict(error)) throw error;
+    }
+  }
+}
+
+const SEQ_RETRIES = 3;
+
+/** True for a unique violation on the (conversation_id, seq) index. */
+function isSeqConflict(error: unknown): boolean {
+  const code = (error as { code?: string })?.code;
+  if (code === '23505') return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('messages_conversation_seq_idx') ||
+    message.includes('duplicate key value')
+  );
 }

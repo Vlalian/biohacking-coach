@@ -8,6 +8,7 @@ An AI coaching product for Ironman trainees. The **Coach** — an LLM agent hold
 |---|---|
 | [CONTEXT.md](CONTEXT.md) | The domain glossary. Canonical terms (Weekly Session, Week Plan, Session Reflection, Coached Mode, ...) — use them exactly, don't drift to synonyms. |
 | [docs/adr/](docs/adr/) | Architecture decision records: Coach-voice-only guided tour, calendar authority model, Coached Mode authority. |
+| [docs/nfr.md](docs/nfr.md) | Nonfunctional requirements: the quality bars (security, privacy/GDPR, safety, reliability, latency) each with a measurable fit criterion. |
 | [poc/](poc/) | The working browser POC of the Coach interaction loop. Run instructions in [poc/README.md](poc/README.md). |
 | [.scratch/](.scratch/) | The local-markdown issue tracker — one directory per feature holding a `PRD.md` and `issues/`. Conventions: [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), labels: [docs/agents/triage-labels.md](docs/agents/triage-labels.md). |
 | [AGENTS.md](AGENTS.md) | Pointer file agents read first: tracker, labels, domain-doc layout. |
@@ -18,6 +19,14 @@ An AI coaching product for Ironman trainees. The **Coach** — an LLM agent hold
 - Git history starts at the 2026-07-08 baseline commit. The repo lives at [Vlalian/biohacking-coach](https://github.com/Vlalian/biohacking-coach) (private, since 2026-07-16). `main` is protected: work lands through pull requests, reviewed by CodeRabbit. Agent sessions may push branches; opening and merging the PR is Mads's call.
 - Product discovery with a domain expert is ongoing — open questions in [.scratch/mvp/domain-expert-questions.md](.scratch/mvp/domain-expert-questions.md).
 - A cleanup effort, [Project Ground Truth](.scratch/project-ground-truth/MAP.md), is bringing the repo's orientation surfaces in line with reality.
+
+## Deployment
+
+The eval MVP is hosted on **Vercel Pro**. Serverless **functions** are pinned to the **Frankfurt (`fra1`)** region (`vercel.json`) so request handling runs in the EU alongside the Neon Frankfurt database; static assets are still served from Vercel's global CDN.
+
+- **Production URL:** https://biohacking-coach-vlalians-projects.vercel.app
+- **Secrets** live only in Vercel environment variables (Production + Preview), never in the repo or client code: `DATABASE_URL` (Neon), `BETTER_AUTH_SECRET`, and `ANTHROPIC_API_KEY` (used from slice 08). `BETTER_AUTH_URL` is **not** a required secret — the auth base URL is derived at runtime from Vercel's `VERCEL_PROJECT_PRODUCTION_URL` / `VERCEL_URL`, so production and branch previews each sign against their own origin.
+- Pushing to `main` deploys to production; a pull request gets its own preview deployment.
 
 ## Agent skills tooling
 
