@@ -1,6 +1,7 @@
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gte, lte } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { sessions } from '@/db/schema';
+import { sessions, type NewSessionRow } from '@/db/schema';
+import { addDays } from '@/lib/date';
 import { toSession, type Session } from './session';
 
 /**
@@ -24,4 +25,68 @@ export async function getSessionsForAthlete(
     .orderBy(asc(sessions.date), asc(sessions.dayOrder));
 
   return rows.map(toSession);
+}
+
+/**
+ * Reads one athlete's sessions for a single Mon–Sun week, in calendar order.
+ *
+ * The Weekly Session reviews the week just lived (its Session Reflections and
+ * skips), so it needs exactly that window. Scoped to the athlete by construction,
+ * like {@link getSessionsForAthlete}.
+ */
+export async function getSessionsForWeek(
+  athleteId: string,
+  weekStartKey: string,
+): Promise<Session[]> {
+  const rows = await getDb()
+    .select()
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.athleteId, athleteId),
+        gte(sessions.date, weekStartKey),
+        lte(sessions.date, addDays(weekStartKey, 6)),
+      ),
+    )
+    .orderBy(asc(sessions.date), asc(sessions.dayOrder));
+
+  return rows.map(toSession);
+}
+
+/**
+ * Replaces the coach-planned sessions of one week with a freshly agreed Week
+ * Plan, atomically.
+ *
+ * Only `origin = 'coach'` rows in the target week are cleared — a completed
+ * session the athlete already rated, a Garmin import, or a Head Coach's
+ * prescription is never touched, so re-running the Weekly Session cannot erase
+ * what actually happened. Delete and insert land in one `db.batch` so a failure
+ * can never leave the week half-written. An empty plan (all Rest) clears the
+ * week's coach sessions and inserts nothing.
+ */
+export async function replaceCoachPlanForWeek(
+  athleteId: string,
+  weekStartKey: string,
+  rows: NewSessionRow[],
+): Promise<void> {
+  const db = getDb();
+  const weekEndKey = addDays(weekStartKey, 6);
+
+  const clear = db
+    .delete(sessions)
+    .where(
+      and(
+        eq(sessions.athleteId, athleteId),
+        eq(sessions.origin, 'coach'),
+        gte(sessions.date, weekStartKey),
+        lte(sessions.date, weekEndKey),
+      ),
+    );
+
+  if (rows.length === 0) {
+    await clear;
+    return;
+  }
+
+  await db.batch([clear, db.insert(sessions).values(rows)]);
 }

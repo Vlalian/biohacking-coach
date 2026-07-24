@@ -43,5 +43,19 @@
     "save": "Save",
     "skip": "Skip",
     "error": "That didn't save. Try again."
+  },
+  "WeeklySession": {
+    "title": "Weekly Session",
+    "intro": "Your once-a-week sit-down with your Coach — review the week and plan the next.",
+    "start": "Start Weekly Session",
+    "starting": "Starting…",
+    "thinking": "Coach is thinking…",
+    "inputLabel": "Your message to Coach",
+    "placeholder": "Type your reply…",
+    "send": "Send",
+    "savePlan": "Save this plan",
+    "planned": "{count, plural, =0 {Plan saved — a rest week} one {Plan saved — # session next week} other {Plan saved — # sessions next week}}",
+    "ended": "This Weekly Session is done. Your plan is on the calendar.",
+    "error": "That didn't work. Try again."
   }
 }
