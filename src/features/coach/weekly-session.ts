@@ -51,12 +51,17 @@ const DAY_INDEX: Record<string, number> = {
  * and the onboarding answers. `personaName` is deliberately left unset: the
  * prompt never carries a real identity (GDPR decision 1). The result is passed
  * through {@link assertNoIdentity}, so the guarantee is enforced, not merely
- * intended. Language falls back to English until onboarding sets it (slice 09).
+ * intended.
+ *
+ * `language` arrives as a parameter because it lives on the user (`ui_prefs`,
+ * ticket 09), not in training data — the caller reads it through the user seam.
+ * Defaults to English until onboarding sets it.
  */
 export function buildWeeklyCheckIn(
   athlete: Athlete,
   readiness: Readiness,
   weeklySessionNumber: number,
+  language?: string,
 ): CheckIn {
   const checkIn: CheckIn = {
     body: readiness.body,
@@ -73,9 +78,13 @@ export function buildWeeklyCheckIn(
     // Mapping `trainingSessionsPerWeek` here would mislabel a cadence (6/week)
     // as history (6 sessions had), so relationship depth is used instead.
     sessionCount: Math.max(0, weeklySessionNumber - 1),
-    language: athlete.profile?.language ?? 'English',
+    language: language ?? 'en',
     onboarding: athlete.profile?.onboarding ?? undefined,
     equipment: athlete.equipment ?? undefined,
+    // The constraint answers from MCQ onboarding (slice 09): no-training days
+    // and the preferred Weekly Session day, both read by the weekly prompt.
+    fixedConstraints: athlete.profile?.fixedConstraints ?? undefined,
+    weeklySessionDay: athlete.profile?.weeklySessionDay ?? undefined,
     weeklySessionNumber,
   };
   assertNoIdentity(checkIn);
