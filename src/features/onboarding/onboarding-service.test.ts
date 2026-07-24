@@ -132,22 +132,23 @@ describe('answerOnboardingStep', () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.step).toBe('done');
 
-    // Columns written from the answers: phase computed, style built, race kept.
-    expect(completeAthleteOnboarding).toHaveBeenCalledWith('athlete_1', {
-      trainingPhase: 'Taper',
-      experienceLevel: 'intermediate',
-      communicationStyle: expect.stringContaining('The athlete'),
-      raceTarget: 'Ironman Copenhagen, August 2026',
-    });
-    // The profile JSONB now carries the prompt-shaped answers + constraints.
-    expect(mergeAthleteProfile).toHaveBeenCalledWith(
+    // Columns and JSONB land in ONE call: a split write could mark the answers
+    // complete while experienceLevel — the page's gate — stayed null.
+    expect(completeAthleteOnboarding).toHaveBeenCalledWith(
       'athlete_1',
+      {
+        trainingPhase: 'Taper',
+        experienceLevel: 'intermediate',
+        communicationStyle: expect.stringContaining('The athlete'),
+        raceTarget: 'Ironman Copenhagen, August 2026',
+      },
       expect.objectContaining({
         onboarding: expect.objectContaining({ hasHumanCoach: 'Yes' }),
         fixedConstraints: ['Sunday'],
         weeklySessionDay: 'Monday',
       }),
     );
+    expect(mergeAthleteProfile).not.toHaveBeenCalled();
     // The Coach's greeting closes the transcript and the conversation ends.
     expect(appendMessages).toHaveBeenLastCalledWith('athlete_1', 'conv_1', [
       { role: 'coach_ai', content: expect.stringContaining("I'm your Coach") },

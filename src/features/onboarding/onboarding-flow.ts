@@ -115,9 +115,24 @@ export type StepAnswer =
 
 const FREE_TEXT_MAX = 200;
 
-const inSet = (value: string, options: readonly string[]) => options.includes(value);
-const allInSet = (values: string[] | undefined, options: readonly string[]) =>
-  values === undefined || values.every((v) => inSet(v, options));
+// A server action's payload is untrusted input, not a typed call: the declared
+// TypeScript shape is erased at runtime, so a hand-rolled request can send a
+// number where a string is declared, or omit a field entirely. Every check below
+// verifies the runtime shape before trusting it.
+const inSet = (value: unknown, options: readonly string[]) =>
+  typeof value === 'string' && options.includes(value);
+
+/** Undefined is allowed (the question is optional); anything present must be a valid array. */
+const allInSet = (values: unknown, options: readonly string[]) =>
+  values === undefined ||
+  (Array.isArray(values) && values.every((v) => inSet(v, options)));
+
+/** Undefined is allowed; anything present must be a string within the cap. */
+const optionalText = (value: unknown): string | null | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null; // present but wrong type — refuse
+  return value.trim().slice(0, FREE_TEXT_MAX);
+};
 
 /**
  * Applies one submitted answer to the answer record — the single validation
@@ -152,6 +167,9 @@ export function applyAnswer(
       };
     }
     case 'race': {
+      // Not `payload.raceTarget.trim()`: the field can be absent or a non-string
+      // at runtime, which would throw instead of refusing.
+      if (typeof payload.raceTarget !== 'string') return null;
       const race = payload.raceTarget.trim();
       if (!race || race.length > FREE_TEXT_MAX) return null;
       return { answers: { ...answers, raceTarget: race }, submitted };
@@ -172,8 +190,9 @@ export function applyAnswer(
         return null;
       if (!allInSet(payload.trackedMetrics, ONBOARDING_OPTIONS.trackedMetrics))
         return null;
-      const bestTime = payload.bestTime?.trim().slice(0, FREE_TEXT_MAX);
-      const targetTime = payload.targetTime?.trim().slice(0, FREE_TEXT_MAX);
+      const bestTime = optionalText(payload.bestTime);
+      const targetTime = optionalText(payload.targetTime);
+      if (bestTime === null || targetTime === null) return null;
       return {
         answers: {
           ...answers,

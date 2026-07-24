@@ -81,12 +81,6 @@ export async function answerOnboardingAction(
 
   const t = await getTranslations('Onboarding');
 
-  // The language choice lands on the user, identity-side (ticket 09). Written
-  // before the step is applied so even a mid-flow refresh keeps the choice.
-  if (payload.step === 'language') {
-    await setUiLanguage(session.user.id, payload.language);
-  }
-
   const raceForGreeting =
     payload.step === 'race'
       ? payload.raceTarget
@@ -106,8 +100,17 @@ export async function answerOnboardingAction(
     new Date(),
   );
 
+  if (!result.ok) return result;
+
+  // The language choice lands on the user, identity-side (ticket 09) — but only
+  // once onboarding has accepted the step. Writing it first would let a payload
+  // the closed-set validation rejects still leave an invalid preference behind.
+  if (payload.step === 'language') {
+    await setUiLanguage(session.user.id, payload.language);
+  }
+
   // Completion flips the page from onboarding to the calendar — refresh it.
-  if (result.ok && result.step === 'done') {
+  if (result.step === 'done') {
     revalidatePath('/', 'layout');
     return { ...result, displayGreeting: `${personal.intro} ${personal.body}` };
   }

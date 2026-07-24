@@ -106,7 +106,11 @@ export async function answerOnboardingStep(
     // for the type system, not a reachable branch.
     if (!completed) return { ok: false, reason: 'invalid' };
 
-    await mergeAthleteProfile(athlete.id, {
+    // The JSONB answers and the profile columns land in one statement: a split
+    // write could leave the answers marked complete while `experienceLevel` —
+    // the page's "onboarded" gate — stayed null, trapping the athlete on a
+    // finished questionnaire.
+    await completeAthleteOnboarding(athlete.id, completed, {
       onboardingAnswers: applied.answers,
       onboardingSubmitted: applied.submitted,
       // The shapes the Coach prompts read from now on.
@@ -114,7 +118,6 @@ export async function answerOnboardingStep(
       fixedConstraints: applied.answers.fixedConstraints ?? [],
       weeklySessionDay: applied.answers.weeklySessionDay,
     });
-    await completeAthleteOnboarding(athlete.id, completed);
     await appendMessages(athlete.id, conversation.id, [
       { role: 'coach_ai', content: greeting },
     ]);

@@ -163,10 +163,13 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
     });
   }
 
+  // aria-pressed, not just a colour swap: selection is the whole content of an
+  // MCQ answer, and a border change conveys nothing to a screen reader.
   const optBtn = (value: string, selected: boolean, onClick: () => void) => (
     <button
       key={value}
       type="button"
+      aria-pressed={selected}
       disabled={pending}
       onClick={onClick}
       className={selected ? BTN_ON : BTN}
@@ -237,7 +240,11 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
         >
           <p className="text-base font-medium">{t('qRace')}</p>
           <p className="text-xs text-neutral-500">{t('qRaceSub')}</p>
+          <label htmlFor="onboarding-race" className="sr-only">
+            {t('qRace')}
+          </label>
           <input
+            id="onboarding-race"
             value={race}
             onChange={(e) => setRace(e.target.value)}
             placeholder={t('racePlaceholder')}
@@ -294,10 +301,11 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
           {state.answers.experienceLevel === 'intermediate' && (
             <>
               <div className="flex flex-col gap-2">
-                <span className={LABEL}>
+                <label className={LABEL} htmlFor="onboarding-best-time">
                   {t('bestTime')} <span className="font-normal normal-case">{t('optional')}</span>
-                </span>
+                </label>
                 <input
+                  id="onboarding-best-time"
                   value={bestTime}
                   onChange={(e) => setBestTime(e.target.value)}
                   placeholder={t('bestTimePlaceholder')}
@@ -331,10 +339,11 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
           {state.answers.experienceLevel === 'veteran' && (
             <>
               <div className="flex flex-col gap-2">
-                <span className={LABEL}>
+                <label className={LABEL} htmlFor="onboarding-target-time">
                   {t('targetTime')} <span className="font-normal normal-case">{t('optional')}</span>
-                </span>
+                </label>
                 <input
+                  id="onboarding-target-time"
                   value={targetTime}
                   onChange={(e) => setTargetTime(e.target.value)}
                   placeholder={t('targetTimePlaceholder')}
@@ -390,6 +399,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 <button
                   key={d}
                   type="button"
+                  aria-pressed={fixedConstraints.includes(d)}
                   disabled={pending}
                   className={fixedConstraints.includes(d) ? BTN_ON : BTN}
                   onClick={() => setFixedConstraints((a) => toggleMulti(a, d, null))}
@@ -407,6 +417,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 <button
                   key={o}
                   type="button"
+                  aria-pressed={weeklySessionDay === o}
                   disabled={pending}
                   className={weeklySessionDay === o ? BTN_ON : BTN}
                   onClick={() => setWeeklySessionDay(weeklySessionDay === o ? '' : o)}

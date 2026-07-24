@@ -104,6 +104,29 @@ describe('applyAnswer', () => {
     ).toBeNull();
   });
 
+  it('refuses a malformed payload rather than throwing', () => {
+    // A server action's payload is untrusted: the declared types are erased at
+    // runtime, so a hand-rolled request can omit fields or send wrong types.
+    // Each of these must return null, never throw.
+    const bad = [
+      { step: 'race' },
+      { step: 'race', raceTarget: 42 },
+      { step: 'language' },
+      { step: 'experience', experienceLevel: null },
+      { step: 'adaptive', sportBackground: 'Runner' }, // string, not array
+      { step: 'adaptive', bestTime: 99 },
+      { step: 'constraints', fixedConstraints: 'Monday' },
+    ];
+    for (const payload of bad) {
+      expect(() =>
+        applyAnswer({}, {}, payload as unknown as Parameters<typeof applyAnswer>[2]),
+      ).not.toThrow();
+      expect(
+        applyAnswer({}, {}, payload as unknown as Parameters<typeof applyAnswer>[2]),
+      ).toBeNull();
+    }
+  });
+
   it('changing the language never resets the other answers', () => {
     // The acceptance criterion: choosing Danish switches the language without
     // resetting the profile. Language is one key in the answer record; applying
