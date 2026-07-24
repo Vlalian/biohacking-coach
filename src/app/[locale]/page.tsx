@@ -8,10 +8,17 @@ import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
+import {
+  getLatestOpenConversation,
+  getMessages,
+} from '@/features/coach/conversation-repository';
+import { nextStep } from '@/features/onboarding/onboarding-flow';
 import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
 import { Calendar } from './calendar';
 import { GarminUpload } from './garmin-upload';
+import { WeeklySession, type WeeklySessionInitial } from './weekly-session';
+import { OnboardingFlow } from './onboarding';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -46,12 +53,54 @@ export default async function AthletePage({
       athlete = await getAthleteByUserId(session.user.id);
     }
 
+    // The onboarding gate: an athlete without an experience level has not
+    // finished MCQ onboarding — the columns land only at completion — so the
+    // page is the Coach's question flow, resumed at the first unanswered step
+    // (the stored answers are the resume point).
+    if (athlete && athlete.experienceLevel === null) {
+      const answers = athlete.profile?.onboardingAnswers ?? {};
+      const submitted = athlete.profile?.onboardingSubmitted ?? {};
+      const step = nextStep(answers, submitted);
+      // step === 'done' with the columns still null means a completion write was
+      // interrupted; fall through to the calendar rather than trapping the
+      // athlete on a finished questionnaire.
+      if (step !== 'done') {
+        return (
+          <main className="flex min-h-screen flex-col items-center gap-6 p-8">
+            <OnboardingFlow initial={{ step, answers }} />
+            <SignOutButton />
+          </main>
+        );
+      }
+    }
+
     // Read the athlete's own training sessions, scoped to their id — the query
     // cannot return anyone else's rows (ADR 0006). Named to not be mistaken for
     // the auth `session` in this same scope.
     const trainingSessions = athlete
       ? await getSessionsForAthlete(athlete.id)
       : [];
+
+    // Restore an in-progress Weekly Session on refresh: the transcript is server
+    // state, so a page reload picks it back up rather than losing it (ADR 0006).
+    let weeklyInitial: WeeklySessionInitial | null = null;
+    if (athlete) {
+      const open = await getLatestOpenConversation(athlete.id, 'weekly_session');
+      if (open) {
+        const transcript = await getMessages(open.id);
+        weeklyInitial = {
+          conversationId: open.id,
+          weeklySessionNumber: open.weeklySessionNumber ?? 1,
+          messages: transcript.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            seq: m.seq,
+          })),
+          ended: false,
+        };
+      }
+    }
 
     return (
       <main className="flex min-h-screen flex-col items-center gap-6 p-8">
@@ -67,6 +116,7 @@ export default async function AthletePage({
               </Link>
             </header>
             <Calendar sessions={trainingSessions} todayKey={dateKey(new Date())} />
+            <WeeklySession initial={weeklyInitial} />
             <GarminUpload />
           </>
         ) : (

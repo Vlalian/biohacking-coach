@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getSession, redirect, getAthleteByUserId, getInformationViewInputs } =
-  vi.hoisted(() => ({
+const {
+  getSession,
+  redirect,
+  getAthleteByUserId,
+  getInformationViewLayout,
+  getInformationViewInputs,
+} = vi.hoisted(() => ({
     getSession: vi.fn(),
     redirect: vi.fn(() => {
       // The real next-intl redirect() throws to stop rendering; the mock does
@@ -9,6 +14,7 @@ const { getSession, redirect, getAthleteByUserId, getInformationViewInputs } =
       throw new Error('REDIRECT');
     }),
     getAthleteByUserId: vi.fn(),
+    getInformationViewLayout: vi.fn(() => Promise.resolve(null)),
     getInformationViewInputs: vi.fn(() =>
       Promise.resolve({ rows: [], streams: {} }),
     ),
@@ -24,7 +30,10 @@ vi.mock('@/i18n/navigation', () => ({
   Link: () => null,
 }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
-vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
+vi.mock('@/features/athlete/athlete-repository', () => ({
+  getAthleteByUserId,
+  getInformationViewLayout,
+}));
 vi.mock('@/features/information-view/information-view-repository', () => ({
   getInformationViewInputs,
 }));
@@ -58,7 +67,6 @@ describe('InformationPage', () => {
     getAthleteByUserId.mockResolvedValue({
       id: 'athlete_1',
       syntheticLabel: null,
-      informationViewLayout: null,
     });
 
     await render();

@@ -36,6 +36,20 @@
       "when": 1784556133265,
       "tag": "0004_slice06_streams",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784833558344,
+      "tag": "0005_slice08_conversations",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784877203787,
+      "tag": "0006_slice09_ui_prefs",
+      "breakpoints": true
     }
   ]
 }

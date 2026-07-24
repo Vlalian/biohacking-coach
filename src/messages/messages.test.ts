@@ -51,11 +51,12 @@ describe('message catalogues', () => {
     // untranslated. So strip the terms and compare what remains — a message
     // that is nothing but technical terms has no translatable text and is the
     // only thing legitimately identical in both languages.
-    // The Information View widened the exempt vocabulary two ways (slice 10).
-    // Technical terms that stay English in every Athlete Language grew by the
-    // panel vocabulary: TSS, Fitness/Fatigue/Form, Peak Power, units.
+    // HRV and Pace joined with slice 09's onboarding options — both are in the
+    // Coach's stay-English SPORTS_TERMS list, and the POC's Danish catalogue
+    // kept them verbatim too. The Information View (slice 10) added the panel
+    // vocabulary: TSS, Fitness/Fatigue/Form, Peak Power, units.
     const technicalTerms =
-      /\b(RPE|FTP|CSS|Zone \d|Z\d|Ironman|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W)\b/g;
+      /\b(RPE|FTP|CSS|Zone \d|Z\d|Ironman|HRV|Pace|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W)\b/g;
     // Danish cognates — words whose correct Danish spelling IS the English one
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.

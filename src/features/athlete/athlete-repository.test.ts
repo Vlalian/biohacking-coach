@@ -45,7 +45,13 @@ describe('getAthleteByUserId', () => {
     expect(athlete).toEqual({
       id: 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213',
       syntheticLabel: null,
-      informationViewLayout: null,
+      trainingPhase: null,
+      experienceLevel: null,
+      communicationStyle: null,
+      raceTarget: null,
+      trainingSessionsPerWeek: null,
+      profile: null,
+      equipment: null,
     });
   });
 
@@ -62,15 +68,26 @@ describe('getAthleteByUserId', () => {
     // storage types out of the app. Both hold only while this boundary
     // converts — if the raw row leaked through, every component would start
     // depending on the column layout. That claim is in the module's docstring,
-    // so it is tested.
-    limit.mockResolvedValue([row({ profile: { secret: 'onboarding answers' } })]);
+    // so it is tested. The identity anchors (userId) and storage-only columns
+    // (informationViewLayout, createdAt, updatedAt) must never appear.
+    limit.mockResolvedValue([row({ userId: 'user_abc' })]);
 
     const athlete = await getAthleteByUserId('user_abc');
 
-    expect(Object.keys(athlete!).sort()).toEqual([
-      'id',
-      'informationViewLayout',
-      'syntheticLabel',
-    ]);
+    expect(Object.keys(athlete!).sort()).toEqual(
+      [
+        'communicationStyle',
+        'equipment',
+        'experienceLevel',
+        'id',
+        'profile',
+        'raceTarget',
+        'syntheticLabel',
+        'trainingPhase',
+        'trainingSessionsPerWeek',
+      ].sort(),
+    );
+    // The user identity anchor is stripped at this boundary (ADR 0006).
+    expect(athlete).not.toHaveProperty('userId');
   });
 });

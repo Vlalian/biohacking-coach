@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The POC is legacy CommonJS reference material we are porting into src/
+    // (slice 08 ports its prompt logic to TypeScript). It intentionally uses
+    // require() and is not held to the app's lint rules — linting it only
+    // reports the very patterns the port exists to replace.
+    "poc/**",
   ]),
 ]);
 

@@ -5,7 +5,10 @@ import { notFound } from 'next/navigation';
 import { Link, redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import {
+  getAthleteByUserId,
+  getInformationViewLayout,
+} from '@/features/athlete/athlete-repository';
 import { buildDataset } from '@/features/information-view/build-dataset';
 import { getInformationViewInputs } from '@/features/information-view/information-view-repository';
 import { parseLayout } from '@/features/information-view/layout';
@@ -41,9 +44,12 @@ export default async function InformationPage({
   // (ADR 0006). The dataset is built server-side; the client only windows it.
   let view = null;
   if (athlete) {
-    const { rows, streams } = await getInformationViewInputs(athlete.id);
+    const [{ rows, streams }, storedLayout] = await Promise.all([
+      getInformationViewInputs(athlete.id),
+      getInformationViewLayout(athlete.id),
+    ]);
     const dataset = buildDataset(rows, streams, dateKey(new Date()));
-    const layout = parseLayout(athlete.informationViewLayout, PANEL_IDS);
+    const layout = parseLayout(storedLayout, PANEL_IDS);
     view = <InformationView dataset={dataset} initialLayout={layout} />;
   }
 
