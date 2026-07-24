@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
+import { getUnavailableDates } from '@/features/availability/availability-repository';
 import {
   getLatestOpenConversation,
   getMessages,
@@ -81,6 +82,12 @@ export default async function AthletePage({
       ? await getSessionsForAthlete(athlete.id)
       : [];
 
+    // The athlete's Unavailable Dates, scoped to their id like the sessions —
+    // rendered as day markers and the source of the mark/clear affordance.
+    const unavailableDates = athlete
+      ? await getUnavailableDates(athlete.id)
+      : [];
+
     // Restore an in-progress Weekly Session on refresh: the transcript is server
     // state, so a page reload picks it back up rather than losing it (ADR 0006).
     let weeklyInitial: WeeklySessionInitial | null = null;
@@ -115,7 +122,11 @@ export default async function AthletePage({
                 {t('informationLink')}
               </Link>
             </header>
-            <Calendar sessions={trainingSessions} todayKey={dateKey(new Date())} />
+            <Calendar
+              sessions={trainingSessions}
+              unavailableDates={unavailableDates}
+              todayKey={dateKey(new Date())}
+            />
             <WeeklySession initial={weeklyInitial} />
             <GarminUpload />
           </>

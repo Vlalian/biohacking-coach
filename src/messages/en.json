@@ -116,7 +116,11 @@
   },
   "Calendar": {
     "empty": "No sessions planned yet.",
-    "rate": "Rate {type} session"
+    "rate": "Rate {type} session",
+    "markUnavailable": "Mark {date} unavailable",
+    "clearUnavailable": "Make {date} available again",
+    "unavailableDay": "Unavailable — can't train this day",
+    "parked": "Parked — awaiting re-placement"
   },
   "Garmin": {
     "upload": "Upload Garmin file",

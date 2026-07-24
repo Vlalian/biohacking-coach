@@ -9,6 +9,7 @@ import {
   boolean,
   check,
   index,
+  primaryKey,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -147,7 +148,7 @@ export const sessions = pgTable(
     ),
     check(
       'sessions_status_valid',
-      sql`${table.status} IN ('planned', 'completed', 'skipped')`,
+      sql`${table.status} IN ('planned', 'completed', 'skipped', 'unavailable')`,
     ),
     check(
       'sessions_feedback_body_range',
@@ -313,3 +314,32 @@ export const messages = pgTable(
 
 export type MessageRow = typeof messages.$inferSelect;
 export type NewMessageRow = typeof messages.$inferInsert;
+
+/**
+ * An Unavailable Date — a specific day the athlete has declared they cannot
+ * train (travel, work, life). Keyed by athlete and date: one row is the whole
+ * fact, so the composite primary key is the natural key and marking a day twice
+ * is idempotent by construction.
+ *
+ * Distinct from a Fixed Constraint (a recurring weekday, stored in the Athlete
+ * Profile) — this is a single day. The row is passed to the next Weekly Session
+ * so the Coach plans around it; the sessions that fell on the day are parked in
+ * place (`sessions.status = 'unavailable'`, `parked = true`) rather than moved.
+ *
+ * Cascade-deletes with its athlete, like every other training table (ADR 0006 —
+ * training data keys off the opaque athlete id and carries no identity).
+ */
+export const unavailableDates = pgTable(
+  'unavailable_dates',
+  {
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.athleteId, table.date] })],
+);
+
+export type UnavailableDateRow = typeof unavailableDates.$inferSelect;
+export type NewUnavailableDateRow = typeof unavailableDates.$inferInsert;

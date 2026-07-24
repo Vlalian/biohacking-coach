@@ -98,6 +98,7 @@ describe('getSessionsForAthlete', () => {
         'feedbackMind',
         'id',
         'note',
+        'parked',
         'status',
         'title',
         'type',
