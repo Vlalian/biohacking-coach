@@ -2,7 +2,7 @@ import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { redirect } from '@/i18n/navigation';
+import { Link, redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
@@ -62,6 +62,9 @@ export default async function AthletePage({
                 {t('greeting', { name: session.user.name })}
               </h1>
               <p className="text-sm text-neutral-500">{t('tagline')}</p>
+              <Link href="/information" className="text-sm text-blue-500 underline">
+                {t('informationLink')}
+              </Link>
             </header>
             <Calendar sessions={trainingSessions} todayKey={dateKey(new Date())} />
             <GarminUpload />

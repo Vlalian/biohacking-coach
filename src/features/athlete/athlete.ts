@@ -17,6 +17,12 @@ import type { AthleteRow } from '@/db/schema';
 export type Athlete = {
   id: string;
   syntheticLabel: string | null;
+  /**
+   * The stored Information View layout, still untyped here: the information-view
+   * feature owns its parsing (`parseLayout`), and this seam just carries what
+   * the row holds.
+   */
+  informationViewLayout: unknown;
 };
 
 /** The one place the stored row becomes a domain object. */
@@ -24,5 +30,6 @@ export function toAthlete(row: AthleteRow): Athlete {
   return {
     id: row.id,
     syntheticLabel: row.syntheticLabel,
+    informationViewLayout: row.informationViewLayout,
   };
 }

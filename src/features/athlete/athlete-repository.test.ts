@@ -45,6 +45,7 @@ describe('getAthleteByUserId', () => {
     expect(athlete).toEqual({
       id: 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213',
       syntheticLabel: null,
+      informationViewLayout: null,
     });
   });
 
@@ -66,6 +67,10 @@ describe('getAthleteByUserId', () => {
 
     const athlete = await getAthleteByUserId('user_abc');
 
-    expect(Object.keys(athlete!).sort()).toEqual(['id', 'syntheticLabel']);
+    expect(Object.keys(athlete!).sort()).toEqual([
+      'id',
+      'informationViewLayout',
+      'syntheticLabel',
+    ]);
   });
 });

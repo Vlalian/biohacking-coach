@@ -28,3 +28,20 @@ export async function getAthleteByUserId(
 
   return rows[0] ? toAthlete(rows[0]) : undefined;
 }
+
+/**
+ * Persists the athlete's Information View layout (favorites + range).
+ *
+ * The value arrives validated — `saveLayout` in the information-view feature is
+ * the only caller and owns what a legal layout is. This is the write seam, kept
+ * with the other athlete-row access so the table has one owner.
+ */
+export async function updateInformationViewLayout(
+  athleteId: string,
+  layout: { favorites: string[]; range: string },
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ informationViewLayout: layout, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
