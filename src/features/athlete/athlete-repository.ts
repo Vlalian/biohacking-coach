@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { athlete } from '@/db/schema';
-import { toAthlete, type Athlete } from './athlete';
+import type { CompletedProfile } from '@/features/onboarding/onboarding-flow';
+import { toAthlete, type Athlete, type AthleteProfile } from './athlete';
 
 /**
  * The only place the app reads athletes out of Postgres.
@@ -27,4 +28,68 @@ export async function getAthleteByUserId(
     .limit(1);
 
   return rows[0] ? toAthlete(rows[0]) : undefined;
+}
+
+/**
+ * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
+ * expression.
+ *
+ * Postgres' `||` merges two jsonb objects in the statement itself, so read and
+ * write are one atomic operation. A select-then-update would not be: a
+ * double-clicked step or a retried request can interleave, and the second write
+ * would silently drop the first's changes.
+ */
+function profileMergedWith(changes: Partial<AthleteProfile>) {
+  return sql`COALESCE(${athlete.profile}, '{}'::jsonb) || ${JSON.stringify(changes)}::jsonb`;
+}
+
+/**
+ * Merges changes into the athlete's `profile` JSONB, atomically.
+ *
+ * Scoped to the athlete id resolved from the authenticated session upstream,
+ * like every write (ADR 0006).
+ */
+export async function mergeAthleteProfile(
+  athleteId: string,
+  changes: Partial<AthleteProfile>,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ profile: profileMergedWith(changes), updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
+ * The completion write for MCQ onboarding: the profile columns a finished
+ * questionnaire produces — phase, experience, communication style, race target —
+ * together with the final `profile` JSONB merge, in ONE update statement.
+ *
+ * One statement on purpose. Split across two writes, a failure between them
+ * would leave the JSONB claiming onboarding is finished while
+ * `experience_level` — the actual "onboarded" gate the page reads — stayed null,
+ * stranding the athlete on a questionnaire they had already completed. A single
+ * UPDATE cannot land half-applied.
+ *
+ * Deliberately NOT written here: `trainingSessionsPerWeek` and `equipment`.
+ * Ticket 09 lists them among the profile fields, but the POC's question set —
+ * the ticket's own specification — never asks for either (weekly *hours* is a
+ * JSONB answer, not a session count; equipment has its own tab in the POC).
+ * They stay null until a feature actually collects them.
+ */
+export async function completeAthleteOnboarding(
+  athleteId: string,
+  completed: CompletedProfile,
+  profileChanges: Partial<AthleteProfile>,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({
+      trainingPhase: completed.trainingPhase,
+      experienceLevel: completed.experienceLevel,
+      communicationStyle: completed.communicationStyle,
+      raceTarget: completed.raceTarget,
+      profile: profileMergedWith(profileChanges),
+      updatedAt: new Date(),
+    })
+    .where(eq(athlete.id, athleteId));
 }

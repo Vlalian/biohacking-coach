@@ -27,7 +27,11 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     communicationStyle: 'direct',
     raceTarget: 'Ironman Copenhagen',
     trainingSessionsPerWeek: 6,
-    profile: { language: 'Dansk', onboarding: { motivation: 'Completion' } },
+    profile: {
+      onboarding: { motivation: 'Completion' },
+      fixedConstraints: ['Sunday'],
+      weeklySessionDay: 'Monday',
+    },
     equipment: { bikeType: 'TT' },
     ...overrides,
   };
@@ -53,7 +57,7 @@ function session(overrides: Partial<Session> = {}): Session {
 
 describe('buildWeeklyCheckIn', () => {
   it('maps the opaque profile and readiness, with no identity', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 3);
+    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 3, 'da');
     expect(checkIn).toMatchObject({
       body: 7,
       mental: 6,
@@ -64,7 +68,9 @@ describe('buildWeeklyCheckIn', () => {
       experienceLevel: 'intermediate',
       commStyle: 'direct',
       raceTarget: 'Ironman Copenhagen',
-      language: 'Dansk',
+      language: 'da',
+      fixedConstraints: ['Sunday'],
+      weeklySessionDay: 'Monday',
       weeklySessionNumber: 3,
     });
     // No name/email fields on the check-in — personaName is never set from data.
@@ -72,9 +78,9 @@ describe('buildWeeklyCheckIn', () => {
     expect(JSON.stringify(checkIn)).not.toContain('@');
   });
 
-  it('defaults language to English when the profile has none', () => {
+  it('defaults language to English when the user has not chosen one', () => {
     const checkIn = buildWeeklyCheckIn(athlete({ profile: null }), READINESS, 1);
-    expect(checkIn.language).toBe('English');
+    expect(checkIn.language).toBe('en');
     expect(checkIn.onboarding).toBeUndefined();
   });
 
@@ -89,7 +95,6 @@ describe('buildWeeklyCheckIn', () => {
     // Deep leaf, not a top-level field — the realistic hiding place.
     const leaky = athlete({
       profile: {
-        language: 'English',
         onboarding: { motivation: 'reach me at mads@example.com' },
       },
     });

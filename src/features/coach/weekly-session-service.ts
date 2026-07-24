@@ -67,10 +67,16 @@ async function renderSystem(
   athlete: Athlete,
   weeklySessionNumber: number,
   today: string,
+  language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
   const weekSessions = await getSessionsForWeek(athlete.id, weekStart);
-  const checkIn = buildWeeklyCheckIn(athlete, BASELINE_READINESS, weeklySessionNumber);
+  const checkIn = buildWeeklyCheckIn(
+    athlete,
+    BASELINE_READINESS,
+    weeklySessionNumber,
+    language,
+  );
   // This slice wires the two inputs it has a real source for: the week's Session
   // Reflections (feedback) and its skips. The remaining ported inputs stay empty
   // because their data sources are later slices, not because they are optional —
@@ -101,6 +107,7 @@ export interface WeeklySessionState {
 export async function startWeeklySession(
   athlete: Athlete,
   today: string,
+  language?: string,
 ): Promise<WeeklySessionState> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
   const conversation = await createConversation({
@@ -109,7 +116,7 @@ export async function startWeeklySession(
     weeklySessionNumber,
   });
 
-  const system = await renderSystem(athlete, weeklySessionNumber, today);
+  const system = await renderSystem(athlete, weeklySessionNumber, today, language);
   const reply = await callCoach({
     system,
     messages: [{ role: 'user', content: WEEKLY_OPENER }],
@@ -142,6 +149,7 @@ export async function continueWeeklySession(
   conversationId: string,
   content: string,
   today: string,
+  language?: string,
 ): Promise<ContinueResult> {
   const trimmed = content.trim();
   if (!trimmed) return { ok: false, reason: 'empty' };
@@ -159,6 +167,7 @@ export async function continueWeeklySession(
     athlete,
     conversation.weeklySessionNumber ?? 1,
     today,
+    language,
   );
   const reply = await callCoach({
     system,

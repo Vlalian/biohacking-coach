@@ -12,11 +12,13 @@ import {
   getLatestOpenConversation,
   getMessages,
 } from '@/features/coach/conversation-repository';
+import { nextStep } from '@/features/onboarding/onboarding-flow';
 import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
 import { Calendar } from './calendar';
 import { GarminUpload } from './garmin-upload';
 import { WeeklySession, type WeeklySessionInitial } from './weekly-session';
+import { OnboardingFlow } from './onboarding';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -49,6 +51,27 @@ export default async function AthletePage({
       // Provisioning is idempotent, so heal it on read and re-fetch once.
       await provisionAthlete(session.user.id);
       athlete = await getAthleteByUserId(session.user.id);
+    }
+
+    // The onboarding gate: an athlete without an experience level has not
+    // finished MCQ onboarding — the columns land only at completion — so the
+    // page is the Coach's question flow, resumed at the first unanswered step
+    // (the stored answers are the resume point).
+    if (athlete && athlete.experienceLevel === null) {
+      const answers = athlete.profile?.onboardingAnswers ?? {};
+      const submitted = athlete.profile?.onboardingSubmitted ?? {};
+      const step = nextStep(answers, submitted);
+      // step === 'done' with the columns still null means a completion write was
+      // interrupted; fall through to the calendar rather than trapping the
+      // athlete on a finished questionnaire.
+      if (step !== 'done') {
+        return (
+          <main className="flex min-h-screen flex-col items-center gap-6 p-8">
+            <OnboardingFlow initial={{ step, answers }} />
+            <SignOutButton />
+          </main>
+        );
+      }
     }
 
     // Read the athlete's own training sessions, scoped to their id — the query

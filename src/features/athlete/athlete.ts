@@ -1,16 +1,29 @@
 import type { AthleteRow } from '@/db/schema';
 import type { Equipment, Onboarding } from '@/features/coach/check-in';
+import type { OnboardingAnswers } from '@/features/onboarding/onboarding-flow';
 
 /**
  * The Athlete Profile as stored in the `profile` JSONB.
  *
- * Holds the MCQ onboarding answers the Coach builds on plus the chosen UI/Coach
- * `language` (slice 09 writes these). It carries no identity — name and email
- * live only in better-auth's tables, reached through the user seam (ADR 0006).
+ * `onboarding` is the finished answer set in the shape the Coach prompts consume
+ * (the ONBOARDING PROFILE block) — written once at completion. `onboardingAnswers`
+ * and `onboardingSubmitted` are the in-progress working state: the resume point
+ * for an interrupted onboarding, kept for audit after completion.
+ * `fixedConstraints` (no-training days) and `weeklySessionDay` are the constraint
+ * answers the Weekly Session prompt reads.
+ *
+ * The authoritative home of the chosen language is NOT here — a language is a
+ * person's preference, not training data, so it sits on the better-auth user
+ * (`ui_prefs`, ticket 05 / ticket 09) and every reader goes there. The raw
+ * `onboardingAnswers.language` key is only the flow's own record of which button
+ * was pressed. Nothing in this JSONB carries identity (ADR 0006).
  */
 export interface AthleteProfile {
-  language?: string;
   onboarding?: Onboarding;
+  onboardingAnswers?: OnboardingAnswers;
+  onboardingSubmitted?: { adaptive?: boolean; constraints?: boolean };
+  fixedConstraints?: string[];
+  weeklySessionDay?: string;
 }
 
 /**
