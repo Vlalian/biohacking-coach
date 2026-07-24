@@ -31,6 +31,42 @@ export async function getAthleteByUserId(
 }
 
 /**
+ * The stored Information View layout, untyped: the information-view feature
+ * owns its parsing (`parseLayout`); this seam just fetches what the row holds.
+ * A dedicated read rather than a field on {@link Athlete} — the layout is
+ * storage the Information View alone consumes, not something the app renders
+ * about an athlete (slice 09's domain-shape test pins that boundary).
+ */
+export async function getInformationViewLayout(
+  athleteId: string,
+): Promise<unknown> {
+  const rows = await getDb()
+    .select({ layout: athlete.informationViewLayout })
+    .from(athlete)
+    .where(eq(athlete.id, athleteId))
+    .limit(1);
+
+  return rows[0]?.layout ?? null;
+}
+
+/**
+ * Persists the athlete's Information View layout (favorites + range).
+ *
+ * The value arrives validated — `saveLayout` in the information-view feature is
+ * the only caller and owns what a legal layout is. This is the write seam, kept
+ * with the other athlete-row access so the table has one owner.
+ */
+export async function updateInformationViewLayout(
+  athleteId: string,
+  layout: { favorites: string[]; range: string },
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ informationViewLayout: layout, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *

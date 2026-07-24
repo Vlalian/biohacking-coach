@@ -28,7 +28,7 @@ vi.mock('next-intl/server', () => ({
     vals ? `${key}:${vals.name}` : key,
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
-vi.mock('@/i18n/navigation', () => ({ redirect }));
+vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));

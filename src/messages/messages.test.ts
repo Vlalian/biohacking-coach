@@ -53,18 +53,33 @@ describe('message catalogues', () => {
     // only thing legitimately identical in both languages.
     // HRV and Pace joined with slice 09's onboarding options — both are in the
     // Coach's stay-English SPORTS_TERMS list, and the POC's Danish catalogue
-    // kept them verbatim too.
-    const technicalTerms = /\b(RPE|FTP|CSS|Zone \d|Ironman|HRV|Pace)\b/g;
-    const translatable = (message: string) => message.replace(technicalTerms, '').trim();
+    // kept them verbatim too. The Information View (slice 10) added the panel
+    // vocabulary: TSS, Fitness/Fatigue/Form, Peak Power, units.
+    const technicalTerms =
+      /\b(RPE|FTP|CSS|Zone \d|Z\d|Ironman|HRV|Pace|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W)\b/g;
+    // Danish cognates — words whose correct Danish spelling IS the English one
+    // — are exempt only inside the Information View's catalogue, so the guard
+    // keeps its full strength everywhere else.
+    const cognates = /\b(Information|Session|Sport|Type|Distance|Motivation)\b/g;
+    const cognateScope = (path: string) =>
+      path.startsWith('Information.') || path === 'AthletePage.informationLink';
+    // Strip punctuation left behind by removed terms ("Peak Power (W)" → "()"),
+    // so a message that was nothing but terms compares as empty.
+    const translatable = (message: string, path: string) =>
+      message
+        .replace(technicalTerms, '')
+        .replace(cognateScope(path) ? cognates : /$^/g, '')
+        .replace(/[^\p{L}]+/gu, ' ')
+        .trim();
 
     const english = new Map(entries(en));
 
     for (const [path, danish] of entries(da)) {
-      const danishText = translatable(danish);
+      const danishText = translatable(danish, path);
       if (danishText === '') continue;
 
       expect(danishText, `"${path}" is identical in Danish and English`).not.toBe(
-        translatable(english.get(path) ?? ''),
+        translatable(english.get(path) ?? '', path),
       );
     }
   });
