@@ -75,9 +75,17 @@ function dotStyle(session: Session): React.CSSProperties {
 export function Calendar({
   sessions,
   todayKey,
+  readOnly = false,
 }: {
   sessions: Session[];
   todayKey: string;
+  /**
+   * A read-only calendar shows the plan but affords no changes — no drag, no
+   * rating. The Head Coach's roster view uses it: the calendar is always
+   * visible (ADR 0003), but moving an athlete's sessions is a different tier of
+   * authority (slice 12), and rating is the athlete's own action.
+   */
+  readOnly?: boolean;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -159,6 +167,21 @@ export function Calendar({
             {slot.sessions.length > 0 && (
               <div className="mt-1 flex flex-wrap gap-1">
                 {slot.sessions.map((s) => {
+                  // Read-only (coach) view: every session is a plain dot — no
+                  // rating button, no drag. The rated ring still shows when the
+                  // athlete's reflection is visible under Link Visibility.
+                  if (readOnly) {
+                    const rated = s.feedbackBody != null;
+                    return (
+                      <span
+                        key={s.id}
+                        data-session-id={s.id}
+                        title={s.title ?? s.type}
+                        className={`inline-block h-2.5 w-2.5 rounded-full ${rated ? 'ring-1 ring-neutral-600 ring-offset-1 dark:ring-neutral-300' : ''}`}
+                        style={dotStyle(s)}
+                      />
+                    );
+                  }
                   // A completed session is rateable — click opens the Session
                   // Reflection. It is a real button, so it is keyboard-operable
                   // (a completed session is frozen, so it never drags anyway).

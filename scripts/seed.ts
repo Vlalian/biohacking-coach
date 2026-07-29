@@ -1,7 +1,13 @@
 import '../src/db/load-env';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../src/db';
-import { athlete, sessions, type NewSessionRow } from '../src/db/schema';
+import {
+  athlete,
+  coach,
+  coachingLink,
+  sessions,
+  type NewSessionRow,
+} from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
 import { dateKey } from '../src/lib/date';
@@ -34,6 +40,19 @@ import { dateKey } from '../src/lib/date';
 
 /** A synthetic athlete keeps a fixed id so re-running the seed converges. */
 const SYNTHETIC_ATHLETE_ID = 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213';
+
+/**
+ * The shallow synthetic roster (ticket 02): athletes with no login and sparse
+ * sessions, present only to give the Roster contrast next to Mads's full
+ * profile. Fixed ids so re-seeding converges.
+ */
+const SYNTHETIC_ROSTER = [
+  { id: 'b1e7c0d2-3f4a-4b5c-8d6e-7f8a9b0c1d2e', label: 'Alex Rivera' },
+  { id: 'c2f8d1e3-4a5b-4c6d-9e7f-8a9b0c1d2e3f', label: 'Sam Chen' },
+];
+
+/** A fixed id for Mads's dev coach row, so the dual-role seed is idempotent. */
+const MADS_COACH_ID = 'd3a9e2f4-5b6c-4d7e-8f90-1a2b3c4d5e6f';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -171,10 +190,159 @@ async function seedSyntheticAthlete() {
   );
 }
 
+/**
+ * The shallow synthetic roster: a couple of login-less athletes with a handful
+ * of past completed sessions each. They exist to give the coach's Roster
+ * contrast — not full histories, just enough that the Roster is not a one-row
+ * special case (ticket 02).
+ */
+async function seedSyntheticRoster() {
+  const db = getDb();
+  for (const { id, label } of SYNTHETIC_ROSTER) {
+    await db
+      .insert(athlete)
+      .values({ id, syntheticLabel: label })
+      .onConflictDoNothing({ target: athlete.id });
+
+    // A few completed sessions in the recent past — origin 'coach', reseeded
+    // atomically like Mads's plan so re-running converges.
+    const now = new Date();
+    const rows: NewSessionRow[] = [3, 9, 16].map((daysAgo, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo);
+      return {
+        athleteId: id,
+        date: dateKey(d),
+        origin: 'coach',
+        status: 'completed',
+        dayOrder: 0,
+        type: ['Endurance', 'Tempo', 'Recovery'][i],
+        duration: [70, 50, 40][i],
+        zone: ['Zone 2', 'Zone 3', 'Zone 1'][i],
+        title: `${label.split(' ')[0]}'s session`,
+        isTraining: true,
+      };
+    });
+    await db.batch([
+      db
+        .delete(sessions)
+        .where(and(eq(sessions.athleteId, id), eq(sessions.origin, 'coach'))),
+      db.insert(sessions).values(rows),
+    ]);
+  }
+  console.log(`Seeded ${SYNTHETIC_ROSTER.length} synthetic roster athletes with sparse sessions.`);
+}
+
+/**
+ * The recruited coach: a real login with a coach row, and one active Coaching
+ * Link to each athlete on their roster (Mads + the synthetic roster).
+ *
+ * Like Mads, the coach account goes through better-auth's own API so login sees
+ * the record it expects. That signup fires the create hook, which also mints an
+ * athlete row for the coach's user — harmless: a coach may also be an athlete,
+ * and nothing points a Coaching Link at that unused row.
+ */
+async function seedCoach(rosterAthleteIds: string[]) {
+  const email = requireEnv('SEED_COACH_EMAIL');
+  const password = requireEnv('SEED_COACH_PASSWORD');
+
+  try {
+    await auth.api.signUpEmail({ body: { name: 'Coach Riley', email, password } });
+    console.log('Seeded coach account: Coach Riley.');
+  } catch (err) {
+    if (isDuplicateUser(err)) {
+      console.log('Coach account already present — nothing to do.');
+    } else {
+      throw err;
+    }
+  }
+
+  const db = getDb();
+  const [coachUser] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1);
+  if (!coachUser) throw new Error('Coach user missing after signup.');
+
+  const [coachRow] = await db
+    .insert(coach)
+    .values({ userId: coachUser.id })
+    .onConflictDoNothing({ target: coach.userId })
+    .returning({ id: coach.id });
+  const coachId = coachRow?.id ?? (await coachIdForUser(coachUser.id));
+
+  await linkAthletes(coachId, rosterAthleteIds);
+  console.log(`Coach Riley linked to ${rosterAthleteIds.length} athletes.`);
+}
+
+/** Resolves an existing coach row's id when the insert was a no-op. */
+async function coachIdForUser(userId: string): Promise<string> {
+  const [row] = await getDb()
+    .select({ id: coach.id })
+    .from(coach)
+    .where(eq(coach.userId, userId))
+    .limit(1);
+  if (!row) throw new Error('Coach row missing for user.');
+  return row.id;
+}
+
+/**
+ * Creates one active Coaching Link per athlete, idempotently. The partial
+ * unique index guards the active pair, so `onConflictDoNothing` makes a re-seed
+ * a no-op rather than a duplicate.
+ */
+async function linkAthletes(coachId: string, athleteIds: string[]) {
+  const db = getDb();
+  for (const athleteId of athleteIds) {
+    await db
+      .insert(coachingLink)
+      .values({ coachId, athleteId })
+      .onConflictDoNothing();
+  }
+}
+
+/**
+ * Mads holds a coach row too (ballot 1: "Mads can hold a coach row for dev").
+ * This is the dual-role person made real in the seed — one user with both an
+ * athlete row and a coach row — with a link to the synthetic roster so his
+ * coach capacity has something to show.
+ */
+async function seedMadsAsCoach(madsUserId: string, rosterAthleteIds: string[]) {
+  const db = getDb();
+  await db
+    .insert(coach)
+    .values({ id: MADS_COACH_ID, userId: madsUserId })
+    .onConflictDoNothing({ target: coach.userId });
+  const [row] = await db
+    .select({ id: coach.id })
+    .from(coach)
+    .where(eq(coach.userId, madsUserId))
+    .limit(1);
+  if (row) await linkAthletes(row.id, rosterAthleteIds);
+  console.log('Mads also holds a coach row (dual-role dev) linked to the synthetic roster.');
+}
+
+/** Resolves Mads's user id through his athlete row, for the dual-role seed. */
+async function madsUserId(email: string): Promise<string> {
+  const [row] = await getDb()
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1);
+  if (!row) throw new Error('Mads user missing.');
+  return row.id;
+}
+
 async function seed() {
+  const madsEmail = requireEnv('SEED_MADS_EMAIL');
   const madsId = await seedMads();
   await seedMadsWeekPlan(madsId);
   await seedSyntheticAthlete();
+  await seedSyntheticRoster();
+
+  const rosterIds = [madsId, ...SYNTHETIC_ROSTER.map((a) => a.id)];
+  await seedCoach(rosterIds);
+  await seedMadsAsCoach(await madsUserId(madsEmail), SYNTHETIC_ROSTER.map((a) => a.id));
 }
 
 seed()

@@ -50,6 +50,13 @@
       "when": 1784877203787,
       "tag": "0006_slice09_ui_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785338983154,
+      "tag": "0007_coach_and_coaching_link",
+      "breakpoints": true
     }
   ]
 }

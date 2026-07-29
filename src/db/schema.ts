@@ -226,6 +226,88 @@ export type SessionStreamRow = typeof sessionStreams.$inferSelect;
 export type NewSessionStreamRow = typeof sessionStreams.$inferInsert;
 
 /**
+ * A coach — a role you *have*, not a kind of person (route ticket 05, ballot 1).
+ *
+ * The row points at a better-auth user and nothing more: a coach always has a
+ * login, so their name lives on `user.name` and never here (route 06 dropped
+ * `display_name` for exactly that reason). Someone is a *Head Coach* only of
+ * the athletes their Coaching Links point at; the same person can hold a coach
+ * row and an athlete row at once without conflict.
+ *
+ * `informationViewLayout` is ONE layout across the whole roster (ADR 0004):
+ * the coach curates their panel wall once and it applies to every athlete they
+ * open.
+ */
+export const coach = pgTable('coach', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => user.id),
+  informationViewLayout: jsonb('information_view_layout'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export type CoachRow = typeof coach.$inferSelect;
+export type NewCoachRow = typeof coach.$inferInsert;
+
+/**
+ * A Coaching Link — the athlete↔Head-Coach relationship record.
+ *
+ * Link Visibility is two booleans, and the mapping is the contract (ticket 05,
+ * amended 2026-07-17):
+ *
+ *   - Always on, no flag, by construction: the calendar, sessions and their
+ *     parameters, statuses, and the move log. "A Head Coach who can't see the
+ *     plan isn't a coach; sever the link instead." There is deliberately no
+ *     calendar column to toggle (ADR 0003).
+ *   - `shareAthleteReports` (default true) — what the athlete *reported about
+ *     their own body*: Session Reflections, Check-in data, Athlete Profile
+ *     training fields and stats. The doctor-patient asymmetry.
+ *   - `shareAiTranscripts` (default false) — Coach Chat and Weekly Session
+ *     transcripts. Opt-in, per the same model.
+ *
+ * A severed link keeps its row (`severedAt` says when) so history survives, but
+ * every access path filters on `status = 'active'` — severing revokes. The
+ * partial unique index lets a pair re-link after severing without colliding
+ * with their own history.
+ */
+export const coachingLink = pgTable(
+  'coaching_link',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    coachId: uuid('coach_id')
+      .notNull()
+      .references(() => coach.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    status: text('status').notNull().default('active'),
+    shareAthleteReports: boolean('share_athlete_reports').notNull().default(true),
+    shareAiTranscripts: boolean('share_ai_transcripts').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    severedAt: timestamp('severed_at'),
+  },
+  (table) => [
+    check(
+      'coaching_link_status_valid',
+      sql`${table.status} IN ('active', 'severed')`,
+    ),
+    // One active link per pair; severed history does not block re-linking.
+    uniqueIndex('coaching_link_active_pair_idx')
+      .on(table.coachId, table.athleteId)
+      .where(sql`${table.status} = 'active'`),
+    // The roster reads by coach; the athlete's link list reads by athlete.
+    index('coaching_link_coach_idx').on(table.coachId),
+    index('coaching_link_athlete_idx').on(table.athleteId),
+  ],
+);
+
+export type CoachingLinkRow = typeof coachingLink.$inferSelect;
+export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
+
+/**
  * A Coach conversation, persisted server-side (ticket 05, ballot 4).
  *
  * Every kind of Coach exchange lands here uniformly — the Weekly Session, Coach
@@ -239,9 +321,8 @@ export type NewSessionStreamRow = typeof sessionStreams.$inferInsert;
  * that owner from the authenticated session; a client-supplied conversation id is
  * checked against it, never trusted (ADR 0006).
  *
- * `coachId` is the Briefing owner — a coach, not an athlete. The coach roster and
- * its foreign key land with slice 11; the column is a plain nullable uuid until
- * then, the same way guard columns landed ahead of the code that reads them.
+ * `coachId` is the Briefing owner — a coach, not an athlete. The foreign key
+ * landed with slice 11's coach roster, as this comment always promised.
  *
  * `weeklySessionNumber` is the 1-based ordinal that selects the Weekly Session's
  * conversational arc (Session 1 welcomes, Session 4+ reviews); null for kinds
@@ -258,7 +339,7 @@ export const conversations = pgTable(
       .notNull()
       .references(() => athlete.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
-    coachId: uuid('coach_id'),
+    coachId: uuid('coach_id').references(() => coach.id),
     weeklySessionNumber: integer('weekly_session_number'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     endedAt: timestamp('ended_at'),

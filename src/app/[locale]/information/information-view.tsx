@@ -46,9 +46,17 @@ const RANGE_KEYS: RangeKey[] = ['r4', 'r12', 'all'];
 export function InformationView({
   dataset,
   initialLayout,
+  persistLayout = true,
 }: {
   dataset: InfoDataset;
   initialLayout: InformationViewLayout;
+  /**
+   * Whether favorite/range changes are saved. True for an athlete viewing their
+   * own page. False when a Head Coach views a roster athlete: the layout is the
+   * coach's one roster-wide layout (ADR 0004), applied read-only here — the
+   * coach must never write to the athlete's row.
+   */
+  persistLayout?: boolean;
 }) {
   const t = useTranslations('Information');
   const [favorites, setFavorites] = useState(initialLayout.favorites);
@@ -63,10 +71,13 @@ export function InformationView({
   );
 
   // Optimistic persistence: the UI reflects the change now; the row catches up.
-  const persist = (favs: string[], rng: RangeKey) =>
+  // A read-only (coach) view keeps the interactions but writes nothing.
+  const persist = (favs: string[], rng: RangeKey) => {
+    if (!persistLayout) return;
     startTransition(async () => {
       await saveLayoutAction(favs, rng);
     });
+  };
 
   const toggleFavorite = (id: string) => {
     const next = isFavorite(favorites, id) ? demote(favorites, id) : promote(favorites, id);
