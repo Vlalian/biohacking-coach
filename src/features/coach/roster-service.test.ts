@@ -140,6 +140,36 @@ describe('getCoachAthleteView — Link Visibility applied server-side', () => {
     expect(view!.dataset.sessions[0].body).toBe(8); // 4 → RPE-axis ×2
   });
 
+  it('the plan editing surface carries origin and the per-session editable guard', async () => {
+    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: false });
+    // A future coach-authored session (editable) and a future athlete session
+    // (view-only). TODAY is 2026-07-14; both dated ahead so neither is past.
+    calendarRows.value = [
+      calRow({ id: 'plan', date: '2026-07-20', status: 'planned', origin: 'coach' }),
+      calRow({ id: 'athletes', date: '2026-07-21', status: 'planned', origin: 'athlete' }),
+    ];
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(view!.planSessions.map((p) => [p.id, p.editable])).toEqual([
+      ['plan', true],
+      ['athletes', false],
+    ]);
+  });
+
+  it('the plan editing surface excludes past and completed sessions', async () => {
+    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: false });
+    calendarRows.value = [
+      calRow({ id: 'past', date: '2026-07-01', status: 'planned', origin: 'coach' }),
+      calRow({ id: 'done', date: '2026-07-20', status: 'completed', origin: 'coach' }),
+    ];
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(view!.planSessions).toHaveLength(0);
+  });
+
   it('reports off: reflections are stripped before they leave the server', async () => {
     getActiveLink.mockResolvedValue({ shareAthleteReports: false, shareAiTranscripts: false });
     calendarRows.value = [calRow()];

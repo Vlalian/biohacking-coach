@@ -33,6 +33,7 @@ vi.mock('@/app/[locale]/calendar', () => ({ Calendar: () => null }));
 vi.mock('@/app/[locale]/information/information-view', () => ({
   InformationView: () => null,
 }));
+vi.mock('./prescribe-panel', () => ({ PrescribePanel: () => null }));
 
 const { default: CoachAthletePage } = await import('./page');
 

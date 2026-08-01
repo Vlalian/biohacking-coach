@@ -110,6 +110,23 @@
     "reportsWithheld": "Reports private",
     "transcriptsWithheld": "Transcripts private"
   },
+  "Prescribe": {
+    "addTitle": "Prescribe a session",
+    "editTitle": "Edit session",
+    "date": "Date",
+    "type": "Session type",
+    "duration": "Duration (min)",
+    "zone": "Intensity zone",
+    "sessionTitle": "Title",
+    "note": "Note",
+    "add": "Add to plan",
+    "save": "Save changes",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "athletesOwn": "athlete's own",
+    "error": "That didn't work ({reason})."
+  },
   "Auth": {
     "signInTitle": "Sign in",
     "signUpTitle": "Create account",
