@@ -13,6 +13,7 @@ import {
   getLatestOpenConversation,
   getMessages,
 } from '@/features/coach/conversation-repository';
+import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { nextStep } from '@/features/onboarding/onboarding-flow';
 import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
@@ -95,6 +96,9 @@ export default async function AthletePage({
       const open = await getLatestOpenConversation(athlete.id, 'weekly_session');
       if (open) {
         const transcript = await getMessages(open.id);
+        // A refresh mid-decision must not lose the pending plan: restore the
+        // proposal too, so the confirm/cancel popup reappears.
+        const pending = await getPendingProposal(athlete.id, open.id);
         weeklyInitial = {
           conversationId: open.id,
           weeklySessionNumber: open.weeklySessionNumber ?? 1,
@@ -104,6 +108,7 @@ export default async function AthletePage({
             content: m.content,
             seq: m.seq,
           })),
+          proposal: pending ? { sessions: pending.sessions } : null,
           ended: false,
         };
       }

@@ -54,23 +54,25 @@ export async function getSessionsForWeek(
 }
 
 /**
- * Replaces the coach-planned sessions of one week with a freshly agreed Week
+ * Replaces the coach-planned sessions in a date range with a freshly agreed Week
  * Plan, atomically.
  *
- * Only `origin = 'coach'` rows in the target week are cleared — a completed
- * session the athlete already rated, a Garmin import, or a Head Coach's
- * prescription is never touched, so re-running the Weekly Session cannot erase
- * what actually happened. Delete and insert land in one `db.batch` so a failure
- * can never leave the week half-written. An empty plan (all Rest) clears the
- * week's coach sessions and inserts nothing.
+ * Only `origin = 'coach'` rows within `[startKey, endKey]` are cleared — a
+ * completed session the athlete already rated, a Garmin import, or a Head Coach's
+ * prescription is never touched, so re-planning cannot erase what actually
+ * happened. The range is the plan's own span, so a plan running from today into
+ * next week replaces exactly that stretch and leaves days outside it alone.
+ * Delete and insert land in one `db.batch` so a failure can never leave the range
+ * half-written. An empty plan clears the range's coach sessions and inserts
+ * nothing.
  */
-export async function replaceCoachPlanForWeek(
+export async function replaceCoachPlanForDateRange(
   athleteId: string,
-  weekStartKey: string,
+  startKey: string,
+  endKey: string,
   rows: NewSessionRow[],
 ): Promise<void> {
   const db = getDb();
-  const weekEndKey = addDays(weekStartKey, 6);
 
   const clear = db
     .delete(sessions)
@@ -78,8 +80,8 @@ export async function replaceCoachPlanForWeek(
       and(
         eq(sessions.athleteId, athleteId),
         eq(sessions.origin, 'coach'),
-        gte(sessions.date, weekStartKey),
-        lte(sessions.date, weekEndKey),
+        gte(sessions.date, startKey),
+        lte(sessions.date, endKey),
       ),
     );
 

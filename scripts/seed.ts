@@ -84,29 +84,37 @@ async function madsAthleteId(email: string): Promise<string> {
 }
 
 /**
- * A plausible coach-planned week for Mads, laid across the current Mon–Sun so it
- * lands in the calendar's current month. Re-seedable: his coach-origin sessions
- * are cleared first, so re-running moves the plan to the new current week rather
- * than piling weeks up. Athlete- and Garmin-origin sessions (none yet) are left
- * untouched.
+ * A week of *completed* training history for Mads, laid across last Mon–Sun.
+ *
+ * Deliberately the past, not a future plan: a new athlete should reach the
+ * calendar with no pre-planned week — the Week Plan is produced by running a
+ * Weekly Session and confirming it, not by the seed. What the seed provides is
+ * history the Coach can review and the Information View can chart (a couple of
+ * days carry a Session Reflection so the review has real feedback to read).
+ *
+ * Re-seedable: his coach-origin sessions are cleared first, so re-running refreshes
+ * last week rather than piling weeks up. Athlete- and Garmin-origin sessions are
+ * left untouched.
  */
-async function seedMadsWeekPlan(athleteId: string) {
+async function seedMadsTrainingHistory(athleteId: string) {
   const db = getDb();
 
   const now = new Date();
   const mondayOffset = (now.getDay() + 6) % 7; // 0 = Monday
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+  // Last week's Monday: this week's Monday minus 7 days.
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset - 7);
   const dayDate = (offset: number) =>
     dateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + offset));
 
-  // One session per day, Mon..Sun — a coach's prescribed week (origin 'coach',
-  // status 'planned'). Numbers/zones are the prescription; the language is a note.
+  // One training session per day (the Rest day carries no row — the calendar
+  // shows rest as the absence of a session). Two days carry a Session Reflection
+  // (Body + Mind, stored on the 1–5 scale the column holds), so the Weekly
+  // Session review has real feedback to read.
   const week: Array<Partial<NewSessionRow> & { day: number }> = [
-    { day: 0, type: 'Endurance', duration: 60, zone: 'Zone 2', title: 'Easy aerobic ride', note: 'Keep it conversational.' },
-    { day: 1, type: 'Intensity', duration: 45, zone: 'Zone 4', title: 'Threshold intervals', note: '4 x 6 min at threshold.' },
+    { day: 0, type: 'Endurance', duration: 60, zone: 'Zone 2', title: 'Easy aerobic ride', note: 'Keep it conversational.', feedbackBody: 4, feedbackMind: 4, feedbackComment: 'Felt smooth.' },
+    { day: 1, type: 'Intensity', duration: 45, zone: 'Zone 4', title: 'Threshold intervals', note: '4 x 6 min at threshold.', feedbackBody: 2, feedbackMind: 3, feedbackComment: 'Legs heavy on the last rep.' },
     { day: 2, type: 'Recovery', duration: 40, zone: 'Zone 1', title: 'Easy swim', note: 'Technique focus, easy effort.' },
     { day: 3, type: 'Tempo', duration: 60, zone: 'Zone 3', title: 'Tempo run', note: '20 min steady in the middle.' },
-    { day: 4, type: 'Rest', title: 'Rest day', isTraining: false },
     { day: 5, type: 'Endurance', duration: 180, zone: 'Zone 2', title: 'Long ride', note: 'Fuel every 45 min.' },
     { day: 6, type: 'Strength', duration: 45, title: 'Strength & mobility', note: 'Core and single-leg work.' },
   ];
@@ -115,7 +123,7 @@ async function seedMadsWeekPlan(athleteId: string) {
     athleteId,
     date: dayDate(day),
     origin: 'coach',
-    status: 'planned',
+    status: 'completed',
     dayOrder: 0,
     type: s.type!,
     duration: s.duration ?? null,
@@ -123,18 +131,22 @@ async function seedMadsWeekPlan(athleteId: string) {
     title: s.title ?? null,
     note: s.note ?? null,
     isTraining: s.isTraining ?? true,
+    feedbackBody: s.feedbackBody ?? null,
+    feedbackMind: s.feedbackMind ?? null,
+    feedbackComment: s.feedbackComment ?? null,
+    ratedAt: s.feedbackBody != null ? now : null,
   }));
 
-  // Atomic reseed: clear only the coach-planned sessions and insert the fresh
-  // week in one transaction, so a failure can never leave Mads with an empty
-  // plan. neon-http has no interactive transactions, but batch() is one.
+  // Atomic reseed: clear only the coach-planned sessions and insert last week's
+  // history in one transaction, so a failure can never leave Mads half-seeded.
+  // neon-http has no interactive transactions, but batch() is one.
   await db.batch([
     db
       .delete(sessions)
       .where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'coach'))),
     db.insert(sessions).values(rows),
   ]);
-  console.log(`Seeded ${rows.length}-session Week Plan for Mads (${dayDate(0)}–${dayDate(6)}).`);
+  console.log(`Seeded ${rows.length} completed sessions for Mads (${dayDate(0)}–${dayDate(6)}).`);
 }
 
 /**
@@ -173,7 +185,7 @@ async function seedSyntheticAthlete() {
 
 async function seed() {
   const madsId = await seedMads();
-  await seedMadsWeekPlan(madsId);
+  await seedMadsTrainingHistory(madsId);
   await seedSyntheticAthlete();
 }
 

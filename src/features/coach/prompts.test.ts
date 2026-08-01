@@ -5,7 +5,6 @@ import {
   buildCoachContext,
   renderPrompt,
   buildChatPrompt,
-  buildPlanExtractionPrompt,
   formatSkippedSessions,
   formatWeekActivity,
   formatWeekFeedback,
@@ -149,17 +148,13 @@ describe('onboarding answers reach every Coach prompt', () => {
   });
 });
 
-describe('plan extraction prompt — multi-session days', () => {
-  it('allows two session objects with the same dayOfWeek', () => {
-    const prompt = buildPlanExtractionPrompt('Coach: two on Monday.');
-    expect(prompt).toContain('same dayOfWeek');
-    expect(prompt).not.toContain('exactly 7 objects');
-  });
-
-  it('defines dayOrder by array order, not an index field', () => {
-    const prompt = buildPlanExtractionPrompt('Coach: plan.');
-    expect(prompt.toLowerCase()).toContain('array order');
-    expect(prompt).not.toContain('sessionIndex');
+describe('weekly prompt — the propose_week_plan tool', () => {
+  it('tells the Coach to propose the plan (not save) once agreed, with dated sessions', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).toContain('propose_week_plan');
+    expect(prompt).toContain('does NOT save');
+    expect(prompt).toContain('YYYY-MM-DD');
   });
 });
 

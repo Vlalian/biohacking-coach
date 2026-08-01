@@ -217,7 +217,15 @@
     "placeholder": "Skriv dit svar…",
     "send": "Send svar",
     "savePlan": "Gem denne plan",
-    "planned": "{count, plural, =0 {Plan gemt — en hvileuge} one {Plan gemt — # session i næste uge} other {Plan gemt — # sessioner i næste uge}}",
+    "cancelPlan": "Annullér",
+    "reviewPlan": "Se planen",
+    "keepTalking": "Fortsæt snakken",
+    "proposalTitle": "Gem denne uge i din kalender?",
+    "proposalIntro": "Din Coach foreslår denne plan. Intet gemmes, før du bekræfter.",
+    "proposalPending": "{count, plural, one {Coach foreslog # session} other {Coach foreslog # sessioner}} — gem eller annullér, når du er klar.",
+    "proposalStale": "Denne plan er rullet ind i en ny dag. Annullér den, og bed din Coach om en ny uge.",
+    "minutes": "{count} minutter",
+    "planned": "{count, plural, =0 {Plan gemt — en hvileuge} one {Plan gemt — # session} other {Plan gemt — # sessioner}}",
     "ended": "Denne ugentlige session er færdig. Din plan ligger i kalenderen.",
     "error": "Det virkede ikke. Prøv igen."
   }
