@@ -4,15 +4,15 @@ import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import {
   buildWeeklyCheckIn,
-  parseDurationMinutes,
-  parsePlanSessions,
-  planToNewSessionRows,
+  proposalDateRange,
+  proposedToNewSessionRows,
   reflectionScoreToTen,
   skippedFrom,
   toApiMessages,
-  transcriptToText,
+  validateProposedPlan,
   weekFeedbackFrom,
   WEEKLY_OPENER,
+  type ProposedSession,
   type Readiness,
 } from './weekly-session';
 
@@ -156,80 +156,103 @@ describe('toApiMessages', () => {
   });
 });
 
-describe('transcriptToText', () => {
-  it('labels each turn Coach or Athlete', () => {
-    const transcript: Message[] = [
-      { id: 'm0', role: 'coach_ai', content: 'Plan?', seq: 0, createdAt: new Date() },
-      { id: 'm1', role: 'athlete', content: 'Yes', seq: 1, createdAt: new Date() },
-    ];
-    expect(transcriptToText(transcript)).toBe('Coach: Plan?\nAthlete: Yes');
-  });
-});
+describe('validateProposedPlan', () => {
+  const TODAY = '2026-07-29';
 
-describe('parsePlanSessions', () => {
-  it('parses a plain JSON array', () => {
-    const items = parsePlanSessions(
-      '[{"dayOfWeek":"Monday","type":"Endurance","duration":"60 min","zone":"Z2","note":"easy"}]',
+  it('accepts a well-formed proposal spanning two calendar weeks', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: '2026-07-29', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
+          { date: '2026-08-05', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: '' },
+        ],
+      },
+      TODAY,
     );
-    expect(items).toEqual([
-      { dayOfWeek: 'Monday', type: 'Endurance', duration: '60 min', zone: 'Z2', note: 'easy' },
-    ]);
-  });
-
-  it('tolerates code fences, labelled or bare', () => {
-    const labelled = parsePlanSessions('```json\n[{"dayOfWeek":"Tuesday","type":"Rest"}]\n```');
-    expect(labelled).toEqual([
-      { dayOfWeek: 'Tuesday', type: 'Rest', duration: null, zone: null, note: null },
-    ]);
-    // A bare fence carries no label — it must strip too, or the plan reads as
-    // unparseable when the model omits the language hint.
-    const bare = parsePlanSessions('```\n[{"dayOfWeek":"Tuesday","type":"Rest"}]\n```');
-    expect(bare).toEqual(labelled);
-  });
-
-  it('returns null when the text is not a JSON array', () => {
-    expect(parsePlanSessions('Sorry, I could not extract a plan.')).toBeNull();
-    expect(parsePlanSessions('{"dayOfWeek":"Monday"}')).toBeNull();
-  });
-
-  it('drops rows with an unknown day or type', () => {
-    const items = parsePlanSessions(
-      '[{"dayOfWeek":"Someday","type":"Endurance"},{"dayOfWeek":"Monday","type":"Nonsense"},{"dayOfWeek":"Monday","type":"Tempo"}]',
-    );
-    expect(items).toEqual([
-      { dayOfWeek: 'Monday', type: 'Tempo', duration: null, zone: null, note: null },
-    ]);
-  });
-});
-
-describe('parseDurationMinutes', () => {
-  it('reads the leading number', () => {
-    expect(parseDurationMinutes('60 min')).toBe(60);
-    expect(parseDurationMinutes('90')).toBe(90);
-  });
-  it('is null for empty or number-free text', () => {
-    expect(parseDurationMinutes(null)).toBeNull();
-    expect(parseDurationMinutes('easy spin')).toBeNull();
-  });
-});
-
-describe('planToNewSessionRows', () => {
-  const WEEK_START = '2026-07-13'; // a Monday
-
-  it('maps days onto dates and skips Rest days', () => {
-    const rows = planToNewSessionRows(
-      [
-        { dayOfWeek: 'Monday', type: 'Endurance', duration: '60 min', zone: 'Z2', note: 'easy' },
-        { dayOfWeek: 'Tuesday', type: 'Rest', duration: null, zone: null, note: null },
-        { dayOfWeek: 'Sunday', type: 'Intensity', duration: '45', zone: 'Z4', note: null },
+    expect(result).toEqual({
+      ok: true,
+      sessions: [
+        { date: '2026-07-29', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
+        // An empty note normalises to null.
+        { date: '2026-08-05', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: null },
       ],
-      WEEK_START,
+    });
+  });
+
+  it('is malformed when there is no sessions array', () => {
+    expect(validateProposedPlan(null, TODAY)).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateProposedPlan({ sessions: 'nope' }, TODAY)).toEqual({
+      ok: false,
+      reason: 'malformed',
+    });
+  });
+
+  it('drops a past date, an impossible date, and an unknown type', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: '2026-07-28', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: '' }, // past
+          { date: '2026-02-30', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: '' }, // impossible
+          { date: '2026-07-30', type: 'Rest', durationMinutes: 0, zone: '', note: '' }, // bad type
+          { date: '2026-07-31', type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: 'ok' }, // valid
+        ],
+      },
+      TODAY,
+    );
+    expect(result).toEqual({
+      ok: true,
+      sessions: [{ date: '2026-07-31', type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: 'ok' }],
+    });
+  });
+
+  it('is empty when nothing valid survives', () => {
+    const result = validateProposedPlan(
+      { sessions: [{ date: '2020-01-01', type: 'Endurance', durationMinutes: 60, zone: '', note: '' }] },
+      TODAY,
+    );
+    expect(result).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  it('rejects a non-positive or absurd duration to null', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: '2026-07-29', type: 'Endurance', durationMinutes: 0, zone: 'Z2', note: '' },
+          { date: '2026-07-30', type: 'Endurance', durationMinutes: 100000, zone: 'Z2', note: '' },
+        ],
+      },
+      TODAY,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.sessions.map((s) => s.durationMinutes)).toEqual([null, null]);
+  });
+});
+
+describe('proposalDateRange', () => {
+  it('spans the earliest to the latest date, unsorted input', () => {
+    const sessions: ProposedSession[] = [
+      { date: '2026-08-02', type: 'Endurance', durationMinutes: null, zone: null, note: null },
+      { date: '2026-07-29', type: 'Intensity', durationMinutes: null, zone: null, note: null },
+      { date: '2026-07-31', type: 'Tempo', durationMinutes: null, zone: null, note: null },
+    ];
+    expect(proposalDateRange(sessions)).toEqual({ start: '2026-07-29', end: '2026-08-02' });
+  });
+});
+
+describe('proposedToNewSessionRows', () => {
+  it('maps dated sessions to coach-planned rows, keeping Double order', () => {
+    const rows = proposedToNewSessionRows(
+      [
+        { date: '2026-07-29', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
+        { date: '2026-07-30', type: 'Endurance', durationMinutes: null, zone: null, note: null },
+        { date: '2026-07-30', type: 'Recovery', durationMinutes: null, zone: null, note: null },
+      ],
       'athlete_1',
     );
     expect(rows).toEqual([
       {
         athleteId: 'athlete_1',
-        date: '2026-07-13',
+        date: '2026-07-29',
         type: 'Endurance',
         origin: 'coach',
         status: 'planned',
@@ -240,30 +263,26 @@ describe('planToNewSessionRows', () => {
       },
       {
         athleteId: 'athlete_1',
-        date: '2026-07-19',
-        type: 'Intensity',
+        date: '2026-07-30',
+        type: 'Endurance',
         origin: 'coach',
         status: 'planned',
-        duration: 45,
-        zone: 'Z4',
+        duration: null,
+        zone: null,
         note: null,
         dayOrder: 0,
       },
-    ]);
-  });
-
-  it('orders a Double by array order within the day', () => {
-    const rows = planToNewSessionRows(
-      [
-        { dayOfWeek: 'Wednesday', type: 'Endurance', duration: null, zone: null, note: null },
-        { dayOfWeek: 'Wednesday', type: 'Recovery', duration: null, zone: null, note: null },
-      ],
-      WEEK_START,
-      'athlete_1',
-    );
-    expect(rows.map((r) => [r.type, r.dayOrder])).toEqual([
-      ['Endurance', 0],
-      ['Recovery', 1],
+      {
+        athleteId: 'athlete_1',
+        date: '2026-07-30',
+        type: 'Recovery',
+        origin: 'coach',
+        status: 'planned',
+        duration: null,
+        zone: null,
+        note: null,
+        dayOrder: 1,
+      },
     ]);
   });
 });

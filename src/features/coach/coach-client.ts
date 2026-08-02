@@ -57,26 +57,92 @@ function getClient(): Anthropic {
 /** The Coach model, overridable per environment; a current Sonnet by default. */
 const COACH_MODEL = process.env.COACH_MODEL || 'claude-sonnet-5';
 
+/** A tool the Coach may call — the app-side name and the validated input it gave. */
+export interface CoachToolCall {
+  name: string;
+  input: unknown;
+}
+
+/**
+ * A Coach turn: the visible text, plus any tool the Coach called. `toolCalls` is
+ * the app's channel for structured proposals (the Week Plan); it never carries
+ * the raw Anthropic block shapes, so callers and the transcript stay text-only.
+ */
+export interface CoachReply {
+  text: string;
+  toolCalls: CoachToolCall[];
+}
+
+const joinText = (content: Anthropic.ContentBlock[]): string =>
+  content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+    .trim();
+
+const toolUsesIn = (content: Anthropic.ContentBlock[]): Anthropic.ToolUseBlock[] =>
+  content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use');
+
 /**
  * Sends a rendered system prompt and a message history to Claude and returns the
- * reply text. Only text content blocks are joined — the Coach never emits tools
- * or images.
+ * Coach's reply.
+ *
+ * When `tools` are offered and the Coach calls one, the tool round-trip is
+ * resolved here, inside the adapter: the tool call is acknowledged with a
+ * `tool_result` and one follow-up request, so the Coach can add a closing line
+ * ("hit confirm when you're happy"). The structured `tool_use`/`tool_result`
+ * blocks live only for that exchange — they are never returned or persisted, so
+ * the stored transcript, and every later API turn rebuilt from it, stay plain
+ * text with no dangling tool call. A single round-trip only: a tool the Coach
+ * calls again in the follow-up is ignored.
  */
 export async function callCoach(input: {
   system: string;
   messages: CoachMessage[];
   maxTokens: number;
-}): Promise<string> {
-  const response = await getClient().messages.create({
+  tools?: Anthropic.Tool[];
+  toolResult?: string;
+}): Promise<CoachReply> {
+  const client = getClient();
+  const first = await client.messages.create({
     model: COACH_MODEL,
     max_tokens: input.maxTokens,
     system: input.system,
     messages: input.messages,
+    ...(input.tools && input.tools.length > 0 ? { tools: input.tools } : {}),
   });
 
-  return response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('')
-    .trim();
+  const toolUses = toolUsesIn(first.content);
+  if (toolUses.length === 0) {
+    return { text: joinText(first.content), toolCalls: [] };
+  }
+
+  // The Coach proposed something. Acknowledge every tool call and ask for a brief
+  // close, so the athlete sees a natural hand-off to the confirm step.
+  const ack = input.toolResult ?? 'Presented to the athlete. Await their decision.';
+  const second = await client.messages.create({
+    model: COACH_MODEL,
+    max_tokens: input.maxTokens,
+    system: input.system,
+    messages: [
+      ...input.messages,
+      { role: 'assistant', content: first.content },
+      {
+        role: 'user',
+        content: toolUses.map((use) => ({
+          type: 'tool_result' as const,
+          tool_use_id: use.id,
+          content: ack,
+        })),
+      },
+    ],
+  });
+
+  const text = [joinText(first.content), joinText(second.content)]
+    .filter((part) => part !== '')
+    .join('\n\n');
+  return {
+    text,
+    toolCalls: toolUses.map((use) => ({ name: use.name, input: use.input })),
+  };
 }
