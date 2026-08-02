@@ -13,6 +13,8 @@ import { dateKey } from '@/lib/date';
 import { Calendar } from '@/app/[locale]/calendar';
 import { InformationView } from '@/app/[locale]/information/information-view';
 import { PrescribePanel } from './prescribe-panel';
+import { SharedConversations } from './shared-conversations';
+import { saveCoachLayoutAction } from './coach-layout-actions';
 
 // Per-request: the page depends on the signed-in coach and the requested
 // athlete, and it must never be prerendered or cached across coaches.
@@ -53,8 +55,9 @@ export default async function CoachAthletePage({
     notFound();
   }
 
-  // The coach's ONE roster-wide layout (ADR 0004), applied read-only — the
-  // coach never writes to the athlete's row.
+  // The coach's ONE roster-wide layout (ADR 0004). Edits persist to the coach
+  // row, not the athlete's — the save action resolves the coach from the
+  // session, so favorites the coach sets here follow them across the roster.
   const layout = parseLayout(coach.informationViewLayout, PANEL_IDS);
 
   return (
@@ -73,7 +76,16 @@ export default async function CoachAthletePage({
         readOnly
       />
       <PrescribePanel athleteId={athleteId} planSessions={view.planSessions} />
-      <InformationView dataset={view.dataset} initialLayout={layout} persistLayout={false} />
+      <InformationView
+        dataset={view.dataset}
+        initialLayout={layout}
+        saveLayout={saveCoachLayoutAction}
+      />
+      {/* Shown only when share_ai_transcripts is on — the service returns null
+          otherwise, so nothing was ever fetched to withhold. */}
+      {view.sharedTranscripts && (
+        <SharedConversations transcripts={view.sharedTranscripts} />
+      )}
     </main>
   );
 }

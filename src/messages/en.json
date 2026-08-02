@@ -127,6 +127,15 @@
     "athletesOwn": "athlete's own",
     "error": "That didn't work ({reason})."
   },
+  "Transcripts": {
+    "title": "Shared conversations",
+    "empty": "No shared conversations yet.",
+    "kindCoachChat": "Coach Chat",
+    "kindWeeklySession": "Weekly Session",
+    "roleAthlete": "Athlete",
+    "roleCoach": "Coach",
+    "roleHeadCoach": "Head Coach"
+  },
   "Auth": {
     "signInTitle": "Sign in",
     "signUpTitle": "Create account",

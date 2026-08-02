@@ -61,12 +61,12 @@ export default async function CoachRosterPage({
               >
                 <span className="font-medium">{entry.name}</span>
                 <span className="flex gap-2 text-xs text-neutral-500">
-                  {!entry.visibility.shareAthleteReports && (
+                  {!entry.link.visibility.shareAthleteReports && (
                     <span className="rounded-full border px-2 py-0.5">
                       {t('reportsWithheld')}
                     </span>
                   )}
-                  {!entry.visibility.shareAiTranscripts && (
+                  {!entry.link.visibility.shareAiTranscripts && (
                     <span className="rounded-full border px-2 py-0.5">
                       {t('transcriptsWithheld')}
                     </span>

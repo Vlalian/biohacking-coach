@@ -28,7 +28,17 @@ import {
 import { buildViewModel } from '@/features/information-view/view-model';
 import { ChartSvg, Legend, Line } from './charts';
 import { PanelBody } from './panel-body';
-import { saveLayoutAction } from './layout-actions';
+
+/**
+ * How the view persists layout changes: a server action that takes the new
+ * favorites and range. The athlete page passes the action that writes their own
+ * row; the coach page passes the one that writes the coach's roster-wide layout.
+ * Omitted → the view is read-only (interactions work, nothing is saved).
+ */
+export type SaveLayout = (
+  favorites: string[],
+  range: string,
+) => Promise<{ ok: boolean }>;
 
 /**
  * The Information View — thin orchestrator, ported from the POC's
@@ -46,17 +56,17 @@ const RANGE_KEYS: RangeKey[] = ['r4', 'r12', 'all'];
 export function InformationView({
   dataset,
   initialLayout,
-  persistLayout = true,
+  saveLayout,
 }: {
   dataset: InfoDataset;
   initialLayout: InformationViewLayout;
   /**
-   * Whether favorite/range changes are saved. True for an athlete viewing their
-   * own page. False when a Head Coach views a roster athlete: the layout is the
-   * coach's one roster-wide layout (ADR 0004), applied read-only here — the
-   * coach must never write to the athlete's row.
+   * The persistence action. The athlete page passes the action that saves their
+   * own layout; the coach page passes the one that saves the coach's ONE
+   * roster-wide layout (ADR 0004) — so a coach editing favorites writes the
+   * coach row, never the athlete's. Omitted → read-only.
    */
-  persistLayout?: boolean;
+  saveLayout?: SaveLayout;
 }) {
   const t = useTranslations('Information');
   const [favorites, setFavorites] = useState(initialLayout.favorites);
@@ -71,11 +81,12 @@ export function InformationView({
   );
 
   // Optimistic persistence: the UI reflects the change now; the row catches up.
-  // A read-only (coach) view keeps the interactions but writes nothing.
+  // With no save action (a read-only view) the interactions work but nothing is
+  // written.
   const persist = (favs: string[], rng: RangeKey) => {
-    if (!persistLayout) return;
+    if (!saveLayout) return;
     startTransition(async () => {
-      await saveLayoutAction(favs, rng);
+      await saveLayout(favs, rng);
     });
   };
 
