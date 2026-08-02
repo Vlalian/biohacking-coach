@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: ready-for-human — built and in review via [PR #21](https://github.com/Vlalian/biohacking-coach/pull/21) (stacked on [PR #20](https://github.com/Vlalian/biohacking-coach/pull/20)/slice 11). Authority as guards on `origin`, server-enforced; add/edit/delete + `head_coach` events verified against the live DB; `move-rules.ts` untouched (athlete keeps placement). DoD green; reviewed manually across both axes (the parallel /code-review agents hit the session limit).
 Label: wayfinder:task
 
 # 12 — The Head Coach prescribes and edits, and the authority holds

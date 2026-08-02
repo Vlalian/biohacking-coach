@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: ready-for-human — built and in review via [PR #17](https://github.com/Vlalian/biohacking-coach/pull/17) (base `main`). DoD green (eslint/tsc/vitest/build); reviewed with /code-review. Head of a stacked chain: 10 → 11 → 12.
 Label: wayfinder:task
 
 # 10 — The Information View runs on real data

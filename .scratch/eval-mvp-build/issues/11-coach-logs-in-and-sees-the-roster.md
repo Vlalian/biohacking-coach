@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: ready-for-human — built and in review via [PR #20](https://github.com/Vlalian/biohacking-coach/pull/20) (stacked on [PR #17](https://github.com/Vlalian/biohacking-coach/pull/17)/slice 10). Migration 0007 adds `coach` + `coaching_link`; Link Visibility enforced server-side; seed + gates verified against the live DB. DoD green; reviewed with /code-review. Note: an orphan untracked `src/features/coaching/` (a prior competing attempt) sits in that worktree and should be cleaned — this slice's code is in `src/features/coach/`.
 Label: wayfinder:task
 
 # 11 — The Head Coach logs in and sees the Roster
