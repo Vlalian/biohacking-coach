@@ -6,11 +6,17 @@ import { buildDataset } from '@/features/information-view/build-dataset';
 import type { InfoDataset } from '@/features/information-view/dataset';
 import { getInformationViewInputs } from '@/features/information-view/information-view-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
-import { getActiveLink, getAthleteName, UNKNOWN_ATHLETE } from './coach-repository';
+import {
+  getActiveLink,
+  getAthleteName,
+  getSharedTranscripts,
+  UNKNOWN_ATHLETE,
+  type SharedTranscript,
+} from './coach-repository';
+import type { LinkVisibility } from './link-visibility';
 import {
   applyVisibilityToInputs,
   applyVisibilityToSessions,
-  type LinkVisibility,
 } from './link-visibility';
 
 /**
@@ -29,12 +35,11 @@ import {
  * browser at all. The calendar and its session parameters are always included —
  * the plan has no flag (ADR 0003).
  *
- * `shareAiTranscripts` needs no enforcement here because this view has no
- * transcript surface: it reads only sessions and streams, never `conversations`
- * or `messages`, so Coach Chat and Weekly Session transcripts cannot reach the
- * client by any path. The flag is carried on `visibility` for the Coach
- * Briefing that will surface transcripts (slice 13); until then the network-
- * layer guarantee holds because nothing fetches them.
+ * `shareAiTranscripts` IS enforced here now: `getSharedTranscripts` returns the
+ * Coach Chat and Weekly Session transcripts only when the flag is on, and
+ * `null` otherwise — the transcripts are never fetched when withheld, so
+ * nothing exists to leak toward the client (Link Visibility at the query, not
+ * the UI). The view exposes `sharedTranscripts` only when the link permits it.
  */
 export type CoachAthleteView = {
   athleteName: string;
@@ -42,6 +47,8 @@ export type CoachAthleteView = {
   calendarSessions: Session[];
   /** The athlete's Unavailable Dates — part of the always-visible calendar. */
   unavailableDates: string[];
+  /** Shared transcripts, or null when `share_ai_transcripts` is off. */
+  sharedTranscripts: SharedTranscript[] | null;
   dataset: InfoDataset;
 };
 
@@ -51,10 +58,11 @@ export async function getCoachAthleteView(
   todayKey: string,
 ): Promise<CoachAthleteView | null> {
   // The authorization gate: no active link → not your athlete → nothing read.
-  const visibility = await getActiveLink(coachId, athleteId);
-  if (!visibility) return null;
+  const link = await getActiveLink(coachId, athleteId);
+  if (!link) return null;
+  const { visibility } = link;
 
-  const [athleteName, calendarRows, unavailableDates, { rows, streams }] =
+  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }] =
     await Promise.all([
       getAthleteName(athleteId),
       getDb()
@@ -65,6 +73,8 @@ export async function getCoachAthleteView(
       // The calendar and its statuses are always visible (ADR 0003), and a day
       // the athlete marked off is part of that plan — so the coach sees it too.
       getUnavailableDates(athleteId),
+      // Gated on share_ai_transcripts: null (unfetched) when the flag is off.
+      getSharedTranscripts(link),
       getInformationViewInputs(athleteId),
     ]);
 
@@ -83,6 +93,7 @@ export async function getCoachAthleteView(
     visibility,
     calendarSessions,
     unavailableDates,
+    sharedTranscripts,
     dataset,
   };
 }

@@ -9,7 +9,9 @@ vi.mock('@/features/athlete/athlete-repository', () => ({
 
 const { saveLayout } = await import('./save-layout');
 
-beforeEach(() => updateInformationViewLayout.mockClear());
+beforeEach(() => {
+  updateInformationViewLayout.mockClear();
+});
 
 describe('saveLayout — layout persistence', () => {
   it('persists a legal layout for the given athlete', async () => {

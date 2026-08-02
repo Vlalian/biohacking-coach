@@ -1,9 +1,14 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { athlete, coach, coachingLink } from '@/db/schema';
+import { athlete, coach, coachingLink, conversations, messages } from '@/db/schema';
 import { user } from '@/db/auth-schema';
-import { toCoach, type Coach, type RosterEntry } from './coach';
-import type { LinkVisibility } from './link-visibility';
+import {
+  toCoach,
+  toCoachingLink,
+  type Coach,
+  type CoachingLink,
+  type RosterEntry,
+} from './coach';
 
 /** The placeholder shown when neither name source is present. */
 export const UNKNOWN_ATHLETE = 'Unknown athlete';
@@ -54,11 +59,9 @@ export async function getCoachByUserId(
 export async function getRoster(coachId: string): Promise<RosterEntry[]> {
   const rows = await getDb()
     .select({
-      athleteId: athlete.id,
+      link: coachingLink,
       userName: user.name,
       syntheticLabel: athlete.syntheticLabel,
-      shareAthleteReports: coachingLink.shareAthleteReports,
-      shareAiTranscripts: coachingLink.shareAiTranscripts,
     })
     .from(coachingLink)
     .innerJoin(athlete, eq(coachingLink.athleteId, athlete.id))
@@ -69,12 +72,9 @@ export async function getRoster(coachId: string): Promise<RosterEntry[]> {
 
   return rows
     .map((r) => ({
-      athleteId: r.athleteId,
+      athleteId: r.link.athleteId,
       name: resolveAthleteName(r.userName, r.syntheticLabel),
-      visibility: {
-        shareAthleteReports: r.shareAthleteReports,
-        shareAiTranscripts: r.shareAiTranscripts,
-      },
+      link: toCoachingLink(r.link),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -92,12 +92,9 @@ export async function getRoster(coachId: string): Promise<RosterEntry[]> {
 export async function getActiveLink(
   coachId: string,
   athleteId: string,
-): Promise<LinkVisibility | undefined> {
+): Promise<CoachingLink | undefined> {
   const rows = await getDb()
-    .select({
-      shareAthleteReports: coachingLink.shareAthleteReports,
-      shareAiTranscripts: coachingLink.shareAiTranscripts,
-    })
+    .select()
     .from(coachingLink)
     .where(
       and(
@@ -108,7 +105,7 @@ export async function getActiveLink(
     )
     .limit(1);
 
-  return rows[0];
+  return rows[0] ? toCoachingLink(rows[0]) : undefined;
 }
 
 /**
@@ -129,4 +126,99 @@ export async function getAthleteName(
   const row = rows[0];
   if (!row) return undefined;
   return resolveAthleteName(row.userName, row.syntheticLabel);
+}
+
+/**
+ * Persists the coach's roster-wide Information View layout (ONE layout across
+ * the whole roster, ADR 0004). The value arrives validated — the
+ * information-view feature owns what a legal layout is — and this is the write
+ * seam, kept beside the other coach-row access. The read is not a separate
+ * function: the coach's layout rides on the {@link Coach} object already.
+ */
+export async function updateCoachInformationViewLayout(
+  coachId: string,
+  layout: { favorites: string[]; range: string },
+): Promise<void> {
+  await getDb()
+    .update(coach)
+    .set({ informationViewLayout: layout, updatedAt: new Date() })
+    .where(eq(coach.id, coachId));
+}
+
+/** The conversation kinds `share_ai_transcripts` governs — Coach Chat and the
+ * Weekly Session. Other kinds (reflection, onboarding, negotiation) are not
+ * part of the Link Visibility contract and are never served to a coach. */
+const SHARED_TRANSCRIPT_KINDS = ['coach_chat', 'weekly_session'] as const;
+type SharedTranscriptKind = (typeof SHARED_TRANSCRIPT_KINDS)[number];
+
+/** A message role, as `messages.role`'s check constrains it. */
+export type MessageRole = 'athlete' | 'coach_ai' | 'head_coach';
+
+/** A conversation transcript shared with the coach, in `seq` order. */
+export type SharedTranscript = {
+  conversationId: string;
+  kind: SharedTranscriptKind;
+  createdAt: Date;
+  messages: Array<{ role: MessageRole; content: string; seq: number }>;
+};
+
+/**
+ * Coach Chat and Weekly Session transcripts for a linked athlete — served ONLY
+ * when the link is active AND `share_ai_transcripts` is on. With the flag off,
+ * a non-active link, or no link, this returns `null` *before any transcript row
+ * is read*, so nothing exists to leak toward the client: Link Visibility is
+ * enforced at the query, not hidden in the UI (ticket 11, ADR 0006).
+ *
+ * The kind filter is in the WHERE clause, so the non-shared conversation kinds
+ * are never fetched either — the "never fetched when withheld" guarantee holds
+ * per-kind, not just per-flag.
+ *
+ * The caller passes the already-resolved active link so the gate is checked
+ * once, not twice.
+ */
+export async function getSharedTranscripts(
+  link: CoachingLink | undefined,
+): Promise<SharedTranscript[] | null> {
+  if (!link || link.status !== 'active' || !link.visibility.shareAiTranscripts) {
+    return null;
+  }
+
+  const rows = await getDb()
+    .select({
+      conversationId: conversations.id,
+      kind: conversations.kind,
+      createdAt: conversations.createdAt,
+      role: messages.role,
+      content: messages.content,
+      seq: messages.seq,
+    })
+    .from(conversations)
+    .innerJoin(messages, eq(messages.conversationId, conversations.id))
+    .where(
+      and(
+        eq(conversations.athleteId, link.athleteId),
+        inArray(conversations.kind, [...SHARED_TRANSCRIPT_KINDS]),
+      ),
+    )
+    .orderBy(asc(conversations.createdAt), asc(messages.seq));
+
+  const byConversation = new Map<string, SharedTranscript>();
+  for (const row of rows) {
+    let entry = byConversation.get(row.conversationId);
+    if (!entry) {
+      entry = {
+        conversationId: row.conversationId,
+        kind: row.kind as SharedTranscriptKind,
+        createdAt: row.createdAt,
+        messages: [],
+      };
+      byConversation.set(row.conversationId, entry);
+    }
+    entry.messages.push({
+      role: row.role as MessageRole,
+      content: row.content,
+      seq: row.seq,
+    });
+  }
+  return [...byConversation.values()];
 }

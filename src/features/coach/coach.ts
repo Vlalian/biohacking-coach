@@ -1,4 +1,4 @@
-import type { CoachRow } from '@/db/schema';
+import type { CoachRow, CoachingLinkRow } from '@/db/schema';
 import type { LinkVisibility } from './link-visibility';
 
 /**
@@ -27,16 +27,53 @@ export function toCoach(row: CoachRow): Coach {
 }
 
 /**
+ * A Coaching Link, as the app knows one — the athlete↔Head-Coach relationship
+ * as a first-class domain object, not just the two flags it carries.
+ *
+ * A Head Coach is a *relationship, not a kind of person* (CONTEXT.md): someone
+ * is a Head Coach only of the athletes their active links point at. Carrying
+ * the link's identity and status (not only its `visibility`) lets callers reason
+ * about the relationship itself — which link, active or severed — rather than
+ * re-deriving it from loose booleans.
+ *
+ * `status` is narrowed to the closed set the schema check enforces, so an
+ * unexpected stored value resolves to `severed` (fail-closed) rather than
+ * leaking access.
+ */
+export type CoachingLink = {
+  id: string;
+  coachId: string;
+  athleteId: string;
+  status: 'active' | 'severed';
+  visibility: LinkVisibility;
+};
+
+/** The one place a stored coaching-link row becomes a domain object. */
+export function toCoachingLink(row: CoachingLinkRow): CoachingLink {
+  return {
+    id: row.id,
+    coachId: row.coachId,
+    athleteId: row.athleteId,
+    // Fail closed: only an explicit 'active' is active; anything else is severed.
+    status: row.status === 'active' ? 'active' : 'severed',
+    visibility: {
+      shareAthleteReports: row.shareAthleteReports,
+      shareAiTranscripts: row.shareAiTranscripts,
+    },
+  };
+}
+
+/**
  * One athlete on a coach's Roster.
  *
  * `name` comes from better-auth's `user.name` for a real athlete, or the
  * fabricated `syntheticLabel` for a synthetic one — resolved at the repository
- * boundary so this shape never depends on which kind it is. `visibility` is the
- * link's own flags, embedded rather than re-flattened, so the Roster can show
- * what is shared without a second read and the two booleans travel as one type.
+ * boundary so this shape never depends on which kind it is. `link` is the whole
+ * Coaching Link, so the Roster can show what is shared (and reason about the
+ * relationship) without a second read.
  */
 export type RosterEntry = {
   athleteId: string;
   name: string;
-  visibility: LinkVisibility;
+  link: CoachingLink;
 };

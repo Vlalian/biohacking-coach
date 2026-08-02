@@ -4,16 +4,30 @@ import type { SessionInput } from '@/features/information-view/build-dataset';
 const {
   getActiveLink,
   getAthleteName,
+  getSharedTranscripts,
   getInformationViewInputs,
   getUnavailableDates,
   calendarRows,
 } = vi.hoisted(() => ({
   getActiveLink: vi.fn(),
   getAthleteName: vi.fn(() => Promise.resolve('Mads')),
+  getSharedTranscripts: vi.fn((): Promise<unknown> => Promise.resolve(null)),
   getInformationViewInputs: vi.fn(),
   getUnavailableDates: vi.fn(() => Promise.resolve([] as string[])),
   calendarRows: { value: [] as unknown[] },
 }));
+
+/** An active Coaching Link with the given flags, as getActiveLink returns it. */
+const activeLink = (
+  shareAthleteReports: boolean,
+  shareAiTranscripts: boolean,
+) => ({
+  id: 'l1',
+  coachId: 'coach_1',
+  athleteId: 'a1',
+  status: 'active' as const,
+  visibility: { shareAthleteReports, shareAiTranscripts },
+});
 
 // The calendar read is the service's one direct db query; the chain is thenable
 // and resolves whatever the test queued in calendarRows.
@@ -27,7 +41,11 @@ function chain() {
 }
 
 vi.mock('@/db', () => ({ getDb: () => chain() }));
-vi.mock('./coach-repository', () => ({ getActiveLink, getAthleteName }));
+vi.mock('./coach-repository', () => ({
+  getActiveLink,
+  getAthleteName,
+  getSharedTranscripts,
+}));
 vi.mock('@/features/information-view/information-view-repository', () => ({
   getInformationViewInputs,
 }));
@@ -87,6 +105,8 @@ beforeEach(() => {
   getInformationViewInputs.mockReset();
   getUnavailableDates.mockClear();
   getUnavailableDates.mockResolvedValue([]);
+  getSharedTranscripts.mockClear();
+  getSharedTranscripts.mockResolvedValue(null);
   calendarRows.value = [];
 });
 
@@ -101,10 +121,11 @@ describe('getCoachAthleteView — the authorization gate', () => {
     expect(getInformationViewInputs).not.toHaveBeenCalled();
     expect(getAthleteName).not.toHaveBeenCalled();
     expect(getUnavailableDates).not.toHaveBeenCalled();
+    expect(getSharedTranscripts).not.toHaveBeenCalled();
   });
 
   it('surfaces the athlete Unavailable Dates — the calendar is always visible', async () => {
-    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: false });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
     getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
     getUnavailableDates.mockResolvedValue(['2026-07-20', '2026-07-21']);
 
@@ -123,34 +144,38 @@ describe('getCoachAthleteView — the authorization gate', () => {
   });
 });
 
-describe('getCoachAthleteView — transcripts are never in the payload', () => {
-  it('the share_ai_transcripts flag changes nothing: no transcript reaches the view either way', async () => {
-    // The guarantee is by construction — this view reads only sessions and
-    // streams, never conversations or messages — so the flag cannot add or
-    // remove a transcript. Proven by flipping it and getting identical,
-    // transcript-free output (AC 3).
-    calendarRows.value = [calRow()];
-    getInformationViewInputs.mockResolvedValue({ rows: [ivInput()], streams: {} });
+describe('getCoachAthleteView — transcripts gated on share_ai_transcripts', () => {
+  it('flag off: sharedTranscripts is null and getSharedTranscripts withholds', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+    // The repository is what enforces the gate; the service passes the link and
+    // exposes whatever it returns — null when the flag is off.
+    getSharedTranscripts.mockResolvedValue(null);
 
-    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: false });
-    const withheld = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
 
-    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: true });
-    const shared = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(view!.sharedTranscripts).toBeNull();
+    // The link (carrying the flag) is what the gate is applied to.
+    expect(getSharedTranscripts).toHaveBeenCalledWith(activeLink(true, false));
+  });
 
-    // The view shape carries no transcript field at all, on either setting.
-    expect(withheld).not.toHaveProperty('transcripts');
-    expect(withheld).not.toHaveProperty('messages');
-    expect(shared).not.toHaveProperty('transcripts');
-    // Flipping the flag leaves the data identical — there is no transcript path.
-    expect(shared!.calendarSessions).toEqual(withheld!.calendarSessions);
-    expect(shared!.dataset).toEqual(withheld!.dataset);
+  it('flag on: the served transcripts reach the view', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, true));
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+    getSharedTranscripts.mockResolvedValue([
+      { conversationId: 'c1', kind: 'coach_chat', createdAt: new Date('2026-07-01'), messages: [{ role: 'athlete', content: 'hi', seq: 0 }] },
+    ]);
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(view!.sharedTranscripts).toHaveLength(1);
+    expect(view!.sharedTranscripts![0].conversationId).toBe('c1');
   });
 });
 
 describe('getCoachAthleteView — Link Visibility applied server-side', () => {
   it('reports on: reflections reach the calendar and the Body & Mind panel', async () => {
-    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: false });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
     calendarRows.value = [calRow()];
     getInformationViewInputs.mockResolvedValue({ rows: [ivInput()], streams: {} });
 
@@ -162,7 +187,7 @@ describe('getCoachAthleteView — Link Visibility applied server-side', () => {
   });
 
   it('reports off: reflections are stripped before they leave the server', async () => {
-    getActiveLink.mockResolvedValue({ shareAthleteReports: false, shareAiTranscripts: false });
+    getActiveLink.mockResolvedValue(activeLink(false, false));
     calendarRows.value = [calRow()];
     getInformationViewInputs.mockResolvedValue({ rows: [ivInput()], streams: {} });
 

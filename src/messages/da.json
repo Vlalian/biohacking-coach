@@ -110,6 +110,15 @@
     "reportsWithheld": "Rapporter private",
     "transcriptsWithheld": "Udskrifter private"
   },
+  "Transcripts": {
+    "title": "Delte samtaler",
+    "empty": "Ingen delte samtaler endnu.",
+    "kindCoachChat": "Coach-chat",
+    "kindWeeklySession": "Ugentlig session",
+    "roleAthlete": "Atlet",
+    "roleCoach": "Træner",
+    "roleHeadCoach": "Cheftræner"
+  },
   "Auth": {
     "signInTitle": "Log ind",
     "signUpTitle": "Opret konto",
