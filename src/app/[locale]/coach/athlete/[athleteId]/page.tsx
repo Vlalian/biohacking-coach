@@ -68,6 +68,7 @@ export default async function CoachAthletePage({
 
       <Calendar
         sessions={view.calendarSessions}
+        unavailableDates={view.unavailableDates}
         todayKey={dateKey(new Date())}
         readOnly
       />

@@ -178,6 +178,30 @@ describe('buildDataset — peaks and bests', () => {
     expect(best5s).toMatchObject({ value: '170 W', sport: 'bike', date: '2026-07-13' });
   });
 
+  it('keeps the same month in different years as separate rows', () => {
+    // Keyed on the short month name alone, these two Julys would collapse into
+    // one row and the earlier year's peak would be lost — reachable on the `all`
+    // range, which spans full history.
+    const lastYear = Array.from({ length: 8 }, (_, i) => 100 + i * 10); // best 170
+    const thisYear = Array.from({ length: 8 }, (_, i) => 200 + i * 10); // best 270
+    const D = buildDataset(
+      [
+        input({ id: 'old', date: '2025-07-14', sport: 'cycling' }),
+        input({ id: 'new', date: '2026-07-13', sport: 'cycling' }),
+      ],
+      {
+        old: { t: lastYear.map((_, i) => i * 10), powerW: lastYear },
+        new: { t: thisYear.map((_, i) => i * 10), powerW: thisYear },
+      },
+      TODAY,
+    );
+
+    expect(D.peaksPower).toHaveLength(2);
+    // Both display as "Jul"; they are distinct rows in date order.
+    expect(D.peaksPower.map((r) => r.label)).toEqual(['Jul', 'Jul']);
+    expect(D.peaksPower.map((r) => r['5s'])).toEqual([170, 270]);
+  });
+
   it('no streams → no peaks, no bests', () => {
     const D = buildDataset([input()], {}, TODAY);
     expect(D.peaksPower).toHaveLength(0);

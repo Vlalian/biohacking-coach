@@ -142,7 +142,11 @@
   },
   "Calendar": {
     "empty": "No sessions planned yet.",
-    "rate": "Rate {type} session"
+    "rate": "Rate {type} session",
+    "markUnavailable": "Mark {date} unavailable",
+    "clearUnavailable": "Make {date} available again",
+    "unavailableDay": "Unavailable — can't train this day",
+    "parked": "Parked — awaiting re-placement"
   },
   "Garmin": {
     "upload": "Upload Garmin file",
@@ -239,7 +243,15 @@
     "placeholder": "Type your reply…",
     "send": "Send",
     "savePlan": "Save this plan",
-    "planned": "{count, plural, =0 {Plan saved — a rest week} one {Plan saved — # session next week} other {Plan saved — # sessions next week}}",
+    "cancelPlan": "Cancel",
+    "reviewPlan": "Review plan",
+    "keepTalking": "Keep talking",
+    "proposalTitle": "Save this week to your calendar?",
+    "proposalIntro": "Your Coach suggests this plan. Nothing is saved until you confirm.",
+    "proposalPending": "{count, plural, one {Coach proposed # session} other {Coach proposed # sessions}} — save or cancel when ready.",
+    "proposalStale": "This plan has rolled into a new day. Cancel it and ask your Coach for a fresh week.",
+    "minutes": "{count} min",
+    "planned": "{count, plural, =0 {Plan saved — a rest week} one {Plan saved — # session} other {Plan saved — # sessions}}",
     "ended": "This Weekly Session is done. Your plan is on the calendar.",
     "error": "That didn't work. Try again."
   }

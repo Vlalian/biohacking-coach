@@ -10,14 +10,18 @@ import type { SessionRow } from '@/db/schema';
  * something renders it.
  *
  * `date` is a 'YYYY-MM-DD' string; `dayOrder` orders sessions within that date.
- * The feedback fields are the Session Reflection (RPE 1–5 for body and mind plus
- * a comment); null until the athlete rates the session.
+ * `parked` is true while the session is an Unavailable session — flipped out of
+ * the plan in place (its `status` is 'unavailable') and awaiting re-placement;
+ * the calendar surfaces it so the athlete can retrieve it. The feedback fields
+ * are the Session Reflection (RPE 1–5 for body and mind plus a comment); null
+ * until the athlete rates the session.
  */
 export type Session = {
   id: string;
   date: string;
   type: string;
   status: string;
+  parked: boolean;
   dayOrder: number;
   title: string | null;
   duration: number | null;
@@ -35,6 +39,7 @@ export function toSession(row: SessionRow): Session {
     date: row.date,
     type: row.type,
     status: row.status,
+    parked: row.parked,
     dayOrder: row.dayOrder,
     title: row.title,
     duration: row.duration,

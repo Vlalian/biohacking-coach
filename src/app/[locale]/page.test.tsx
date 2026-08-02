@@ -6,6 +6,7 @@ const {
   getAthleteByUserId,
   provisionAthlete,
   getSessionsForAthlete,
+  getUnavailableDates,
   getLatestOpenConversation,
   getMessages,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   getAthleteByUserId: vi.fn(),
   provisionAthlete: vi.fn(),
   getSessionsForAthlete: vi.fn(() => Promise.resolve([])),
+  getUnavailableDates: vi.fn(() => Promise.resolve([])),
   getLatestOpenConversation: vi.fn(() => Promise.resolve(null)),
   getMessages: vi.fn(() => Promise.resolve([])),
 }));
@@ -33,6 +35,7 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
+vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/features/coach/conversation-repository', () => ({
   getLatestOpenConversation,
   getMessages,

@@ -8,11 +8,13 @@ import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import { dateKey } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import {
+  commitWeeklyPlan,
   continueWeeklySession,
-  finalizeWeeklyPlan,
+  declineWeeklyPlan,
   startWeeklySession,
+  type CommitResult,
   type ContinueResult,
-  type FinalizeResult,
+  type DeclineResult,
   type WeeklySessionState,
 } from '@/features/coach/weekly-session-service';
 
@@ -74,18 +76,29 @@ export async function sendWeeklyMessageAction(
   );
 }
 
-export async function finalizeWeeklyPlanAction(
+/** The athlete confirmed the proposal — write it and refresh the calendar. */
+export async function commitWeeklyPlanAction(
   conversationId: string,
-): Promise<FinalizeResult | AuthFailure> {
+): Promise<CommitResult | AuthFailure> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
 
-  const result = await finalizeWeeklyPlan(
+  const result = await commitWeeklyPlan(
     resolved.athlete,
     conversationId,
     dateKey(new Date()),
   );
-  // The agreed plan lands in the calendar — refresh it so the new week shows.
+  // The confirmed plan lands in the calendar — refresh it so the new week shows.
   if (result.ok) revalidatePath('/', 'layout');
   return result;
+}
+
+/** The athlete cancelled the proposal — nothing is written. */
+export async function declineWeeklyPlanAction(
+  conversationId: string,
+): Promise<DeclineResult | AuthFailure> {
+  const resolved = await currentAthlete();
+  if (!resolved.ok) return resolved;
+
+  return declineWeeklyPlan(resolved.athlete, conversationId);
 }

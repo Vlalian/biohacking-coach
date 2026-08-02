@@ -1,7 +1,7 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import type { Session } from '@/features/session/session';
 import type { NewSessionRow } from '@/db/schema';
-import { addDays } from '@/lib/date';
+import { isValidDateKey } from '@/lib/date';
 import { assertNoIdentity, type CheckIn, type SkippedSession, type WeekFeedbackEntry } from './check-in';
 import type { CoachMessage } from './coach-client';
 import type { Message } from './conversation';
@@ -28,20 +28,6 @@ export interface Readiness {
 
 /** The user-turn primer that opens a Weekly Session (never persisted). */
 export const WEEKLY_OPENER = "Let's do our weekly session.";
-
-/** The allowed session types the plan extractor may return. */
-const PLAN_TYPES = ['Endurance', 'Intensity', 'Tempo', 'Recovery', 'Rest'] as const;
-type PlanType = (typeof PLAN_TYPES)[number];
-
-const DAY_INDEX: Record<string, number> = {
-  Monday: 0,
-  Tuesday: 1,
-  Wednesday: 2,
-  Thursday: 3,
-  Friday: 4,
-  Saturday: 5,
-  Sunday: 6,
-};
 
 /**
  * Assembles the check-in the Weekly Session prompt reasons about, from the
@@ -139,102 +125,157 @@ export function toApiMessages(transcript: Message[]): CoachMessage[] {
   ];
 }
 
-/** Turns a stored transcript into the "Coach:/Athlete:" text the extractor reads. */
-export function transcriptToText(transcript: Message[]): string {
-  return transcript
-    .map((m) => `${m.role === 'coach_ai' ? 'Coach' : 'Athlete'}: ${m.content}`)
-    .join('\n');
-}
+// ── The Week Plan proposal tool ───────────────────────────────────────────────
 
-export interface PlanItem {
-  dayOfWeek: string;
+/**
+ * The session types the Coach may propose. A rest day carries no session — the
+ * calendar shows it as the absence of one — so 'Rest' is deliberately not a
+ * value the tool can emit.
+ */
+export const PLAN_TYPES = ['Endurance', 'Intensity', 'Tempo', 'Recovery'] as const;
+export type PlanType = (typeof PLAN_TYPES)[number];
+
+/** One session the Coach proposes — a real date, not a weekday name. */
+export interface ProposedSession {
+  date: string;
   type: PlanType;
-  duration: string | null;
+  durationMinutes: number | null;
   zone: string | null;
   note: string | null;
 }
 
+export const PROPOSE_WEEK_PLAN_TOOL_NAME = 'propose_week_plan';
+
 /**
- * Parses the plan-extraction reply into plan items, tolerating the code fences a
- * model sometimes wraps JSON in. Returns null when the text is not a JSON array —
- * the caller surfaces that as "could not read the plan" rather than crashing.
- * Items with an unknown day or type are dropped, so a malformed row never becomes
- * a bad session.
+ * The tool the Coach calls to *propose* a training week — it never writes. A tool
+ * call stages a proposal the athlete then confirms or cancels; the server is the
+ * authority on what actually lands (ADR 0006). Dates are explicit, so a plan may
+ * span any range the Coach and athlete agreed — including from today into the
+ * following week, which a weekday-only shape could not express. `strict` makes
+ * the API guarantee the input matches this schema, so there is no JSON parsing or
+ * fence-stripping to get wrong.
  */
-export function parsePlanSessions(rawText: string): PlanItem[] | null {
-  // The label is optional as a whole: a reply may come back in a bare ``` fence
-  // or a ```json one. (`json?` would only make the trailing "n" optional and
-  // leave a bare fence unstripped — the plan would then read as unparseable.)
-  const cleaned = rawText
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
+export const PROPOSE_WEEK_PLAN_TOOL = {
+  name: PROPOSE_WEEK_PLAN_TOOL_NAME,
+  description:
+    'Propose the agreed training week to the athlete for confirmation. This does ' +
+    'NOT save anything — it shows the plan to the athlete, who confirms or cancels. ' +
+    'Call it only once the athlete has agreed to the plan, never while you are ' +
+    'still offering options. Give every session an explicit calendar date; omit ' +
+    'rest days entirely. The plan may cover any range you agreed, including from ' +
+    'today into next week.',
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      sessions: {
+        type: 'array',
+        description: 'The training sessions of the week, in day order. No rest days.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            date: { type: 'string', description: 'Calendar date, YYYY-MM-DD.' },
+            type: { type: 'string', enum: [...PLAN_TYPES] },
+            durationMinutes: { type: 'integer', description: 'Planned duration in minutes.' },
+            zone: { type: 'string', description: 'Intensity zone, e.g. Z2.' },
+            note: { type: 'string', description: 'One short coaching line.' },
+          },
+          required: ['date', 'type', 'durationMinutes', 'zone', 'note'],
+        },
+      },
+    },
+    required: ['sessions'],
+  },
+} as const;
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(parsed)) return null;
+const MAX_SESSION_MINUTES = 24 * 60;
 
-  const items: PlanItem[] = [];
-  for (const raw of parsed) {
-    if (!raw || typeof raw !== 'object') continue;
-    const r = raw as Record<string, unknown>;
-    const dayOfWeek = typeof r.dayOfWeek === 'string' ? r.dayOfWeek : '';
-    const type = typeof r.type === 'string' ? r.type : '';
-    if (!(dayOfWeek in DAY_INDEX)) continue;
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+function positiveMinutes(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_SESSION_MINUTES
+    ? value
+    : null;
+}
+
+export type ValidatePlanResult =
+  | { ok: true; sessions: ProposedSession[] }
+  | { ok: false; reason: 'malformed' | 'empty' };
+
+/**
+ * The server-authority gate over a proposed plan.
+ *
+ * `strict` tool use guarantees the shape, but not the meaning: the Coach could
+ * still name an impossible date (2026-02-30) or one in the past. Each row is
+ * checked against the real calendar and today; a row that fails is dropped rather
+ * than trusted. `malformed` means the input was not even a sessions array;
+ * `empty` means nothing valid survived — both are refusals, so nothing is staged.
+ * The athlete only ever sees, and confirms, rows that passed here.
+ */
+export function validateProposedPlan(input: unknown, today: string): ValidatePlanResult {
+  if (!input || typeof input !== 'object') return { ok: false, reason: 'malformed' };
+  const raw = (input as Record<string, unknown>).sessions;
+  if (!Array.isArray(raw)) return { ok: false, reason: 'malformed' };
+
+  const sessions: ProposedSession[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const s = entry as Record<string, unknown>;
+    const date = typeof s.date === 'string' ? s.date : '';
+    const type = typeof s.type === 'string' ? s.type : '';
+    // A real calendar day, today or later — a past day is history, not a plan.
+    if (!isValidDateKey(date) || date < today) continue;
     if (!PLAN_TYPES.includes(type as PlanType)) continue;
-    items.push({
-      dayOfWeek,
+    sessions.push({
+      date,
       type: type as PlanType,
-      duration: typeof r.duration === 'string' ? r.duration : null,
-      zone: typeof r.zone === 'string' ? r.zone : null,
-      note: typeof r.note === 'string' ? r.note : null,
+      durationMinutes: positiveMinutes(s.durationMinutes),
+      zone: optionalString(s.zone),
+      note: optionalString(s.note),
     });
   }
-  return items;
+
+  if (sessions.length === 0) return { ok: false, reason: 'empty' };
+  return { ok: true, sessions };
 }
 
-/** Minutes from a free-form duration string ("60 min" → 60), or null. */
-export function parseDurationMinutes(duration: string | null): number | null {
-  if (!duration) return null;
-  const match = duration.match(/\d+/);
-  return match ? Number(match[0]) : null;
+/** The [start, end] calendar span a proposal covers — the range to replace. */
+export function proposalDateRange(sessions: ProposedSession[]): {
+  start: string;
+  end: string;
+} {
+  const dates = sessions.map((s) => s.date).sort();
+  return { start: dates[0], end: dates[dates.length - 1] };
 }
 
 /**
- * Maps parsed plan items onto real dates for the target week, ready to insert.
+ * Maps validated proposed sessions to insertable rows.
  *
- * Rest days carry no session, so they produce no row — the calendar shows a Rest
- * day as the absence of a session. `dayOrder` follows array order within a day, so
- * a Double (two sessions on one date) keeps the order the Coach agreed.
+ * `dayOrder` follows array order within a single date, so a Double (two sessions
+ * on one day) keeps the order the Coach agreed. Every row is `origin: 'coach'`
+ * and `status: 'planned'`, so the write only ever replaces coach-planned days.
  */
-export function planToNewSessionRows(
-  items: PlanItem[],
-  weekStartKey: string,
+export function proposedToNewSessionRows(
+  sessions: ProposedSession[],
   athleteId: string,
 ): NewSessionRow[] {
   const orderByDate = new Map<string, number>();
-  const rows: NewSessionRow[] = [];
-  for (const item of items) {
-    if (item.type === 'Rest') continue;
-    const date = addDays(weekStartKey, DAY_INDEX[item.dayOfWeek]);
-    const dayOrder = orderByDate.get(date) ?? 0;
-    orderByDate.set(date, dayOrder + 1);
-    rows.push({
+  return sessions.map((s) => {
+    const dayOrder = orderByDate.get(s.date) ?? 0;
+    orderByDate.set(s.date, dayOrder + 1);
+    return {
       athleteId,
-      date,
-      type: item.type,
+      date: s.date,
+      type: s.type,
       origin: 'coach',
       status: 'planned',
-      duration: parseDurationMinutes(item.duration),
-      zone: item.zone,
-      note: item.note,
+      duration: s.durationMinutes,
+      zone: s.zone,
+      note: s.note,
       dayOrder,
-    });
-  }
-  return rows;
+    };
+  });
 }
