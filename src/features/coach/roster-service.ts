@@ -5,6 +5,7 @@ import { toSession, type Session } from '@/features/session/session';
 import { buildDataset } from '@/features/information-view/build-dataset';
 import type { InfoDataset } from '@/features/information-view/dataset';
 import { getInformationViewInputs } from '@/features/information-view/information-view-repository';
+import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { getActiveLink, getAthleteName, UNKNOWN_ATHLETE } from './coach-repository';
 import {
   applyVisibilityToInputs,
@@ -39,6 +40,8 @@ export type CoachAthleteView = {
   athleteName: string;
   visibility: LinkVisibility;
   calendarSessions: Session[];
+  /** The athlete's Unavailable Dates — part of the always-visible calendar. */
+  unavailableDates: string[];
   dataset: InfoDataset;
 };
 
@@ -51,15 +54,19 @@ export async function getCoachAthleteView(
   const visibility = await getActiveLink(coachId, athleteId);
   if (!visibility) return null;
 
-  const [athleteName, calendarRows, { rows, streams }] = await Promise.all([
-    getAthleteName(athleteId),
-    getDb()
-      .select()
-      .from(sessions)
-      .where(eq(sessions.athleteId, athleteId))
-      .orderBy(asc(sessions.date), asc(sessions.dayOrder)),
-    getInformationViewInputs(athleteId),
-  ]);
+  const [athleteName, calendarRows, unavailableDates, { rows, streams }] =
+    await Promise.all([
+      getAthleteName(athleteId),
+      getDb()
+        .select()
+        .from(sessions)
+        .where(eq(sessions.athleteId, athleteId))
+        .orderBy(asc(sessions.date), asc(sessions.dayOrder)),
+      // The calendar and its statuses are always visible (ADR 0003), and a day
+      // the athlete marked off is part of that plan — so the coach sees it too.
+      getUnavailableDates(athleteId),
+      getInformationViewInputs(athleteId),
+    ]);
 
   const calendarSessions = applyVisibilityToSessions(
     calendarRows.map(toSession),
@@ -75,6 +82,7 @@ export async function getCoachAthleteView(
     athleteName: athleteName ?? UNKNOWN_ATHLETE,
     visibility,
     calendarSessions,
+    unavailableDates,
     dataset,
   };
 }

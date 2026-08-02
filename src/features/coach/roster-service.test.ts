@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SessionInput } from '@/features/information-view/build-dataset';
 
-const { getActiveLink, getAthleteName, getInformationViewInputs, calendarRows } =
-  vi.hoisted(() => ({
-    getActiveLink: vi.fn(),
-    getAthleteName: vi.fn(() => Promise.resolve('Mads')),
-    getInformationViewInputs: vi.fn(),
-    calendarRows: { value: [] as unknown[] },
-  }));
+const {
+  getActiveLink,
+  getAthleteName,
+  getInformationViewInputs,
+  getUnavailableDates,
+  calendarRows,
+} = vi.hoisted(() => ({
+  getActiveLink: vi.fn(),
+  getAthleteName: vi.fn(() => Promise.resolve('Mads')),
+  getInformationViewInputs: vi.fn(),
+  getUnavailableDates: vi.fn(() => Promise.resolve([] as string[])),
+  calendarRows: { value: [] as unknown[] },
+}));
 
 // The calendar read is the service's one direct db query; the chain is thenable
 // and resolves whatever the test queued in calendarRows.
@@ -24,6 +30,9 @@ vi.mock('@/db', () => ({ getDb: () => chain() }));
 vi.mock('./coach-repository', () => ({ getActiveLink, getAthleteName }));
 vi.mock('@/features/information-view/information-view-repository', () => ({
   getInformationViewInputs,
+}));
+vi.mock('@/features/availability/availability-repository', () => ({
+  getUnavailableDates,
 }));
 
 const { getCoachAthleteView } = await import('./roster-service');
@@ -76,6 +85,8 @@ beforeEach(() => {
   getActiveLink.mockReset();
   getAthleteName.mockClear();
   getInformationViewInputs.mockReset();
+  getUnavailableDates.mockClear();
+  getUnavailableDates.mockResolvedValue([]);
   calendarRows.value = [];
 });
 
@@ -89,6 +100,16 @@ describe('getCoachAthleteView — the authorization gate', () => {
     // The refusal is total: no athlete data is touched after the gate closes.
     expect(getInformationViewInputs).not.toHaveBeenCalled();
     expect(getAthleteName).not.toHaveBeenCalled();
+    expect(getUnavailableDates).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the athlete Unavailable Dates — the calendar is always visible', async () => {
+    getActiveLink.mockResolvedValue({ shareAthleteReports: true, shareAiTranscripts: false });
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+    getUnavailableDates.mockResolvedValue(['2026-07-20', '2026-07-21']);
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(view!.unavailableDates).toEqual(['2026-07-20', '2026-07-21']);
   });
 
   it('revokes access on a severed link — indistinguishable from no link', async () => {

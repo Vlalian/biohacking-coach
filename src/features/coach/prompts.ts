@@ -536,6 +536,8 @@ ${weekActivityLines}
       : ''
   }DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.
 
+SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Plan whatever range you agreed, from today onward.
+
 ${CONSTRAINT_SIGNALS}
 
 DATA USE: Scores = coaching intelligence, never cite directly.
@@ -598,31 +600,4 @@ phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} 
 ${onboardingBlock}${CONSTRAINT_SIGNALS}
 
 ${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}PRIVACY: Never use athlete's name. Second person only. No PII reproduction.`;
-}
-
-// ── Week Plan extraction ──────────────────────────────────────────────────────
-
-/**
- * Extraction prompt for the agreed week plan. A day may hold two sessions: the
- * Coach returns two objects with the same dayOfWeek, and their array order
- * defines their order within the day (no index field).
- */
-export function buildPlanExtractionPrompt(conversationText: string): string {
-  return `Extract the week training plan agreed in this coaching conversation.
-
-CONVERSATION:
-${conversationText}
-
-Return ONLY a valid JSON array of session objects covering Monday through Sunday, in day order:
-[
-  { "dayOfWeek": "Monday", "type": "Endurance"|"Intensity"|"Tempo"|"Recovery"|"Rest", "duration": "e.g. 60 min" or null, "zone": "e.g. Z2" or null, "note": "one coaching line" or null },
-  ...
-]
-
-Rules:
-- Every day Monday through Sunday appears at least once.
-- If a day is a rest day or not mentioned, use type "Rest" with null for duration, zone, and note.
-- If two sessions were agreed for one day, return two objects with the same dayOfWeek — their array order is their order within the day. Never invent a second session that wasn't agreed.
-- Only use these exact type values: Endurance, Intensity, Tempo, Recovery, Rest.
-- Return JSON only — no preamble, no code fences.`;
 }
