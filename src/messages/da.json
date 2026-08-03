@@ -110,6 +110,23 @@
     "reportsWithheld": "Rapporter private",
     "transcriptsWithheld": "Udskrifter private"
   },
+  "Prescribe": {
+    "addTitle": "Ordinér en session",
+    "editTitle": "Rediger session",
+    "date": "Dato",
+    "type": "Sessionstype",
+    "duration": "Varighed (min)",
+    "zone": "Intensitetszone",
+    "sessionTitle": "Titel",
+    "note": "Notat",
+    "add": "Føj til plan",
+    "save": "Gem ændringer",
+    "cancel": "Annullér",
+    "edit": "Rediger",
+    "delete": "Slet",
+    "athletesOwn": "atletens egen",
+    "error": "Det virkede ikke ({reason})."
+  },
   "Transcripts": {
     "title": "Delte samtaler",
     "empty": "Ingen delte samtaler endnu.",

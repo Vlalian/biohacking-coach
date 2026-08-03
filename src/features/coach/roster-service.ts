@@ -13,11 +13,34 @@ import {
   UNKNOWN_ATHLETE,
   type SharedTranscript,
 } from './coach-repository';
+import { canHeadCoachEditContent } from './head-coach-authority';
 import type { LinkVisibility } from './link-visibility';
 import {
   applyVisibilityToInputs,
   applyVisibilityToSessions,
 } from './link-visibility';
+
+/**
+ * A plan session as the Head Coach's editing surface sees it — the fields a
+ * prescription form reads and writes, plus `origin`/`status` so the UI knows
+ * which sessions are the Head Coach's to edit. Distinct from the calendar's
+ * `Session` because it deliberately carries `origin` (the calendar never needs
+ * it) and never the athlete's reflection (editing is about the plan, not the
+ * reports the visibility flag governs).
+ */
+export type PlanSession = {
+  id: string;
+  date: string;
+  type: string;
+  status: string;
+  origin: string;
+  duration: number | null;
+  zone: string | null;
+  title: string | null;
+  note: string | null;
+  /** Whether the Head Coach may edit/delete this one (guard on origin). */
+  editable: boolean;
+};
 
 /**
  * What a coach is allowed to see of one roster athlete, assembled server-side.
@@ -47,6 +70,8 @@ export type CoachAthleteView = {
   calendarSessions: Session[];
   /** The athlete's Unavailable Dates — part of the always-visible calendar. */
   unavailableDates: string[];
+  /** The plan as the Head Coach's editing surface, past sessions excluded. */
+  planSessions: PlanSession[];
   /** Shared transcripts, or null when `share_ai_transcripts` is off. */
   sharedTranscripts: SharedTranscript[] | null;
   dataset: InfoDataset;
@@ -88,11 +113,31 @@ export async function getCoachAthleteView(
     todayKey,
   );
 
+  // The editing surface is the current-and-future plan: a completed or past
+  // session is the record, not something the Head Coach re-plans (ADR 0002).
+  // `editable` is the content-authority guard, so the UI shows edit/delete only
+  // where the server would allow it — the button matches the rule.
+  const planSessions: PlanSession[] = calendarRows
+    .filter((r) => r.date >= todayKey && r.status !== 'completed')
+    .map((r) => ({
+      id: r.id,
+      date: r.date,
+      type: r.type,
+      status: r.status,
+      origin: r.origin,
+      duration: r.duration,
+      zone: r.zone,
+      title: r.title,
+      note: r.note,
+      editable: canHeadCoachEditContent(r.origin),
+    }));
+
   return {
     athleteName: athleteName ?? UNKNOWN_ATHLETE,
     visibility,
     calendarSessions,
     unavailableDates,
+    planSessions,
     sharedTranscripts,
     dataset,
   };

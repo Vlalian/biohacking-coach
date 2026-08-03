@@ -12,6 +12,7 @@ import { PANEL_IDS } from '@/features/information-view/panels';
 import { dateKey } from '@/lib/date';
 import { Calendar } from '@/app/[locale]/calendar';
 import { InformationView } from '@/app/[locale]/information/information-view';
+import { PrescribePanel } from './prescribe-panel';
 import { SharedConversations } from './shared-conversations';
 import { saveCoachLayoutAction } from './coach-layout-actions';
 
@@ -74,6 +75,7 @@ export default async function CoachAthletePage({
         todayKey={dateKey(new Date())}
         readOnly
       />
+      <PrescribePanel athleteId={athleteId} planSessions={view.planSessions} />
       <InformationView
         dataset={view.dataset}
         initialLayout={layout}
