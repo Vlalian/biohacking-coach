@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-24) — merged via PR #19. Unavailable Dates with Displacement parking (migration 0007).
 Label: wayfinder:task
 
 # 14 — The athlete marks a day unavailable and the plan respects it

@@ -1,4 +1,4 @@
-Status: ready-for-human — built and in review via [PR #17](https://github.com/Vlalian/biohacking-coach/pull/17) (base `main`). DoD green (eslint/tsc/vitest/build); reviewed with /code-review. Head of a stacked chain: 10 → 11 → 12.
+Status: done (2026-07-24) — merged via PR #17. The Information View renders real sessions/feedback/streams; layout persists; Period Comparison added (ADR 0004 second pillar).
 Label: wayfinder:task
 
 # 10 — The Information View runs on real data
