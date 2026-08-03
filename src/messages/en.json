@@ -101,6 +101,24 @@
     "bestRun400": "Fastest 400 m run",
     "bestSwim100": "Fastest 100 m swim"
   },
+  "Roster": {
+    "title": "Roster",
+    "subtitle": "The athletes you coach.",
+    "empty": "No athletes linked yet.",
+    "notACoach": "You don't have a coach account.",
+    "backToRoster": "Back to Roster",
+    "reportsWithheld": "Reports private",
+    "transcriptsWithheld": "Transcripts private"
+  },
+  "Transcripts": {
+    "title": "Shared conversations",
+    "empty": "No shared conversations yet.",
+    "kindCoachChat": "Coach Chat",
+    "kindWeeklySession": "Weekly Session",
+    "roleAthlete": "Athlete",
+    "roleCoach": "Coach",
+    "roleHeadCoach": "Head Coach"
+  },
   "Auth": {
     "signInTitle": "Sign in",
     "signUpTitle": "Create account",

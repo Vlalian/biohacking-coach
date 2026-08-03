@@ -101,6 +101,24 @@
     "bestRun400": "Hurtigste 400 m løb",
     "bestSwim100": "Hurtigste 100 m svømning"
   },
+  "Roster": {
+    "title": "Atletliste",
+    "subtitle": "De atleter, du coacher.",
+    "empty": "Ingen atleter tilknyttet endnu.",
+    "notACoach": "Du har ingen coach-konto.",
+    "backToRoster": "Tilbage til atletlisten",
+    "reportsWithheld": "Rapporter private",
+    "transcriptsWithheld": "Udskrifter private"
+  },
+  "Transcripts": {
+    "title": "Delte samtaler",
+    "empty": "Ingen delte samtaler endnu.",
+    "kindCoachChat": "Coach-chat",
+    "kindWeeklySession": "Ugentlig session",
+    "roleAthlete": "Atlet",
+    "roleCoach": "Træner",
+    "roleHeadCoach": "Cheftræner"
+  },
   "Auth": {
     "signInTitle": "Log ind",
     "signUpTitle": "Opret konto",

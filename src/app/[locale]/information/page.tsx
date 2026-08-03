@@ -15,6 +15,7 @@ import { parseLayout } from '@/features/information-view/layout';
 import { PANEL_IDS } from '@/features/information-view/panels';
 import { dateKey } from '@/lib/date';
 import { InformationView } from './information-view';
+import { saveLayoutAction } from './layout-actions';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -50,7 +51,13 @@ export default async function InformationPage({
     ]);
     const dataset = buildDataset(rows, streams, dateKey(new Date()));
     const layout = parseLayout(storedLayout, PANEL_IDS);
-    view = <InformationView dataset={dataset} initialLayout={layout} />;
+    view = (
+      <InformationView
+        dataset={dataset}
+        initialLayout={layout}
+        saveLayout={saveLayoutAction}
+      />
+    );
   }
 
   return (
