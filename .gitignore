@@ -26,3 +26,20 @@ coverage/
 .vercel/
 .turbo/
 *.tsbuildinfo
+
+# --- Private working docs — kept local only, never published ---
+# This is a learning project. The planning corpus, concept notes, decision
+# records, and prototype stay on the author's machine; the public repo leads
+# with README.md and ABOUT.md instead. These files remain on disk (the agent
+# tooling still reads them) — they are only removed from version control.
+/CONTEXT.md
+/OVERVIEW.md
+/CLAUDE.md
+/.scratch/
+/poc/
+/docs/
+/.agents/
+/.claude/
+/skills-lock.json
+/.fallowrc.json
+/lovable/
