@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-23) — merged via PR #14. The walking skeleton is hosted on Vercel and login works on the deployment.
 Label: wayfinder:task
 
 # 03 — The skeleton is hosted and Mads logs into it from a browser

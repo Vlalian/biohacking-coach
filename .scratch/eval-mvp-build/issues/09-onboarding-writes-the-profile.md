@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-24) — merged via PR #16. MCQ onboarding writes the Athlete Profile (phase, experience, communication style, race target + profile JSONB).
 Label: wayfinder:task
 
 # 09 — MCQ onboarding creates the athlete profile

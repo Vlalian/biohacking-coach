@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-07-24) — merged via PR #15. The Weekly Session conversation runs against real Claude and persists server-side (conversations + messages).
 Label: wayfinder:task
 
 # 08 — The Coach runs the Weekly Session and remembers it
