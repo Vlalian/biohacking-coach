@@ -246,7 +246,6 @@ export function renderPrompt(ctx: CoachContext): string {
     sleep,
     pulse,
     phase,
-    personaName,
     sessionCount,
     commStyle,
     experienceLevel,
@@ -284,7 +283,7 @@ Reference kit when relevant. Never list unprompted.
 
 `
       : ''
-  }STATE: phase=${phase} sessions=${sessionCount} xp=${experienceLevel || 'intermediate'} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${personaName ? ` athlete=${personaName}` : ''}${raceTarget ? ` race=${raceTarget}` : ''}
+  }STATE: phase=${phase} sessions=${sessionCount} xp=${experienceLevel || 'intermediate'} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${raceTarget ? ` race=${raceTarget}` : ''}
 
 ${onboardingBlock}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${
     patterns.length > 0
@@ -438,7 +437,6 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     sleep,
     pulse,
     phase,
-    personaName,
     commStyle,
     experienceLevel,
     sessionCount,
@@ -519,8 +517,7 @@ POSTURE: Confident, evidence-led, direct. Hold position unless athlete gives rea
 ${arc}
 
 TODAY: ${today}
-${planningDayLine}${fixedConstraints && fixedConstraints.length > 0 ? `NO TRAINING ON: ${fixedConstraints.join(', ')}\n\n` : ''}${hasEquipment ? `EQUIPMENT:\n${equipmentLines.join('\n')}\n\n` : ''}STATE: phase=${phase} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm xp=${experienceLevel || 'intermediate'}${personaName ? ` athlete=${personaName}` : ''}
-
+${planningDayLine}${fixedConstraints && fixedConstraints.length > 0 ? `NO TRAINING ON: ${fixedConstraints.join(', ')}\n\n` : ''}${hasEquipment ? `EQUIPMENT:\n${equipmentLines.join('\n')}\n\n` : ''}STATE: phase=${phase} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm xp=${experienceLevel || 'intermediate'}
 ${onboardingBlock}${feedbackSummary ? `LAST WEEK FEEDBACK:\n${feedbackSummary}\n\n` : 'No feedback this week — use check-in signals and self-assessment.\n\n'}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${
     patterns.length > 0
       ? `PATTERNS: ${patterns.join('; ')}.
