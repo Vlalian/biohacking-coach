@@ -1,3 +1,25 @@
+## Local context files (gitignored — read these first)
+
+`CONTEXT.md` and `OVERVIEW.md` are **not in git**. They were removed from version
+control when the repo went public (PR #24) and now live only on disk in each
+working copy, alongside the read-on-demand `.scratch/`, `docs/`, and `poc/` corpus.
+They remain the source of truth for this project's language and orientation.
+
+**Read `CONTEXT.md` and `OVERVIEW.md` at the start of every session**, before
+writing code or issues — `CONTEXT.md` is the domain glossary (use its terms
+exactly, don't drift to synonyms) and `OVERVIEW.md` says where truth lives.
+`docs/` and `.scratch/` are read on demand when a task calls for them.
+
+- **Claude Code** loads them automatically: `CLAUDE.md` `@`-imports `CONTEXT.md`
+  and `OVERVIEW.md`, so every Claude session already has them in context.
+- **Other agents** (Copilot, Cursor, Codex) do not `@`-import — open and read the
+  two files explicitly at session start.
+- **A freshly-created worktree will not have these files** (they are gitignored,
+  so they are never checked out from `main`). Restore them before working: copy
+  them in from another working copy, or `git restore --source <pre-PR#24-commit> --
+  CONTEXT.md OVERVIEW.md`. A missing file makes the `@`-import silently no-op, so an
+  agent can lose the domain language with no error — confirm they are present.
+
 ## Working rules
 
 ### Review code before committing it
