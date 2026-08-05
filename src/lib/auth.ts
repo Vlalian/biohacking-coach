@@ -55,11 +55,21 @@ export const auth = betterAuth({
   baseURL,
   trustedOrigins: baseURL ? [baseURL] : [],
 
-  // Registration is enabled everywhere in this slice. Turning it OFF on the
-  // hosted deployment (while it stays on locally and in tests) is slice 16's
-  // job, not this one — see .scratch/eval-mvp-build/issues/16-tier-1-hardening.md.
+  // Email/password login is always on. Self-*registration* is switched off on
+  // the deployment and left on locally and in tests (slice 16, route 10 ballot
+  // 1): the deployment holds health data and has no one in the eval who needs
+  // to self-register — both humans are seeded (Mads by slice 02, the coach by
+  // slice 11), and slice 03 asks Mads to sign *in*.
+  //
+  // Driven by `DISABLE_SIGNUP`: set it to "true" on Vercel, leave it unset
+  // locally so slice 02's "a person can sign up" still passes on the dev box and
+  // in tests. The seed is then the ONLY way an account can exist on the
+  // deployment, which is exactly why the seed creates users through
+  // better-auth's own server API (`signUpEmail`), not raw `user` inserts —
+  // otherwise nobody could log in, with no self-registration to escape through.
   emailAndPassword: {
     enabled: true,
+    disableSignUp: process.env.DISABLE_SIGNUP === 'true',
   },
 
   databaseHooks: {
