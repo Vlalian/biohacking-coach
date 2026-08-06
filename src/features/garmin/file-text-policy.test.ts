@@ -42,6 +42,10 @@ describe('boundFileText — the storage guard', () => {
   it('caps length at 64 characters', () => {
     expect(boundFileText('x'.repeat(200))!.length).toBe(64);
   });
+  it('returns null for a non-string (a nested XML element), never throws', () => {
+    expect(boundFileText({ foo: 'x' })).toBeNull();
+    expect(boundFileText(42)).toBeNull();
+  });
   it('returns null for empty, whitespace, or nullish input', () => {
     expect(boundFileText(null)).toBeNull();
     expect(boundFileText(undefined)).toBeNull();
@@ -70,6 +74,19 @@ describe('parseGpx — the label is bounded and kept out of the note', () => {
     const [session] = parseGpx(Buffer.from(hostileGpx));
     expect(session.sessionType).toBe('Endurance'); // fell to the lookup default
     expect(session.sessionType).not.toContain('IGNORE');
+  });
+
+  it('a nested-element <type> does not throw — the parser keeps its contract', () => {
+    // A valid GPX can nest elements inside <type>, which parses to an object,
+    // not a string. The parser must not throw on `.replace`/`.toLowerCase`.
+    const nestedGpx = `<gpx><trk><type><b>run</b></type><trkseg>
+      <trkpt lat="55" lon="12"><ele>10</ele><time>2026-07-13T08:00:00Z</time></trkpt>
+      <trkpt lat="55" lon="12"><ele>10</ele><time>2026-07-13T08:10:00Z</time></trkpt>
+    </trkseg></trk></gpx>`;
+    expect(() => parseGpx(Buffer.from(nestedGpx))).not.toThrow();
+    const [session] = parseGpx(Buffer.from(nestedGpx));
+    expect(session.sessionType).toBe('Endurance');
+    expect(session.note).toBe('Imported from GPX');
   });
 });
 

@@ -67,7 +67,10 @@ const SPORT_MAP: Record<string, string> = {
   training: 'Strength',
 };
 
-export function inferSessionType(sport = ''): string {
+export function inferSessionType(sport: unknown = ''): string {
+  // Defensive: a nested XML element parses to an object, not a string. Anything
+  // non-string falls straight to the safe default rather than throwing.
+  if (typeof sport !== 'string') return 'Endurance';
   return SPORT_MAP[sport.toLowerCase()] || 'Endurance';
 }
 
@@ -82,8 +85,10 @@ const MAX_FILE_TEXT = 64;
  * text is never interpolated into prompt text — only `sessionType`, which
  * always passes through {@link inferSessionType}'s lookup, reaches a prompt.
  */
-export function boundFileText(value: string | null | undefined): string | null {
-  if (value == null) return null;
+export function boundFileText(value: unknown): string | null {
+  // Defensive against a non-string (a nested XML element parses to an object):
+  // treat anything but a string as absent rather than throwing on `.replace`.
+  if (typeof value !== 'string') return null;
   // Strip ASCII control characters (C0 range + DEL), then cap the length.
   const cleaned = value.replace(/[\x00-\x1F\x7F]/g, '').trim();
   return cleaned ? cleaned.slice(0, MAX_FILE_TEXT) : null;
@@ -373,7 +378,15 @@ export function parseGpx(buffer: Buffer): ParsedSession[] {
         hasStart && Number.isFinite(lastTs) && lastTs > 0
           ? Math.round((lastTs - firstTs) / 60000)
           : null;
-      const typeName = (trk.type || trk.name || '') as string;
+      // A valid GPX can nest `<type>`/`<name>` as an element, so the parser
+      // yields an object, not a string — take a string or fall back to '', so
+      // the parser keeps its never-throws contract.
+      const typeName =
+        typeof trk.type === 'string'
+          ? trk.type
+          : typeof trk.name === 'string'
+            ? trk.name
+            : '';
       // Bounded label to the display-only column; the note is constant (see the
       // FIT path — file text never rides the note into a prompt).
       const sport = boundFileText(typeName);
