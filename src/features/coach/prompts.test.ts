@@ -28,6 +28,42 @@ const BASE: CheckIn = {
   equipment: {},
 };
 
+describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => {
+  // The load-bearing criterion: the consent artifact tells the coach that no
+  // name reaches Anthropic. If a name can appear in a rendered prompt, that
+  // sentence is a lie. `personaName` is deliberately no longer interpolated —
+  // even set to a real-looking name, it must not surface.
+  const NAME = 'Jane Q Realname';
+  const EMAIL = 'jane.realname@example.com';
+  const withIdentity: CheckIn = {
+    ...BASE,
+    personaName: NAME,
+    raceTarget: 'Ironman Copenhagen',
+    experienceLevel: 'veteran',
+  };
+
+  it('the Session Negotiation / chat prompt carries no name or email', () => {
+    const prompt = renderPrompt(buildCoachContext(withIdentity, [], null));
+    expect(prompt).not.toContain(NAME);
+    expect(prompt).not.toContain('Realname');
+    expect(prompt).not.toContain(EMAIL);
+  });
+
+  it('the Weekly Session prompt carries no name or email', () => {
+    const ctx = buildWeeklyContext(
+      { ...withIdentity, weeklySessionNumber: 4 },
+      [],
+      [],
+      [],
+      [],
+    );
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).not.toContain(NAME);
+    expect(prompt).not.toContain('Realname');
+    expect(prompt).not.toContain(EMAIL);
+  });
+});
+
 describe('buildWeeklyContext — raceTarget', () => {
   it('forwards raceTarget from checkIn', () => {
     const ctx = buildWeeklyContext(

@@ -57,6 +57,29 @@ function getClient(): Anthropic {
 /** The Coach model, overridable per environment; a current Sonnet by default. */
 const COACH_MODEL = process.env.COACH_MODEL || 'claude-sonnet-5';
 
+/**
+ * Inference runs in the United States, always (slice 15, route 09 / GDPR).
+ *
+ * `inference_geo` is a top-level `/v1/messages` parameter — not a header, not
+ * nested. It is carried on every request here so the consent artifact's promise
+ * ("processing runs in the US, under the SCCs in the DPA") is true of every
+ * call. The load-bearing half is the workspace lock (`allowed_inference_geos:
+ * ["us"]`, set in the Console): with it, a request that omits this parameter or
+ * asks for `global` is *rejected by the API*, so the promise does not depend on
+ * every future call remembering the parameter. The SDK's param types may not
+ * include `inference_geo` yet, so it is added at the call boundary.
+ */
+const INFERENCE_GEO = 'us';
+
+function withInferenceGeo(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Anthropic.MessageCreateParamsNonStreaming {
+  return {
+    ...params,
+    inference_geo: INFERENCE_GEO,
+  } as Anthropic.MessageCreateParamsNonStreaming;
+}
+
 /** A tool the Coach may call — the app-side name and the validated input it gave. */
 export interface CoachToolCall {
   name: string;
@@ -104,13 +127,15 @@ export async function callCoach(input: {
   toolResult?: string;
 }): Promise<CoachReply> {
   const client = getClient();
-  const first = await client.messages.create({
-    model: COACH_MODEL,
-    max_tokens: input.maxTokens,
-    system: input.system,
-    messages: input.messages,
-    ...(input.tools && input.tools.length > 0 ? { tools: input.tools } : {}),
-  });
+  const first = await client.messages.create(
+    withInferenceGeo({
+      model: COACH_MODEL,
+      max_tokens: input.maxTokens,
+      system: input.system,
+      messages: input.messages,
+      ...(input.tools && input.tools.length > 0 ? { tools: input.tools } : {}),
+    }),
+  );
 
   const toolUses = toolUsesIn(first.content);
   if (toolUses.length === 0) {
@@ -120,23 +145,25 @@ export async function callCoach(input: {
   // The Coach proposed something. Acknowledge every tool call and ask for a brief
   // close, so the athlete sees a natural hand-off to the confirm step.
   const ack = input.toolResult ?? 'Presented to the athlete. Await their decision.';
-  const second = await client.messages.create({
-    model: COACH_MODEL,
-    max_tokens: input.maxTokens,
-    system: input.system,
-    messages: [
-      ...input.messages,
-      { role: 'assistant', content: first.content },
-      {
-        role: 'user',
-        content: toolUses.map((use) => ({
-          type: 'tool_result' as const,
-          tool_use_id: use.id,
-          content: ack,
-        })),
-      },
-    ],
-  });
+  const second = await client.messages.create(
+    withInferenceGeo({
+      model: COACH_MODEL,
+      max_tokens: input.maxTokens,
+      system: input.system,
+      messages: [
+        ...input.messages,
+        { role: 'assistant', content: first.content },
+        {
+          role: 'user',
+          content: toolUses.map((use) => ({
+            type: 'tool_result' as const,
+            tool_use_id: use.id,
+            content: ack,
+          })),
+        },
+      ],
+    }),
+  );
 
   const text = [joinText(first.content), joinText(second.content)]
     .filter((part) => part !== '')
