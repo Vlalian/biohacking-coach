@@ -67,8 +67,31 @@ const SPORT_MAP: Record<string, string> = {
   training: 'Strength',
 };
 
-export function inferSessionType(sport = ''): string {
+export function inferSessionType(sport: unknown = ''): string {
+  // Defensive: a nested XML element parses to an object, not a string. Anything
+  // non-string falls straight to the safe default rather than throwing.
+  if (typeof sport !== 'string') return 'Endurance';
   return SPORT_MAP[sport.toLowerCase()] || 'Endurance';
+}
+
+/** Longest a raw file-derived label may be stored/displayed (slice 16). */
+const MAX_FILE_TEXT = 64;
+
+/**
+ * Bounds a raw file-derived string at the parse boundary (slice 16, route 10
+ * ballot 3): control characters stripped, length capped, so the database never
+ * holds arbitrary `.fit`/`.gpx` text even in display-only columns like `sport`
+ * and `note`. This is the *storage* guard; the *prompt* guard is that raw file
+ * text is never interpolated into prompt text — only `sessionType`, which
+ * always passes through {@link inferSessionType}'s lookup, reaches a prompt.
+ */
+export function boundFileText(value: unknown): string | null {
+  // Defensive against a non-string (a nested XML element parses to an object):
+  // treat anything but a string as absent rather than throwing on `.replace`.
+  if (typeof value !== 'string') return null;
+  // Strip ASCII control characters (C0 range + DEL), then cap the length.
+  const cleaned = value.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  return cleaned ? cleaned.slice(0, MAX_FILE_TEXT) : null;
 }
 
 const BIN_SECONDS = 10;
@@ -205,13 +228,20 @@ function fitSession(s: FitSession, allRecords: FitRecord[]): ParsedSession | nul
   const computed = summarizeRecords(records);
   const date = start ? start.toISOString().slice(0, 10) : null;
   if (!date) return null;
+  // The raw file label is bounded and kept only in the display-only `sport`
+  // column (slice 16). The `note` is a *constant* provenance string, carrying
+  // no file text: `note` is the one field a prompt could interpolate (the
+  // Session Negotiation prompt does), and bounding cannot neutralise injection
+  // prose — only keeping file text out of the note can. `sessionType` stays on
+  // the raw value; its lookup is the injection defence there.
+  const sport = boundFileText(s.sport);
   return {
     date,
     sessionType: inferSessionType(s.sport || ''),
     duration: s.total_elapsed_time ? Math.round(s.total_elapsed_time / 60) : null,
-    note: `Imported from Garmin${s.sport ? ' · ' + s.sport : ''}`,
+    note: 'Imported from Garmin',
     startTime: start ? start.toISOString() : null,
-    sport: s.sport || null,
+    sport,
     summary: {
       avgHr: numOr(s.avg_heart_rate, computed.avgHr),
       maxHr: numOr(s.max_heart_rate, computed.maxHr),
@@ -348,15 +378,26 @@ export function parseGpx(buffer: Buffer): ParsedSession[] {
         hasStart && Number.isFinite(lastTs) && lastTs > 0
           ? Math.round((lastTs - firstTs) / 60000)
           : null;
-      const typeName = (trk.type || trk.name || '') as string;
+      // A valid GPX can nest `<type>`/`<name>` as an element, so the parser
+      // yields an object, not a string — take a string or fall back to '', so
+      // the parser keeps its never-throws contract.
+      const typeName =
+        typeof trk.type === 'string'
+          ? trk.type
+          : typeof trk.name === 'string'
+            ? trk.name
+            : '';
+      // Bounded label to the display-only column; the note is constant (see the
+      // FIT path — file text never rides the note into a prompt).
+      const sport = boundFileText(typeName);
       const records = firstTs ? gpxRecords(points, firstTs) : [];
       return {
         date,
         sessionType: inferSessionType(typeName),
         duration,
-        note: `Imported from GPX${typeName ? ' · ' + typeName : ''}`,
+        note: 'Imported from GPX',
         startTime: hasStart ? new Date(firstTs).toISOString() : null,
-        sport: typeName || null,
+        sport,
         summary: summarizeRecords(records),
         streams: downsampleRecords(records),
       };
