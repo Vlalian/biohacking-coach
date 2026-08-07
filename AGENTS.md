@@ -50,6 +50,25 @@ Rules that follow:
 - Never `git add -A` when a parallel session has uncommitted work — you will commit theirs as yours. Stage the specific files you changed.
 - If you find uncommitted work you did not write, stop and surface it. Do not commit it, do not revert it.
 
+### Session helper scripts (Windows)
+
+Because the domain docs are gitignored (see the section above), a bare `git worktree add`
+gives a session the code but **not** `CONTEXT.md`, `OVERVIEW.md`, or the `.scratch/`,
+`docs/`, `poc/` corpus. Two PowerShell scripts in the main folder bridge that — they keep
+**one** canonical copy of the docs and link it into each session:
+
+- **`New-Session.ps1 -Name <slug> -Branch build/<NN>-<slug>`** — creates the worktree off
+  `origin/main`, junctions the doc folders back to the canonical copies (admin-free on
+  Windows), and writes a gitignored `CLAUDE.md` that `@`-imports `CONTEXT.md`/`OVERVIEW.md`/
+  `AGENTS.md` by absolute path. Every session starts from the same ground truth, and doc
+  edits land on the one real copy.
+- **`Remove-Session.ps1 -Name <slug>`** — tears the session down. It **unlinks the junctions
+  first**, then removes the worktree. This matters: a plain `git worktree remove` can follow
+  the junctions and delete the canonical docs — always tear down with this script.
+
+Run both from the main folder. The junctions and generated `CLAUDE.md` are gitignored, so
+they never enter a PR.
+
 ## Code standards
 
 ### Coding conventions
