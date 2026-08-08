@@ -15,12 +15,18 @@ import {
 } from '@/features/coach/conversation-repository';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { nextStep } from '@/features/onboarding/onboarding-flow';
+import { getActiveConsents } from '@/features/consent/consent-repository';
+import {
+  currentlyConsentedPurposes,
+  missingRequiredConsents,
+} from '@/features/consent/consent';
 import { dateKey } from '@/lib/date';
 import { SignOutButton } from './sign-out-button';
 import { Calendar } from './calendar';
 import { GarminUpload } from './garmin-upload';
 import { WeeklySession, type WeeklySessionInitial } from './weekly-session';
 import { OnboardingFlow } from './onboarding';
+import { ConsentScreen } from './consent';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -53,6 +59,27 @@ export default async function AthletePage({
       // Provisioning is idempotent, so heal it on read and re-fetch once.
       await provisionAthlete(session.user.id);
       athlete = await getAthleteByUserId(session.user.id);
+    }
+
+    // The consent gate: before any of the athlete's data is processed, the
+    // required processing purposes must be consented under the current
+    // disclosure version (GDPR lawful basis; gdpr-decisions item A). This is the
+    // render half of the gate — the AI call itself is refused server-side by
+    // assertAiCoachingConsent. Placed before onboarding so no health-adjacent
+    // data is collected without a lawful basis to process it.
+    if (athlete) {
+      const activeConsents = await getActiveConsents(athlete.id);
+      if (missingRequiredConsents(activeConsents).length > 0) {
+        return (
+          <main className="flex min-h-screen flex-col items-center gap-6 p-8">
+            <ConsentScreen
+              granted={currentlyConsentedPurposes(activeConsents)}
+              mode="gate"
+            />
+            <SignOutButton />
+          </main>
+        );
+      }
     }
 
     // The onboarding gate: an athlete without an experience level has not
@@ -123,9 +150,14 @@ export default async function AthletePage({
                 {t('greeting', { name: session.user.name })}
               </h1>
               <p className="text-sm text-neutral-500">{t('tagline')}</p>
-              <Link href="/information" className="text-sm text-blue-500 underline">
-                {t('informationLink')}
-              </Link>
+              <div className="flex gap-3">
+                <Link href="/information" className="text-sm text-blue-500 underline">
+                  {t('informationLink')}
+                </Link>
+                <Link href="/privacy" className="text-sm text-blue-500 underline">
+                  {t('privacyLink')}
+                </Link>
+              </div>
             </header>
             <Calendar
               sessions={trainingSessions}

@@ -6,7 +6,8 @@
     "greeting": "Velkommen tilbage, {name}",
     "tagline": "Din Coach er klar, når du er.",
     "noAthlete": "Vi kunne ikke indlæse din profil. Log ud, og prøv igen.",
-    "informationLink": "Information"
+    "informationLink": "Information",
+    "privacyLink": "Privatliv & samtykke"
   },
   "Information": {
     "title": "Information",
@@ -262,6 +263,8 @@
     "minutes": "{count} minutter",
     "planned": "{count, plural, =0 {Plan gemt — en hvileuge} one {Plan gemt — # session} other {Plan gemt — # sessioner}}",
     "ended": "Denne ugentlige session er færdig. Din plan ligger i kalenderen.",
+    "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
+    "consentRequiredLink": "Åbn Privatliv & samtykke",
     "error": "Det virkede ikke. Prøv igen."
   }
 }

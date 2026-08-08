@@ -424,3 +424,65 @@ export const unavailableDates = pgTable(
 
 export type UnavailableDateRow = typeof unavailableDates.$inferSelect;
 export type NewUnavailableDateRow = typeof unavailableDates.$inferInsert;
+
+/**
+ * A consent record — the athlete's explicit, unbundled, versioned grant for one
+ * processing purpose (the lawful basis GDPR requires; gdpr-decisions item A).
+ *
+ * Append-only audit trail, not a mutable flag. A grant inserts a row; a
+ * withdrawal stamps `withdrawnAt` on the active row; a re-grant, or a grant made
+ * under a newer disclosure version, inserts a fresh row. So the table is the
+ * full history of what the athlete agreed to and when — the evidence a consent
+ * regime must be able to produce — rather than a current-state boolean that
+ * forgets.
+ *
+ * `purpose` is one processing purpose, granted on its own: the consent is
+ * *unbundled*, so an athlete accepts each purpose separately instead of one
+ * all-or-nothing checkbox. It is a closed set, checked at the database so a bad
+ * write fails here and not silently downstream. The set mirrors
+ * `CONSENT_PURPOSES` in `features/consent/disclosure.ts` — the app-side source of
+ * truth; keep the two in step (a migration changes this list deliberately).
+ *
+ * `disclosureVersion` is the version of the disclosure text the athlete saw when
+ * they granted. The gate accepts a grant only when its version equals the
+ * current `DISCLOSURE_VERSION`, so revising the disclosure wording invalidates
+ * every prior grant and the athlete must consent again to the new text.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006): a consent row
+ * carries no name or email, so a leak of this table alone names nobody, exactly
+ * like every training table.
+ *
+ * The partial unique index keeps at most one *active* (un-withdrawn) row per
+ * (athlete, purpose), so "is this currently granted?" has a single answer; the
+ * withdrawn history is left unconstrained to accumulate.
+ */
+export const consent = pgTable(
+  'consent',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    purpose: text('purpose').notNull(),
+    disclosureVersion: text('disclosure_version').notNull(),
+    grantedAt: timestamp('granted_at').notNull().defaultNow(),
+    withdrawnAt: timestamp('withdrawn_at'),
+  },
+  (table) => [
+    // The athlete's consent list — and the gate — always read by athlete.
+    index('consent_athlete_idx').on(table.athleteId),
+    // At most one active grant per (athlete, purpose); withdrawn rows are exempt
+    // (their `withdrawn_at` is set), so history piles up freely beneath it.
+    uniqueIndex('consent_active_purpose_idx')
+      .on(table.athleteId, table.purpose)
+      .where(sql`${table.withdrawnAt} IS NULL`),
+    // Closed value set — the mirror of CONSENT_PURPOSES (see the docstring).
+    check(
+      'consent_purpose_valid',
+      sql`${table.purpose} IN ('ai_coaching', 'health_data', 'product_improvement')`,
+    ),
+  ],
+);
+
+export type ConsentRow = typeof consent.$inferSelect;
+export type NewConsentRow = typeof consent.$inferInsert;

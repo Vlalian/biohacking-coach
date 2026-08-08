@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
+import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { dateKey } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import {
@@ -26,11 +27,18 @@ import {
  * checks any client-supplied conversation id against that owner (ADR 0006), so
  * these actions add authentication and the service adds authority.
  *
+ * The two actions that make the Coach process the athlete's data — starting a
+ * Weekly Session and sending it a message — also pass the server-enforced
+ * consent gate before any prompt is assembled: no valid, current-version consent
+ * for the required purposes, no AI call (gdpr-decisions item A). The gate is the
+ * control; the consent screen is only its front door.
+ *
  * The Coach's language is read here too — from the user's `ui_prefs` (ticket 09),
  * through the user seam, and passed into the service as plain data.
  */
 
 type AuthFailure = { ok: false; reason: 'not-authenticated' };
+type ConsentFailure = { ok: false; reason: 'consent-required' };
 
 /** Resolves the signed-in user to their athlete + language, or a failure. */
 async function currentAthlete(): Promise<
@@ -44,13 +52,29 @@ async function currentAthlete(): Promise<
   return { ok: true, athlete, language: prefs.language };
 }
 
+/**
+ * The server-enforced gate on AI processing: refuses unless the athlete's
+ * required consents are current. Returns a `consent-required` failure the action
+ * surfaces, rather than ever reaching the Coach with un-consented data. In the
+ * normal flow the render gate has already collected consent, so this fires only
+ * for a request that skipped it — which is exactly what a control is for.
+ */
+async function aiConsentOk(athleteId: string): Promise<boolean> {
+  const gate = await assertAiCoachingConsent(athleteId);
+  return gate.ok;
+}
+
 export type StartWeeklyResult =
   | ({ ok: true } & WeeklySessionState)
-  | AuthFailure;
+  | AuthFailure
+  | ConsentFailure;
 
 export async function startWeeklySessionAction(): Promise<StartWeeklyResult> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
+  if (!(await aiConsentOk(resolved.athlete.id))) {
+    return { ok: false, reason: 'consent-required' };
+  }
 
   const state = await startWeeklySession(
     resolved.athlete,
@@ -63,9 +87,12 @@ export async function startWeeklySessionAction(): Promise<StartWeeklyResult> {
 export async function sendWeeklyMessageAction(
   conversationId: string,
   content: string,
-): Promise<ContinueResult | AuthFailure> {
+): Promise<ContinueResult | AuthFailure | ConsentFailure> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
+  if (!(await aiConsentOk(resolved.athlete.id))) {
+    return { ok: false, reason: 'consent-required' };
+  }
 
   return continueWeeklySession(
     resolved.athlete,
