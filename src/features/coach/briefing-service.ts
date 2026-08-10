@@ -10,6 +10,7 @@ import { canSeeAthleteReports } from './link-visibility';
 import {
   appendBriefingMessages,
   createBriefing,
+  getLatestBriefingWithMessages,
   getMessages,
   getOwnedBriefing,
 } from './conversation-repository';
@@ -114,12 +115,22 @@ export interface BriefingState {
 
 export type StartBriefingResult =
   | ({ ok: true } & BriefingState)
-  | { ok: false; reason: 'not-linked' };
+  | { ok: false; reason: 'not-linked' | 'failed' };
 
 /**
- * Opens a briefing: verifies the active link, creates the conversation, and the
- * Coach speaks first (the analyst's opening read), persisted. Refuses when no
- * active link joins the coach to the athlete.
+ * Opens — or resumes — a briefing about a linked athlete. Refuses when no active
+ * link joins the coach to the athlete.
+ *
+ * A Coach Briefing is one ongoing channel per coach/athlete pair, not a fresh
+ * thread each time (CONTEXT.md — an interrogable channel). If one already exists
+ * it is resumed, never duplicated: the page restores the latest briefing on load
+ * (so this "open" is normally reached only when none was restored), and opening a
+ * second would orphan the first's transcript under the latest-only restore.
+ *
+ * When there is none, the Coach speaks first (the analyst's opening read). The
+ * model is called *before* the conversation is created, so a failed call leaves
+ * no empty briefing row for the page to restore into a dead end (a form with no
+ * opening read and no retry). The row is born only once there is a turn to store.
  */
 export async function startBriefing(
   coachId: string,
@@ -130,17 +141,30 @@ export async function startBriefing(
   const link = await getActiveLink(coachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
 
-  const conversation = await createBriefing({ coachId, athleteId });
+  const existing = await getLatestBriefingWithMessages(coachId, athleteId);
+  if (existing) {
+    return {
+      ok: true,
+      conversationId: existing.conversation.id,
+      messages: existing.messages,
+    };
+  }
+
   const system = await buildBriefingSystem(link, today, language);
   const reply = await callCoach({
     system,
     messages: [{ role: 'user', content: BRIEFING_OPENER }],
     maxTokens: BRIEFING_MAX_TOKENS,
   });
-  const messages =
-    (await appendBriefingMessages(coachId, conversation.id, [
-      { role: 'coach_ai', content: reply.text },
-    ])) ?? [];
+  const conversation = await createBriefing({ coachId, athleteId });
+  // appendBriefingMessages returns null only when coach ownership fails — which
+  // it cannot on a row this coach just created — but a null must never be
+  // laundered into an empty-but-ok success (`?? []` did exactly that): it
+  // surfaces as a persistence failure the UI can show, not a blank briefing.
+  const messages = await appendBriefingMessages(coachId, conversation.id, [
+    { role: 'coach_ai', content: reply.text },
+  ]);
+  if (!messages) return { ok: false, reason: 'failed' };
 
   return { ok: true, conversationId: conversation.id, messages };
 }

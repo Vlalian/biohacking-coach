@@ -52,11 +52,19 @@ export function Briefing({
   function start() {
     setError(false);
     startTransition(async () => {
-      const result = await startBriefingAction(athleteId);
-      if (result.ok) {
-        setConversationId(result.conversationId);
-        setMessages(result.messages);
-      } else {
+      // A server action can reject outright (the Anthropic call fails, a query
+      // throws), not only resolve to { ok: false }. Without the catch the
+      // rejection settles the transition with the UI unchanged and no error —
+      // a silent no-op — so both outcomes must land on setError.
+      try {
+        const result = await startBriefingAction(athleteId);
+        if (result.ok) {
+          setConversationId(result.conversationId);
+          setMessages(result.messages);
+        } else {
+          setError(true);
+        }
+      } catch {
         setError(true);
       }
     });
@@ -68,11 +76,15 @@ export function Briefing({
     if (!content || !conversationId) return;
     setError(false);
     startTransition(async () => {
-      const result = await sendBriefingMessageAction(conversationId, content);
-      if (result.ok) {
-        setMessages(result.messages);
-        setDraft('');
-      } else {
+      try {
+        const result = await sendBriefingMessageAction(conversationId, content);
+        if (result.ok) {
+          setMessages(result.messages);
+          setDraft('');
+        } else {
+          setError(true);
+        }
+      } catch {
         setError(true);
       }
     });

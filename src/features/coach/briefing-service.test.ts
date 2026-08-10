@@ -9,6 +9,7 @@ const {
   callCoach,
   createBriefing,
   getOwnedBriefing,
+  getLatestBriefingWithMessages,
   appendBriefingMessages,
   getMessages,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
   >(() => Promise.resolve({ text: 'my read', toolCalls: [] })),
   createBriefing: vi.fn(),
   getOwnedBriefing: vi.fn(),
+  getLatestBriefingWithMessages: vi.fn((): Promise<unknown> => Promise.resolve(null)),
   appendBriefingMessages: vi.fn((): Promise<unknown[] | null> => Promise.resolve(null)),
   getMessages: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
 }));
@@ -39,6 +41,7 @@ vi.mock('./coach-client', () => ({ callCoach }));
 vi.mock('./conversation-repository', () => ({
   createBriefing,
   getOwnedBriefing,
+  getLatestBriefingWithMessages,
   appendBriefingMessages,
   getMessages,
 }));
@@ -64,6 +67,7 @@ beforeEach(() => {
   getSharedTranscripts.mockResolvedValue(null);
   getBriefingPlan.mockResolvedValue([]);
   getBriefingReflections.mockResolvedValue([]);
+  getLatestBriefingWithMessages.mockResolvedValue(null);
   callCoach.mockResolvedValue({ text: 'my read', toolCalls: [] });
   createBriefing.mockResolvedValue({ id: 'b1', athleteId: 'a1', coachId: 'coach_1', kind: 'coach_briefing' });
   appendBriefingMessages.mockResolvedValue([
@@ -167,6 +171,43 @@ describe('startBriefing — persistence', () => {
     ]);
     expect(result.ok && result.conversationId).toBe('b1');
   });
+
+  it('resumes an existing briefing instead of opening a second (no duplicate, no model call)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getLatestBriefingWithMessages.mockResolvedValue({
+      conversation: { id: 'b_existing', athleteId: 'a1', coachId: 'coach_1', kind: 'coach_briefing' },
+      messages: [{ id: 'm0', role: 'coach_ai', content: 'earlier read', seq: 0, createdAt: new Date() }],
+    });
+
+    const result = await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(result).toEqual({
+      ok: true,
+      conversationId: 'b_existing',
+      messages: [{ id: 'm0', role: 'coach_ai', content: 'earlier read', seq: 0, createdAt: expect.any(Date) }],
+    });
+    // No second briefing row, and no wasted model call — the channel is one thread.
+    expect(createBriefing).not.toHaveBeenCalled();
+    expect(callCoach).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a persistence failure rather than a blank-but-ok briefing', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    // appendBriefingMessages returning null must never be laundered into ok:[].
+    appendBriefingMessages.mockResolvedValue(null);
+
+    const result = await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'failed' });
+  });
+
+  it('calls the model before creating the conversation, so a failed call leaves no empty row', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    callCoach.mockRejectedValue(new Error('anthropic down'));
+
+    await expect(startBriefing('coach_1', 'a1', TODAY)).rejects.toThrow('anthropic down');
+    expect(createBriefing).not.toHaveBeenCalled();
+  });
 });
 
 describe('continueBriefing — the gates', () => {
@@ -176,7 +217,7 @@ describe('continueBriefing — the gates', () => {
     expect(getOwnedBriefing).not.toHaveBeenCalled();
   });
 
-  it('refuses a briefing the coach does not own, calling the model for nothing', async () => {
+  it('refuses a briefing the coach does not own, without calling the model', async () => {
     getOwnedBriefing.mockResolvedValue(null);
 
     const result = await continueBriefing('coach_2', 'b1', 'brief me', TODAY);
