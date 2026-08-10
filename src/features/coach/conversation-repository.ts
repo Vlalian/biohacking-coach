@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
 import {
+  coachOwnedOrNull,
   nextSeq,
   ownedOrNull,
   toConversation,
@@ -155,13 +156,27 @@ export async function appendMessages(
 ): Promise<Message[] | null> {
   const owned = await getOwnedConversation(athleteId, conversationId);
   if (!owned) return null;
+  return appendInOrder(conversationId, entries);
+}
+
+/**
+ * Appends already-authorised messages to a conversation, assigning each the next
+ * `seq` in turn. The ownership gate is the caller's — {@link appendMessages}
+ * checks athlete ownership, {@link appendBriefingMessages} checks coach ownership
+ * — so this shared core never crosses an owner; it only serialises the write.
+ *
+ * Read-max-then-insert is not atomic: two concurrent appends to the same
+ * conversation can pick the same next seq. The unique (conversation_id, seq)
+ * index makes that a failed write rather than a corrupted transcript, so the
+ * loser simply re-reads and retries. Bounded, because a persistent failure is a
+ * real error and must surface rather than spin.
+ */
+async function appendInOrder(
+  conversationId: string,
+  entries: { role: MessageRole; content: string }[],
+): Promise<Message[]> {
   if (entries.length === 0) return [];
 
-  // Read-max-then-insert is not atomic: two concurrent appends to the same
-  // conversation can pick the same next seq. The unique (conversation_id, seq)
-  // index makes that a failed write rather than a corrupted transcript, so the
-  // loser simply re-reads and retries. Bounded, because a persistent failure is
-  // a real error and must surface rather than spin.
   for (let attempt = 0; ; attempt++) {
     const [last] = await getDb()
       .select({ seq: messages.seq })
@@ -191,6 +206,99 @@ export async function appendMessages(
 }
 
 const SEQ_RETRIES = 3;
+
+// ── Coach Briefing (slice 13) ─────────────────────────────────────────────────
+//
+// A Coach Briefing is the one conversation kind owned by a *coach*, not an
+// athlete: `coach_id` is the owner, `athlete_id` names the subject. Every read
+// and write below is scoped to the coach resolved from the authenticated session
+// upstream and to `kind = 'coach_briefing'`, so an athlete-owned conversation id
+// — or another coach's briefing — never resolves here (ADR 0006). The active
+// Coaching Link is a second gate the service re-checks on every turn (severing
+// revokes); this repository owns only the coach-ownership half.
+
+/** Opens a briefing a coach owns about one athlete. */
+export async function createBriefing(input: {
+  coachId: string;
+  athleteId: string;
+}): Promise<Conversation> {
+  const [row] = await getDb()
+    .insert(conversations)
+    .values({
+      athleteId: input.athleteId,
+      coachId: input.coachId,
+      kind: 'coach_briefing',
+    })
+    .returning();
+  return toConversation(row);
+}
+
+/**
+ * The briefing for this id — but only if it is a `coach_briefing` owned by this
+ * coach. The coach-ownership filter is part of the query, so another coach's id,
+ * or an athlete-owned conversation, can never resolve to a row;
+ * {@link coachOwnedOrNull} is the belt-and-suspenders in-code check.
+ */
+export async function getOwnedBriefing(
+  coachId: string,
+  conversationId: string,
+): Promise<Conversation | null> {
+  const rows = await getDb()
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.id, conversationId),
+        eq(conversations.coachId, coachId),
+        eq(conversations.kind, 'coach_briefing'),
+      ),
+    )
+    .limit(1);
+  return coachOwnedOrNull(rows[0] ? toConversation(rows[0]) : undefined, coachId);
+}
+
+/**
+ * The coach's most recent briefing about this athlete, with its transcript, or
+ * null when none exists. The page uses it to restore a briefing on refresh — the
+ * whole transcript is server-side, so nothing lives only in the browser (ADR
+ * 0006). Scoped to the coach *and* the athlete, so it never surfaces a briefing
+ * about a different athlete.
+ */
+export async function getLatestBriefingWithMessages(
+  coachId: string,
+  athleteId: string,
+): Promise<{ conversation: Conversation; messages: Message[] } | null> {
+  const rows = await getDb()
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.coachId, coachId),
+        eq(conversations.athleteId, athleteId),
+        eq(conversations.kind, 'coach_briefing'),
+      ),
+    )
+    .orderBy(desc(conversations.createdAt))
+    .limit(1);
+  if (!rows[0]) return null;
+  const conversation = toConversation(rows[0]);
+  return { conversation, messages: await getMessages(conversation.id) };
+}
+
+/**
+ * Appends messages to a briefing this coach owns, assigning each the next `seq`.
+ * Coach ownership is verified first: a briefing that is not this coach's is
+ * refused (returns null) and nothing is written.
+ */
+export async function appendBriefingMessages(
+  coachId: string,
+  conversationId: string,
+  entries: { role: MessageRole; content: string }[],
+): Promise<Message[] | null> {
+  const owned = await getOwnedBriefing(coachId, conversationId);
+  if (!owned) return null;
+  return appendInOrder(conversationId, entries);
+}
 
 /** True for a unique violation on the (conversation_id, seq) index. */
 function isSeqConflict(error: unknown): boolean {

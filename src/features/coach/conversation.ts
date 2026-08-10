@@ -20,6 +20,8 @@ export interface Conversation {
   id: string;
   athleteId: string;
   kind: ConversationKind;
+  /** The owning coach for a `coach_briefing`; null for athlete-owned kinds. */
+  coachId: string | null;
   weeklySessionNumber: number | null;
   createdAt: Date;
   endedAt: Date | null;
@@ -39,6 +41,7 @@ export function toConversation(row: ConversationRow): Conversation {
     id: row.id,
     athleteId: row.athleteId,
     kind: row.kind as ConversationKind,
+    coachId: row.coachId,
     weeklySessionNumber: row.weeklySessionNumber,
     createdAt: row.createdAt,
     endedAt: row.endedAt,
@@ -77,5 +80,24 @@ export function ownedOrNull(
 ): Conversation | null {
   if (!conversation) return null;
   if (conversation.athleteId !== athleteId) return null;
+  return conversation;
+}
+
+/**
+ * The Coach Briefing's ownership gate (ADR 0006). A briefing is owned by the
+ * *coach*, not the athlete: it is returned only when it is a `coach_briefing`
+ * belonging to the coach resolved from the server session. Another coach's id —
+ * or an athlete-owned conversation id — resolves to null and the caller refuses
+ * it. The active Coaching Link is a *separate* gate the service re-checks on
+ * every turn, so severing the link revokes access even to a briefing the coach
+ * once owned. Pure — data in, decision out.
+ */
+export function coachOwnedOrNull(
+  conversation: Conversation | undefined,
+  coachId: string,
+): Conversation | null {
+  if (!conversation) return null;
+  if (conversation.kind !== 'coach_briefing') return null;
+  if (conversation.coachId !== coachId) return null;
   return conversation;
 }

@@ -137,6 +137,18 @@
     "roleCoach": "Coach",
     "roleHeadCoach": "Head Coach"
   },
+  "Briefing": {
+    "title": "Coach Briefing",
+    "subtitle": "Ask the Coach about this athlete.",
+    "intro": "The Coach has read this athlete's data — open a briefing to hear its read and ask questions.",
+    "start": "Open briefing",
+    "starting": "Opening…",
+    "thinking": "Coach is thinking…",
+    "inputLabel": "Ask the Coach about this athlete",
+    "placeholder": "How has their sleep trended?",
+    "send": "Send",
+    "error": "That didn't work. Try again."
+  },
   "Auth": {
     "signInTitle": "Sign in",
     "signUpTitle": "Create account",

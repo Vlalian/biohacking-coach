@@ -42,6 +42,10 @@ const {
   getOwnedConversation,
   appendMessages,
   createConversation,
+  createBriefing,
+  getOwnedBriefing,
+  appendBriefingMessages,
+  getLatestBriefingWithMessages,
 } = await import('./conversation-repository');
 
 function cRow(overrides: Partial<ConversationRow> = {}): ConversationRow {
@@ -216,5 +220,82 @@ describe('appendMessages — ownership and seq', () => {
     expect(insertedValues).toEqual([
       { conversationId: 'c1', role: 'athlete', content: 'first', seq: 0 },
     ]);
+  });
+});
+
+// ── Coach Briefing persistence (slice 13) ─────────────────────────────────────
+
+const bRow = (overrides: Partial<ConversationRow> = {}): ConversationRow =>
+  cRow({ id: 'b1', kind: 'coach_briefing', coachId: 'coach_1', weeklySessionNumber: null, ...overrides });
+
+describe('createBriefing', () => {
+  it('inserts a coach_briefing owned by the coach and about the athlete', async () => {
+    insertRows = [bRow()];
+    const conv = await createBriefing({ coachId: 'coach_1', athleteId: 'athlete_1' });
+    expect(insert).toHaveBeenCalledWith(conversations);
+    expect(insertedValues).toMatchObject({
+      athleteId: 'athlete_1',
+      coachId: 'coach_1',
+      kind: 'coach_briefing',
+    });
+    expect(conv.coachId).toBe('coach_1');
+    expect(conv.kind).toBe('coach_briefing');
+  });
+});
+
+describe('getOwnedBriefing', () => {
+  it('scopes the read to the id, the owning coach, and the coach_briefing kind', async () => {
+    selectRows = [bRow()];
+    await getOwnedBriefing('coach_1', 'b1');
+    expect(eq).toHaveBeenCalledWith(conversations.id, 'b1');
+    expect(eq).toHaveBeenCalledWith(conversations.coachId, 'coach_1');
+    expect(eq).toHaveBeenCalledWith(conversations.kind, 'coach_briefing');
+  });
+
+  it('returns null when no row matches (another coach asks)', async () => {
+    selectRows = [];
+    expect(await getOwnedBriefing('coach_2', 'b1')).toBeNull();
+  });
+
+  it('refuses a non-briefing conversation even if the query somehow returned one', async () => {
+    // Belt-and-suspenders: coachOwnedOrNull rejects a wrong-kind row.
+    selectRows = [cRow({ id: 'b1', kind: 'weekly_session', coachId: 'coach_1' })];
+    expect(await getOwnedBriefing('coach_1', 'b1')).toBeNull();
+  });
+});
+
+describe('appendBriefingMessages — coach ownership', () => {
+  it('refuses and writes nothing when the briefing is not the coach\'s', async () => {
+    selectRows = []; // ownership lookup finds nothing
+    const result = await appendBriefingMessages('coach_2', 'b1', [
+      { role: 'head_coach', content: 'brief me' },
+    ]);
+    expect(result).toBeNull();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('appends when the coach owns the briefing', async () => {
+    let call = 0;
+    limit.mockImplementation(() => {
+      call += 1;
+      return Promise.resolve(call === 1 ? [bRow()] : []); // owner, then no prior seq
+    });
+    insertRows = [mRow({ id: 'bm1', role: 'head_coach', seq: 0 })];
+
+    const result = await appendBriefingMessages('coach_1', 'b1', [
+      { role: 'head_coach', content: 'how has her sleep trended?' },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(insertedValues).toEqual([
+      { conversationId: 'b1', role: 'head_coach', content: 'how has her sleep trended?', seq: 0 },
+    ]);
+  });
+});
+
+describe('getLatestBriefingWithMessages', () => {
+  it('returns null when the coach has no briefing about this athlete', async () => {
+    selectRows = [];
+    expect(await getLatestBriefingWithMessages('coach_1', 'athlete_1')).toBeNull();
   });
 });

@@ -31,6 +31,27 @@ export async function getAthleteByUserId(
 }
 
 /**
+ * The athlete by their opaque id, or undefined when none exists.
+ *
+ * Keyed off the athlete id, not the user seam: the Coach Briefing (slice 13)
+ * reaches an athlete it is *linked to*, not one it owns, so it has the id, not
+ * the user. This carries no identity — the domain {@link Athlete} has no name
+ * (ADR 0006) — and the briefing reads it only when `shareAthleteReports` permits
+ * the profile's training fields.
+ */
+export async function getAthleteById(
+  athleteId: string,
+): Promise<Athlete | undefined> {
+  const rows = await getDb()
+    .select()
+    .from(athlete)
+    .where(eq(athlete.id, athleteId))
+    .limit(1);
+
+  return rows[0] ? toAthlete(rows[0]) : undefined;
+}
+
+/**
  * The stored Information View layout, untyped: the information-view feature
  * owns its parsing (`parseLayout`); this seam just fetches what the row holds.
  * A dedicated read rather than a field on {@link Athlete} — the layout is

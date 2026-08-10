@@ -6,6 +6,7 @@ const {
   notFound,
   getCoachByUserId,
   getCoachAthleteView,
+  getLatestBriefingWithMessages,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -16,6 +17,7 @@ const {
   }),
   getCoachByUserId: vi.fn(),
   getCoachAthleteView: vi.fn(),
+  getLatestBriefingWithMessages: vi.fn(() => Promise.resolve(null)),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -28,12 +30,16 @@ vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/coach/coach-repository', () => ({ getCoachByUserId }));
 vi.mock('@/features/coach/roster-service', () => ({ getCoachAthleteView }));
+vi.mock('@/features/coach/conversation-repository', () => ({
+  getLatestBriefingWithMessages,
+}));
 // Client components pulling in browser deps; the page's own wiring is under test.
 vi.mock('@/app/[locale]/calendar', () => ({ Calendar: () => null }));
 vi.mock('@/app/[locale]/information/information-view', () => ({
   InformationView: () => null,
 }));
 vi.mock('./prescribe-panel', () => ({ PrescribePanel: () => null }));
+vi.mock('./briefing', () => ({ Briefing: () => null }));
 
 const { default: CoachAthletePage } = await import('./page');
 
