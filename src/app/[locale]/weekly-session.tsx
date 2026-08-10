@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type FormEvent } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
-import { useRouter } from '@/i18n/navigation';
+import { useRouter, Link } from '@/i18n/navigation';
 import {
   commitWeeklyPlanAction,
   declineWeeklyPlanAction,
@@ -42,8 +42,19 @@ export interface WeeklySessionInitial {
 type Notice =
   | { kind: 'none' }
   | { kind: 'error' }
+  | { kind: 'consentRequired' }
   | { kind: 'stale' }
   | { kind: 'planned'; count: number };
+
+/**
+ * Turns an action failure into a notice. A `consent-required` refusal is its own
+ * notice with a route back to Privacy & consent — not the generic error — so the
+ * one case where the Coach is paused for a lawful-basis reason tells the athlete
+ * how to lift it (the server gate is the control; this is its front door).
+ */
+function failureNotice(reason: string): Notice {
+  return reason === 'consent-required' ? { kind: 'consentRequired' } : { kind: 'error' };
+}
 
 /**
  * The Weekly Session — the Coach's once-a-week structured conversation
@@ -85,7 +96,7 @@ export function WeeklySession({ initial }: { initial: WeeklySessionInitial | nul
         setProposal(null);
         setPopupOpen(false);
       } else {
-        setNotice({ kind: 'error' });
+        setNotice(failureNotice(result.reason));
       }
     });
   }
@@ -106,7 +117,7 @@ export function WeeklySession({ initial }: { initial: WeeklySessionInitial | nul
           setPopupOpen(true);
         }
       } else {
-        setNotice({ kind: 'error' });
+        setNotice(failureNotice(result.reason));
       }
     });
   }
@@ -256,6 +267,14 @@ export function WeeklySession({ initial }: { initial: WeeklySessionInitial | nul
       {notice.kind === 'planned' && (
         <p className="text-sm text-green-700 dark:text-green-500">
           {t('planned', { count: notice.count })}
+        </p>
+      )}
+      {notice.kind === 'consentRequired' && (
+        <p role="alert" className="text-sm text-amber-700 dark:text-amber-500">
+          {t('consentRequired')}{' '}
+          <Link href="/privacy" className="underline">
+            {t('consentRequiredLink')}
+          </Link>
         </p>
       )}
       {notice.kind === 'stale' && (

@@ -40,6 +40,17 @@ vi.mock('@/features/coach/conversation-repository', () => ({
   getLatestOpenConversation,
   getMessages,
 }));
+// Consent is out of scope here (it has its own consent.test.ts). Let the gate
+// pass so the page reaches the athlete-resolution paths under test, and keep the
+// consent read off the database.
+vi.mock('@/features/consent/consent-repository', () => ({
+  getActiveConsents: vi.fn(() => Promise.resolve([])),
+}));
+vi.mock('@/features/consent/consent', () => ({
+  missingRequiredConsents: () => [],
+  currentlyConsentedPurposes: () => [],
+}));
+vi.mock('./consent', () => ({ ConsentScreen: () => null }));
 // Client components / server actions pulling in browser + auth deps; stub them
 // out of the node test — the page's own wiring is what's under test here.
 vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));

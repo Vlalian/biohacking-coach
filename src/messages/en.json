@@ -6,7 +6,8 @@
     "greeting": "Welcome back, {name}",
     "tagline": "Your Coach is ready when you are.",
     "noAthlete": "We couldn't load your profile. Please sign out and try again.",
-    "informationLink": "Information"
+    "informationLink": "Information",
+    "privacyLink": "Privacy & consent"
   },
   "Information": {
     "title": "Information",
@@ -262,6 +263,8 @@
     "minutes": "{count} min",
     "planned": "{count, plural, =0 {Plan saved — a rest week} one {Plan saved — # session} other {Plan saved — # sessions}}",
     "ended": "This Weekly Session is done. Your plan is on the calendar.",
+    "consentRequired": "Your Coach is paused until you agree to how your data is processed.",
+    "consentRequiredLink": "Open Privacy & consent",
     "error": "That didn't work. Try again."
   }
 }
