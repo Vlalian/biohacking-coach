@@ -136,6 +136,18 @@
     "roleCoach": "Træner",
     "roleHeadCoach": "Cheftræner"
   },
+  "Briefing": {
+    "title": "Coach-briefing",
+    "subtitle": "Spørg Coachen om denne atlet.",
+    "intro": "Coachen har læst denne atlets data — åbn en briefing for at høre dens vurdering og stille spørgsmål.",
+    "start": "Åbn briefing",
+    "starting": "Åbner…",
+    "thinking": "Coachen tænker…",
+    "inputLabel": "Spørg Coachen om denne atlet",
+    "placeholder": "Hvordan har hendes søvn udviklet sig?",
+    "send": "Send besked",
+    "error": "Det virkede ikke. Prøv igen."
+  },
   "Auth": {
     "signInTitle": "Log ind",
     "signUpTitle": "Opret konto",

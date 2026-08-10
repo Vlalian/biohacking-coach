@@ -140,25 +140,34 @@ export function assertNoIdentity(checkIn: CheckIn): void {
         'reach a prompt (GDPR decision 1).',
     );
   }
-  assertNoEmailDeep(checkIn);
+  assertNoDirectIdentifier(checkIn);
 }
 
-/** Walks every nested string leaf of a check-in looking for an email shape. */
-function assertNoEmailDeep(value: unknown): void {
+/**
+ * Walks every nested string leaf of an app-assembled prompt input looking for an
+ * email shape, and throws if one is found (GDPR decision 1 / ADR 0006).
+ *
+ * The same runtime guarantee {@link assertNoIdentity} makes for a check-in,
+ * exposed for any prompt builder that assembles its own material from an
+ * athlete's opaque record — the Coach Briefing (slice 13) is the second caller.
+ * The walk is deep because an identifier realistically hides in a free-text leaf
+ * (an onboarding answer, a session note), not the top-level scalars.
+ */
+export function assertNoDirectIdentifier(value: unknown): void {
   if (typeof value === 'string') {
     if (EMAIL_SHAPED.test(value)) {
       throw new Error(
-        'CheckIn carries an email-shaped value — no direct identifier may reach a ' +
-          'prompt (GDPR decision 1).',
+        'Prompt input carries an email-shaped value — no direct identifier may ' +
+          'reach a prompt (GDPR decision 1).',
       );
     }
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach(assertNoEmailDeep);
+    value.forEach(assertNoDirectIdentifier);
     return;
   }
   if (value && typeof value === 'object') {
-    Object.values(value).forEach(assertNoEmailDeep);
+    Object.values(value).forEach(assertNoDirectIdentifier);
   }
 }

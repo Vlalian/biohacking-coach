@@ -6,12 +6,14 @@ import { Link, redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getCoachByUserId } from '@/features/coach/coach-repository';
+import { getLatestBriefingWithMessages } from '@/features/coach/conversation-repository';
 import { getCoachAthleteView } from '@/features/coach/roster-service';
 import { parseLayout } from '@/features/information-view/layout';
 import { PANEL_IDS } from '@/features/information-view/panels';
 import { dateKey } from '@/lib/date';
 import { Calendar } from '@/app/[locale]/calendar';
 import { InformationView } from '@/app/[locale]/information/information-view';
+import { Briefing } from './briefing';
 import { PrescribePanel } from './prescribe-panel';
 import { SharedConversations } from './shared-conversations';
 import { saveCoachLayoutAction } from './coach-layout-actions';
@@ -60,6 +62,12 @@ export default async function CoachAthletePage({
   // session, so favorites the coach sets here follow them across the roster.
   const layout = parseLayout(coach.informationViewLayout, PANEL_IDS);
 
+  // The coach's most recent briefing about this athlete, restored so it survives
+  // a refresh (ADR 0006 — the transcript is server-side, not browser state). The
+  // conversation's own material is gated by Link Visibility when it is (re)built;
+  // this only carries the persisted turns.
+  const briefing = await getLatestBriefingWithMessages(coach.id, athleteId);
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center gap-6 p-8">
       <header className="flex w-full flex-col items-center gap-1">
@@ -86,6 +94,22 @@ export default async function CoachAthletePage({
       {view.sharedTranscripts && (
         <SharedConversations transcripts={view.sharedTranscripts} />
       )}
+      <Briefing
+        athleteId={athleteId}
+        initial={
+          briefing
+            ? {
+                conversationId: briefing.conversation.id,
+                messages: briefing.messages.map((m) => ({
+                  id: m.id,
+                  role: m.role,
+                  content: m.content,
+                  seq: m.seq,
+                })),
+              }
+            : null
+        }
+      />
     </main>
   );
 }
