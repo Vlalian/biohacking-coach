@@ -54,6 +54,29 @@ export async function getSessionsForAthlete(
 }
 
 /**
+ * Reads a single session, but only if this athlete owns it.
+ *
+ * The Coach Overlay's Reference ("Discuss with Coach") arrives from the client
+ * as a session id. Resolving it here — filtered on `athlete_id` in the same
+ * query — is what stops a forged id from pulling another athlete's session into
+ * a prompt (ADR 0006). Returns undefined for a missing or unowned id; callers
+ * treat that as "no Reference" rather than an error, so a stale id degrades to
+ * an ordinary chat instead of a failure.
+ */
+export async function getOwnedSession(
+  athleteId: string,
+  sessionId: string,
+): Promise<Session | undefined> {
+  const [row] = await getDb()
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.athleteId, athleteId)))
+    .limit(1);
+
+  return row ? toSession(row) : undefined;
+}
+
+/**
  * Reads one athlete's sessions for a single Mon–Sun week, in calendar order.
  *
  * The Weekly Session reviews the week just lived (its Session Reflections and

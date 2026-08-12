@@ -1,3 +1,5 @@
+import type { EquipmentItem } from '@/features/equipment/equipment';
+
 /**
  * The plain-data inputs the Coach prompts reason about.
  *
@@ -19,20 +21,6 @@ export interface Onboarding {
   hasHumanCoach?: string | null;
   targetTime?: string | null;
   trackedMetrics?: string | string[] | null;
-}
-
-/** Kit the athlete trains on — referenced by the Coach only when relevant. */
-export interface Equipment {
-  bikeType?: string | null;
-  bikeModel?: string | null;
-  powerMeter?: string | null;
-  trainingShoes?: string | null;
-  raceShoes?: string | null;
-  wetsuit?: string | null;
-  gpsWatch?: string | null;
-  hrMonitor?: string | null;
-  bikeComputer?: string | null;
-  notes?: string | null;
 }
 
 /**
@@ -107,7 +95,7 @@ export interface CheckIn {
   commStyle?: string;
   experienceLevel?: string;
   language?: string;
-  equipment?: Equipment | null;
+  equipment?: EquipmentItem[];
   raceTarget?: string | null;
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
@@ -128,7 +116,7 @@ const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
  * harness; the app path must never set it from a real athlete, so here it must be
  * absent. No field may look like an email — and the walk is deep, because the
  * places an identifier realistically hides are the free-text leaves (an
- * onboarding answer, `equipment.notes`), not the top-level scalars. This is the
+ * onboarding answer, an equipment item's `details`), not the top-level scalars. This is the
  * assertion the "no direct identifier reaches the LLM" standard requires the
  * prompt builders to make — enforced once, at the seam where app data becomes
  * prompt input.

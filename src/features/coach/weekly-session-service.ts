@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
+import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import {
   getSessionsForWeek,
   replaceCoachPlanForDateRange,
@@ -89,8 +90,17 @@ async function renderSystem(
   language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
-  const weekSessions = await getSessionsForWeek(athlete.id, weekStart);
-  const checkIn = buildWeeklyCheckIn(athlete, BASELINE_READINESS, weeklySessionNumber, language);
+  const [weekSessions, equipmentItems] = await Promise.all([
+    getSessionsForWeek(athlete.id, weekStart),
+    getEquipmentItems(athlete.id),
+  ]);
+  const checkIn = buildWeeklyCheckIn(
+    athlete,
+    BASELINE_READINESS,
+    weeklySessionNumber,
+    language,
+    equipmentItems,
+  );
   // This slice wires the two inputs it has a real source for: the week's Session
   // Reflections (feedback) and its skips. The remaining ported inputs stay empty
   // because their data sources are later slices, not because they are optional —

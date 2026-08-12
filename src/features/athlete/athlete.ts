@@ -1,5 +1,5 @@
 import type { AthleteRow } from '@/db/schema';
-import type { Equipment, Onboarding } from '@/features/coach/check-in';
+import type { Onboarding } from '@/features/coach/check-in';
 import type { OnboardingAnswers } from '@/features/onboarding/onboarding-flow';
 
 /**
@@ -50,7 +50,6 @@ export type Athlete = {
   raceTarget: string | null;
   trainingSessionsPerWeek: number | null;
   profile: AthleteProfile | null;
-  equipment: Equipment | null;
 };
 
 /** The one place the stored row becomes a domain object. */
@@ -64,6 +63,5 @@ export function toAthlete(row: AthleteRow): Athlete {
     raceTarget: row.raceTarget,
     trainingSessionsPerWeek: row.trainingSessionsPerWeek,
     profile: (row.profile as AthleteProfile | null) ?? null,
-    equipment: (row.equipment as Equipment | null) ?? null,
   };
 }

@@ -8,7 +8,7 @@ import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { getActiveConsents } from '@/features/consent/consent-repository';
 import { currentlyConsentedPurposes } from '@/features/consent/consent';
-import { ConsentScreen } from '../consent';
+import { ConsentScreen } from '../../consent';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -45,8 +45,8 @@ export default async function PrivacyPage({
     : [];
 
   return (
-    <main className="flex min-h-screen flex-col items-center gap-6 p-8">
+    <div className="flex flex-col items-center gap-6 p-8">
       <ConsentScreen granted={granted} mode="manage" />
-    </main>
+    </div>
   );
 }

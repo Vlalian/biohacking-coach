@@ -132,7 +132,7 @@ export function Donut({
 
 export function Legend({ items }: { items: Array<[string, string]> }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
       {items.map(([label, color]) => (
         <span key={label} className="inline-flex items-center gap-1.5">
           <i className="inline-block h-2 w-2 rounded-sm" style={{ background: color }} />

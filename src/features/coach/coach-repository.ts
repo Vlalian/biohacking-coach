@@ -1,14 +1,16 @@
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { athlete, coach, coachingLink, conversations, messages } from '@/db/schema';
 import { user } from '@/db/auth-schema';
 import {
   toCoach,
   toCoachingLink,
+  type AthleteCoachingLink,
   type Coach,
   type CoachingLink,
   type RosterEntry,
 } from './coach';
+import type { LinkVisibility } from './link-visibility';
 
 /** The placeholder shown when neither name source is present. */
 export const UNKNOWN_ATHLETE = 'Unknown athlete';
@@ -106,6 +108,78 @@ export async function getActiveLink(
     .limit(1);
 
   return rows[0] ? toCoachingLink(rows[0]) : undefined;
+}
+
+/**
+ * The athlete's own active Coaching Link — what puts them in Coached Mode
+ * (CONTEXT.md) — or undefined when they are solo (no link, or a severed one).
+ *
+ * Unlike {@link getActiveLink}, there is no coach id to scope by: the athlete
+ * id resolved from their session upstream *is* the whole scope, so Settings
+ * can only ever show and change the signed-in athlete's own relationship.
+ *
+ * `.limit(1)`: the product models one Head Coach relationship at a time (the
+ * Settings brief's `coachingLink?:` is singular). The schema does not forbid
+ * two simultaneous active links to different coaches, but nothing surfaces
+ * more than one — ordered by newest first so that's the one shown if it ever
+ * happens.
+ */
+export async function getLinkForAthlete(
+  athleteId: string,
+): Promise<AthleteCoachingLink | undefined> {
+  const rows = await getDb()
+    .select({ link: coachingLink, coachUserName: user.name })
+    .from(coachingLink)
+    .innerJoin(coach, eq(coachingLink.coachId, coach.id))
+    .innerJoin(user, eq(coach.userId, user.id))
+    .where(
+      and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'active')),
+    )
+    .orderBy(desc(coachingLink.createdAt))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return undefined;
+  return { headCoachName: row.coachUserName, link: toCoachingLink(row.link) };
+}
+
+/**
+ * Updates the Link Visibility flags on the athlete's own active Coaching Link.
+ *
+ * The WHERE clause IS the authorization: scoped to `athleteId` and
+ * `status = 'active'`, so this can only ever touch the signed-in athlete's own
+ * live link — someone else's link, or their own severed one, matches no row
+ * (ADR 0006). There is deliberately no flag for the always-on calendar
+ * section (schema comment, `link-visibility.ts`) — only the two toggleable
+ * flags are ever passed here.
+ */
+export async function updateLinkVisibility(
+  athleteId: string,
+  changes: Partial<LinkVisibility>,
+): Promise<void> {
+  await getDb()
+    .update(coachingLink)
+    .set(changes)
+    .where(
+      and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'active')),
+    );
+}
+
+/**
+ * Severs the athlete's own active Coaching Link — cuts all access, including
+ * history, from either side (CONTEXT.md). Keeps the row (`severedAt` records
+ * when) so history survives; every read elsewhere already filters on
+ * `status = 'active'`, so flipping the status alone revokes the Head Coach's
+ * access. Scoped like {@link updateLinkVisibility}: an athlete can only sever
+ * their own active link.
+ */
+export async function severLinkForAthlete(athleteId: string): Promise<void> {
+  await getDb()
+    .update(coachingLink)
+    .set({ status: 'severed', severedAt: new Date() })
+    .where(
+      and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'active')),
+    );
 }
 
 /**

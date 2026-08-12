@@ -25,7 +25,7 @@ const BASE: CheckIn = {
   language: 'English',
   weeklySessionDay: 'Monday',
   fixedConstraints: [],
-  equipment: {},
+  equipment: [],
 };
 
 describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => {
@@ -47,6 +47,28 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     expect(prompt).not.toContain(NAME);
     expect(prompt).not.toContain('Realname');
     expect(prompt).not.toContain(EMAIL);
+  });
+
+  // The Coach Overlay's Reference ("Discuss with Coach") passes a Session into
+  // the prompt as a *separate* argument, so it bypasses the check-in assertion
+  // that guards everything else. Its `note` is athlete/Coach free text — the
+  // realistic hiding place for an identifier — so the prompt builders assert it
+  // themselves. Caught by code review; these two tests are what keep it shut.
+  const leakySession = {
+    type: 'Endurance',
+    dayLabel: '2026-08-18',
+    duration: '90 min',
+    zone: 'Z2',
+    note: `ride with me, reach me at ${EMAIL}`,
+    status: 'planned',
+  };
+
+  it('refuses a Reference whose note carries an email — Coach Chat', () => {
+    expect(() => buildChatPrompt(BASE, '2026-08-12', leakySession)).toThrow(/identifier/i);
+  });
+
+  it('refuses a Reference whose note carries an email — Session Negotiation', () => {
+    expect(() => renderPrompt(buildCoachContext(BASE, [], leakySession))).toThrow(/identifier/i);
   });
 
   it('the Weekly Session prompt carries no name or email', () => {

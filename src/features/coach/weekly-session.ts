@@ -1,4 +1,5 @@
 import type { Athlete } from '@/features/athlete/athlete';
+import type { EquipmentItem } from '@/features/equipment/equipment';
 import type { Session } from '@/features/session/session';
 import type { NewSessionRow } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
@@ -48,6 +49,7 @@ export function buildWeeklyCheckIn(
   readiness: Readiness,
   weeklySessionNumber: number,
   language?: string,
+  equipmentItems: EquipmentItem[] = [],
 ): CheckIn {
   const checkIn: CheckIn = {
     body: readiness.body,
@@ -66,7 +68,9 @@ export function buildWeeklyCheckIn(
     sessionCount: Math.max(0, weeklySessionNumber - 1),
     language: language ?? 'en',
     onboarding: athlete.profile?.onboarding ?? undefined,
-    equipment: athlete.equipment ?? undefined,
+    // Equipment lives in its own table (its own screen, its own CRUD), not on
+    // the athlete row — the caller fetches it and passes it in.
+    equipment: equipmentItems,
     // The constraint answers from MCQ onboarding (slice 09): no-training days
     // and the preferred Weekly Session day, both read by the weekly prompt.
     fixedConstraints: athlete.profile?.fixedConstraints ?? undefined,

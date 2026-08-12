@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
+import { ArrowLeftRight, Maximize2, Star, X } from 'lucide-react';
 import type { InfoDataset, InfoSession } from '@/features/information-view/dataset';
 import {
   demote,
@@ -162,7 +163,7 @@ export function InformationView({
   // — that keeps the range controls, so the athlete can widen it again.
   if (vm.datasetEmpty) {
     return (
-      <p className="max-w-md text-center text-neutral-500" data-testid="info-empty">
+      <p className="max-w-md text-center text-muted-foreground" data-testid="info-empty">
         {t('empty')}
       </p>
     );
@@ -172,8 +173,8 @@ export function InformationView({
     <button
       key={p.id}
       data-fav-id={fav ? p.id : undefined}
-      className={`w-full rounded px-2 py-1 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
-        dropHover === p.id ? 'bg-neutral-200 dark:bg-neutral-700' : ''
+      className={`w-full px-2 py-1 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-signal ${
+        dropHover === p.id ? 'bg-panel text-signal' : ''
       }`}
       onClick={() => jumpToPanel(p.id)}
       onPointerDown={fav ? onFavPointerDown(p.id) : undefined}
@@ -186,14 +187,16 @@ export function InformationView({
 
   return (
     <div className="w-full max-w-5xl">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <CompareOverlayTrigger sessions={vm.windowed.sessions} />
-        <span className="flex gap-1">
+        <span className="flex gap-1.5">
           {RANGE_KEYS.map((r) => (
             <button
               key={r}
-              className={`rounded-full border px-3 py-1 text-xs ${
-                range === r ? 'border-blue-500 text-blue-500' : 'text-neutral-500'
+              className={`border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors ${
+                range === r
+                  ? 'border-signal text-signal'
+                  : 'border-border text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => pickRange(r)}
             >
@@ -201,29 +204,30 @@ export function InformationView({
             </button>
           ))}
         </span>
-        <span className="text-xs text-neutral-500">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           {t('readingCount', { n: vm.available.length, total: PANELS.length })}
         </span>
       </div>
 
       {vm.empty && (
-        <p className="max-w-md text-neutral-500" data-testid="info-empty-range">
+        <p className="max-w-md text-muted-foreground" data-testid="info-empty-range">
           {t('emptyRange')}
         </p>
       )}
 
-      <div className="flex gap-6">
+      <div className="flex gap-8">
         <nav className="hidden w-44 shrink-0 sm:block">
           <div className="sticky top-4 flex flex-col gap-0.5">
             {vm.favPanels.length > 0 && (
-              <div className="px-2 pt-2 text-xs font-semibold text-neutral-500">
-                ★ {t('favorites')}
+              <div className="flex items-center gap-1 px-2 pt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-signal">
+                <Star className="h-3 w-3" style={{ fill: 'var(--signal)' }} />
+                {t('favorites')}
               </div>
             )}
             {vm.favPanels.map((p) => railItem(p, true))}
             {vm.groups.map((g) => (
               <div key={g.familyKey}>
-                <div className="px-2 pt-2 text-xs font-semibold text-neutral-500">
+                <div className="px-2 pt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
                   {t(g.familyKey)}
                 </div>
                 {g.panels.map((p) => railItem(p, false))}
@@ -232,7 +236,7 @@ export function InformationView({
           </div>
         </nav>
 
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-5 md:grid-cols-2">
           <ComparisonGraph
             dataset={vm.windowed}
             graphIds={graphIds}
@@ -245,44 +249,49 @@ export function InformationView({
               id={`iv-anchor-${p.id}`}
               className={enlarged.includes(p.id) ? 'md:col-span-2' : ''}
             >
-              <div className="rounded-lg border p-4" data-panel={p.id}>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold">{t(p.titleKey)}</span>
-                  <span className="flex gap-1">
+              <div className="border border-border bg-panel p-5" data-panel={p.id}>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <span className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
+                    {t(p.titleKey)}
+                  </span>
+                  <span className="flex items-center gap-1 text-muted-foreground">
                     {p.series && (
                       <button
-                        className={`rounded px-1.5 text-sm ${
-                          graphIds.includes(p.id) ? 'text-blue-500' : 'text-neutral-400'
+                        className={`rounded p-1.5 transition-colors hover:text-foreground ${
+                          graphIds.includes(p.id) ? 'text-signal' : ''
                         }`}
                         title={t('addToGraph')}
                         aria-label={t('addToGraph')}
                         aria-pressed={graphIds.includes(p.id)}
                         onClick={() => setGraphIds((g) => toggleIn(g, p.id))}
                       >
-                        ⇄
+                        <ArrowLeftRight className="h-3.5 w-3.5" strokeWidth={1.5} />
                       </button>
                     )}
                     <button
-                      className={`rounded px-1.5 text-sm ${
-                        enlarged.includes(p.id) ? 'text-blue-500' : 'text-neutral-400'
+                      className={`rounded p-1.5 transition-colors hover:text-foreground ${
+                        enlarged.includes(p.id) ? 'text-signal' : ''
                       }`}
                       title={t('enlarge')}
                       aria-label={t('enlarge')}
                       aria-pressed={enlarged.includes(p.id)}
                       onClick={() => setEnlarged((g) => toggleIn(g, p.id))}
                     >
-                      ⛶
+                      <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
                     <button
-                      className={`rounded px-1.5 text-sm ${
-                        isFavorite(favorites, p.id) ? 'text-amber-400' : 'text-neutral-400'
-                      }`}
+                      className="rounded p-1.5 transition-colors hover:text-foreground"
                       title={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-label={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-pressed={isFavorite(favorites, p.id)}
                       onClick={() => toggleFavorite(p.id)}
                     >
-                      {isFavorite(favorites, p.id) ? '★' : '☆'}
+                      <Star
+                        className="h-3.5 w-3.5"
+                        strokeWidth={1.5}
+                        fill={isFavorite(favorites, p.id) ? 'var(--signal)' : 'none'}
+                        stroke={isFavorite(favorites, p.id) ? 'var(--signal)' : 'currentColor'}
+                      />
                     </button>
                   </span>
                 </div>
@@ -318,26 +327,32 @@ function ComparisonGraph({
   );
   return (
     <div className="md:col-span-2">
-      <div className="rounded-lg border p-4" data-panel="comparison-graph">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-semibold">{t('graphTitle')}</span>
-          <button className="text-xs text-neutral-500 underline" onClick={onClear}>
+      <div className="border border-signal/40 bg-panel p-5" data-panel="comparison-graph">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <span className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
+            {t('graphTitle')}
+          </span>
+          <button
+            className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground underline transition-colors hover:text-signal"
+            onClick={onClear}
+          >
             {t('graphClear')}
           </button>
         </div>
-        <div className="mb-2 flex flex-wrap gap-1.5">
+        <div className="mb-3 flex flex-wrap gap-1.5">
           {picked.map((p) => (
             <span
               key={p.id}
-              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+              className="inline-flex items-center gap-1.5 border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground"
             >
               {t(p.titleKey)}
               <button
                 title={t('graphRemove')}
                 aria-label={t('graphRemove')}
+                className="transition-colors hover:text-signal"
                 onClick={() => onRemove(p.id)}
               >
-                ✕
+                <X className="h-3 w-3" strokeWidth={1.5} />
               </button>
             </span>
           ))}
@@ -348,7 +363,9 @@ function ComparisonGraph({
           ))}
         </ChartSvg>
         <Legend items={entries.map((e) => [`${t(e.panel.titleKey)} — ${t(e.labelKey)}`, e.color])} />
-        <div className="mt-2 text-xs text-neutral-500">{t('graphNote')}</div>
+        <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+          {t('graphNote')}
+        </div>
       </div>
     </div>
   );
@@ -359,7 +376,7 @@ function RpeChip({ value, color }: { value: number | null; color: string }) {
   if (value == null) return <>—</>;
   return (
     <span
-      className="rounded px-1.5 py-0.5 text-xs"
+      className="rounded px-1.5 py-0.5 font-mono text-xs"
       style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}
     >
       {value}/10
@@ -380,9 +397,13 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
     setSelected([]);
   };
 
+  const compareButtonClass =
+    'flex items-center gap-1.5 border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-signal hover:text-signal';
+
   if (!open) {
     return (
-      <button className="rounded border px-3 py-1 text-sm" onClick={openPicker}>
+      <button className={compareButtonClass} onClick={openPicker}>
+        <ArrowLeftRight className="h-3 w-3" strokeWidth={1.5} />
         {t('compareOpen')}
       </button>
     );
@@ -394,20 +415,29 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
 
   return (
     <>
-      <button className="rounded border px-3 py-1 text-sm" onClick={openPicker}>
+      <button className={compareButtonClass} onClick={openPicker}>
+        <ArrowLeftRight className="h-3 w-3" strokeWidth={1.5} />
         {t('compareOpen')}
       </button>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-        <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-lg border bg-background p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="max-h-[85vh] w-full max-w-3xl overflow-auto border border-border bg-background p-5">
           {show && canCompare(selected) ? (
             <>
-              <div className="mb-3 flex items-center justify-between">
-                <b>{t('compareResultTitle')}</b>
+              <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+                <span className="font-display text-2xl leading-none tracking-[0.03em] text-foreground">
+                  {t('compareResultTitle')}
+                </span>
                 <span className="flex gap-2">
-                  <button className="rounded border px-2 py-1 text-sm" onClick={() => setShow(false)}>
+                  <button
+                    className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShow(false)}
+                  >
                     {t('compareBack')}
                   </button>
-                  <button className="rounded border px-2 py-1 text-sm" onClick={() => setOpen(false)}>
+                  <button
+                    className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setOpen(false)}
+                  >
                     {t('compareClose')}
                   </button>
                 </span>
@@ -416,11 +446,13 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                 {extractColumns(chosen).map((c) => (
                   <div
                     key={c.id}
-                    className="min-w-44 flex-1 rounded-md border p-3"
+                    className="min-w-44 flex-1 border border-border bg-panel p-3"
                     style={{ borderTop: `3px solid ${TYPE_COLORS[c.type] || 'var(--border)'}` }}
                   >
-                    <div className="text-sm font-semibold">{c.title ?? c.type}</div>
-                    <div className="mb-2 text-xs text-neutral-500">
+                    <div className="font-display text-lg leading-none tracking-[0.02em] text-foreground">
+                      {c.title ?? c.type}
+                    </div>
+                    <div className="mb-2 mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
                       {c.date} ·{' '}
                       <span style={{ color: SPORT_COLOR[c.sport ?? ''] || 'inherit' }}>
                         {t(SPORT_KEY[c.sport ?? ''] || 'other')}
@@ -429,37 +461,44 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                     </div>
                     {c.rows.map(([k, v]) => (
                       <div key={k} className="flex justify-between text-sm">
-                        <span className="text-neutral-500">{k === 'TSS' ? 'TSS' : t(k)}</span>
-                        <b>{v}</b>
+                        <span className="text-muted-foreground">{k === 'TSS' ? 'TSS' : t(k)}</span>
+                        <b className="font-mono">{v}</b>
                       </div>
                     ))}
                     <div className="flex justify-between text-sm">
-                      <span className="text-neutral-500">{t('body')}</span>
+                      <span className="text-muted-foreground">{t('body')}</span>
                       <RpeChip value={c.body} color="#6db36d" />
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-neutral-500">{t('mind')}</span>
+                      <span className="text-muted-foreground">{t('mind')}</span>
                       <RpeChip value={c.mind} color="#9a7bd0" />
                     </div>
                     {c.comment && (
-                      <div className="mt-2 text-xs italic text-neutral-500">“{c.comment}”</div>
+                      <div className="mt-2 text-xs italic text-muted-foreground">“{c.comment}”</div>
                     )}
                   </div>
                 ))}
               </div>
-              <div className="mt-3 text-xs text-neutral-500">{t('compareNote')}</div>
+              <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                {t('compareNote')}
+              </div>
             </>
           ) : (
             <>
-              <div className="mb-3 flex items-center justify-between">
-                <b>{t('compareTitle')}</b>
-                <button className="rounded border px-2 py-1 text-sm" onClick={() => setOpen(false)}>
+              <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+                <span className="font-display text-2xl leading-none tracking-[0.03em] text-foreground">
+                  {t('compareTitle')}
+                </span>
+                <button
+                  className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => setOpen(false)}
+                >
                   {t('compareClose')}
                 </button>
               </div>
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
                 <select
-                  className="rounded border bg-background px-2 py-1"
+                  className="border border-border bg-background px-2 py-1 font-mono text-xs uppercase tracking-wider"
                   value={filter.sport}
                   onChange={(e) => setFilter((f) => ({ ...f, sport: e.target.value }))}
                 >
@@ -471,7 +510,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                   ))}
                 </select>
                 <select
-                  className="rounded border bg-background px-2 py-1"
+                  className="border border-border bg-background px-2 py-1 font-mono text-xs uppercase tracking-wider"
                   value={filter.type}
                   onChange={(e) => setFilter((f) => ({ ...f, type: e.target.value }))}
                 >
@@ -482,26 +521,31 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                     </option>
                   ))}
                 </select>
-                <span className="text-xs text-neutral-500">{t('compareHint')}</span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                  {t('compareHint')}
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs text-neutral-500">
+                    <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                       <th />
-                      <th className="py-1 font-normal">{t('colDate')}</th>
-                      <th className="py-1 font-normal">{t('colSession')}</th>
-                      <th className="py-1 font-normal">{t('colSport')}</th>
-                      <th className="py-1 font-normal">{t('colType')}</th>
-                      <th className="py-1 font-normal">Min</th>
-                      <th className="py-1 font-normal">{t('body')}</th>
-                      <th className="py-1 font-normal">{t('mind')}</th>
+                      <th className="py-2 font-medium">{t('colDate')}</th>
+                      <th className="py-2 font-medium">{t('colSession')}</th>
+                      <th className="py-2 font-medium">{t('colSport')}</th>
+                      <th className="py-2 font-medium">{t('colType')}</th>
+                      <th className="py-2 font-medium">Min</th>
+                      <th className="py-2 font-medium">{t('body')}</th>
+                      <th className="py-2 font-medium">{t('mind')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {listed.slice(0, 40).map((s) => (
-                      <tr key={s.id} className={selected.includes(s.id) ? 'bg-neutral-100 dark:bg-neutral-800' : ''}>
-                        <td className="py-0.5">
+                      <tr
+                        key={s.id}
+                        className={`border-b border-rule ${selected.includes(s.id) ? 'bg-panel' : ''}`}
+                      >
+                        <td className="py-1.5">
                           <input
                             type="checkbox"
                             checked={selected.includes(s.id)}
@@ -512,25 +556,25 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                             }
                           />
                         </td>
-                        <td className="py-0.5">{s.date}</td>
-                        <td className="py-0.5">{s.title ?? s.type}</td>
-                        <td className="py-0.5" style={{ color: SPORT_COLOR[s.sport ?? ''] || 'inherit' }}>
+                        <td className="py-1.5 font-mono text-xs">{s.date}</td>
+                        <td className="py-1.5">{s.title ?? s.type}</td>
+                        <td className="py-1.5" style={{ color: SPORT_COLOR[s.sport ?? ''] || 'inherit' }}>
                           {t(SPORT_KEY[s.sport ?? ''] || 'other')}
                         </td>
-                        <td className="py-0.5" style={{ color: TYPE_COLORS[s.type] || 'inherit' }}>
+                        <td className="py-1.5" style={{ color: TYPE_COLORS[s.type] || 'inherit' }}>
                           {s.type}
                         </td>
-                        <td className="py-0.5">{s.durMin ?? '—'}</td>
-                        <td className="py-0.5">{s.body ?? '—'}</td>
-                        <td className="py-0.5">{s.mind ?? '—'}</td>
+                        <td className="py-1.5 font-mono">{s.durMin ?? '—'}</td>
+                        <td className="py-1.5 font-mono">{s.body ?? '—'}</td>
+                        <td className="py-1.5 font-mono">{s.mind ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="mt-3">
+              <div className="mt-4">
                 <button
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-40"
+                  className="border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-signal"
                   disabled={!canCompare(selected)}
                   onClick={() => canCompare(selected) && setShow(true)}
                 >

@@ -55,14 +55,34 @@ describe('message catalogues', () => {
     // Coach's stay-English SPORTS_TERMS list, and the POC's Danish catalogue
     // kept them verbatim too. The Information View (slice 10) added the panel
     // vocabulary: TSS, Fitness/Fatigue/Form, Peak Power, units.
+    // "Coach" joins the list here rather than the cognates exemption below: it
+    // isn't a coincidental Danish/English spelling match, it's the domain term
+    // (CONTEXT.md) used untranslated throughout the existing Danish catalogue
+    // — "Coach tænker…", "Din Coach er klar, når du er.".
+    // "Coaching Channel" and "AI Coach" (slice 17) are the same case, per word:
+    // CONTEXT.md names the Channel as the coined product term for the shared
+    // athlete/Head Coach/AI thread (avoiding "chat/DM/thread"), and inside it
+    // names the AI party "AI Coach" specifically to distinguish it from the
+    // Head Coach — both fixed names, not translated phrases.
     const technicalTerms =
-      /\b(RPE|FTP|CSS|Zone \d|Z\d|Ironman|HRV|Pace|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W)\b/g;
+      /\b(RPE|FTP|CSS|Zone|Z\d|Ironman|HRV|Pace|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W|Coach|Coaching Channel|AI Coach)\b/g;
     // Danish cognates — words whose correct Danish spelling IS the English one
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.
-    const cognates = /\b(Information|Session|Sport|Type|Distance|Motivation)\b/g;
+    const cognates = /\b(Information|Session|Sport|Type|Distance|Motivation|System|min)\b/g;
     const cognateScope = (path: string) =>
-      path.startsWith('Information.') || path === 'AthletePage.informationLink';
+      path.startsWith('Information.') ||
+      path.startsWith('SessionDrawer.') ||
+      path === 'Calendar.minutes' ||
+      path === 'AthletePage.informationLink' ||
+      path === 'Shell.viewInformation' ||
+      // The theme-cycle's "System" option (follow the OS) — genuinely spelled
+      // the same in Danish, confirmed by the existing lowercase "system" in
+      // ThemeToggle.switch.
+      path === 'Shell.themeSystem' ||
+      // "Session Type" is the domain term (CONTEXT.md) — the calendar legend
+      // names it verbatim in both languages, like Information's "Type" already does.
+      path === 'Calendar.legend';
     // Strip punctuation left behind by removed terms ("Peak Power (W)" → "()"),
     // so a message that was nothing but terms compares as empty.
     const translatable = (message: string, path: string) =>

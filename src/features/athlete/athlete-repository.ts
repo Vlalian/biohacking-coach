@@ -88,6 +88,23 @@ export async function updateInformationViewLayout(
 }
 
 /**
+ * Sets the athlete's Communication Style — the free-text preference the Coach
+ * reads to shape Tone Adaptation. Onboarding derives an initial value; Settings
+ * is where the athlete corrects it in their own words afterward. A plain
+ * column, not the `profile` JSONB, so it goes through its own update rather
+ * than {@link mergeAthleteProfile}.
+ */
+export async function updateCommunicationStyle(
+  athleteId: string,
+  communicationStyle: string,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ communicationStyle, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *
@@ -127,11 +144,12 @@ export async function mergeAthleteProfile(
  * stranding the athlete on a questionnaire they had already completed. A single
  * UPDATE cannot land half-applied.
  *
- * Deliberately NOT written here: `trainingSessionsPerWeek` and `equipment`.
- * Ticket 09 lists them among the profile fields, but the POC's question set —
- * the ticket's own specification — never asks for either (weekly *hours* is a
- * JSONB answer, not a session count; equipment has its own tab in the POC).
- * They stay null until a feature actually collects them.
+ * Deliberately NOT written here: `trainingSessionsPerWeek`. Ticket 09 lists it
+ * among the profile fields, but the POC's question set — the ticket's own
+ * specification — never asks for it (weekly *hours* is a JSONB answer, not a
+ * session count). It stays null until a feature actually collects it.
+ * Equipment is written through its own CRUD (`features/equipment`), not
+ * through onboarding — it lives in its own table, not on this row.
  */
 export async function completeAthleteOnboarding(
   athleteId: string,

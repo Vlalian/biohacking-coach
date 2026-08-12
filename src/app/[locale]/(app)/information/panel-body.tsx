@@ -69,7 +69,9 @@ export function PanelBody({ id, dataset }: { id: string; dataset: InfoDataset })
 }
 
 const Note = ({ children }: { children: React.ReactNode }) => (
-  <div className="mt-2 text-xs text-neutral-500">{children}</div>
+  <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+    {children}
+  </div>
 );
 
 function FfNow({ D }: { D: InfoDataset }) {
@@ -90,7 +92,7 @@ function FfNow({ D }: { D: InfoDataset }) {
           <div className="text-2xl font-semibold" style={{ color }}>
             {value ?? '—'}
           </div>
-          <div className="text-xs text-neutral-500">{label}</div>
+          <div className="text-xs text-muted-foreground">{label}</div>
         </div>
       ))}
     </div>
@@ -101,8 +103,10 @@ function Race({ D }: { D: InfoDataset }) {
   const t = useTranslations('Information');
   return (
     <div className="text-center">
-      <div className="text-3xl font-semibold text-blue-500">{D.weeksToRace}</div>
-      <div className="text-xs text-neutral-500">
+      <div className="font-display text-3xl leading-none tracking-[0.02em] text-signal">
+        {D.weeksToRace}
+      </div>
+      <div className="text-xs text-muted-foreground">
         {t('weeksUntil')}
         <br />
         {D.raceName}
@@ -146,7 +150,7 @@ function Ramp({ D }: { D: InfoDataset }) {
             <div className="text-xl font-semibold" style={{ color }}>
               {text}
             </div>
-            <div className="text-xs text-neutral-500">{tl.label}</div>
+            <div className="text-xs text-muted-foreground">{tl.label}</div>
             {tl.spark.length > 1 && (
               <ChartSvg w={90} h={22}>
                 <Line vals={tl.spark} w={90} h={22} color={color} />
@@ -240,7 +244,7 @@ function Checkin({ D }: { D: InfoDataset }) {
         return (
           <div key={key}>
             <div className="flex items-baseline justify-between text-xs">
-              <span className="text-neutral-500">{label}</span>
+              <span className="text-muted-foreground">{label}</span>
               <b style={{ color }}>{vals[vals.length - 1]}</b>
             </div>
             <ChartSvg w={140} h={34}>
@@ -288,7 +292,7 @@ function Period({ D }: { D: InfoDataset }) {
     <>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-xs text-neutral-500">
+          <tr className="text-left text-xs text-muted-foreground">
             <th />
             <th className="py-1 font-normal">{t('periodThis')}</th>
             <th className="py-1 font-normal">{t('periodLast')}</th>
@@ -307,7 +311,7 @@ function Period({ D }: { D: InfoDataset }) {
                   : '#e05555';
             return (
               <tr key={label}>
-                <td className="py-0.5 text-neutral-500">{label}</td>
+                <td className="py-0.5 text-muted-foreground">{label}</td>
                 <td className="py-0.5 font-semibold">{cur ?? '—'}</td>
                 <td className="py-0.5">{prev ?? '—'}</td>
                 <td className="py-0.5" style={{ color }}>
@@ -335,7 +339,7 @@ function Split({ D, metric }: { D: InfoDataset; metric: 'durMin' | 'km' }) {
           <div key={p.sport} className="flex items-center gap-1.5">
             <i className="inline-block h-2 w-2 rounded-sm" style={{ background: p.color }} />
             {t(p.labelKey)} <b>{p.pct}%</b>{' '}
-            <span className="text-neutral-500">{fmt(p.value)}</span>
+            <span className="text-muted-foreground">{fmt(p.value)}</span>
           </div>
         ))}
       </div>
@@ -416,7 +420,7 @@ function Bests({ D }: { D: InfoDataset }) {
     <div className="flex flex-col gap-1.5">
       {D.bests.slice(0, 6).map((b, i) => (
         <div key={`${b.metricKey}-${i}`} className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-neutral-500">{b.date}</span>
+          <span className="text-xs text-muted-foreground">{b.date}</span>
           <i
             className="inline-block h-2 w-2 rounded-full"
             style={{ background: SPORT_COLOR[b.sport] || SPORT_COLOR.other }}
@@ -433,7 +437,7 @@ function PeaksTable({ rows }: { rows: PeaksRow[] }) {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-xs text-neutral-500">
+        <tr className="text-left text-xs text-muted-foreground">
           <th />
           {PEAK_WINDOW_LABELS.map((c) => (
             <th key={c} className="py-1 font-normal">

@@ -85,9 +85,11 @@ describe('getSessionsForAthlete', () => {
     const result = await getSessionsForAthlete('athlete_1');
 
     expect(result.map((s) => s.id)).toEqual(['a', 'b']);
-    // Domain shape only — the authority and Garmin columns stay in the
-    // repository; feedback comes through because the calendar renders and
-    // pre-fills it.
+    // Domain shape only — the Garmin columns stay in the repository;
+    // feedback comes through because the calendar renders and pre-fills it.
+    // `origin`/`isTraining` came in with the Session Drawer's status and
+    // Athlete Session actions (edit/delete gating on origin, Double/Rest
+    // rules on isTraining).
     expect(Object.keys(result[0]).sort()).toEqual(
       [
         'date',
@@ -97,7 +99,9 @@ describe('getSessionsForAthlete', () => {
         'feedbackComment',
         'feedbackMind',
         'id',
+        'isTraining',
         'note',
+        'origin',
         'parked',
         'status',
         'title',

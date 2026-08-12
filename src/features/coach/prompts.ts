@@ -1,6 +1,7 @@
+import type { EquipmentCategory, EquipmentItem } from '@/features/equipment/equipment';
+import { assertNoDirectIdentifier } from './check-in';
 import type {
   CheckIn,
-  Equipment,
   Onboarding,
   SessionContext,
   SessionHistoryItem,
@@ -143,24 +144,19 @@ ${lines.map((l) => `- ${l}`).join('\n')}
 `;
 }
 
-export function buildEquipmentLines(equipment?: Equipment | null): string[] {
-  const lines: string[] = [];
-  if (!equipment) return lines;
-  if (equipment.bikeType || equipment.bikeModel)
-    lines.push(
-      `Bike: ${[equipment.bikeType, equipment.bikeModel].filter(Boolean).join(' — ')}`,
-    );
-  if (equipment.powerMeter) lines.push(`Power meter: ${equipment.powerMeter}`);
-  if (equipment.trainingShoes)
-    lines.push(`Training shoes: ${equipment.trainingShoes}`);
-  if (equipment.raceShoes) lines.push(`Race shoes: ${equipment.raceShoes}`);
-  if (equipment.wetsuit) lines.push(`Wetsuit: ${equipment.wetsuit}`);
-  if (equipment.gpsWatch) lines.push(`GPS watch: ${equipment.gpsWatch}`);
-  if (equipment.hrMonitor) lines.push(`Heart rate monitor: ${equipment.hrMonitor}`);
-  if (equipment.bikeComputer)
-    lines.push(`Bike computer: ${equipment.bikeComputer}`);
-  if (equipment.notes) lines.push(`Equipment notes: ${equipment.notes}`);
-  return lines;
+const EQUIPMENT_CATEGORY_LABEL: Record<EquipmentCategory, string> = {
+  bike: 'Bike',
+  shoes: 'Shoes',
+  watch: 'Watch',
+  other: 'Other',
+};
+
+export function buildEquipmentLines(equipment?: EquipmentItem[]): string[] {
+  if (!equipment || equipment.length === 0) return [];
+  return equipment.map((item) => {
+    const detail = item.details ? ` — ${item.details}` : '';
+    return `${EQUIPMENT_CATEGORY_LABEL[item.category]}: ${item.name}${detail}`;
+  });
 }
 
 // ── Language directive ────────────────────────────────────────────────────────
@@ -239,6 +235,10 @@ export function buildCoachContext(
 /** Serialises a CoachContext into a system prompt string. Pure — no logic here. */
 export function renderPrompt(ctx: CoachContext): string {
   const { signalConflicts, hasConflict, patterns, sessionContext } = ctx;
+  // Same exposure as buildChatPrompt's Reference: `sessionContext.note` is free
+  // text reaching the model. Asserted here for the same reason, so wiring this
+  // prompt up later (Session Negotiation) cannot reintroduce the hole.
+  if (sessionContext) assertNoDirectIdentifier(sessionContext);
   const {
     body,
     mental,
@@ -564,7 +564,29 @@ EQUIPMENT NUDGE: One sentence in planning — don't know what they train on; Equ
 
 // ── Coach Chat prompt ─────────────────────────────────────────────────────────
 
-export function buildChatPrompt(checkIn: CheckIn, today: string = todayISO()): string {
+/**
+ * The Coach Chat system prompt — the Coach Overlay's baseline mode (ADR 0007:
+ * "Coach Chat, the Weekly Session, Session Negotiation, and the Reflective
+ * Prompt become behaviors inside that one thread").
+ *
+ * `sessionContext` is the Reference the athlete brought in: the Session they
+ * tapped "Discuss with Coach" on. It is resolved server-side from the session
+ * id and passed here, never taken from the client — so the Coach discusses the
+ * session the athlete actually owns. The block mirrors the Session Negotiation
+ * prompt's wording so the two cannot drift.
+ */
+export function buildChatPrompt(
+  checkIn: CheckIn,
+  today: string = todayISO(),
+  sessionContext: SessionContext | null = null,
+): string {
+  // The check-in is asserted upstream by buildWeeklyCheckIn, but the Reference
+  // arrives as a *separate* argument and carries free text (a session note the
+  // athlete or Coach wrote). That is exactly the "free-text leaf" the standard
+  // warns identifiers hide in, so it is asserted here — at the prompt builder,
+  // where AGENTS.md says the assertion belongs, rather than trusting each caller.
+  if (sessionContext) assertNoDirectIdentifier(sessionContext);
+
   const {
     body,
     mental,
@@ -595,6 +617,17 @@ CONTEXT (use silently — never cite scores/numbers):
 phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${raceTarget ? ` race=${raceTarget}` : ''}${fixedConstraints && fixedConstraints.length > 0 ? ` no-train=${fixedConstraints.join(', ')}` : ''}${equipmentLines.length > 0 ? `\n\nEQUIPMENT:\n${equipmentLines.join('\n')}` : ''}
 
 ${onboardingBlock}${CONSTRAINT_SIGNALS}
-
+${
+    sessionContext
+      ? `
+SESSION DISCUSSION:
+Athlete tapped a session from Training Plan. Engage directly.
+Session: ${sessionContext.type} — ${sessionContext.dayLabel}
+Duration: ${sessionContext.duration} · Zone: ${sessionContext.zone}
+Note: "${sessionContext.note}"${sessionContext.status === 'skipped' ? '\nPreviously skipped.' : ''}
+Walk through rationale in context of ${phase} phase.
+`
+      : ''
+  }
 ${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}PRIVACY: Never use athlete's name. Second person only. No PII reproduction.`;
 }

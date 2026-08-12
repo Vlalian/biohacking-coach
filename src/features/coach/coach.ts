@@ -77,3 +77,14 @@ export type RosterEntry = {
   name: string;
   link: CoachingLink;
 };
+
+/**
+ * The Coaching Link as the *athlete* sees it, in Settings. A coach always has
+ * a login, so `headCoachName` is `user.name` reached through the coach's user
+ * seam — athlete-facing surfaces show the Head Coach's real name (CONTEXT.md),
+ * unlike the domain-facing "Head Coach" term used everywhere else.
+ */
+export type AthleteCoachingLink = {
+  headCoachName: string;
+  link: CoachingLink;
+};
