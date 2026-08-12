@@ -28,16 +28,21 @@ coverage/
 *.tsbuildinfo
 
 # --- Private working docs — kept local only, never published ---
-# This is a learning project. The planning corpus, concept notes, decision
-# records, and prototype stay on the author's machine; the public repo leads
-# with README.md and ABOUT.md instead. These files remain on disk (the agent
-# tooling still reads them) — they are only removed from version control.
+# This is a learning project. The planning corpus, concept notes, and prototype
+# stay on the author's machine; the public repo leads with README.md and
+# ABOUT.md instead. These files remain on disk (the agent tooling still reads
+# them) — they are only removed from version control.
+#
+# Architecture decision records are the exception (2026-08-13): an ADR is the
+# reasoning behind code that is already public, not planning material, so
+# docs/adr/ is published while the rest of docs/ stays local.
 /CONTEXT.md
 /OVERVIEW.md
 /CLAUDE.md
 /.scratch/
 /poc/
-/docs/
+/docs/*
+!/docs/adr/
 /.agents/
 /.claude/
 /skills-lock.json
