@@ -186,131 +186,6 @@ export function languageDirective(language?: string): string {
   return '';
 }
 
-// ── Session Negotiation prompt ────────────────────────────────────────────────
-
-export interface CoachContext {
-  checkIn: CheckIn;
-  signalConflicts: string[];
-  hasConflict: boolean;
-  patterns: string[];
-  sessionContext: SessionContext | null;
-}
-
-/**
- * Derives structured coaching intelligence from raw check-in data. This is the
- * seam between "what the Coach reasons about" and "how it formats that reasoning
- * into a prompt". Tests verify this directly — no API call needed.
- */
-export function buildCoachContext(
-  checkIn: CheckIn,
-  sessionHistory: SessionHistoryItem[] = [],
-  sessionContext: SessionContext | null = null,
-): CoachContext {
-  const { body, mental, energy, sleep, pulse } = checkIn;
-  const patterns = detectPatterns(sessionHistory);
-
-  const signalConflicts: string[] = [];
-  if (body <= 4 && energy >= 7)
-    signalConflicts.push('body readiness is low but perceived energy is high');
-  if (body >= 7 && energy <= 4)
-    signalConflicts.push('body readiness is high but perceived energy is low');
-  if (mental <= 4 && energy >= 7)
-    signalConflicts.push('mental state is low but perceived energy is high');
-  if (pulse >= 70 && body >= 7)
-    signalConflicts.push(
-      'resting pulse is elevated despite high body readiness',
-    );
-  if (sleep <= 5 && energy >= 7)
-    signalConflicts.push('sleep was short but energy feels high');
-
-  return {
-    checkIn,
-    signalConflicts,
-    hasConflict: signalConflicts.length > 0,
-    patterns,
-    sessionContext,
-  };
-}
-
-/** Serialises a CoachContext into a system prompt string. Pure — no logic here. */
-export function renderPrompt(ctx: CoachContext): string {
-  const { signalConflicts, hasConflict, patterns, sessionContext } = ctx;
-  // Same exposure as buildChatPrompt's Reference: `sessionContext.note` is free
-  // text reaching the model. Asserted here for the same reason, so wiring this
-  // prompt up later (Session Negotiation) cannot reintroduce the hole.
-  if (sessionContext) assertNoDirectIdentifier(sessionContext);
-  const {
-    body,
-    mental,
-    energy,
-    sleep,
-    pulse,
-    phase,
-    sessionCount,
-    commStyle,
-    experienceLevel,
-    language,
-    equipment,
-    raceTarget,
-    onboarding,
-  } = ctx.checkIn;
-
-  const equipmentLines = buildEquipmentLines(equipment);
-  const onboardingBlock = renderOnboardingBlock(onboarding);
-
-  return `You are Coach in a luxury Ironman training app.${languageDirective(language)} Knowledgeable peer — not prescription machine, not assistant.
-
-POSTURE:
-- Lead with evidence. Recommend directly — no hedging.
-- End with one genuine question.
-- Never defer ("you know your body best").
-- Hold position unless athlete gives real reason.
-- Weak pushback → acknowledge, hold. Good pushback (new info/context) → adapt, explain why.
-
-${
-    hasConflict
-      ? `UNCERTAINTY REQUIRED:
-Conflicts: ${signalConflicts.join('; ')}.
-Name conflict before recommending: "Mixed signals — [conflict]. Best read: [recommendation]. [Question]."
-
-`
-      : ''
-  }${
-    equipmentLines.length > 0
-      ? `EQUIPMENT:
-${equipmentLines.map((l) => `- ${l}`).join('\n')}
-Reference kit when relevant. Never list unprompted.
-
-`
-      : ''
-  }STATE: phase=${phase} sessions=${sessionCount} xp=${experienceLevel || 'intermediate'} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${raceTarget ? ` race=${raceTarget}` : ''}
-
-${onboardingBlock}${commStyle ? `COMM STYLE: ${commStyle}\n\n` : ''}${
-    patterns.length > 0
-      ? `PATTERNS (don't surface directly):
-Athlete has: ${patterns.join('; ')}.
-Shape recommendations and questions silently. Athlete should feel known, not observed.
-
-`
-      : ''
-  }DATA USE: Scores = intelligence, not script. Never cite numbers/scales.
-Low mental/energy → soften load. Low body → reduce demand. Short sleep → recovery. High pulse → lower load.
-Conflict → name in plain language ("body ready but energy doesn't match"). Never reference scores.
-If athlete asks why ("why this session?" "explain your reasoning") → explain in natural language. Reference state ("you seemed flat this morning"), patterns as coaching intuition. Never cite scores.
-${
-    sessionContext
-      ? `
-SESSION DISCUSSION:
-Athlete tapped a session from Training Plan. Engage directly.
-Session: ${sessionContext.type} — ${sessionContext.dayLabel}
-Duration: ${sessionContext.duration} · Zone: ${sessionContext.zone}
-Note: "${sessionContext.note}"${sessionContext.status === 'skipped' ? '\nPreviously skipped.' : ''}
-Walk through rationale in context of ${phase} phase.
-`
-      : ''
-  }Keep responses concise. No markdown. No lists.`;
-}
-
 // ── Weekly Session prompt ─────────────────────────────────────────────────────
 
 const ORDINALS = ['', '1st', '2nd', '3rd'];
@@ -572,8 +447,9 @@ EQUIPMENT NUDGE: One sentence in planning — don't know what they train on; Equ
  * `sessionContext` is the Reference the athlete brought in: the Session they
  * tapped "Discuss with Coach" on. It is resolved server-side from the session
  * id and passed here, never taken from the client — so the Coach discusses the
- * session the athlete actually owns. The block mirrors the Session Negotiation
- * prompt's wording so the two cannot drift.
+ * session the athlete actually owns. This is the only prompt that renders a
+ * Reference: "discuss this session" is a behavior inside the one conversation,
+ * not a mode of its own (CONTEXT.md, Session Negotiation, decided 2026-08-12).
  */
 export function buildChatPrompt(
   checkIn: CheckIn,

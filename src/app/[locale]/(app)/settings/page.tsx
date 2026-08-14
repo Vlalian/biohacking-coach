@@ -13,6 +13,7 @@ import {
   removeFixedConstraintAction,
   severCoachingLinkAction,
   updateCommunicationStyleAction,
+  updateRaceTargetAction,
   updateLanguageAction,
   updateLinkVisibilityAction,
   updateWeeklySessionDayAction,
@@ -64,6 +65,7 @@ export default async function SettingsPage({
         name: session!.user.name,
         email: session!.user.email,
         communicationStyle: athlete.communicationStyle ?? '',
+        raceTarget: athlete.raceTarget ?? '',
         weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
         fixedConstraints: athlete.profile?.fixedConstraints ?? [],
       }}
@@ -78,6 +80,7 @@ export default async function SettingsPage({
           : null
       }
       onUpdateCommunicationStyle={updateCommunicationStyleAction}
+      onUpdateRaceTarget={updateRaceTargetAction}
       onUpdateWeeklySessionDay={updateWeeklySessionDayAction}
       onAddFixedConstraint={addFixedConstraintAction}
       onRemoveFixedConstraint={removeFixedConstraintAction}

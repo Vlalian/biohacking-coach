@@ -107,6 +107,19 @@ export interface CheckIn {
 const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
 
 /**
+ * A phone-shaped run: `+` followed by 8–15 digits, or a bare contiguous run of
+ * 8–15 digits. Deliberately tight so ordinary training prose survives it — an
+ * ISO date (`2026-08-18`), a duration (`90 min`), a pulse (`55bpm`) and an
+ * interval set (`4x800m`) all have digit runs far shorter than eight.
+ */
+const PHONE_SHAPED = /\+\d[\d\s-]{6,16}\d|\b\d{8,15}\b/;
+
+const SHAPED_IDENTIFIERS: ReadonlyArray<{ kind: string; pattern: RegExp }> = [
+  { kind: 'email', pattern: EMAIL_SHAPED },
+  { kind: 'phone', pattern: PHONE_SHAPED },
+];
+
+/**
  * Fails closed if a check-in built from app data would carry a direct identifier
  * into a prompt (GDPR decision 1 / ADR 0006). The rule is load-bearing for the
  * whole GDPR posture, so it is a runtime assertion, not a convention: the app's
@@ -132,21 +145,43 @@ export function assertNoIdentity(checkIn: CheckIn): void {
 }
 
 /**
- * Walks every nested string leaf of an app-assembled prompt input looking for an
- * email shape, and throws if one is found (GDPR decision 1 / ADR 0006).
+ * Walks every nested string leaf of an app-assembled prompt input looking for a
+ * *shape-detectable* identifier, and throws if one is found (GDPR decision 1 /
+ * ADR 0006).
  *
  * The same runtime guarantee {@link assertNoIdentity} makes for a check-in,
  * exposed for any prompt builder that assembles its own material from an
  * athlete's opaque record — the Coach Briefing (slice 13) is the second caller.
  * The walk is deep because an identifier realistically hides in a free-text leaf
  * (an onboarding answer, a session note), not the top-level scalars.
+ *
+ * **What this does and does not guarantee.** AGENTS.md names four identifiers —
+ * name, email, DOB, location — and only some of those have a shape a regex can
+ * recognise. So the control is in two layers, and this function is the second:
+ *
+ *  1. **Structural (primary).** Identity is separated from training data by
+ *     opaque athlete id (ADR 0006): training tables carry no name, email, DOB or
+ *     location column, so a prompt assembled from an athlete's training record
+ *     has nothing to interpolate. `personaName` is refused outright by
+ *     {@link assertNoIdentity}. This is what actually makes the promise true.
+ *  2. **Shape guard (backstop, here).** Athlete *free text* — a session note, an
+ *     onboarding answer — can say anything, and no pattern can recognise a name
+ *     or a place name in prose. What it can catch is email and phone shapes, so
+ *     it catches those and fails closed.
+ *
+ * A name typed into a session note is therefore *not* caught here, by design —
+ * it is covered by the consent disclosure that says athlete free text reaches
+ * the model (`CONTEXT.md`, Privacy Proxy). Do not describe this function as
+ * asserting that no identifier of any kind can reach a prompt; it asserts the
+ * detectable ones.
  */
 export function assertNoDirectIdentifier(value: unknown): void {
   if (typeof value === 'string') {
-    if (EMAIL_SHAPED.test(value)) {
+    const hit = SHAPED_IDENTIFIERS.find(({ pattern }) => pattern.test(value));
+    if (hit) {
       throw new Error(
-        'Prompt input carries an email-shaped value — no direct identifier may ' +
-          'reach a prompt (GDPR decision 1).',
+        `Prompt input carries a ${hit.kind}-shaped value — no direct identifier ` +
+          'may reach a prompt (GDPR decision 1).',
       );
     }
     return;

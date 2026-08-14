@@ -42,6 +42,7 @@ vi.mock('./settings-actions', () => ({
   updateCommunicationStyleAction: vi.fn(),
   updateLanguageAction: vi.fn(),
   updateLinkVisibilityAction: vi.fn(),
+  updateRaceTargetAction: vi.fn(),
   updateWeeklySessionDayAction: vi.fn(),
 }));
 
@@ -116,11 +117,31 @@ describe('SettingsPage', () => {
       name: 'Mads',
       email: 'mads@example.com',
       communicationStyle: '',
+      raceTarget: '',
       weeklySessionDay: null,
       fixedConstraints: [],
     });
     expect(props.language).toBe('en');
     expect(props.coachingLink).toBeNull();
+  });
+
+  it("passes the athlete's stored race target so Settings can change it", async () => {
+    // Issue 17's AC: race target is editable here, not write-once at onboarding.
+    getSession.mockResolvedValue({
+      user: { id: 'user_abc', name: 'Mads', email: 'mads@example.com' },
+    });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      communicationStyle: null,
+      raceTarget: 'Ironman Copenhagen 2026-08-16',
+      profile: null,
+    });
+    getUiPrefs.mockResolvedValue({});
+
+    const element = await render('en');
+
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    expect(props.profile).toMatchObject({ raceTarget: 'Ironman Copenhagen 2026-08-16' });
   });
 
   it('maps the athlete-side Coaching Link into the flat shape the view expects', async () => {

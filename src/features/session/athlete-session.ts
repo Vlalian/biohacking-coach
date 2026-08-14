@@ -1,6 +1,7 @@
 import { and, count, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, events } from '@/db/schema';
+import { getSessionAuthority } from './session-repository';
 
 /** The Athlete Session types (CONTEXT.md): Mobility and Other coexist with
  *  Rest; Strength and Other-as-training follow the training rules. */
@@ -82,18 +83,15 @@ export type AthleteSessionWriteResult =
   | { ok: false; reason: 'not-found' | 'not-owner' | 'not-athlete-authored' | 'invalid' };
 
 async function loadOwnedAthleteSession(sessionId: string, athleteId: string) {
-  const [row] = await getDb()
-    .select({ athleteId: sessions.athleteId, origin: sessions.origin })
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
+  const row = await getSessionAuthority(sessionId);
 
   if (!row) return { ok: false as const, reason: 'not-found' as const };
   if (row.athleteId !== athleteId) return { ok: false as const, reason: 'not-owner' as const };
   // Content ownership: the athlete owns *placement* of every session, but only
   // *content* of their own (CONTEXT.md, Prescribed Session) — a Coach-planned
   // or Head-Coach-prescribed session's note/type/duration is read-only here.
-  if (row.origin !== 'athlete') return { ok: false as const, reason: 'not-athlete-authored' as const };
+  if (row.origin !== 'athlete')
+    return { ok: false as const, reason: 'not-athlete-authored' as const };
   return { ok: true as const };
 }
 

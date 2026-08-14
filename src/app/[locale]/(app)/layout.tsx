@@ -9,16 +9,13 @@ import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import {
-  getLatestOpenConversation,
+  getOpenConversations,
   getMessages,
+  hasHeldWeeklySessionInWeek,
 } from '@/features/coach/conversation-repository';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
-import {
-  getOpenCoachChat,
-  hasCoachPlanForWeek,
-  shouldOfferWeeklySession,
-} from '@/features/coach/coach-chat-service';
-import { dateKey } from '@/lib/date';
+import { shouldOfferWeeklySession } from '@/features/coach/coach-chat-service';
+import { dateKey, weekStartOf } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import type { WeeklySessionInitial } from '../weekly-session';
@@ -73,11 +70,19 @@ export default async function AppShellLayout({
 
   if (athlete) {
     const today = dateKey(new Date());
-    const [open, chat, weekPlanned] = await Promise.all([
-      getLatestOpenConversation(athlete.id, 'weekly_session'),
-      getOpenCoachChat(athlete.id),
-      hasCoachPlanForWeek(athlete.id, today),
+    // One query for whatever is open, across kinds — the Overlay is one surface
+    // hosting several behaviors (ADR 0007), so the shell does not ask for a kind
+    // by name. Both can be open at once by design: the resting Coach Chat, and
+    // an in-progress Weekly Session on top of it.
+    const [openConversations, heldWeeklySession] = await Promise.all([
+      getOpenConversations(athlete.id),
+      hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(today)),
     ]);
+    const open = openConversations.find((c) => c.kind === 'weekly_session') ?? null;
+    const openChat = openConversations.find((c) => c.kind === 'coach_chat') ?? null;
+    const chat = openChat
+      ? { conversationId: openChat.id, messages: await getMessages(openChat.id) }
+      : null;
 
     if (open) {
       const transcript = await getMessages(open.id);
@@ -115,7 +120,7 @@ export default async function AppShellLayout({
     offerWeeklySession = shouldOfferWeeklySession({
       weeklySessionDay: athlete.profile?.weeklySessionDay,
       todayWeekday: new Date(`${today}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
-      hasCoachPlannedThisWeek: weekPlanned,
+      hasHeldWeeklySessionThisWeek: heldWeeklySession,
     });
   }
 

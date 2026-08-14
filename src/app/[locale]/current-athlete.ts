@@ -15,13 +15,15 @@ import type { Athlete } from '@/features/athlete/athlete';
  * helpers are the authentication half, and the feature services then check the
  * ids they were handed against that owner (the authority half).
  *
- * Two shapes because callers genuinely need two: most actions want only the
- * opaque athlete id, while the Coach actions also need the athlete's language
- * to render a prompt in. Marked `server-only` so an accidental client import
- * fails at build rather than shipping `auth` to the browser.
+ * Three shapes because callers genuinely need three: most actions want only the
+ * opaque athlete id; Settings needs the whole athlete row, because it reads the
+ * current profile before writing the next one; and the Coach actions also need
+ * the athlete's language to render a prompt in. Marked `server-only` so an
+ * accidental client import fails at build rather than shipping `auth` to the
+ * browser.
  */
 
-/** The failure both helpers return, shaped like every other action result. */
+/** The failure these helpers return, shaped like every other action result. */
 export type AuthFailure = { ok: false; reason: 'not-authenticated' };
 
 /** Just the opaque athlete id, or null when signed out / unprovisioned. */
@@ -30,6 +32,19 @@ export async function resolveAthleteId(): Promise<string | null> {
   if (!session) return null;
   const athlete = await getAthleteByUserId(session.user.id);
   return athlete?.id ?? null;
+}
+
+/**
+ * The whole athlete row, or null when signed out / unprovisioned.
+ *
+ * What an action needs when the *current* value is part of the next write —
+ * Fixed Constraints reads the existing list before appending to it, since the
+ * JSONB merge replaces the whole array.
+ */
+export async function resolveAthlete(): Promise<Athlete | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return null;
+  return (await getAthleteByUserId(session.user.id)) ?? null;
 }
 
 /**

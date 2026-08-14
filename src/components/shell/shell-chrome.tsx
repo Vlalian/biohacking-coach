@@ -69,7 +69,6 @@ export function ShellChrome({
       themeDark: t('themeDark'),
       themeSystem: t('themeSystem'),
       coachedModeBadge: t('coachedModeBadge'),
-      closeMessaging: t('closeMessaging'),
       openCoach: t('openCoach'),
       closeCoach: t('closeCoach'),
       coachOverlayTitle: t('coachOverlayTitle'),

@@ -4,11 +4,10 @@ const {
   getSession,
   redirect,
   getAthleteByUserId,
-  getLatestOpenConversation,
+  getOpenConversations,
   getMessages,
   getPendingProposal,
-  getOpenCoachChat,
-  hasCoachPlanForWeek,
+  hasHeldWeeklySessionInWeek,
   shouldOfferWeeklySession,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -18,14 +17,13 @@ const {
     throw new Error('REDIRECT');
   }),
   getAthleteByUserId: vi.fn(),
-  getLatestOpenConversation: vi.fn(),
-  getMessages: vi.fn(),
+  // The Overlay is one surface across kinds (ADR 0007), so the layout resolves
+  // whatever is open in one query and picks the kinds out of it, rather than
+  // asking for 'weekly_session' by name.
+  getOpenConversations: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
+  getMessages: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getPendingProposal: vi.fn(() => Promise.resolve(null)),
-  // Coach Chat is the overlay's baseline mode (ADR 0007), so the layout now
-  // also resumes the chat and decides the weekly offer. Both reach Postgres;
-  // the layout's own wiring is what is under test, not the service.
-  getOpenCoachChat: vi.fn(() => Promise.resolve(null)),
-  hasCoachPlanForWeek: vi.fn(() => Promise.resolve(false)),
+  hasHeldWeeklySessionInWeek: vi.fn(() => Promise.resolve(false)),
   shouldOfferWeeklySession: vi.fn(() => false),
 }));
 
@@ -37,15 +35,12 @@ vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/coach/conversation-repository', () => ({
-  getLatestOpenConversation,
+  getOpenConversations,
   getMessages,
+  hasHeldWeeklySessionInWeek,
 }));
 vi.mock('@/features/coach/plan-proposal-repository', () => ({ getPendingProposal }));
-vi.mock('@/features/coach/coach-chat-service', () => ({
-  getOpenCoachChat,
-  hasCoachPlanForWeek,
-  shouldOfferWeeklySession,
-}));
+vi.mock('@/features/coach/coach-chat-service', () => ({ shouldOfferWeeklySession }));
 // Client components pulling in browser deps; the layout's own wiring is under
 // test here, not their rendering.
 vi.mock('@/components/shell/shell-chrome', () => ({ ShellChrome: () => null }));
@@ -65,10 +60,11 @@ describe('AppShellLayout', () => {
     getSession.mockReset();
     redirect.mockClear();
     getAthleteByUserId.mockReset();
-    getLatestOpenConversation.mockReset();
+    getOpenConversations.mockReset();
+    getOpenConversations.mockResolvedValue([]);
     getMessages.mockReset();
-    getOpenCoachChat.mockClear();
-    hasCoachPlanForWeek.mockClear();
+    getMessages.mockResolvedValue([]);
+    hasHeldWeeklySessionInWeek.mockClear();
     shouldOfferWeeklySession.mockClear();
   });
 
@@ -83,28 +79,44 @@ describe('AppShellLayout', () => {
   it('restores an in-progress Weekly Session for a signed-in athlete', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
-    getLatestOpenConversation.mockResolvedValue({
-      id: 'conv_1',
-      weeklySessionNumber: 3,
-    });
+    getOpenConversations.mockResolvedValue([
+      { id: 'conv_1', kind: 'weekly_session', weeklySessionNumber: 3 },
+    ]);
     getMessages.mockResolvedValue([
       { id: 'm1', role: 'athlete', content: 'hi', seq: 1 },
     ]);
 
     await render();
 
-    expect(getLatestOpenConversation).toHaveBeenCalledWith('athlete_1', 'weekly_session');
+    expect(getOpenConversations).toHaveBeenCalledWith('athlete_1');
     expect(getMessages).toHaveBeenCalledWith('conv_1');
   });
 
   it("resumes the athlete's Coach Chat — the overlay's baseline mode", async () => {
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
-    getLatestOpenConversation.mockResolvedValue(null);
+    getOpenConversations.mockResolvedValue([{ id: 'chat_1', kind: 'coach_chat' }]);
 
     await render();
 
-    expect(getOpenCoachChat).toHaveBeenCalledWith('athlete_1');
+    expect(getMessages).toHaveBeenCalledWith('chat_1');
+  });
+
+  it('picks both kinds out of one open-conversation query', async () => {
+    // The seam issue 01 asks for: resolved across kinds, not by naming one. A
+    // resting Coach Chat and an in-progress Weekly Session are open at once.
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
+    getOpenConversations.mockResolvedValue([
+      { id: 'conv_1', kind: 'weekly_session', weeklySessionNumber: 2 },
+      { id: 'chat_1', kind: 'coach_chat' },
+    ]);
+
+    await render();
+
+    expect(getOpenConversations).toHaveBeenCalledTimes(1);
+    expect(getMessages).toHaveBeenCalledWith('conv_1');
+    expect(getMessages).toHaveBeenCalledWith('chat_1');
   });
 
   it('decides the weekly offer from the stored Weekly Session Day', async () => {
@@ -117,13 +129,14 @@ describe('AppShellLayout', () => {
       syntheticLabel: null,
       profile: { weeklySessionDay: 'Monday' },
     });
-    getLatestOpenConversation.mockResolvedValue(null);
-
     await render();
 
-    expect(hasCoachPlanForWeek).toHaveBeenCalledWith('athlete_1', expect.any(String));
+    expect(hasHeldWeeklySessionInWeek).toHaveBeenCalledWith('athlete_1', expect.any(String));
     expect(shouldOfferWeeklySession).toHaveBeenCalledWith(
-      expect.objectContaining({ weeklySessionDay: 'Monday', hasCoachPlannedThisWeek: false }),
+      expect.objectContaining({
+        weeklySessionDay: 'Monday',
+        hasHeldWeeklySessionThisWeek: false,
+      }),
     );
   });
 });

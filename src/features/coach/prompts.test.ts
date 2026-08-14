@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildWeeklyContext,
   renderWeeklyPrompt,
-  buildCoachContext,
-  renderPrompt,
   buildChatPrompt,
   formatSkippedSessions,
   formatWeekActivity,
@@ -42,8 +40,8 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     experienceLevel: 'veteran',
   };
 
-  it('the Session Negotiation / chat prompt carries no name or email', () => {
-    const prompt = renderPrompt(buildCoachContext(withIdentity, [], null));
+  it('the Coach Chat prompt carries no name or email', () => {
+    const prompt = buildChatPrompt(withIdentity, '2026-08-12');
     expect(prompt).not.toContain(NAME);
     expect(prompt).not.toContain('Realname');
     expect(prompt).not.toContain(EMAIL);
@@ -65,10 +63,6 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
 
   it('refuses a Reference whose note carries an email — Coach Chat', () => {
     expect(() => buildChatPrompt(BASE, '2026-08-12', leakySession)).toThrow(/identifier/i);
-  });
-
-  it('refuses a Reference whose note carries an email — Session Negotiation', () => {
-    expect(() => renderPrompt(buildCoachContext(BASE, [], leakySession))).toThrow(/identifier/i);
   });
 
   it('the Weekly Session prompt carries no name or email', () => {
@@ -171,25 +165,14 @@ describe('onboarding answers reach every Coach prompt', () => {
     expect(prompt).toContain('Motivation: Completion');
   });
 
-  it('negotiation prompt includes the answers, experience level and race', () => {
-    const ctx = buildCoachContext(
-      { ...BASE, onboarding: ONBOARDING, raceTarget: 'Ironman Copenhagen' },
-      [],
-      null,
-    );
-    const prompt = renderPrompt(ctx);
-    expect(prompt).toContain('ONBOARDING PROFILE');
-    expect(prompt).toContain('xp=intermediate');
-    expect(prompt).toContain('race=Ironman Copenhagen');
-  });
-
-  it('chat prompt includes the answers and race', () => {
+  it('chat prompt includes the answers, experience level and race', () => {
     const prompt = buildChatPrompt({
       ...BASE,
       onboarding: ONBOARDING,
       raceTarget: 'Ironman Copenhagen',
     });
     expect(prompt).toContain('ONBOARDING PROFILE');
+    expect(prompt).toContain('xp=intermediate');
     expect(prompt).toContain('race=Ironman Copenhagen');
   });
 

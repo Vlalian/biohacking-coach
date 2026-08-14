@@ -2,7 +2,7 @@ import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, type NewSessionRow } from '@/db/schema';
 import { addDays } from '@/lib/date';
-import { toSession, type Session } from './session';
+import { toSession, toSessionOrigin, type Session, type SessionOrigin } from './session';
 
 // These two row shapes deliberately mirror the Coach Briefing's own input types
 // (`BriefingPlanEntry` and `toBriefingReflection`'s argument in
@@ -51,6 +51,37 @@ export async function getSessionsForAthlete(
     .orderBy(asc(sessions.date), asc(sessions.dayOrder));
 
   return rows.map(toSession);
+}
+
+/**
+ * The columns every authority check needs, for one session, by id — owner,
+ * placement, status, and authorship.
+ *
+ * One read behind all of them. `session-status` (skip / unavailable / complete)
+ * and `athlete-session` (edit / delete) both have to answer "does this athlete
+ * own it, is it frozen, and who wrote it" before they write, and each had grown
+ * its own near-identical select. They still map the answer to their own refusal
+ * reasons — those genuinely differ — but the query lives here, next to the other
+ * session reads, rather than in two copies that can drift apart.
+ *
+ * Deliberately *not* filtered on `athlete_id`: the caller distinguishes "no such
+ * session" from "not yours", which a filtered query collapses into one.
+ */
+export async function getSessionAuthority(sessionId: string): Promise<
+  { athleteId: string; date: string; status: string; origin: SessionOrigin } | undefined
+> {
+  const [row] = await getDb()
+    .select({
+      athleteId: sessions.athleteId,
+      date: sessions.date,
+      status: sessions.status,
+      origin: sessions.origin,
+    })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+
+  return row ? { ...row, origin: toSessionOrigin(row.origin) } : undefined;
 }
 
 /**

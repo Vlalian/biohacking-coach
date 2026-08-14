@@ -105,6 +105,26 @@ export async function updateCommunicationStyle(
 }
 
 /**
+ * Sets the athlete's race target — the fixed date everything else is planned
+ * backwards from (CONTEXT.md, Training Phase).
+ *
+ * Onboarding writes it once ({@link completeOnboarding}); a race moves, is
+ * cancelled, or is replaced by the next one, so Settings is where it stays
+ * true. Null clears it: an athlete between races has no target, and an empty
+ * string would render in the prompt as though they did. Another plain column,
+ * so it takes its own update rather than {@link mergeAthleteProfile}.
+ */
+export async function updateRaceTarget(
+  athleteId: string,
+  raceTarget: string | null,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ raceTarget, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *

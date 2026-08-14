@@ -173,10 +173,10 @@ describe('shouldOfferWeeklySession', () => {
   const base = {
     weeklySessionDay: 'Monday',
     todayWeekday: 'Monday',
-    hasCoachPlannedThisWeek: false,
+    hasHeldWeeklySessionThisWeek: false,
   };
 
-  it('offers on the preferred day when the week is unplanned', () => {
+  it('offers on the preferred day when no Weekly Session has been held', () => {
     expect(shouldOfferWeeklySession(base)).toBe(true);
   });
 
@@ -184,9 +184,16 @@ describe('shouldOfferWeeklySession', () => {
     expect(shouldOfferWeeklySession({ ...base, todayWeekday: 'Wednesday' })).toBe(false);
   });
 
-  it('stays silent once the week is already planned', () => {
-    // The nudge is an offer to plan, not a reminder to re-plan.
-    expect(shouldOfferWeeklySession({ ...base, hasCoachPlannedThisWeek: true })).toBe(false);
+  it('stays silent once the athlete has held this week’s session', () => {
+    // The nudge is an offer to talk, not a reminder to talk again.
+    expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: true })).toBe(false);
+  });
+
+  it('still offers when a plan exists but no session was held', () => {
+    // The gate keys on the conversation, not the plan — otherwise automatic
+    // generation would silence its own offer (coach-overlay issue 04, decision
+    // 4). A drafted week is exactly the week worth discussing.
+    expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: false })).toBe(true);
   });
 
   it('never nudges an athlete who chose Flexible', () => {

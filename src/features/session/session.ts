@@ -1,6 +1,23 @@
 import type { SessionRow } from '@/db/schema';
 
 /**
+ * Who authored a session. A closed set, enforced at the database by the
+ * `sessions_origin_valid` check constraint — mirrored here so the authority
+ * checks that branch on it (only `'athlete'` content is athlete-editable) are
+ * exhaustively typed rather than comparing against open strings.
+ */
+export const SESSION_ORIGINS = ['coach', 'athlete', 'garmin', 'head_coach'] as const;
+export type SessionOrigin = (typeof SESSION_ORIGINS)[number];
+
+/** Narrows a stored `origin` column to the closed set, so authority checks
+ *  compare against the union rather than an open string. */
+export function toSessionOrigin(value: string): SessionOrigin {
+  return (SESSION_ORIGINS as readonly string[]).includes(value)
+    ? (value as SessionOrigin)
+    : 'coach';
+}
+
+/**
  * A session, as the calendar knows one.
  *
  * Narrower than the stored row: it carries what the calendar renders today — the
@@ -16,15 +33,6 @@ import type { SessionRow } from '@/db/schema';
  * are the Session Reflection (RPE 1–5 for body and mind plus a comment); null
  * until the athlete rates the session.
  */
-/**
- * Who authored a session. A closed set, enforced at the database by the
- * `sessions_origin_valid` check constraint — mirrored here so the authority
- * checks that branch on it (only `'athlete'` content is athlete-editable) are
- * exhaustively typed rather than comparing against open strings.
- */
-export const SESSION_ORIGINS = ['coach', 'athlete', 'garmin', 'head_coach'] as const;
-export type SessionOrigin = (typeof SESSION_ORIGINS)[number];
-
 export type Session = {
   id: string;
   date: string;
@@ -66,7 +74,7 @@ export function toSession(row: SessionRow): Session {
     feedbackComment: row.feedbackComment,
     // The database's check constraint is what makes this cast safe: no row can
     // hold a value outside SESSION_ORIGINS.
-    origin: row.origin as SessionOrigin,
+    origin: toSessionOrigin(row.origin),
     isTraining: row.isTraining,
   };
 }

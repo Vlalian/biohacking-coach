@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { boundFileText, inferSessionType, parseGpx } from './garmin';
 import {
-  buildCoachContext,
-  renderPrompt,
+  buildChatPrompt,
   formatWeekActivity,
   formatSkippedSessions,
 } from '@/features/coach/prompts';
@@ -18,12 +17,13 @@ import {
  *    `sport` column.
  *  - **Prompt guard** — no file-derived text reaches a prompt. Two fields could
  *    carry it: `sessionType`, which always passes through `inferSessionType`'s
- *    closed-set lookup; and `note`, which the Session Negotiation prompt DOES
- *    interpolate verbatim (`renderPrompt`) — so the Garmin `note` is a constant
- *    provenance string, never the file label. Bounding cannot neutralise
- *    injection *prose*; keeping file text out of the note can. Adding a session
- *    note to a prompt is a natural product wish, and the renderPrompt test below
- *    is what stops a hostile file riding it in by accident.
+ *    closed-set lookup; and `note`, which the Coach Chat prompt DOES interpolate
+ *    verbatim (`buildChatPrompt`, via the Reference the athlete brings in) — so
+ *    the Garmin `note` is a constant provenance string, never the file label.
+ *    Bounding cannot neutralise injection *prose*; keeping file text out of the
+ *    note can. Adding a session note to a prompt is a natural product wish, and
+ *    the buildChatPrompt test below is what stops a hostile file riding it in by
+ *    accident.
  */
 
 // A hostile label: a control character, then prompt-injection prose.
@@ -100,19 +100,18 @@ describe('inferSessionType — the prompt guard is a closed-set lookup', () => {
 });
 
 describe('the prompt seams carry no file-derived text', () => {
-  it('the Session Negotiation prompt (which interpolates note) is fed a safe constant', () => {
-    // The full chain: a hostile file → the session note → the SessionContext
-    // the Session Negotiation prompt reads → renderPrompt. The note interpolates
-    // verbatim (prompts.ts, `Note: "..."`), so this only stays safe because the
-    // Garmin note is a constant. If a future change puts the file label back in
-    // the note, this test fails.
+  it('the Coach Chat prompt (which interpolates note) is fed a safe constant', () => {
+    // The full chain: a hostile file → the session note → the Reference the
+    // Coach Chat prompt reads → buildChatPrompt. The note interpolates verbatim
+    // (prompts.ts, `Note: "..."`), so this only stays safe because the Garmin
+    // note is a constant. If a future change puts the file label back in the
+    // note, this test fails.
     const [session] = parseGpx(Buffer.from(hostileGpx));
-    const ctx = buildCoachContext(
+    const prompt = buildChatPrompt(
       { body: 6, mental: 6, energy: 6, sleep: 7, pulse: 55 },
-      [],
+      '2026-08-12',
       { type: 'Endurance', dayLabel: 'Mon', duration: '30 min', zone: 'Z2', note: session.note },
     );
-    const prompt = renderPrompt(ctx);
     expect(prompt).toContain('Imported from GPX');
     expect(prompt).not.toContain('IGNORE');
     expect(prompt).not.toContain(CTRL);

@@ -48,7 +48,6 @@ export interface AppShellStrings {
   themeDark: string;
   themeSystem: string;
   coachedModeBadge: string;
-  closeMessaging: string;
   openCoach: string;
   closeCoach: string;
   coachOverlayTitle: string;
@@ -65,8 +64,6 @@ export interface AppShellProps {
   navDrawerOpen: boolean;
   /** The always-available Coach surface — not a View. */
   coachOverlay?: { open: boolean };
-  messagingDrawer?: { open: boolean; title: string };
-  navBadges?: Partial<Record<ViewId, number>>;
   /** Rendered at the bottom of the Navigation Drawer, below the View list —
    *  the shell's own account actions (sign out) live here, always reachable
    *  regardless of scroll position. Opaque content: this component stays
@@ -76,13 +73,10 @@ export interface AppShellProps {
   children: ReactNode;
   /** The Coach Overlay body — follows the athlete across Views. */
   coachContent?: ReactNode;
-  /** The persistent Coaching Channel body (Coached Mode only). */
-  messagingContent?: ReactNode;
   onNavigate: (view: ViewId) => void;
   onToggleNavDrawer: () => void;
   onToggleCoachOverlay?: () => void;
   onCycleTheme: () => void;
-  onCloseMessagingDrawer?: () => void;
   t: AppShellStrings;
 }
 
@@ -115,17 +109,13 @@ export function AppShell({
   theme,
   navDrawerOpen,
   coachOverlay,
-  messagingDrawer,
-  navBadges,
   navFooter,
   children,
   coachContent,
-  messagingContent,
   onNavigate,
   onToggleNavDrawer,
   onToggleCoachOverlay,
   onCycleTheme,
-  onCloseMessagingDrawer,
   t,
 }: AppShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -150,7 +140,6 @@ export function AppShell({
     requestAnimationFrame(() => contentRef.current?.focus());
   };
 
-  const messagingOpen = Boolean(messagingDrawer?.open && isCoachedMode);
   const coachOpen = Boolean(coachOverlay?.open);
 
   return (
@@ -254,7 +243,6 @@ export function AppShell({
             {availableViews.map((view) => {
               const Icon = VIEW_ICONS[view];
               const active = view === currentView;
-              const badge = navBadges?.[view];
               return (
                 <li key={view}>
                   <button
@@ -270,11 +258,6 @@ export function AppShell({
                   >
                     <Icon className={active ? 'h-4 w-4 text-signal' : 'h-4 w-4'} />
                     <span className="font-body text-sm tracking-wide">{t.views[view]}</span>
-                    {badge ? (
-                      <span className="ml-auto min-w-5 bg-signal px-1.5 py-0.5 text-center font-mono text-[10px] text-signal-foreground">
-                        {badge}
-                      </span>
-                    ) : null}
                   </button>
                 </li>
               );
@@ -294,29 +277,6 @@ export function AppShell({
         >
           {children}
         </main>
-
-        {/* Messaging Drawer — docked, persistent, closes only via its own button */}
-        {messagingOpen && (
-          <aside
-            aria-label={messagingDrawer?.title}
-            className="z-20 flex w-full max-w-full shrink-0 flex-col border-l border-border bg-panel sm:w-[340px]"
-          >
-            <div className="flex items-center justify-between border-b border-rule px-4 py-3">
-              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                {messagingDrawer?.title}
-              </span>
-              <button
-                type="button"
-                onClick={onCloseMessagingDrawer}
-                aria-label={t.closeMessaging}
-                className="text-muted-foreground transition-colors hover:text-signal"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">{messagingContent}</div>
-          </aside>
-        )}
 
         {/* Coach Overlay — movable, non-modal, persistent across Views */}
         {coachOpen && (

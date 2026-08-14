@@ -16,6 +16,7 @@ export interface SettingsProfile {
   name: string;
   email: string;
   communicationStyle: string;
+  raceTarget: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
 }
@@ -34,6 +35,7 @@ export interface SettingsViewProps {
   language: string;
   coachingLink: SettingsCoachingLink | null;
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
+  onUpdateRaceTarget: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -74,6 +76,7 @@ export function SettingsView({
   language,
   coachingLink,
   onUpdateCommunicationStyle,
+  onUpdateRaceTarget,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
@@ -104,9 +107,11 @@ export function SettingsView({
 
         <TrainingSection
           communicationStyle={profile.communicationStyle}
+          raceTarget={profile.raceTarget}
           weeklySessionDay={profile.weeklySessionDay}
           fixedConstraints={profile.fixedConstraints}
           onUpdateCommunicationStyle={onUpdateCommunicationStyle}
+          onUpdateRaceTarget={onUpdateRaceTarget}
           onUpdateWeeklySessionDay={onUpdateWeeklySessionDay}
           onAddFixedConstraint={onAddFixedConstraint}
           onRemoveFixedConstraint={onRemoveFixedConstraint}
@@ -299,17 +304,21 @@ function ThemeTile({
 
 function TrainingSection({
   communicationStyle,
+  raceTarget,
   weeklySessionDay,
   fixedConstraints,
   onUpdateCommunicationStyle,
+  onUpdateRaceTarget,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
 }: {
   communicationStyle: string;
+  raceTarget: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
+  onUpdateRaceTarget: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -318,6 +327,7 @@ function TrainingSection({
 
   return (
     <Section label={t('sectionTraining')}>
+      <RaceTargetField value={raceTarget} onSave={onUpdateRaceTarget} />
       <CommunicationStyleField
         value={communicationStyle}
         onSave={onUpdateCommunicationStyle}
@@ -329,6 +339,61 @@ function TrainingSection({
         onRemove={onRemoveFixedConstraint}
       />
     </Section>
+  );
+}
+
+/**
+ * The race target — the fixed point the whole plan is built backwards from, and
+ * until now write-once at onboarding. Clearable: an athlete between races has
+ * no target, and an empty value stores null rather than "".
+ */
+function RaceTargetField({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (value: string) => Promise<SettingsActionResult>;
+}) {
+  const t = useTranslations('Settings');
+  const [draft, setDraft] = useState(value);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const dirty = draft.trim() !== value.trim();
+
+  async function save() {
+    setStatus('saving');
+    const result = await onSave(draft);
+    setStatus(result.ok ? 'saved' : 'error');
+  }
+
+  return (
+    <div>
+      <label className="block">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {t('raceTargetLabel')}
+        </span>
+        <p className="mt-1 font-body text-xs text-muted-foreground">{t('raceTargetNote')}</p>
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setStatus('idle');
+          }}
+          placeholder={t('raceTargetPlaceholder')}
+          maxLength={120}
+          className="mt-2 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+        />
+      </label>
+      <div className="mt-2 flex items-center gap-3">
+        <SaveButton
+          onClick={save}
+          disabled={!dirty || status === 'saving'}
+          pending={status === 'saving'}
+          label={t('save')}
+        />
+        <SaveStatus status={status} t={t} />
+      </div>
+    </div>
   );
 }
 

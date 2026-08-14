@@ -1,7 +1,6 @@
-import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
-import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
+import { getOwnedSession } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
 import type { SessionContext } from './check-in';
 import { buildChatPrompt } from './prompts';
@@ -174,26 +173,25 @@ export async function sendCoachChatMessage(
  * sanctioned proactive nudge (ADR 0007: "Offered every week, forced never").
  *
  * True only on the athlete's stored Weekly Session Day, and only when they have
- * not already planned this week. "Flexible" (or unset) means no preferred day,
- * so no nudge — an athlete who declined to name a day is not asking to be
- * chased; they can still start one whenever they like.
+ * not already *held* a Weekly Session this week. "Flexible" (or unset) means no
+ * preferred day, so no nudge — an athlete who declined to name a day is not
+ * asking to be chased; they can still start one whenever they like.
  *
- * Pure given its inputs: the caller supplies today's weekday and the week's
- * sessions, so this is decided without a clock or a query of its own.
+ * The "already done" test is the conversation, not the plan. A week that has a
+ * plan is not a week that has been discussed: once generation lands, an
+ * auto-drafted week must still be offered, or generation would silence its own
+ * offer (coach-overlay issue 04, decision 4).
+ *
+ * Pure given its inputs: the caller supplies today's weekday and the answer to
+ * the "already held" question, so this is decided without a clock or a query.
  */
 export function shouldOfferWeeklySession(params: {
   weeklySessionDay: string | null | undefined;
   todayWeekday: string;
-  hasCoachPlannedThisWeek: boolean;
+  hasHeldWeeklySessionThisWeek: boolean;
 }): boolean {
-  const { weeklySessionDay, todayWeekday, hasCoachPlannedThisWeek } = params;
+  const { weeklySessionDay, todayWeekday, hasHeldWeeklySessionThisWeek } = params;
   if (!weeklySessionDay || weeklySessionDay === 'Flexible') return false;
   if (weeklySessionDay !== todayWeekday) return false;
-  return !hasCoachPlannedThisWeek;
-}
-
-/** Whether this week already holds a Coach-planned session — the nudge's "already done" test. */
-export async function hasCoachPlanForWeek(athleteId: string, today: string): Promise<boolean> {
-  const weekSessions = await getSessionsForWeek(athleteId, weekStartOf(today));
-  return weekSessions.some((s) => s.origin === 'coach');
+  return !hasHeldWeeklySessionThisWeek;
 }

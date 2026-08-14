@@ -2,21 +2,14 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, events } from '@/db/schema';
 import { isFrozen } from './move-rules';
+import { getSessionAuthority } from './session-repository';
 
 export type SessionStatusResult =
   | { ok: true }
   | { ok: false; reason: 'not-found' | 'not-owner' | 'frozen' | 'future' };
 
 async function loadOwnedSession(sessionId: string, athleteId: string) {
-  const [row] = await getDb()
-    .select({
-      athleteId: sessions.athleteId,
-      date: sessions.date,
-      status: sessions.status,
-    })
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
+  const row = await getSessionAuthority(sessionId);
 
   if (!row) return { ok: false as const, reason: 'not-found' as const };
   if (row.athleteId !== athleteId) return { ok: false as const, reason: 'not-owner' as const };

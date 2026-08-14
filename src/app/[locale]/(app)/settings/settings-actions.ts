@@ -3,12 +3,12 @@
 import { hasLocale } from 'next-intl';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
-import type { Athlete } from '@/features/athlete/athlete';
 import {
-  getAthleteByUserId,
   mergeAthleteProfile,
   updateCommunicationStyle,
+  updateRaceTarget,
 } from '@/features/athlete/athlete-repository';
+import { resolveAthlete } from '../../current-athlete';
 import {
   severLinkForAthlete,
   updateLinkVisibility,
@@ -37,17 +37,14 @@ const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
 // the MCQ's shortlist.
 const WEEKLY_SESSION_DAY_OPTIONS: readonly string[] = [...DAYS, 'Flexible'];
 const COMMUNICATION_STYLE_MAX = 300;
+const RACE_TARGET_MAX = 120;
 
 /**
- * Resolves the acting athlete from the authenticated session — never from the
- * request body (ADR 0006). Returns the full {@link Athlete}, not just an id:
- * Fixed Constraints reads the current list before writing the next one.
+ * The acting athlete, resolved from the authenticated session — never from the
+ * request body (ADR 0006). The full {@link Athlete}, not just an id: Fixed
+ * Constraints reads the current list before writing the next one.
  */
-async function actingAthlete(): Promise<Athlete | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return null;
-  return (await getAthleteByUserId(session.user.id)) ?? null;
-}
+const actingAthlete = resolveAthlete;
 
 /**
  * Communication Style, corrected by the athlete in their own words. Onboarding
@@ -66,6 +63,27 @@ export async function updateCommunicationStyleAction(
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
   await updateCommunicationStyle(athlete.id, trimmed);
+  return { ok: true };
+}
+
+/**
+ * The race target, changed after onboarding. Free text (a race name and date as
+ * the athlete says it — "Ironman Copenhagen 2026-08-16"), so the only gate is a
+ * length cap; an empty value clears the target rather than storing "".
+ *
+ * Deliberately not an identity field: this is a public race, not a person, and
+ * it already reaches the prompt from onboarding (`renderWeeklyPrompt`'s `race=`).
+ */
+export async function updateRaceTargetAction(
+  value: string,
+): Promise<SettingsActionResult> {
+  const trimmed = value.trim();
+  if (trimmed.length > RACE_TARGET_MAX) return { ok: false, reason: 'invalid' };
+
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  await updateRaceTarget(athlete.id, trimmed || null);
   return { ok: true };
 }
 
