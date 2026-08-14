@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 import type { Session } from '@/features/session/session';
 import { rateSessionAction } from './rate-actions';
 
@@ -72,41 +73,9 @@ export function RatingModal({
   const [mind, setMind] = useState(session.feedbackMind ?? 0);
   const [comment, setComment] = useState(session.feedbackComment ?? '');
   const [failed, setFailed] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Focus management: move focus into the dialog on open, close on Escape, keep
-  // Tab inside the panel, and restore focus to the trigger on close.
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-        'button, textarea, [href], input, [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable || focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      opener?.focus();
-    };
-  }, [onClose]);
+  // Focus into the dialog on open, Tab trapped inside, Escape to close, focus
+  // restored to the trigger — shared with every other overlay.
+  const panelRef = useDialogFocus(onClose);
 
   function onSave() {
     if (body < 1 || mind < 1) return;

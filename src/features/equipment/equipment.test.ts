@@ -48,4 +48,31 @@ describe('validateEquipmentDraft', () => {
       reason: 'invalid',
     });
   });
+
+  // Both fields reach the Coach prompts through `buildEquipmentLines`, so a
+  // shaped identifier is refused at the write rather than stored and then
+  // throwing on the athlete's next Coach message.
+  it('refuses an email in the name', () => {
+    expect(validateEquipmentDraft({ category: 'bike', name: 'Canyon — mads@example.com' })).toEqual(
+      { ok: false, reason: 'identifier' },
+    );
+  });
+
+  it('refuses a phone number in the details', () => {
+    expect(
+      validateEquipmentDraft({
+        category: 'bike',
+        name: 'Canyon Speedmax',
+        details: 'shop on +45 20 12 34 56',
+      }),
+    ).toEqual({ ok: false, reason: 'identifier' });
+  });
+
+  it('leaves ordinary gear text alone', () => {
+    // The guard must not eat real equipment names — model numbers and years are
+    // exactly the digits an over-eager pattern would swallow.
+    for (const name of ['Canyon Speedmax CF SLX 8', 'Garmin Forerunner 955', 'Zoom Fly 5']) {
+      expect(validateEquipmentDraft({ category: 'other', name })).toMatchObject({ ok: true });
+    }
+  });
 });

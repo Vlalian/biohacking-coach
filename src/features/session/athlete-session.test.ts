@@ -51,7 +51,6 @@ beforeEach(() => {
 
 describe('createAthleteSession', () => {
   it('creates a retro-logged session as completed when the date is today or earlier', async () => {
-    countWhere.mockResolvedValue([{ value: 2 }]);
     insertReturning.mockResolvedValue([{ id: 'new_sess' }]);
 
     const result = await createAthleteSession({
@@ -70,9 +69,32 @@ describe('createAthleteSession', () => {
         athleteId: OWNER,
         origin: 'athlete',
         status: 'completed',
-        dayOrder: 2,
       }),
     );
+  });
+
+  it('allocates dayOrder inside the INSERT, never from a prior count', async () => {
+    // A select-then-insert races: two sessions added to the same day at once
+    // both read the same count and collide on dayOrder, which is the column the
+    // calendar orders a Double by. Computed in the statement, the second insert
+    // sees the first — so the value handed to the insert must be SQL, not a
+    // number this process worked out beforehand.
+    insertReturning.mockResolvedValue([{ id: 'new_sess' }]);
+
+    await createAthleteSession({
+      athleteId: OWNER,
+      date: TODAY,
+      type: 'Strength',
+      durationMin: 45,
+      isTraining: true,
+      note: null,
+      today: TODAY,
+    });
+
+    const { dayOrder } = (insertValues.mock.calls as unknown as [{ dayOrder: unknown }][])[0][0];
+    expect(typeof dayOrder).not.toBe('number');
+    expect(dayOrder).toMatchObject({ queryChunks: expect.anything() });
+    expect(countWhere).not.toHaveBeenCalled();
   });
 
   it('creates a future session as planned', async () => {

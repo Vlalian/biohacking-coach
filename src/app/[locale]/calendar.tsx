@@ -254,6 +254,7 @@ export function Calendar({
             expanded={expanded.includes(week.isoWeekStart)}
             readOnly={readOnly}
             todayKey={todayKey}
+            locale={locale}
             dragging={dragging}
             hoverDate={hoverDate}
             bounce={bounce}
@@ -304,6 +305,7 @@ function WeekRow({
   expanded,
   readOnly,
   todayKey,
+  locale,
   dragging,
   hoverDate,
   bounce,
@@ -323,6 +325,7 @@ function WeekRow({
   expanded: boolean;
   readOnly: boolean;
   todayKey: string;
+  locale: string;
   dragging: { session: Session; week: string } | null;
   hoverDate: string | null;
   bounce: { date: string; reason: BounceReason } | null;
@@ -338,9 +341,16 @@ function WeekRow({
   onDropDay: (day: Day) => void;
   onToggleAvailability: (date: string, currentlyUnavailable: boolean) => void;
 }) {
-  const weekLabel = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(
-    new Date(`${week.isoWeekStart}T00:00:00`),
-  );
+  // Explicit locale and time zone: `undefined` resolves both from the runtime —
+  // the server during SSR, the visitor in the browser — so the same week can
+  // render as two different strings and mismatch on hydration. It also ignored
+  // the app locale, putting an English week start under a Danish header. Same
+  // pattern as `formatFullDate` in session-drawer.tsx.
+  const weekLabel = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(new Date(`${week.isoWeekStart}T00:00:00Z`));
 
   return (
     <div>

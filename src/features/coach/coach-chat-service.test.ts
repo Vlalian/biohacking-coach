@@ -114,6 +114,59 @@ describe('sendCoachChatMessage', () => {
     expect(result).toMatchObject({ ok: true, conversationId: 'conv_1' });
   });
 
+  it('reports coach-unavailable when the Coach call rejects', async () => {
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    callCoach.mockRejectedValue(new Error('upstream 529'));
+
+    const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+  });
+
+  it('writes nothing when the Coach call rejects — no question without an answer', async () => {
+    // The failure mode this ordering exists to prevent: the athlete's turn
+    // persisted, the reply never arriving, and a retry duplicating the message.
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    callCoach.mockRejectedValue(new Error('upstream 529'));
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
+
+    expect(appendMessages).not.toHaveBeenCalled();
+  });
+
+  it('does not mint a conversation when the Coach call rejects', async () => {
+    callCoach.mockRejectedValue(new Error('upstream 529'));
+
+    await sendCoachChatMessage(ATHLETE, null, 'first ever message', '2026-08-12');
+
+    expect(createConversation).not.toHaveBeenCalled();
+  });
+
+  it('stores the turn and the reply together, in order', async () => {
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
+
+    expect(appendMessages).toHaveBeenCalledTimes(1);
+    expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
+      { role: 'athlete', content: 'should I ride?' },
+      { role: 'coach_ai', content: 'Fuel early.' },
+    ]);
+  });
+
+  it("sends the athlete's turn to the Coach even though it is not stored yet", async () => {
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getMessages.mockResolvedValue([msg('athlete', 'earlier', 1), msg('coach_ai', 'noted', 2)]);
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'and now?', '2026-08-12');
+
+    expect(callCoach.mock.calls[0][0].messages).toEqual([
+      { role: 'user', content: 'earlier' },
+      { role: 'assistant', content: 'noted' },
+      { role: 'user', content: 'and now?' },
+    ]);
+  });
+
   it('refuses an empty message without calling the Coach', async () => {
     const result = await sendCoachChatMessage(ATHLETE, 'conv_1', '   ', '2026-08-12');
 

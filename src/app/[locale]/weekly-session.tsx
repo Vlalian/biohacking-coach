@@ -1,10 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useRouter, Link } from '@/i18n/navigation';
 import { AlertTriangle, Check, ChevronLeft, CornerDownLeft, Loader2 } from 'lucide-react';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 import {
   commitWeeklyPlanAction,
   declineWeeklyPlanAction,
@@ -110,6 +118,13 @@ export function WeeklySession({
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
   const [proposal, setProposal] = useState<UiPlanProposal | null>(initial?.proposal ?? null);
   const [popupOpen, setPopupOpen] = useState<boolean>(Boolean(initial?.proposal));
+  // Dismissing the popup drops to the persistent bar, never to a dead end — so
+  // Escape closes the popup rather than the conversation. Bound only while the
+  // popup is up, since this component is mounted throughout the session.
+  const proposalRef = useDialogFocus(
+    useCallback(() => setPopupOpen(false), []),
+    Boolean(proposal) && popupOpen,
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -366,7 +381,11 @@ export function WeeklySession({
           aria-modal="true"
           aria-labelledby="plan-proposal-title"
         >
-          <div className="flex max-h-[80%] w-full max-w-sm flex-col border border-border bg-panel shadow-2xl">
+          <div
+            ref={proposalRef}
+            tabIndex={-1}
+            className="flex max-h-[80%] w-full max-w-sm flex-col border border-border bg-panel shadow-2xl outline-none"
+          >
             <div className="border-b border-rule px-5 py-4">
               <h3
                 id="plan-proposal-title"

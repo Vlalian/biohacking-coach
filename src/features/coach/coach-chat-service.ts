@@ -119,7 +119,7 @@ export async function getOpenCoachChat(athleteId: string): Promise<CoachChatStat
 
 export type SendChatResult =
   | { ok: true; conversationId: string; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'empty' };
+  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' };
 
 /**
  * Sends the athlete's turn and returns the Coach's reply, creating the chat on
@@ -128,7 +128,17 @@ export type SendChatResult =
  * which matches how the athlete experiences it — they tapped a session, asked
  * about it, and may then move on.
  *
- * Refuses an empty message, and a conversation that is not this athlete's.
+ * Refuses an empty message, a conversation that is not this athlete's, and a
+ * Coach that could not be reached.
+ *
+ * **Nothing is written until the Coach has answered.** The turn and the reply
+ * land together, in one append, after the API call returns. Persisting the
+ * athlete's message first is the obvious order and the wrong one: the Anthropic
+ * call is the step that realistically fails, and doing it second leaves a
+ * transcript holding a question with no answer — which the athlete cannot retry
+ * without their message appearing twice. Failing before any write means the
+ * client can simply hand the draft back (`coach-chat.tsx`), and the conversation
+ * is exactly as it was.
  */
 export async function sendCoachChatMessage(
   athlete: Athlete,
@@ -141,29 +151,42 @@ export async function sendCoachChatMessage(
   const trimmed = content.trim();
   if (!trimmed) return { ok: false, reason: 'empty' };
 
-  let id = conversationId;
-  if (id) {
-    const owned = await getOwnedConversation(athlete.id, id);
-    if (!owned) return { ok: false, reason: 'not-owner' };
-  } else {
-    // Lazily created: the resting conversation costs nothing until it is used.
-    const created = await createConversation({ athleteId: athlete.id, kind: 'coach_chat' });
-    id = created.id;
+  // Ownership is checked before any work: a forged conversation id must not
+  // reach a prompt or an API call, let alone a write (ADR 0006).
+  const existing = conversationId
+    ? await getOwnedConversation(athlete.id, conversationId)
+    : null;
+  if (conversationId && !existing) return { ok: false, reason: 'not-owner' };
+
+  const transcript = conversationId ? await getMessages(conversationId) : [];
+  const system = await renderSystem(athlete, today, language, referenceSessionId);
+
+  let replyText: string;
+  try {
+    replyText = (
+      await callCoach({
+        system,
+        // The athlete's turn joins the history here rather than being stored
+        // first — same messages the API would have seen, no orphan on failure.
+        messages: [...toChatApiMessages(transcript), { role: 'user', content: trimmed }],
+        maxTokens: CHAT_MAX_TOKENS,
+      })
+    ).text;
+  } catch {
+    return { ok: false, reason: 'coach-unavailable' };
   }
 
-  const afterAthlete = await appendMessages(athlete.id, id, [
+  // Lazily created: the resting conversation costs nothing until it is used,
+  // and a Coach that never answered should not mint an empty one.
+  const id =
+    conversationId ??
+    (await createConversation({ athleteId: athlete.id, kind: 'coach_chat' })).id;
+
+  const appended = await appendMessages(athlete.id, id, [
     { role: 'athlete', content: trimmed },
+    { role: 'coach_ai', content: replyText },
   ]);
-  if (!afterAthlete) return { ok: false, reason: 'not-owner' };
-
-  const system = await renderSystem(athlete, today, language, referenceSessionId);
-  const reply = await callCoach({
-    system,
-    messages: toChatApiMessages(await getMessages(id)),
-    maxTokens: CHAT_MAX_TOKENS,
-  });
-
-  await appendMessages(athlete.id, id, [{ role: 'coach_ai', content: reply.text }]);
+  if (!appended) return { ok: false, reason: 'not-owner' };
 
   return { ok: true, conversationId: id, messages: await getMessages(id) };
 }

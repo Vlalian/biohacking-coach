@@ -9,6 +9,8 @@
  * screen and the Coach's prompt builder both consume {@link EquipmentItem}.
  */
 
+import { isFreeOfShapedIdentifiers } from '@/lib/identifiers';
+
 export const EQUIPMENT_CATEGORIES = ['bike', 'shoes', 'watch', 'other'] as const;
 export type EquipmentCategory = (typeof EQUIPMENT_CATEGORIES)[number];
 
@@ -36,12 +38,13 @@ export function isValidCategory(value: unknown): value is EquipmentCategory {
 
 export type EquipmentDraftValidation =
   | { ok: true; draft: EquipmentDraft }
-  | { ok: false; reason: 'invalid' };
+  | { ok: false; reason: 'invalid' | 'identifier' };
 
 /**
  * Validates and normalises a would-be Equipment item: a valid category, a
  * non-empty name (trimmed, length-capped), optional details (trimmed,
- * length-capped, empty becomes null rather than an empty string).
+ * length-capped, empty becomes null rather than an empty string), and neither
+ * field carrying a shape-detectable identifier.
  */
 export function validateEquipmentDraft(input: {
   category: unknown;
@@ -54,5 +57,15 @@ export function validateEquipmentDraft(input: {
   if (!name) return { ok: false, reason: 'invalid' };
   const details =
     typeof input.details === 'string' ? input.details.trim().slice(0, DETAILS_MAX) || null : null;
+
+  // Both fields are interpolated into Coach prompts by `buildEquipmentLines`,
+  // so a shaped identifier is refused at the door, not only at the prompt.
+  // Refusing here is the kinder half: the athlete is told now, rather than the
+  // value being stored and then throwing on their next Coach message. What this
+  // does and does not recognise is documented on the guard itself.
+  if (!isFreeOfShapedIdentifiers(name) || !isFreeOfShapedIdentifiers(details)) {
+    return { ok: false, reason: 'identifier' };
+  }
+
   return { ok: true, draft: { category: input.category, name, details } };
 }

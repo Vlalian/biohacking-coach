@@ -297,6 +297,12 @@ export function buildWeeklyContext(
 }
 
 export function renderWeeklyPrompt(ctx: WeeklyContext): string {
+  // Same reason as buildChatPrompt: the assertion belongs at the prompt builder,
+  // so a caller that assembled the context itself cannot route around the one in
+  // `buildWeeklyCheckIn`. Idempotent — asserting twice costs a walk, missing it
+  // once costs an identifier reaching Anthropic.
+  assertNoDirectIdentifier(ctx.checkIn);
+
   const {
     patterns,
     feedbackSummary,
@@ -456,11 +462,13 @@ export function buildChatPrompt(
   today: string = todayISO(),
   sessionContext: SessionContext | null = null,
 ): string {
-  // The check-in is asserted upstream by buildWeeklyCheckIn, but the Reference
-  // arrives as a *separate* argument and carries free text (a session note the
-  // athlete or Coach wrote). That is exactly the "free-text leaf" the standard
-  // warns identifiers hide in, so it is asserted here — at the prompt builder,
-  // where AGENTS.md says the assertion belongs, rather than trusting each caller.
+  // Asserted here, at the prompt builder, because that is where AGENTS.md says
+  // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
+  // covered: the check-in (whose equipment and onboarding answers are athlete
+  // free text) and the Reference, which arrives separately and carries a session
+  // note. Relying on the upstream builder left this reachable by any caller that
+  // assembled a CheckIn itself.
+  assertNoDirectIdentifier(checkIn);
   if (sessionContext) assertNoDirectIdentifier(sessionContext);
 
   const {

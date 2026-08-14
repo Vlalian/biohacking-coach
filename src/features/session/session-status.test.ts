@@ -4,7 +4,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // batch records whether a write happened.
 const limit = vi.fn();
 const batch = vi.fn().mockResolvedValue(undefined);
-const updateWhere = vi.fn(() => ({}));
+// The status write is conditional (`... AND status = :expected`) and reports
+// what it matched, so the mock's update chain ends in `.returning()`. An empty
+// array is how the database says "the row was not in the state you read it in".
+const updateReturning = vi.fn().mockResolvedValue([{ id: 's1' }]);
+const updateWhere = vi.fn(() => ({ returning: updateReturning }));
 const updateSet = vi.fn(() => ({ where: updateWhere }));
 const insertValues = vi.fn(() => ({}));
 
@@ -33,6 +37,7 @@ beforeEach(() => {
   batch.mockClear();
   insertValues.mockClear();
   updateSet.mockClear();
+  updateReturning.mockClear().mockResolvedValue([{ id: 's1' }]);
 });
 
 describe('completeSession — server authority', () => {

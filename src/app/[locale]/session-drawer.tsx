@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 import {
   CalendarX2,
   CheckCircle2,
@@ -91,6 +92,9 @@ export function SessionDrawer({
   const coachOverlay = useCoachOverlay();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(false);
+  // Bound only while open: this component stays mounted and renders null when
+  // closed, so an unconditional binding would swallow Escape for the whole page.
+  const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
 
   if (!state.open) return null;
 
@@ -120,9 +124,11 @@ export function SessionDrawer({
         className="absolute inset-0 bg-foreground/20 backdrop-blur-[1px]"
       />
       <aside
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-panel shadow-2xl"
+        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-panel shadow-2xl outline-none"
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">

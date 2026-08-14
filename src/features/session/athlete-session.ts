@@ -1,20 +1,16 @@
-import { and, count, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, events } from '@/db/schema';
 import { getSessionAuthority } from './session-repository';
+import { createdStatusFor, validateAthleteSessionDraft } from './athlete-session-rules';
 
-/** The Athlete Session types (CONTEXT.md): Mobility and Other coexist with
- *  Rest; Strength and Other-as-training follow the training rules. */
-const ATHLETE_SESSION_TYPES = ['Mobility', 'Strength', 'Other'] as const;
-const NOTE_MAX = 500;
-
-function isValidType(type: unknown): type is (typeof ATHLETE_SESSION_TYPES)[number] {
-  return typeof type === 'string' && (ATHLETE_SESSION_TYPES as readonly string[]).includes(type);
-}
-
-function isValidDuration(duration: unknown): duration is number | null {
-  return duration === null || (Number.isInteger(duration) && (duration as number) > 0);
-}
+/**
+ * The Athlete Session adapter: reads, writes, and nothing else.
+ *
+ * What counts as a legal type, duration or note, and which status a retro-log
+ * lands in, are decided by `athlete-session-rules.ts` — framework-free and
+ * tested without a database (AGENTS.md: pure core, I/O at the edges).
+ */
 
 export type CreateAthleteSessionResult =
   | { ok: true; sessionId: string }
@@ -41,29 +37,33 @@ export async function createAthleteSession(params: {
 }): Promise<CreateAthleteSessionResult> {
   const { athleteId, date, type, durationMin, isTraining, note, today } = params;
 
-  if (!isValidType(type)) return { ok: false, reason: 'invalid' };
-  if (!isValidDuration(durationMin)) return { ok: false, reason: 'invalid' };
-
-  const trimmedNote = typeof note === 'string' ? note.trim().slice(0, NOTE_MAX) : null;
+  const validated = validateAthleteSessionDraft({ type, durationMin, isTraining, note });
+  if (!validated.ok) return validated;
+  const { draft } = validated;
 
   const db = getDb();
-  const [{ value: existing }] = await db
-    .select({ value: count() })
-    .from(sessions)
-    .where(and(eq(sessions.athleteId, athleteId), eq(sessions.date, date)));
 
   const [row] = await db
     .insert(sessions)
     .values({
       athleteId,
       date,
-      type,
+      type: draft.type,
       origin: 'athlete',
-      status: date <= today ? 'completed' : 'planned',
-      isTraining,
-      duration: durationMin,
-      note: trimmedNote || null,
-      dayOrder: existing,
+      status: createdStatusFor(date, today),
+      isTraining: draft.isTraining,
+      duration: draft.durationMin,
+      note: draft.note,
+      // Allocated in the INSERT itself, not by counting first: a select-then-
+      // insert races, and two sessions added to the same day at once would both
+      // read the same count and land on the same dayOrder — which is the column
+      // the calendar orders a Double by. Computed in the statement, the second
+      // insert sees the first.
+      dayOrder: sql`(
+        SELECT COALESCE(MAX(${sessions.dayOrder}) + 1, 0)
+        FROM ${sessions}
+        WHERE ${sessions.athleteId} = ${athleteId} AND ${sessions.date} = ${date}
+      )`,
     })
     .returning({ id: sessions.id });
 
@@ -109,20 +109,22 @@ export async function updateAthleteSession(params: {
   const found = await loadOwnedAthleteSession(sessionId, athleteId);
   if (!found.ok) return found;
 
-  if (!isValidType(type)) return { ok: false, reason: 'invalid' };
-  if (!isValidDuration(durationMin)) return { ok: false, reason: 'invalid' };
-  const trimmedNote = typeof note === 'string' ? note.trim().slice(0, NOTE_MAX) : null;
+  const validated = validateAthleteSessionDraft({ type, durationMin, isTraining, note });
+  if (!validated.ok) return validated;
+  const { draft } = validated;
 
   await getDb()
     .update(sessions)
     .set({
-      type,
-      duration: durationMin,
-      isTraining,
-      note: trimmedNote || null,
+      type: draft.type,
+      duration: draft.durationMin,
+      isTraining: draft.isTraining,
+      note: draft.note,
       updatedAt: new Date(),
     })
-    .where(eq(sessions.id, sessionId));
+    // Ownership is re-asserted in the WHERE, not just checked above: the read
+    // and the write are separate statements, so the guard travels with the write.
+    .where(and(eq(sessions.id, sessionId), eq(sessions.athleteId, athleteId)));
 
   return { ok: true };
 }

@@ -313,6 +313,12 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                       title={t('bestTime')}
                       help={t('optional')}
                     />
+                    {/* StepHeading renders a heading, not a label, so it gives
+                        the input no accessible name. Same sr-only pairing the
+                        race step above already uses. */}
+                    <label htmlFor="onboarding-best-time" className="sr-only">
+                      {t('bestTime')}
+                    </label>
                     <input
                       id="onboarding-best-time"
                       value={bestTime}
@@ -341,6 +347,9 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 <>
                   <div className="space-y-3">
                     <StepHeading title={t('targetTime')} help={t('optional')} />
+                    <label htmlFor="onboarding-target-time" className="sr-only">
+                      {t('targetTime')}
+                    </label>
                     <input
                       id="onboarding-target-time"
                       value={targetTime}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 import { useTranslations } from 'next-intl';
 import { Bike, Footprints, Pencil, Plus, Trash2, Watch, Wrench, X } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
@@ -35,19 +36,28 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
   const t = useTranslations('Equipment');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<'none' | 'generic' | 'identifier'>('none');
   const [form, setForm] = useState<FormState>({ open: false });
 
-  function run(action: () => Promise<{ ok: boolean }>, after?: () => void) {
-    setError(false);
+  function run(
+    action: () => Promise<{ ok: boolean; reason?: string }>,
+    after?: () => void,
+  ) {
+    setError('none');
     startTransition(async () => {
-      const result = await action();
-      if (!result.ok) {
-        setError(true);
-        return;
+      try {
+        const result = await action();
+        if (!result.ok) {
+          // A refused identifier gets its own message: "try again" is useless
+          // advice for an input that will be refused identically every time.
+          setError(result.reason === 'identifier' ? 'identifier' : 'generic');
+          return;
+        }
+        router.refresh();
+        after?.();
+      } catch {
+        setError('generic');
       }
-      router.refresh();
-      after?.();
     });
   }
 
@@ -71,9 +81,9 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
         )}
       </header>
 
-      {error && (
+      {error !== 'none' && (
         <p role="alert" className="mt-4 text-sm text-destructive">
-          {t('error')}
+          {error === 'identifier' ? t('errorIdentifier') : t('error')}
         </p>
       )}
 
@@ -210,10 +220,19 @@ function EquipmentForm({
   const [category, setCategory] = useState<EquipmentCategory>(item?.category ?? 'bike');
   const [name, setName] = useState(item?.name ?? '');
   const [details, setDetails] = useState(item?.details ?? '');
+  // Mounted only while open, so no enabled flag is needed here.
+  const panelRef = useDialogFocus(onCancel);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/30 p-0 sm:items-center sm:p-6">
-      <div className="w-full max-w-md border border-border bg-panel">
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={item ? t('editItem') : t('addItem')}
+        className="w-full max-w-md border border-border bg-panel outline-none"
+      >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
             {item ? t('editItem') : t('addItem')}

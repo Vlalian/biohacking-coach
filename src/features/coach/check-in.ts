@@ -1,4 +1,5 @@
 import type { EquipmentItem } from '@/features/equipment/equipment';
+import { shapedIdentifierIn } from '@/lib/identifiers';
 
 /**
  * The plain-data inputs the Coach prompts reason about.
@@ -103,21 +104,6 @@ export interface CheckIn {
   weeklySessionNumber?: number;
 }
 
-/** Anything shaped like `local@domain` — the cheapest tell of a leaked email. */
-const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
-
-/**
- * A phone-shaped run: `+` followed by 8–15 digits, or a bare contiguous run of
- * 8–15 digits. Deliberately tight so ordinary training prose survives it — an
- * ISO date (`2026-08-18`), a duration (`90 min`), a pulse (`55bpm`) and an
- * interval set (`4x800m`) all have digit runs far shorter than eight.
- */
-const PHONE_SHAPED = /\+\d[\d\s-]{6,16}\d|\b\d{8,15}\b/;
-
-const SHAPED_IDENTIFIERS: ReadonlyArray<{ kind: string; pattern: RegExp }> = [
-  { kind: 'email', pattern: EMAIL_SHAPED },
-  { kind: 'phone', pattern: PHONE_SHAPED },
-];
 
 /**
  * Fails closed if a check-in built from app data would carry a direct identifier
@@ -177,10 +163,10 @@ export function assertNoIdentity(checkIn: CheckIn): void {
  */
 export function assertNoDirectIdentifier(value: unknown): void {
   if (typeof value === 'string') {
-    const hit = SHAPED_IDENTIFIERS.find(({ pattern }) => pattern.test(value));
-    if (hit) {
+    const kind = shapedIdentifierIn(value);
+    if (kind) {
       throw new Error(
-        `Prompt input carries a ${hit.kind}-shaped value — no direct identifier ` +
+        `Prompt input carries a ${kind}-shaped value — no direct identifier ` +
           'may reach a prompt (GDPR decision 1).',
       );
     }

@@ -65,6 +65,43 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     expect(() => buildChatPrompt(BASE, '2026-08-12', leakySession)).toThrow(/identifier/i);
   });
 
+  // Equipment `name` and `details` are athlete free text that `buildEquipmentLines`
+  // interpolates into BOTH prompts. The assertion used to live only in
+  // `buildWeeklyCheckIn`, so a caller assembling a CheckIn itself walked straight
+  // past it. These four lock the builders themselves.
+  const leakyEquipment = (field: 'name' | 'details') => [
+    {
+      id: 'eq_1',
+      category: 'bike' as const,
+      name: field === 'name' ? 'Canyon — mads@example.com' : 'Canyon Speedmax',
+      details: field === 'details' ? 'bought from jane@example.com' : 'CF SLX',
+      addedDate: '2026-01-04',
+    },
+  ];
+
+  it.each(['name', 'details'] as const)(
+    'refuses equipment %s carrying an email — Coach Chat',
+    (field) => {
+      expect(() =>
+        buildChatPrompt({ ...BASE, equipment: leakyEquipment(field) }, '2026-08-12'),
+      ).toThrow(/identifier/i);
+    },
+  );
+
+  it.each(['name', 'details'] as const)(
+    'refuses equipment %s carrying an email — Weekly Session',
+    (field) => {
+      const ctx = buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, equipment: leakyEquipment(field) },
+        [],
+        [],
+        [],
+        [],
+      );
+      expect(() => renderWeeklyPrompt(ctx)).toThrow(/identifier/i);
+    },
+  );
+
   it('the Weekly Session prompt carries no name or email', () => {
     const ctx = buildWeeklyContext(
       { ...withIdentity, weeklySessionNumber: 4 },

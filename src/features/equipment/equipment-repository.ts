@@ -46,7 +46,7 @@ export async function getEquipmentItems(athleteId: string): Promise<EquipmentIte
 
 export type CreateEquipmentItemResult =
   | { ok: true; item: EquipmentItem }
-  | { ok: false; reason: 'invalid' };
+  | { ok: false; reason: 'invalid' | 'identifier' };
 
 export async function createEquipmentItem(params: {
   athleteId: string;
@@ -73,7 +73,7 @@ export async function createEquipmentItem(params: {
 
 export type EquipmentItemWriteResult =
   | { ok: true }
-  | { ok: false; reason: 'not-found' | 'not-owner' | 'invalid' };
+  | { ok: false; reason: 'not-found' | 'not-owner' | 'invalid' | 'identifier' };
 
 async function loadOwnedEquipmentItem(itemId: string, athleteId: string) {
   const [row] = await getDb()

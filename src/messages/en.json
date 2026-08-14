@@ -133,6 +133,7 @@
     "emptyBody": "Add your bike, your shoes and your watch. It takes a minute, and it lets the Coach talk about your actual gear instead of gear in general.",
     "emptyCta": "Add your first item",
     "error": "That didn't save — try again.",
+    "errorIdentifier": "That looks like an email address or a phone number. Your Coach reads this text, so leave contact details out of it.",
     "fieldCategory": "Category",
     "fieldName": "Name",
     "fieldDetails": "Details",

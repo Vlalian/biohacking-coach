@@ -212,13 +212,18 @@ function PreferencesSection({
     if (next === language) return;
     setPending(true);
     setError(false);
-    const result = await onUpdateLanguage(next);
-    setPending(false);
-    if (!result.ok) {
+    try {
+      const result = await onUpdateLanguage(next);
+      if (!result.ok) {
+        setError(true);
+        return;
+      }
+      router.replace(pathname, { locale: next });
+    } catch {
       setError(true);
-      return;
+    } finally {
+      setPending(false);
     }
-    router.replace(pathname, { locale: next });
   }
 
   return (
@@ -361,8 +366,14 @@ function RaceTargetField({
 
   async function save() {
     setStatus('saving');
-    const result = await onSave(draft);
-    setStatus(result.ok ? 'saved' : 'error');
+    try {
+      const result = await onSave(draft);
+      setStatus(result.ok ? 'saved' : 'error');
+    } catch {
+      // A rejected server action (network drop, redeploy) must still clear
+      // 'saving', or the button stays disabled until the athlete reloads.
+      setStatus('error');
+    }
   }
 
   return (
@@ -411,8 +422,14 @@ function CommunicationStyleField({
 
   async function save() {
     setStatus('saving');
-    const result = await onSave(draft);
-    setStatus(result.ok ? 'saved' : 'error');
+    try {
+      const result = await onSave(draft);
+      setStatus(result.ok ? 'saved' : 'error');
+    } catch {
+      // A rejected server action (network drop, redeploy) must still clear
+      // 'saving', or the button stays disabled until the athlete reloads.
+      setStatus('error');
+    }
   }
 
   return (
@@ -466,13 +483,18 @@ function WeeklySessionDayField({
     if (day === current) return;
     setPending(true);
     setError(false);
-    const result = await onSave(day);
-    setPending(false);
-    if (!result.ok) {
+    try {
+      const result = await onSave(day);
+      if (!result.ok) {
+        setError(true);
+        return;
+      }
+      setCurrent(day);
+    } catch {
       setError(true);
-      return;
+    } finally {
+      setPending(false);
     }
-    setCurrent(day);
   }
 
   return (
@@ -517,13 +539,18 @@ function FixedConstraintsField({
     setPending(true);
     setError(false);
     const isSet = current.includes(day);
-    const result = isSet ? await onRemove(day) : await onAdd(day);
-    setPending(false);
-    if (!result.ok) {
+    try {
+      const result = isSet ? await onRemove(day) : await onAdd(day);
+      if (!result.ok) {
+        setError(true);
+        return;
+      }
+      setCurrent((prev) => (isSet ? prev.filter((d) => d !== day) : [...prev, day]));
+    } catch {
       setError(true);
-      return;
+    } finally {
+      setPending(false);
     }
-    setCurrent((prev) => (isSet ? prev.filter((d) => d !== day) : [...prev, day]));
   }
 
   return (
@@ -637,13 +664,18 @@ function VisibilityToggle({
     const next = !on;
     setPending(true);
     setError(false);
-    const result = await onSetLinkVisibility(section, next);
-    setPending(false);
-    if (!result.ok) {
+    try {
+      const result = await onSetLinkVisibility(section, next);
+      if (!result.ok) {
+        setError(true);
+        return;
+      }
+      setOn(next);
+    } catch {
       setError(true);
-      return;
+    } finally {
+      setPending(false);
     }
-    setOn(next);
   }
 
   return (
@@ -693,13 +725,18 @@ function SeverControl({
   async function confirmSever() {
     setPending(true);
     setError(false);
-    const result = await onSeverCoachingLink();
-    setPending(false);
-    if (!result.ok) {
+    try {
+      const result = await onSeverCoachingLink();
+      if (!result.ok) {
+        setError(true);
+        return;
+      }
+      onSevered();
+    } catch {
       setError(true);
-      return;
+    } finally {
+      setPending(false);
     }
-    onSevered();
   }
 
   if (!confirming) {

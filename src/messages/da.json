@@ -133,6 +133,7 @@
     "emptyBody": "Tilføj din cykel, dine sko og dit ur. Det tager et minut, og det lader Coach tale om dit faktiske udstyr i stedet for udstyr i al almindelighed.",
     "emptyCta": "Tilføj din første ting",
     "error": "Det blev ikke gemt — prøv igen.",
+    "errorIdentifier": "Det ligner en e-mailadresse eller et telefonnummer. Din Coach læser denne tekst, så hold kontaktoplysninger ude af den.",
     "fieldCategory": "Kategori",
     "fieldName": "Navn",
     "fieldDetails": "Detaljer",
