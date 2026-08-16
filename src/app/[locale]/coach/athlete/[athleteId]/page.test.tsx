@@ -35,7 +35,7 @@ vi.mock('@/features/coach/conversation-repository', () => ({
 }));
 // Client components pulling in browser deps; the page's own wiring is under test.
 vi.mock('@/app/[locale]/calendar', () => ({ Calendar: () => null }));
-vi.mock('@/app/[locale]/information/information-view', () => ({
+vi.mock('@/app/[locale]/(app)/information/information-view', () => ({
   InformationView: () => null,
 }));
 vi.mock('./prescribe-panel', () => ({ PrescribePanel: () => null }));

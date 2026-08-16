@@ -1,7 +1,6 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { revalidatePath } from 'next/cache';
 import { getTranslations } from 'next-intl/server';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
@@ -68,7 +67,7 @@ function answerText(payload: StepAnswer): string {
 }
 
 export type OnboardingActionResult =
-  | (AnswerResult & { displayGreeting?: string })
+  | (AnswerResult & { displayGreetingIntro?: string; displayGreetingBody?: string })
   | AuthFailure;
 
 export async function answerOnboardingAction(
@@ -88,9 +87,13 @@ export async function answerOnboardingAction(
 
   // Two greetings on purpose: the persisted one is name-free, because messages
   // is a training-side table keyed by athlete id and must never carry a name
-  // (ADR 0006). The personalized one exists only in this response, for display.
+  // (ADR 0006). The personalized one exists only in this response, for display
+  // — first name only (Origin Story: "Hello {firstName}, I'm your AI Coach"),
+  // computed here rather than trimmed client-side so it stays correct
+  // regardless of locale.
+  const firstName = session.user.name.trim().split(/\s+/)[0] ?? '';
   const stored = coachGreeting('', raceForGreeting);
-  const personal = coachGreeting(session.user.name, raceForGreeting);
+  const personal = coachGreeting(firstName, raceForGreeting);
 
   const result = await answerOnboardingStep(
     athlete,
@@ -109,10 +112,19 @@ export async function answerOnboardingAction(
     await setUiLanguage(session.user.id, payload.language);
   }
 
-  // Completion flips the page from onboarding to the calendar — refresh it.
+  // Completion shows the climax hand-off screen; the athlete moves on by
+  // clicking through it, which calls router.refresh(). No revalidatePath
+  // here: root page.tsx is already `force-dynamic` (never cached), so
+  // revalidating it would only invalidate the route this action itself runs
+  // on — which makes Next.js replace this transition's result with the
+  // already-onboarded redirect to /training-plan before the client ever
+  // renders the hand-off screen, skipping the Coach's first message entirely.
   if (result.step === 'done') {
-    revalidatePath('/', 'layout');
-    return { ...result, displayGreeting: `${personal.intro} ${personal.body}` };
+    return {
+      ...result,
+      displayGreetingIntro: personal.intro,
+      displayGreetingBody: personal.body,
+    };
   }
   return result;
 }

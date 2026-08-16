@@ -4,13 +4,21 @@ import type { AthleteRow } from '@/db/schema';
 const limit = vi.fn();
 const where = vi.fn(() => ({ limit }));
 
+let updateCalls: unknown[] = [];
+const updateWhere = vi.fn(() => Promise.resolve());
+const set = vi.fn((v: unknown) => {
+  updateCalls.push(v);
+  return { where: updateWhere };
+});
+
 vi.mock('@/db', () => ({
   getDb: () => ({
     select: () => ({ from: () => ({ where }) }),
+    update: () => ({ set }),
   }),
 }));
 
-const { getAthleteByUserId } = await import('./athlete-repository');
+const { getAthleteByUserId, updateCommunicationStyle } = await import('./athlete-repository');
 
 function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
   return {
@@ -23,7 +31,6 @@ function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
     raceTarget: null,
     trainingSessionsPerWeek: null,
     profile: null,
-    equipment: null,
     informationViewLayout: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -51,7 +58,6 @@ describe('getAthleteByUserId', () => {
       raceTarget: null,
       trainingSessionsPerWeek: null,
       profile: null,
-      equipment: null,
     });
   });
 
@@ -77,7 +83,6 @@ describe('getAthleteByUserId', () => {
     expect(Object.keys(athlete!).sort()).toEqual(
       [
         'communicationStyle',
-        'equipment',
         'experienceLevel',
         'id',
         'profile',
@@ -89,5 +94,22 @@ describe('getAthleteByUserId', () => {
     );
     // The user identity anchor is stripped at this boundary (ADR 0006).
     expect(athlete).not.toHaveProperty('userId');
+  });
+});
+
+describe('updateCommunicationStyle', () => {
+  beforeEach(() => {
+    updateCalls = [];
+    set.mockClear();
+    updateWhere.mockClear();
+  });
+
+  it('writes the given value to the communication_style column', async () => {
+    await updateCommunicationStyle('athlete_1', 'Terse, technical, no hand-holding.');
+
+    expect(updateCalls).toHaveLength(1);
+    const written = updateCalls[0] as { communicationStyle: string; updatedAt: Date };
+    expect(written.communicationStyle).toBe('Terse, technical, no hand-holding.');
+    expect(written.updatedAt).toBeInstanceOf(Date);
   });
 });

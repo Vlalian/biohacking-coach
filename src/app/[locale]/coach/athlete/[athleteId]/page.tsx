@@ -12,7 +12,7 @@ import { parseLayout } from '@/features/information-view/layout';
 import { PANEL_IDS } from '@/features/information-view/panels';
 import { dateKey } from '@/lib/date';
 import { Calendar } from '@/app/[locale]/calendar';
-import { InformationView } from '@/app/[locale]/information/information-view';
+import { InformationView } from '@/app/[locale]/(app)/information/information-view';
 import { Briefing } from './briefing';
 import { PrescribePanel } from './prescribe-panel';
 import { SharedConversations } from './shared-conversations';

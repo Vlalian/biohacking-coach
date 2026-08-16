@@ -1,30 +1,19 @@
-import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
+import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { Link, redirect } from '@/i18n/navigation';
+import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
-import { getSessionsForAthlete } from '@/features/session/session-repository';
-import { getUnavailableDates } from '@/features/availability/availability-repository';
-import {
-  getLatestOpenConversation,
-  getMessages,
-} from '@/features/coach/conversation-repository';
-import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { nextStep } from '@/features/onboarding/onboarding-flow';
 import { getActiveConsents } from '@/features/consent/consent-repository';
 import {
   currentlyConsentedPurposes,
   missingRequiredConsents,
 } from '@/features/consent/consent';
-import { dateKey } from '@/lib/date';
-import { SignOutButton } from './sign-out-button';
-import { Calendar } from './calendar';
-import { GarminUpload } from './garmin-upload';
-import { WeeklySession, type WeeklySessionInitial } from './weekly-session';
+import { SignOutButton } from '@/components/auth/sign-out-button';
 import { OnboardingFlow } from './onboarding';
 import { ConsentScreen } from './consent';
 
@@ -46,8 +35,6 @@ export default async function AthletePage({
   const session = await auth.api.getSession({ headers: await headers() });
 
   if (session) {
-    const t = await getTranslations('AthletePage');
-
     // The name comes from better-auth's user record, reached through the session
     // — never from a training table (ADR 0006, route 06). The athlete row is
     // fetched only to confirm the user resolves to one.
@@ -95,83 +82,30 @@ export default async function AthletePage({
       // athlete on a finished questionnaire.
       if (step !== 'done') {
         return (
-          <main className="flex min-h-screen flex-col items-center gap-6 p-8">
+          <main className="relative h-screen">
+            <div className="absolute right-4 top-4 z-10">
+              <SignOutButton />
+            </div>
             <OnboardingFlow initial={{ step, answers }} />
-            <SignOutButton />
           </main>
         );
       }
     }
 
-    // Read the athlete's own training sessions, scoped to their id — the query
-    // cannot return anyone else's rows (ADR 0006). Named to not be mistaken for
-    // the auth `session` in this same scope.
-    const trainingSessions = athlete
-      ? await getSessionsForAthlete(athlete.id)
-      : [];
-
-    // The athlete's Unavailable Dates, scoped to their id like the sessions —
-    // rendered as day markers and the source of the mark/clear affordance.
-    const unavailableDates = athlete
-      ? await getUnavailableDates(athlete.id)
-      : [];
-
-    // Restore an in-progress Weekly Session on refresh: the transcript is server
-    // state, so a page reload picks it back up rather than losing it (ADR 0006).
-    let weeklyInitial: WeeklySessionInitial | null = null;
+    // Every gate passed: Training Plan is the default View (ADR 0007), and it
+    // — like every View — lives inside the shared Navigation Drawer / Coach
+    // Overlay shell, not inline on this gate page.
     if (athlete) {
-      const open = await getLatestOpenConversation(athlete.id, 'weekly_session');
-      if (open) {
-        const transcript = await getMessages(open.id);
-        // A refresh mid-decision must not lose the pending plan: restore the
-        // proposal too, so the confirm/cancel popup reappears.
-        const pending = await getPendingProposal(athlete.id, open.id);
-        weeklyInitial = {
-          conversationId: open.id,
-          weeklySessionNumber: open.weeklySessionNumber ?? 1,
-          messages: transcript.map((m) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            seq: m.seq,
-          })),
-          proposal: pending ? { sessions: pending.sessions } : null,
-          ended: false,
-        };
-      }
+      redirect({ href: '/training-plan', locale });
     }
 
+    // Provisioning could not recover a row for this user — a broken profile,
+    // not a View. No shell chrome; sign-out stays reachable so it is never a
+    // dead end.
+    const t = await getTranslations('AthletePage');
     return (
       <main className="flex min-h-screen flex-col items-center gap-6 p-8">
-        {athlete ? (
-          <>
-            <header className="flex flex-col items-center gap-1">
-              <h1 className="text-2xl font-semibold">
-                {t('greeting', { name: session.user.name })}
-              </h1>
-              <p className="text-sm text-neutral-500">{t('tagline')}</p>
-              <div className="flex gap-3">
-                <Link href="/information" className="text-sm text-blue-500 underline">
-                  {t('informationLink')}
-                </Link>
-                <Link href="/privacy" className="text-sm text-blue-500 underline">
-                  {t('privacyLink')}
-                </Link>
-              </div>
-            </header>
-            <Calendar
-              sessions={trainingSessions}
-              unavailableDates={unavailableDates}
-              todayKey={dateKey(new Date())}
-            />
-            <WeeklySession initial={weeklyInitial} />
-            <GarminUpload />
-          </>
-        ) : (
-          <p className="text-neutral-500">{t('noAthlete')}</p>
-        )}
-        {/* Sign-out stays reachable even when provisioning could not recover, so
-            a stranded account is never a dead end. */}
+        <p className="text-neutral-500">{t('noAthlete')}</p>
         <SignOutButton />
       </main>
     );

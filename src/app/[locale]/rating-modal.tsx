@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 import type { Session } from '@/features/session/session';
 import { rateSessionAction } from './rate-actions';
 
@@ -23,8 +24,8 @@ function ScoreRow({
   onPick: (n: number) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+    <div className="flex flex-col gap-1.5">
+      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
         {label}
       </span>
       <div className="flex gap-1.5" role="group" aria-label={label}>
@@ -37,11 +38,11 @@ function ScoreRow({
               type="button"
               aria-pressed={active}
               onClick={() => onPick(n)}
-              className="flex-1 rounded-md border py-2 text-sm font-semibold transition"
+              className="flex-1 border py-2 font-mono text-sm font-semibold transition-colors"
               style={{
-                borderColor: `hsl(${hue}, ${active ? 60 : 30}%, ${active ? 48 : 40}%)`,
+                borderColor: active ? `hsl(${hue}, 60%, 48%)` : 'var(--border)',
                 backgroundColor: active ? `hsl(${hue}, 45%, 90%)` : 'transparent',
-                color: `hsl(${hue}, 55%, 32%)`,
+                color: active ? `hsl(${hue}, 55%, 32%)` : 'var(--foreground)',
               }}
             >
               {n}
@@ -72,41 +73,9 @@ export function RatingModal({
   const [mind, setMind] = useState(session.feedbackMind ?? 0);
   const [comment, setComment] = useState(session.feedbackComment ?? '');
   const [failed, setFailed] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Focus management: move focus into the dialog on open, close on Escape, keep
-  // Tab inside the panel, and restore focus to the trigger on close.
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-        'button, textarea, [href], input, [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable || focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      opener?.focus();
-    };
-  }, [onClose]);
+  // Focus into the dialog on open, Tab trapped inside, Escape to close, focus
+  // restored to the trigger — shared with every other overlay.
+  const panelRef = useDialogFocus(onClose);
 
   function onSave() {
     if (body < 1 || mind < 1) return;
@@ -127,20 +96,20 @@ export function RatingModal({
       role="dialog"
       aria-modal="true"
       aria-label={t('title')}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4 backdrop-blur-[1px]"
       onClick={onClose}
     >
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="flex w-full max-w-md flex-col gap-4 rounded-2xl bg-white p-6 outline-none dark:bg-neutral-900"
+        className="flex w-full max-w-md flex-col gap-4 border border-border bg-panel p-6 shadow-2xl outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-500">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
             {t('title')}
           </p>
-          <h2 className="text-base font-semibold">
+          <h2 className="mt-1 font-display text-2xl tracking-[0.04em] text-foreground">
             {t('subtitle', { type: session.type })}
           </h2>
         </div>
@@ -148,19 +117,21 @@ export function RatingModal({
         <ScoreRow label={t('body')} value={body} onPick={setBody} />
         <ScoreRow label={t('mind')} value={mind} onPick={setMind} />
 
-        <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          {t('comment')}
+        <label className="flex flex-col gap-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {t('comment')}
+          </span>
           <textarea
             rows={3}
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder={t('commentPlaceholder')}
-            className="resize-none rounded-lg border border-neutral-300 p-2 text-sm font-normal normal-case text-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+            className="resize-none border border-border bg-background p-2 font-body text-sm text-foreground outline-none focus:border-signal"
           />
         </label>
 
         {failed && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="font-body text-sm text-destructive">
             {t('error')}
           </p>
         )}
@@ -169,7 +140,7 @@ export function RatingModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm text-neutral-600 dark:border-neutral-700"
+            className="flex-1 border border-border py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
           >
             {t('skip')}
           </button>
@@ -177,7 +148,7 @@ export function RatingModal({
             type="button"
             onClick={onSave}
             disabled={pending || body < 1 || mind < 1}
-            className="flex-[2] rounded-lg bg-neutral-900 py-2 text-sm font-semibold text-white disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900"
+            className="flex-[2] bg-signal py-2 font-mono text-[11px] uppercase tracking-[0.2em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             {t('save')}
           </button>

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
 import {
@@ -55,6 +55,49 @@ export async function countWeeklySessions(athleteId: string): Promise<number> {
       ),
     );
   return row?.n ?? 0;
+}
+
+/**
+ * Whether the athlete has already held a Weekly Session in the week containing
+ * `weekStart` (a 'YYYY-MM-DD' Monday).
+ *
+ * This is the Weekly Session offer's "already done" test. It asks about the
+ * *conversation*, not about whether a plan exists: an auto-drafted week must
+ * still be offered for discussion, so a plan existing is not the same as the
+ * athlete having held the session (coach-overlay issue 04, decision 4).
+ */
+export async function hasHeldWeeklySessionInWeek(
+  athleteId: string,
+  weekStart: string,
+): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ n: count() })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.athleteId, athleteId),
+        eq(conversations.kind, 'weekly_session'),
+        gte(conversations.createdAt, new Date(`${weekStart}T00:00:00`)),
+      ),
+    );
+  return (row?.n ?? 0) > 0;
+}
+
+/**
+ * Every still-open conversation this athlete has, newest first.
+ *
+ * The Coach Overlay hosts one conversation surface across kinds (ADR 0007), so
+ * the shell resolves what is open *generically* rather than naming one kind: the
+ * resting `coach_chat` and an in-progress `weekly_session` are both open at once
+ * by design, and a kind added later needs no extra query at the call site.
+ */
+export async function getOpenConversations(athleteId: string): Promise<Conversation[]> {
+  const rows = await getDb()
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.athleteId, athleteId), isNull(conversations.endedAt)))
+    .orderBy(desc(conversations.createdAt));
+  return rows.map(toConversation);
 }
 
 /**

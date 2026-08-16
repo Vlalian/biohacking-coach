@@ -57,7 +57,6 @@ export const athlete = pgTable(
     raceTarget: text('race_target'),
     trainingSessionsPerWeek: integer('training_sessions_per_week'),
     profile: jsonb('profile'),
-    equipment: jsonb('equipment'),
     informationViewLayout: jsonb('information_view_layout'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -486,3 +485,38 @@ export const consent = pgTable(
 
 export type ConsentRow = typeof consent.$inferSelect;
 export type NewConsentRow = typeof consent.$inferInsert;
+
+/**
+ * One piece of Equipment — gear the athlete trains on (CONTEXT.md: "the value
+ * is the Coach knowing what the athlete trains on, not inventory management").
+ * A list, not a single fixed slot: an athlete may log more than one bike or
+ * pair of shoes, each as its own named row.
+ *
+ * `category` is the fixed catalog the Equipment screen groups by; `details` is
+ * optional free text (setup, size — whatever the Coach should know). Cascade-
+ * deletes with its athlete, like every other training table (ADR 0006).
+ */
+export const equipmentItems = pgTable(
+  'equipment_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    category: text('category').notNull(),
+    name: text('name').notNull(),
+    details: text('details'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // The Equipment screen always reads one athlete's items, oldest first.
+    index('equipment_items_athlete_idx').on(table.athleteId, table.createdAt),
+    check(
+      'equipment_items_category_valid',
+      sql`${table.category} IN ('bike', 'shoes', 'watch', 'other')`,
+    ),
+  ],
+);
+
+export type EquipmentItemRow = typeof equipmentItems.$inferSelect;
+export type NewEquipmentItemRow = typeof equipmentItems.$inferInsert;

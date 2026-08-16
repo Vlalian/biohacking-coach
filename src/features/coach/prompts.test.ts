@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildWeeklyContext,
   renderWeeklyPrompt,
-  buildCoachContext,
-  renderPrompt,
   buildChatPrompt,
   formatSkippedSessions,
   formatWeekActivity,
@@ -25,7 +23,7 @@ const BASE: CheckIn = {
   language: 'English',
   weeklySessionDay: 'Monday',
   fixedConstraints: [],
-  equipment: {},
+  equipment: [],
 };
 
 describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => {
@@ -42,12 +40,67 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     experienceLevel: 'veteran',
   };
 
-  it('the Session Negotiation / chat prompt carries no name or email', () => {
-    const prompt = renderPrompt(buildCoachContext(withIdentity, [], null));
+  it('the Coach Chat prompt carries no name or email', () => {
+    const prompt = buildChatPrompt(withIdentity, '2026-08-12');
     expect(prompt).not.toContain(NAME);
     expect(prompt).not.toContain('Realname');
     expect(prompt).not.toContain(EMAIL);
   });
+
+  // The Coach Overlay's Reference ("Discuss with Coach") passes a Session into
+  // the prompt as a *separate* argument, so it bypasses the check-in assertion
+  // that guards everything else. Its `note` is athlete/Coach free text — the
+  // realistic hiding place for an identifier — so the prompt builders assert it
+  // themselves. Caught by code review; these two tests are what keep it shut.
+  const leakySession = {
+    type: 'Endurance',
+    dayLabel: '2026-08-18',
+    duration: '90 min',
+    zone: 'Z2',
+    note: `ride with me, reach me at ${EMAIL}`,
+    status: 'planned',
+  };
+
+  it('refuses a Reference whose note carries an email — Coach Chat', () => {
+    expect(() => buildChatPrompt(BASE, '2026-08-12', leakySession)).toThrow(/identifier/i);
+  });
+
+  // Equipment `name` and `details` are athlete free text that `buildEquipmentLines`
+  // interpolates into BOTH prompts. The assertion used to live only in
+  // `buildWeeklyCheckIn`, so a caller assembling a CheckIn itself walked straight
+  // past it. These four lock the builders themselves.
+  const leakyEquipment = (field: 'name' | 'details') => [
+    {
+      id: 'eq_1',
+      category: 'bike' as const,
+      name: field === 'name' ? 'Canyon — mads@example.com' : 'Canyon Speedmax',
+      details: field === 'details' ? 'bought from jane@example.com' : 'CF SLX',
+      addedDate: '2026-01-04',
+    },
+  ];
+
+  it.each(['name', 'details'] as const)(
+    'refuses equipment %s carrying an email — Coach Chat',
+    (field) => {
+      expect(() =>
+        buildChatPrompt({ ...BASE, equipment: leakyEquipment(field) }, '2026-08-12'),
+      ).toThrow(/identifier/i);
+    },
+  );
+
+  it.each(['name', 'details'] as const)(
+    'refuses equipment %s carrying an email — Weekly Session',
+    (field) => {
+      const ctx = buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, equipment: leakyEquipment(field) },
+        [],
+        [],
+        [],
+        [],
+      );
+      expect(() => renderWeeklyPrompt(ctx)).toThrow(/identifier/i);
+    },
+  );
 
   it('the Weekly Session prompt carries no name or email', () => {
     const ctx = buildWeeklyContext(
@@ -149,25 +202,14 @@ describe('onboarding answers reach every Coach prompt', () => {
     expect(prompt).toContain('Motivation: Completion');
   });
 
-  it('negotiation prompt includes the answers, experience level and race', () => {
-    const ctx = buildCoachContext(
-      { ...BASE, onboarding: ONBOARDING, raceTarget: 'Ironman Copenhagen' },
-      [],
-      null,
-    );
-    const prompt = renderPrompt(ctx);
-    expect(prompt).toContain('ONBOARDING PROFILE');
-    expect(prompt).toContain('xp=intermediate');
-    expect(prompt).toContain('race=Ironman Copenhagen');
-  });
-
-  it('chat prompt includes the answers and race', () => {
+  it('chat prompt includes the answers, experience level and race', () => {
     const prompt = buildChatPrompt({
       ...BASE,
       onboarding: ONBOARDING,
       raceTarget: 'Ironman Copenhagen',
     });
     expect(prompt).toContain('ONBOARDING PROFILE');
+    expect(prompt).toContain('xp=intermediate');
     expect(prompt).toContain('race=Ironman Copenhagen');
   });
 

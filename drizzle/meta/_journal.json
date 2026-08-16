@@ -71,6 +71,13 @@
       "when": 1786182756049,
       "tag": "0009_slice15_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786484394803,
+      "tag": "0010_equipment_items",
+      "breakpoints": true
     }
   ]
 }

@@ -54,7 +54,6 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     raceTarget: null,
     trainingSessionsPerWeek: null,
     profile: null,
-    equipment: null,
     ...overrides,
   };
 }

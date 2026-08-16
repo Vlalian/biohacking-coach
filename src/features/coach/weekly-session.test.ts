@@ -32,7 +32,6 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
       fixedConstraints: ['Sunday'],
       weeklySessionDay: 'Monday',
     },
-    equipment: { bikeType: 'TT' },
     ...overrides,
   };
 }
@@ -54,6 +53,8 @@ function session(overrides: Partial<Session> = {}): Session {
     feedbackBody: null,
     feedbackMind: null,
     feedbackComment: null,
+    origin: 'coach',
+    isTraining: true,
     ...overrides,
   };
 }
@@ -85,6 +86,16 @@ describe('buildWeeklyCheckIn', () => {
     const checkIn = buildWeeklyCheckIn(athlete({ profile: null }), READINESS, 1);
     expect(checkIn.language).toBe('en');
     expect(checkIn.onboarding).toBeUndefined();
+  });
+
+  it('carries the equipment items passed in, defaulting to none', () => {
+    expect(buildWeeklyCheckIn(athlete(), READINESS, 1).equipment).toEqual([]);
+
+    const items = [
+      { id: 'e1', category: 'bike' as const, name: 'Canyon Speedmax', details: null, addedDate: '2026-08-01' },
+    ];
+    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 1, undefined, items);
+    expect(checkIn.equipment).toEqual(items);
   });
 
   it('sets sessionCount to coaching-relationship depth, not weekly frequency', () => {

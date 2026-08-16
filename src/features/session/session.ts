@@ -1,6 +1,23 @@
 import type { SessionRow } from '@/db/schema';
 
 /**
+ * Who authored a session. A closed set, enforced at the database by the
+ * `sessions_origin_valid` check constraint — mirrored here so the authority
+ * checks that branch on it (only `'athlete'` content is athlete-editable) are
+ * exhaustively typed rather than comparing against open strings.
+ */
+export const SESSION_ORIGINS = ['coach', 'athlete', 'garmin', 'head_coach'] as const;
+export type SessionOrigin = (typeof SESSION_ORIGINS)[number];
+
+/** Narrows a stored `origin` column to the closed set, so authority checks
+ *  compare against the union rather than an open string. */
+export function toSessionOrigin(value: string): SessionOrigin {
+  return (SESSION_ORIGINS as readonly string[]).includes(value)
+    ? (value as SessionOrigin)
+    : 'coach';
+}
+
+/**
  * A session, as the calendar knows one.
  *
  * Narrower than the stored row: it carries what the calendar renders today — the
@@ -30,6 +47,13 @@ export type Session = {
   feedbackBody: number | null;
   feedbackMind: number | null;
   feedbackComment: string | null;
+  /** Who authored it — 'athlete' is the only origin whose content (type/note/
+   *  duration) the athlete may edit or delete; every other origin is read-only
+   *  content for them (CONTEXT.md, Prescribed Session). */
+  origin: SessionOrigin;
+  /** Whether it counts as training load (Athlete Session's Other-as-training
+   *  toggle) — governs Double/Rest-day placement rules on the calendar. */
+  isTraining: boolean;
 };
 
 /** The one place a stored session row becomes a domain object. */
@@ -48,5 +72,9 @@ export function toSession(row: SessionRow): Session {
     feedbackBody: row.feedbackBody,
     feedbackMind: row.feedbackMind,
     feedbackComment: row.feedbackComment,
+    // The database's check constraint is what makes this cast safe: no row can
+    // hold a value outside SESSION_ORIGINS.
+    origin: toSessionOrigin(row.origin),
+    isTraining: row.isTraining,
   };
 }

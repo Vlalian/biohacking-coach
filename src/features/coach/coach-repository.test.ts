@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // repository actually owns (name resolution, undefined-on-empty), without
 // re-asserting drizzle's own SQL generation.
 let nextRows: unknown[] = [];
+/** Every `.set(...)` payload passed to an update chain, in call order. */
+let updateCalls: unknown[] = [];
 const CHAIN_METHODS = [
   'select',
   'from',
@@ -14,12 +16,19 @@ const CHAIN_METHODS = [
   'leftJoin',
   'orderBy',
   'limit',
+  'update',
 ] as const;
 
 function chain() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c: any = {};
   for (const m of CHAIN_METHODS) c[m] = () => c;
+  // Not an identity method like the rest: `.set()` is where an update chain's
+  // payload actually is, so it is captured rather than discarded.
+  c.set = (v: unknown) => {
+    updateCalls.push(v);
+    return c;
+  };
   c.then = (resolve: (rows: unknown[]) => unknown) =>
     Promise.resolve(nextRows).then(resolve);
   return c;
@@ -27,8 +36,15 @@ function chain() {
 
 vi.mock('@/db', () => ({ getDb: () => chain() }));
 
-const { getCoachByUserId, getRoster, getActiveLink, getAthleteName } =
-  await import('./coach-repository');
+const {
+  getCoachByUserId,
+  getRoster,
+  getActiveLink,
+  getAthleteName,
+  getLinkForAthlete,
+  updateLinkVisibility,
+  severLinkForAthlete,
+} = await import('./coach-repository');
 
 /** A stored coaching_link row, as the repository selects it. */
 const linkRow = (over: Record<string, unknown> = {}) => ({
@@ -45,6 +61,7 @@ const linkRow = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   nextRows = [];
+  updateCalls = [];
 });
 
 describe('getCoachByUserId', () => {
@@ -132,6 +149,54 @@ describe('getActiveLink / getRoster — status is fail-closed', () => {
     // path, it resolves to severed rather than leaking access.
     nextRows = [linkRow({ status: 'weird_value' })];
     expect((await getActiveLink('coach_1', 'a1'))!.status).toBe('severed');
+  });
+});
+
+describe('getLinkForAthlete — the athlete reading their own link', () => {
+  it('returns the head coach name alongside the link when active', async () => {
+    nextRows = [
+      {
+        link: linkRow({ shareAthleteReports: true, shareAiTranscripts: true }),
+        coachUserName: 'Lars Nielsen',
+      },
+    ];
+    expect(await getLinkForAthlete('a1')).toEqual({
+      headCoachName: 'Lars Nielsen',
+      link: {
+        id: 'link_1',
+        coachId: 'coach_1',
+        athleteId: 'a1',
+        status: 'active',
+        visibility: { shareAthleteReports: true, shareAiTranscripts: true },
+      },
+    });
+  });
+
+  it('is undefined when solo — no link, or a severed one', async () => {
+    nextRows = [];
+    expect(await getLinkForAthlete('a1')).toBeUndefined();
+  });
+});
+
+describe('updateLinkVisibility', () => {
+  it('writes exactly the changes given', async () => {
+    await updateLinkVisibility('a1', { shareAiTranscripts: true });
+    expect(updateCalls).toContainEqual({ shareAiTranscripts: true });
+  });
+
+  it('can set either flag independently', async () => {
+    await updateLinkVisibility('a1', { shareAthleteReports: false });
+    expect(updateCalls).toContainEqual({ shareAthleteReports: false });
+  });
+});
+
+describe('severLinkForAthlete', () => {
+  it('marks the link severed and stamps when', async () => {
+    await severLinkForAthlete('a1');
+    expect(updateCalls).toHaveLength(1);
+    const written = updateCalls[0] as { status: string; severedAt: Date };
+    expect(written.status).toBe('severed');
+    expect(written.severedAt).toBeInstanceOf(Date);
   });
 });
 

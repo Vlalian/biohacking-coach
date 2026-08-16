@@ -2,7 +2,7 @@ import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { Link, redirect } from '@/i18n/navigation';
+import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import {
@@ -61,15 +61,16 @@ export default async function InformationPage({
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center gap-6 p-8">
-      <header className="flex flex-col items-center gap-1">
-        <h1 className="text-2xl font-semibold">{t('title')}</h1>
-        <p className="text-sm text-neutral-500">{t('subtitle')}</p>
-        <Link href="/" className="text-sm text-blue-500 underline">
-          {t('backToPlan')}
-        </Link>
+    <div className="flex flex-col items-center gap-8 p-6 sm:p-8">
+      <header className="flex w-full max-w-5xl flex-col items-start gap-1 border-b border-border pb-6">
+        <h1 className="font-display text-4xl leading-none tracking-[0.03em] text-foreground">
+          {t('title')}
+        </h1>
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          {t('subtitle')}
+        </p>
       </header>
-      {view ?? <p className="text-neutral-500">{t('noAthlete')}</p>}
-    </main>
+      {view ?? <p className="text-muted-foreground">{t('noAthlete')}</p>}
+    </div>
   );
 }

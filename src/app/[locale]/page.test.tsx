@@ -53,10 +53,7 @@ vi.mock('@/features/consent/consent', () => ({
 vi.mock('./consent', () => ({ ConsentScreen: () => null }));
 // Client components / server actions pulling in browser + auth deps; stub them
 // out of the node test — the page's own wiring is what's under test here.
-vi.mock('./sign-out-button', () => ({ SignOutButton: () => null }));
-vi.mock('./calendar', () => ({ Calendar: () => null }));
-vi.mock('./garmin-upload', () => ({ GarminUpload: () => null }));
-vi.mock('./weekly-session', () => ({ WeeklySession: () => null }));
+vi.mock('@/components/auth/sign-out-button', () => ({ SignOutButton: () => null }));
 
 const { default: AthletePage } = await import('./page');
 
@@ -81,30 +78,31 @@ describe('AthletePage', () => {
     expect(getAthleteByUserId).not.toHaveBeenCalled();
   });
 
-  it('resolves a signed-in user to their own athlete row', async () => {
+  it('sends a signed-in, fully-onboarded athlete to the Training Plan View', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
 
-    await render();
-
-    expect(redirect).not.toHaveBeenCalled();
+    // Every gate passed: the page is now a redirect to the default View, not
+    // an inline render — Training Plan lives inside the shared shell.
+    await expect(render()).rejects.toThrow('REDIRECT');
+    expect(redirect).toHaveBeenCalledWith({ href: '/training-plan', locale: 'en' });
     // Resolution goes through the session's user id, never a name or email.
     expect(getAthleteByUserId).toHaveBeenCalledWith('user_abc');
     // The row was already there, so no recovery provisioning was needed.
     expect(provisionAthlete).not.toHaveBeenCalled();
   });
 
-  it('self-heals a signed-in user whose athlete row is missing', async () => {
+  it('self-heals a signed-in user whose athlete row is missing, then sends them on', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_orphan', name: 'Mads' } });
     // Missing on first read, present after recovery provisioning.
     getAthleteByUserId
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ id: 'athlete_2', syntheticLabel: null });
 
-    await render();
+    await expect(render()).rejects.toThrow('REDIRECT');
 
     expect(provisionAthlete).toHaveBeenCalledWith('user_orphan');
     expect(getAthleteByUserId).toHaveBeenCalledTimes(2);
-    expect(redirect).not.toHaveBeenCalled();
+    expect(redirect).toHaveBeenCalledWith({ href: '/training-plan', locale: 'en' });
   });
 });

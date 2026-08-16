@@ -2,7 +2,7 @@ import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, type NewSessionRow } from '@/db/schema';
 import { addDays } from '@/lib/date';
-import { toSession, type Session } from './session';
+import { toSession, toSessionOrigin, type Session, type SessionOrigin } from './session';
 
 // These two row shapes deliberately mirror the Coach Briefing's own input types
 // (`BriefingPlanEntry` and `toBriefingReflection`'s argument in
@@ -51,6 +51,60 @@ export async function getSessionsForAthlete(
     .orderBy(asc(sessions.date), asc(sessions.dayOrder));
 
   return rows.map(toSession);
+}
+
+/**
+ * The columns every authority check needs, for one session, by id — owner,
+ * placement, status, and authorship.
+ *
+ * One read behind all of them. `session-status` (skip / unavailable / complete)
+ * and `athlete-session` (edit / delete) both have to answer "does this athlete
+ * own it, is it frozen, and who wrote it" before they write, and each had grown
+ * its own near-identical select. They still map the answer to their own refusal
+ * reasons — those genuinely differ — but the query lives here, next to the other
+ * session reads, rather than in two copies that can drift apart.
+ *
+ * Deliberately *not* filtered on `athlete_id`: the caller distinguishes "no such
+ * session" from "not yours", which a filtered query collapses into one.
+ */
+export async function getSessionAuthority(sessionId: string): Promise<
+  { athleteId: string; date: string; status: string; origin: SessionOrigin } | undefined
+> {
+  const [row] = await getDb()
+    .select({
+      athleteId: sessions.athleteId,
+      date: sessions.date,
+      status: sessions.status,
+      origin: sessions.origin,
+    })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+
+  return row ? { ...row, origin: toSessionOrigin(row.origin) } : undefined;
+}
+
+/**
+ * Reads a single session, but only if this athlete owns it.
+ *
+ * The Coach Overlay's Reference ("Discuss with Coach") arrives from the client
+ * as a session id. Resolving it here — filtered on `athlete_id` in the same
+ * query — is what stops a forged id from pulling another athlete's session into
+ * a prompt (ADR 0006). Returns undefined for a missing or unowned id; callers
+ * treat that as "no Reference" rather than an error, so a stale id degrades to
+ * an ordinary chat instead of a failure.
+ */
+export async function getOwnedSession(
+  athleteId: string,
+  sessionId: string,
+): Promise<Session | undefined> {
+  const [row] = await getDb()
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.athleteId, athleteId)))
+    .limit(1);
+
+  return row ? toSession(row) : undefined;
 }
 
 /**

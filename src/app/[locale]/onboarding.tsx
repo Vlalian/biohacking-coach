@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/navigation';
+import { AlertTriangle, ArrowRight, Check, Loader2 } from 'lucide-react';
 import {
   ONBOARDING_OPTIONS,
   type OnboardingAnswers,
@@ -21,6 +22,15 @@ import { answerOnboardingAction } from './onboarding-actions';
  * Choosing Dansk switches the next-intl locale immediately — the UI re-renders
  * in Danish and the Coach's language preference is stored with the user — and
  * touches nothing else.
+ *
+ * Visual language ported from the Lovable design (iron-insight-grid,
+ * onboarding-session brief): race-bib header with a step progress rail,
+ * bordered option tiles, and the climax hand-off screen. The Lovable brief
+ * assumed an identity step and a history-upload step that don't exist in this
+ * flow — the athlete's name already lives on the auth user (ADR 0006) and
+ * upload is its own feature reachable from the Training Plan — so this port
+ * carries the *look*, not those steps: no Back control either, since the real
+ * flow persists step by step server-side and has no "unsubmit".
  */
 
 export interface OnboardingInitial {
@@ -31,17 +41,20 @@ export interface OnboardingInitial {
 type UiState = {
   step: OnboardingStepId | 'done';
   answers: OnboardingAnswers;
-  greeting: string | null;
+  /** Populated only on completion; two parts so the climax screen can give the
+   *  headline and the message their own visual weight (see Handoff below). */
+  greeting: { intro: string; body: string } | null;
 };
 
-const BTN =
-  'rounded border border-neutral-300 px-3 py-2 text-left text-sm hover:border-neutral-500 dark:border-neutral-700 dark:hover:border-neutral-400';
-const BTN_ON = 'rounded border px-3 py-2 text-left text-sm border-amber-600 text-amber-700 dark:text-amber-400';
-const PRIMARY =
-  'rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-const LABEL = 'text-xs font-semibold uppercase tracking-wide text-neutral-500';
-const INPUT =
-  'w-full rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950';
+const STEPS: OnboardingStepId[] = ['language', 'experience', 'race', 'adaptive', 'constraints'];
+
+const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
+  language: 'stepLanguage',
+  experience: 'stepExperience',
+  race: 'stepRace',
+  adaptive: 'stepAdaptive',
+  constraints: 'stepConstraints',
+};
 
 const DAY_KEYS = [
   'dayMonday',
@@ -120,14 +133,6 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
   const [fixedConstraints, setFixedConstraints] = useState<string[]>([]);
   const [weeklySessionDay, setWeeklySessionDay] = useState('');
 
-  const STEP_NUMBER: Record<OnboardingStepId, number> = {
-    language: 1,
-    experience: 2,
-    race: 3,
-    adaptive: 4,
-    constraints: 5,
-  };
-
   function submit(payload: StepAnswer, after?: () => void) {
     setError(false);
     startTransition(async () => {
@@ -138,17 +143,17 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
       }
       // The personalized greeting exists only in this response — the persisted
       // transcript stays name-free (ADR 0006). Fall back to the stored line.
-      const lastCoach = [...result.messages]
-        .reverse()
-        .find((m) => m.role === 'coach_ai');
+      const lastCoach = [...result.messages].reverse().find((m) => m.role === 'coach_ai');
       setState({
         step: result.step,
         answers: result.answers,
         greeting:
           result.step === 'done'
-            ? ('displayGreeting' in result ? result.displayGreeting : undefined) ??
-              lastCoach?.content ??
-              null
+            ? result.displayGreetingIntro && result.displayGreetingBody
+              ? { intro: result.displayGreetingIntro, body: result.displayGreetingBody }
+              : lastCoach
+                ? { intro: '', body: lastCoach.content }
+                : null
             : null,
       });
       after?.();
@@ -163,301 +168,408 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
     });
   }
 
-  // aria-pressed, not just a colour swap: selection is the whole content of an
-  // MCQ answer, and a border change conveys nothing to a screen reader.
-  const optBtn = (value: string, selected: boolean, onClick: () => void) => (
-    <button
-      key={value}
-      type="button"
-      aria-pressed={selected}
-      disabled={pending}
-      onClick={onClick}
-      className={selected ? BTN_ON : BTN}
-    >
-      {t(OPT_KEY[value] ?? value)}
-    </button>
+  const isDone = state.step === 'done';
+  const stepIndex = state.step === 'done' ? STEPS.length : STEPS.indexOf(state.step);
+
+  const opt = (value: string, selected: boolean, onClick: () => void) => (
+    <OptionTile key={value} label={t(OPT_KEY[value] ?? value)} selected={selected} onClick={onClick} />
   );
 
   return (
-    <section className="flex w-full max-w-lg flex-col gap-4">
-      <div className="text-xs font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-500">
-        {t('coachLabel')}
-      </div>
-
-      {state.step !== 'done' && (
-        <div className="text-xs text-neutral-500">
-          {t('stepOf', { step: STEP_NUMBER[state.step], total: 5 })}
-        </div>
-      )}
-
-      {state.step === 'language' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-base font-medium">{t('qLanguage')}</p>
-          <div className="flex gap-3">
-            <button type="button" disabled={pending} className={BTN} onClick={() => chooseLanguage('en')}>
-              English
-            </button>
-            <button type="button" disabled={pending} className={BTN} onClick={() => chooseLanguage('da')}>
-              Dansk
-            </button>
+    <div className="flex h-full flex-col bg-background">
+      {/* Race-bib header */}
+      <header className="shrink-0 border-b border-border bg-panel">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 px-6 py-4">
+          <div className="flex items-baseline gap-3">
+            <span className="border border-signal px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-signal">
+              {t('coachLabel')}
+            </span>
+            {!isDone && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                {t(STEP_LABEL_KEY[state.step as OnboardingStepId])}
+              </span>
+            )}
           </div>
+          {!isDone && (
+            <span className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground">
+              {t('stepOf', { step: stepIndex + 1, total: STEPS.length })}
+            </span>
+          )}
         </div>
-      )}
-
-      {state.step === 'experience' && (
-        <div className="flex flex-col gap-3">
-          <p className="text-base font-medium">{t('qExperience')}</p>
-          <p className="text-xs text-neutral-500">{t('qExperienceSub')}</p>
-          <div className="flex flex-col gap-2">
-            {(
-              [
-                ['beginner', 'expBeginner'],
-                ['intermediate', 'expIntermediate'],
-                ['veteran', 'expVeteran'],
-              ] as const
-            ).map(([value, key]) => (
-              <button
-                key={value}
-                type="button"
-                disabled={pending}
-                className={BTN}
-                onClick={() => submit({ step: 'experience', experienceLevel: value })}
-              >
-                {t(key)}
-              </button>
+        {!isDone && (
+          <div className="mx-auto flex w-full max-w-2xl gap-1 px-6 pb-4">
+            {STEPS.map((s, i) => (
+              <span
+                key={s}
+                className={[
+                  'h-[3px] flex-1 transition-colors',
+                  i < stepIndex ? 'bg-signal/50' : i === stepIndex ? 'bg-signal' : 'bg-border',
+                ].join(' ')}
+              />
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </header>
 
-      {state.step === 'race' && (
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (race.trim()) submit({ step: 'race', raceTarget: race.trim() });
-          }}
-        >
-          <p className="text-base font-medium">{t('qRace')}</p>
-          <p className="text-xs text-neutral-500">{t('qRaceSub')}</p>
-          <label htmlFor="onboarding-race" className="sr-only">
-            {t('qRace')}
-          </label>
-          <input
-            id="onboarding-race"
-            value={race}
-            onChange={(e) => setRace(e.target.value)}
-            placeholder={t('racePlaceholder')}
-            disabled={pending}
-            className={INPUT}
-          />
-          <button type="submit" disabled={pending || !race.trim()} className={PRIMARY}>
-            {t('continue')}
-          </button>
-        </form>
-      )}
-
-      {state.step === 'adaptive' && (
-        <div className="flex flex-col gap-4">
-          <p className="text-base font-medium">{t('qAdaptive')}</p>
-
-          {state.answers.experienceLevel === 'beginner' && (
-            <>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>
-                  {t('sportBg')} <span className="font-normal normal-case">{t('optionalMulti')}</span>
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {ONBOARDING_OPTIONS.sportBackground.map((o) =>
-                    optBtn(o, sportBackground.includes(o), () =>
-                      setSportBackground((a) => toggleMulti(a, o, 'None')),
-                    ),
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>
-                  {t('weeklyHours')} <span className="font-normal normal-case">{t('optional')}</span>
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {ONBOARDING_OPTIONS.weeklyHours.map((o) =>
-                    optBtn(o, weeklyHours === o, () => setWeeklyHours(weeklyHours === o ? '' : o)),
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>
-                  {t('motivation')} <span className="font-normal normal-case">{t('optional')}</span>
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {ONBOARDING_OPTIONS.motivation.map((o) =>
-                    optBtn(o, motivation === o, () => setMotivation(motivation === o ? '' : o)),
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {state.answers.experienceLevel === 'intermediate' && (
-            <>
-              <div className="flex flex-col gap-2">
-                <label className={LABEL} htmlFor="onboarding-best-time">
-                  {t('bestTime')} <span className="font-normal normal-case">{t('optional')}</span>
-                </label>
-                <input
-                  id="onboarding-best-time"
-                  value={bestTime}
-                  onChange={(e) => setBestTime(e.target.value)}
-                  placeholder={t('bestTimePlaceholder')}
-                  disabled={pending}
-                  className={INPUT}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>
-                  {t('weakest')} <span className="font-normal normal-case">{t('optionalMulti')}</span>
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {ONBOARDING_OPTIONS.weakestDiscipline.map((o) =>
-                    optBtn(o, weakestDiscipline.includes(o), () =>
-                      setWeakestDiscipline((a) => toggleMulti(a, o, null)),
-                    ),
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>{t('humanCoach')}</span>
-                <div className="flex flex-wrap gap-2">
-                  {ONBOARDING_OPTIONS.hasHumanCoach.map((o) =>
-                    optBtn(o, hasHumanCoach === o, () => setHasHumanCoach(hasHumanCoach === o ? '' : o)),
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {state.answers.experienceLevel === 'veteran' && (
-            <>
-              <div className="flex flex-col gap-2">
-                <label className={LABEL} htmlFor="onboarding-target-time">
-                  {t('targetTime')} <span className="font-normal normal-case">{t('optional')}</span>
-                </label>
-                <input
-                  id="onboarding-target-time"
-                  value={targetTime}
-                  onChange={(e) => setTargetTime(e.target.value)}
-                  placeholder={t('targetTimePlaceholder')}
-                  disabled={pending}
-                  className={INPUT}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className={LABEL}>
-                  {t('metrics')} <span className="font-normal normal-case">{t('optionalMulti')}</span>
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {ONBOARDING_OPTIONS.trackedMetrics.map((o) =>
-                    optBtn(o, trackedMetrics.includes(o), () =>
-                      setTrackedMetrics((a) => toggleMulti(a, o, 'None')),
-                    ),
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          <button
-            type="button"
-            disabled={pending}
-            className={PRIMARY}
-            onClick={() =>
-              submit({
-                step: 'adaptive',
-                sportBackground: sportBackground.length > 0 ? sportBackground : undefined,
-                weeklyHours: weeklyHours || undefined,
-                motivation: motivation || undefined,
-                bestTime: bestTime || undefined,
-                weakestDiscipline: weakestDiscipline.length > 0 ? weakestDiscipline : undefined,
-                hasHumanCoach: hasHumanCoach || undefined,
-                targetTime: targetTime || undefined,
-                trackedMetrics: trackedMetrics.length > 0 ? trackedMetrics : undefined,
-              })
-            }
-          >
-            {t('continue')}
-          </button>
-        </div>
-      )}
-
-      {state.step === 'constraints' && (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <p className="text-base font-medium">{t('qConstraints')}</p>
-            <p className="text-xs text-neutral-500">{t('qConstraintsSub')}</p>
-            <div className="flex flex-wrap gap-2">
-              {DAYS.map((d, i) => (
-                <button
-                  key={d}
-                  type="button"
-                  aria-pressed={fixedConstraints.includes(d)}
-                  disabled={pending}
-                  className={fixedConstraints.includes(d) ? BTN_ON : BTN}
-                  onClick={() => setFixedConstraints((a) => toggleMulti(a, d, null))}
-                >
-                  {t(DAY_KEYS[i])}
-                </button>
-              ))}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-2xl px-6 py-10">
+          {error && (
+            <div className="mb-6 flex items-start gap-3 border border-destructive/40 bg-destructive/5 px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <p role="alert" className="font-body text-sm text-foreground">
+                {t('error')}
+              </p>
             </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <p className="text-base font-medium">{t('weeklyDay')}</p>
-            <p className="text-xs text-neutral-500">{t('weeklyDaySub')}</p>
-            <div className="flex flex-wrap gap-2">
-              {ONBOARDING_OPTIONS.weeklySessionDay.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  aria-pressed={weeklySessionDay === o}
-                  disabled={pending}
-                  className={weeklySessionDay === o ? BTN_ON : BTN}
-                  onClick={() => setWeeklySessionDay(weeklySessionDay === o ? '' : o)}
-                >
-                  {o === 'Flexible' ? t('optFlexible') : t(DAY_KEYS[DAYS.indexOf(o)])}
-                </button>
-              ))}
+          )}
+
+          {isDone ? (
+            <Handoff
+              raceTarget={state.answers.raceTarget}
+              greeting={state.greeting}
+              t={t}
+            />
+          ) : state.step === 'language' ? (
+            <div className="space-y-4">
+              <StepHeading title={t('qLanguage')} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <OptionTile label="English" selected={false} onClick={() => chooseLanguage('en')} />
+                <OptionTile label="Dansk" selected={false} onClick={() => chooseLanguage('da')} />
+              </div>
             </div>
-          </div>
-          <button
-            type="button"
-            disabled={pending}
-            className={PRIMARY}
-            onClick={() =>
-              submit({
-                step: 'constraints',
-                fixedConstraints,
-                weeklySessionDay: weeklySessionDay || undefined,
-              })
-            }
-          >
-            {t('finish')}
-          </button>
-        </div>
-      )}
+          ) : state.step === 'experience' ? (
+            <div className="space-y-4">
+              <StepHeading title={t('qExperience')} help={t('qExperienceSub')} />
+              <div className="grid gap-2">
+                {(
+                  [
+                    ['beginner', 'expBeginner'],
+                    ['intermediate', 'expIntermediate'],
+                    ['veteran', 'expVeteran'],
+                  ] as const
+                ).map(([value, key]) => (
+                  <OptionTile
+                    key={value}
+                    label={t(key)}
+                    selected={false}
+                    onClick={() => submit({ step: 'experience', experienceLevel: value })}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : state.step === 'race' ? (
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (race.trim()) submit({ step: 'race', raceTarget: race.trim() });
+              }}
+            >
+              <StepHeading title={t('qRace')} help={t('qRaceSub')} />
+              <label htmlFor="onboarding-race" className="sr-only">
+                {t('qRace')}
+              </label>
+              <input
+                id="onboarding-race"
+                value={race}
+                onChange={(e) => setRace(e.target.value)}
+                placeholder={t('racePlaceholder')}
+                disabled={pending}
+                className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+              />
+              <PrimaryButton type="submit" disabled={pending || !race.trim()} pending={pending}>
+                {t('continue')}
+              </PrimaryButton>
+            </form>
+          ) : state.step === 'adaptive' ? (
+            <div className="space-y-8">
+              <StepHeading title={t('qAdaptive')} />
 
-      {state.step === 'done' && (
-        <div className="flex flex-col gap-4">
-          <p className="whitespace-pre-wrap text-base leading-relaxed">{state.greeting}</p>
-          <button type="button" className={PRIMARY} onClick={() => router.refresh()}>
-            {t('startTraining')}
-          </button>
-        </div>
-      )}
+              {state.answers.experienceLevel === 'beginner' && (
+                <>
+                  <FieldGroup label={t('sportBg')} note={t('optionalMulti')}>
+                    {ONBOARDING_OPTIONS.sportBackground.map((o) =>
+                      opt(o, sportBackground.includes(o), () =>
+                        setSportBackground((a) => toggleMulti(a, o, 'None')),
+                      ),
+                    )}
+                  </FieldGroup>
+                  <FieldGroup label={t('weeklyHours')} note={t('optional')}>
+                    {ONBOARDING_OPTIONS.weeklyHours.map((o) =>
+                      opt(o, weeklyHours === o, () => setWeeklyHours(weeklyHours === o ? '' : o)),
+                    )}
+                  </FieldGroup>
+                  <FieldGroup label={t('motivation')} note={t('optional')}>
+                    {ONBOARDING_OPTIONS.motivation.map((o) =>
+                      opt(o, motivation === o, () => setMotivation(motivation === o ? '' : o)),
+                    )}
+                  </FieldGroup>
+                </>
+              )}
 
-      {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {t('error')}
+              {state.answers.experienceLevel === 'intermediate' && (
+                <>
+                  <div className="space-y-3">
+                    <StepHeading
+                      title={t('bestTime')}
+                      help={t('optional')}
+                    />
+                    {/* StepHeading renders a heading, not a label, so it gives
+                        the input no accessible name. Same sr-only pairing the
+                        race step above already uses. */}
+                    <label htmlFor="onboarding-best-time" className="sr-only">
+                      {t('bestTime')}
+                    </label>
+                    <input
+                      id="onboarding-best-time"
+                      value={bestTime}
+                      onChange={(e) => setBestTime(e.target.value)}
+                      placeholder={t('bestTimePlaceholder')}
+                      disabled={pending}
+                      className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+                    />
+                  </div>
+                  <FieldGroup label={t('weakest')} note={t('optionalMulti')}>
+                    {ONBOARDING_OPTIONS.weakestDiscipline.map((o) =>
+                      opt(o, weakestDiscipline.includes(o), () =>
+                        setWeakestDiscipline((a) => toggleMulti(a, o, null)),
+                      ),
+                    )}
+                  </FieldGroup>
+                  <FieldGroup label={t('humanCoach')}>
+                    {ONBOARDING_OPTIONS.hasHumanCoach.map((o) =>
+                      opt(o, hasHumanCoach === o, () => setHasHumanCoach(hasHumanCoach === o ? '' : o)),
+                    )}
+                  </FieldGroup>
+                </>
+              )}
+
+              {state.answers.experienceLevel === 'veteran' && (
+                <>
+                  <div className="space-y-3">
+                    <StepHeading title={t('targetTime')} help={t('optional')} />
+                    <label htmlFor="onboarding-target-time" className="sr-only">
+                      {t('targetTime')}
+                    </label>
+                    <input
+                      id="onboarding-target-time"
+                      value={targetTime}
+                      onChange={(e) => setTargetTime(e.target.value)}
+                      placeholder={t('targetTimePlaceholder')}
+                      disabled={pending}
+                      className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+                    />
+                  </div>
+                  <FieldGroup label={t('metrics')} note={t('optionalMulti')}>
+                    {ONBOARDING_OPTIONS.trackedMetrics.map((o) =>
+                      opt(o, trackedMetrics.includes(o), () =>
+                        setTrackedMetrics((a) => toggleMulti(a, o, 'None')),
+                      ),
+                    )}
+                  </FieldGroup>
+                </>
+              )}
+
+              <PrimaryButton
+                onClick={() =>
+                  submit({
+                    step: 'adaptive',
+                    sportBackground: sportBackground.length > 0 ? sportBackground : undefined,
+                    weeklyHours: weeklyHours || undefined,
+                    motivation: motivation || undefined,
+                    bestTime: bestTime || undefined,
+                    weakestDiscipline: weakestDiscipline.length > 0 ? weakestDiscipline : undefined,
+                    hasHumanCoach: hasHumanCoach || undefined,
+                    targetTime: targetTime || undefined,
+                    trackedMetrics: trackedMetrics.length > 0 ? trackedMetrics : undefined,
+                  })
+                }
+                disabled={pending}
+                pending={pending}
+              >
+                {t('continue')}
+              </PrimaryButton>
+            </div>
+          ) : state.step === 'constraints' ? (
+            <div className="space-y-8">
+              <FieldGroup
+                heading
+                label={t('qConstraints')}
+                note={t('qConstraintsSub')}
+              >
+                {DAYS.map((d, i) => (
+                  <OptionTile
+                    key={d}
+                    label={t(DAY_KEYS[i])}
+                    selected={fixedConstraints.includes(d)}
+                    onClick={() => setFixedConstraints((a) => toggleMulti(a, d, null))}
+                  />
+                ))}
+              </FieldGroup>
+              <FieldGroup heading label={t('weeklyDay')} note={t('weeklyDaySub')}>
+                {ONBOARDING_OPTIONS.weeklySessionDay.map((o) => (
+                  <OptionTile
+                    key={o}
+                    label={o === 'Flexible' ? t('optFlexible') : t(DAY_KEYS[DAYS.indexOf(o)])}
+                    selected={weeklySessionDay === o}
+                    onClick={() => setWeeklySessionDay(weeklySessionDay === o ? '' : o)}
+                  />
+                ))}
+              </FieldGroup>
+              <PrimaryButton
+                onClick={() =>
+                  submit({
+                    step: 'constraints',
+                    fixedConstraints,
+                    weeklySessionDay: weeklySessionDay || undefined,
+                  })
+                }
+                disabled={pending}
+                pending={pending}
+              >
+                {t('finish')}
+              </PrimaryButton>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function StepHeading({ title, help }: { title: string; help?: string }) {
+  return (
+    <div>
+      <h2 className="font-display text-3xl tracking-[0.03em] text-foreground">{title}</h2>
+      {help && <p className="mt-2 font-body text-sm text-muted-foreground">{help}</p>}
+    </div>
+  );
+}
+
+function FieldGroup({
+  label,
+  note,
+  heading,
+  children,
+}: {
+  label: string;
+  note?: string;
+  /** Use the bigger StepHeading treatment (constraints step's two field groups
+   *  stand alone rather than under one shared "About you" heading). */
+  heading?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      {heading ? (
+        <StepHeading title={label} help={note} />
+      ) : (
+        <p className="font-body text-sm text-foreground">
+          {label}
+          {note && <span className="ml-2 font-body text-xs text-muted-foreground">{note}</span>}
         </p>
       )}
-    </section>
+      <div className="grid gap-2 sm:grid-cols-2">{children}</div>
+    </div>
+  );
+}
+
+function OptionTile({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={[
+        'flex items-center justify-between gap-3 border px-4 py-3 text-left transition-colors',
+        selected
+          ? 'border-signal bg-signal/5'
+          : 'border-border bg-panel hover:border-muted-foreground',
+      ].join(' ')}
+    >
+      <span className="font-body text-sm text-foreground">{label}</span>
+      {selected && <Check className="h-4 w-4 shrink-0 text-signal" />}
+    </button>
+  );
+}
+
+function PrimaryButton({
+  children,
+  onClick,
+  disabled,
+  pending,
+  type = 'button',
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  pending?: boolean;
+  type?: 'button' | 'submit';
+}) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-2 bg-signal px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+    >
+      {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+      {children}
+      {!pending && <ArrowRight className="h-3 w-3" />}
+    </button>
+  );
+}
+
+function Handoff({
+  raceTarget,
+  greeting,
+  t,
+}: {
+  raceTarget?: string;
+  greeting: { intro: string; body: string } | null;
+  t: ReturnType<typeof useTranslations<'Onboarding'>>;
+}) {
+  const router = useRouter();
+
+  return (
+    <div className="space-y-6">
+      <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
+        {t('coachLabel')}
+      </p>
+      {greeting?.intro && (
+        <h1 className="font-display text-5xl leading-[1.05] tracking-[0.02em] text-foreground">
+          {greeting.intro}
+        </h1>
+      )}
+      <div className="border-l-2 border-signal bg-panel px-6 py-6">
+        <p className="whitespace-pre-wrap font-body text-lg leading-relaxed text-foreground">
+          {greeting?.body}
+        </p>
+      </div>
+      <dl className="grid gap-px border border-border bg-border sm:grid-cols-2">
+        <div className="bg-panel px-4 py-3">
+          <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {t('raceTargetLabel')}
+          </dt>
+          <dd className="mt-1 font-body text-sm text-foreground">{raceTarget}</dd>
+        </div>
+        <div className="bg-panel px-4 py-3">
+          <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {t('nextLabel')}
+          </dt>
+          <dd className="mt-1 font-body text-sm text-foreground">{t('nextValue')}</dd>
+        </div>
+      </dl>
+      <PrimaryButton onClick={() => router.refresh()}>{t('startTraining')}</PrimaryButton>
+    </div>
   );
 }

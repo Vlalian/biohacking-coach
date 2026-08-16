@@ -88,6 +88,43 @@ export async function updateInformationViewLayout(
 }
 
 /**
+ * Sets the athlete's Communication Style — the free-text preference the Coach
+ * reads to shape Tone Adaptation. Onboarding derives an initial value; Settings
+ * is where the athlete corrects it in their own words afterward. A plain
+ * column, not the `profile` JSONB, so it goes through its own update rather
+ * than {@link mergeAthleteProfile}.
+ */
+export async function updateCommunicationStyle(
+  athleteId: string,
+  communicationStyle: string,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ communicationStyle, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
+ * Sets the athlete's race target — the fixed date everything else is planned
+ * backwards from (CONTEXT.md, Training Phase).
+ *
+ * Onboarding writes it once ({@link completeOnboarding}); a race moves, is
+ * cancelled, or is replaced by the next one, so Settings is where it stays
+ * true. Null clears it: an athlete between races has no target, and an empty
+ * string would render in the prompt as though they did. Another plain column,
+ * so it takes its own update rather than {@link mergeAthleteProfile}.
+ */
+export async function updateRaceTarget(
+  athleteId: string,
+  raceTarget: string | null,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ raceTarget, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *
@@ -117,6 +154,62 @@ export async function mergeAthleteProfile(
 }
 
 /**
+ * Adds one day to Fixed Constraints, atomically, and idempotently.
+ *
+ * {@link mergeAthleteProfile} is atomic about *replacing* a key, which is not
+ * enough here: the next array was being computed in JS from a previous read, so
+ * two edits in flight together — a double-tap, or two tabs — would each write a
+ * list missing the other's day. The whole array is derived inside the statement
+ * instead, from the row's own current value.
+ *
+ * Idempotent by construction (`@>` before appending), so a retried request adds
+ * the day once rather than twice.
+ */
+export async function addFixedConstraint(athleteId: string, day: string): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({
+      profile: sql`
+        COALESCE(${athlete.profile}, '{}'::jsonb) || jsonb_build_object(
+          'fixedConstraints',
+          CASE
+            WHEN COALESCE(${athlete.profile} -> 'fixedConstraints', '[]'::jsonb) @> to_jsonb(${day}::text)
+              THEN ${athlete.profile} -> 'fixedConstraints'
+            ELSE COALESCE(${athlete.profile} -> 'fixedConstraints', '[]'::jsonb) || to_jsonb(${day}::text)
+          END
+        )`,
+      updatedAt: new Date(),
+    })
+    .where(eq(athlete.id, athleteId));
+}
+
+/** Removes one day from Fixed Constraints, atomically. Same reasoning as
+ *  {@link addFixedConstraint}: the surviving array is derived in the statement,
+ *  never from a value this process read a moment earlier. */
+export async function removeFixedConstraint(athleteId: string, day: string): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({
+      profile: sql`
+        COALESCE(${athlete.profile}, '{}'::jsonb) || jsonb_build_object(
+          'fixedConstraints',
+          COALESCE(
+            (
+              SELECT jsonb_agg(value)
+              FROM jsonb_array_elements(
+                COALESCE(${athlete.profile} -> 'fixedConstraints', '[]'::jsonb)
+              ) AS value
+              WHERE value <> to_jsonb(${day}::text)
+            ),
+            '[]'::jsonb
+          )
+        )`,
+      updatedAt: new Date(),
+    })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The completion write for MCQ onboarding: the profile columns a finished
  * questionnaire produces — phase, experience, communication style, race target —
  * together with the final `profile` JSONB merge, in ONE update statement.
@@ -127,11 +220,12 @@ export async function mergeAthleteProfile(
  * stranding the athlete on a questionnaire they had already completed. A single
  * UPDATE cannot land half-applied.
  *
- * Deliberately NOT written here: `trainingSessionsPerWeek` and `equipment`.
- * Ticket 09 lists them among the profile fields, but the POC's question set —
- * the ticket's own specification — never asks for either (weekly *hours* is a
- * JSONB answer, not a session count; equipment has its own tab in the POC).
- * They stay null until a feature actually collects them.
+ * Deliberately NOT written here: `trainingSessionsPerWeek`. Ticket 09 lists it
+ * among the profile fields, but the POC's question set — the ticket's own
+ * specification — never asks for it (weekly *hours* is a JSONB answer, not a
+ * session count). It stays null until a feature actually collects it.
+ * Equipment is written through its own CRUD (`features/equipment`), not
+ * through onboarding — it lives in its own table, not on this row.
  */
 export async function completeAthleteOnboarding(
   athleteId: string,

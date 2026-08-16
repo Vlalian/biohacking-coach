@@ -1,13 +1,12 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
-import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { dateKey } from '@/lib/date';
-import type { Athlete } from '@/features/athlete/athlete';
+import {
+  resolveAthleteWithLanguage as currentAthlete,
+  type AuthFailure,
+} from './current-athlete';
 import {
   commitWeeklyPlan,
   continueWeeklySession,
@@ -37,20 +36,7 @@ import {
  * through the user seam, and passed into the service as plain data.
  */
 
-type AuthFailure = { ok: false; reason: 'not-authenticated' };
 type ConsentFailure = { ok: false; reason: 'consent-required' };
-
-/** Resolves the signed-in user to their athlete + language, or a failure. */
-async function currentAthlete(): Promise<
-  { ok: true; athlete: Athlete; language?: string } | AuthFailure
-> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
-  const athlete = await getAthleteByUserId(session.user.id);
-  if (!athlete) return { ok: false, reason: 'not-authenticated' };
-  const prefs = await getUiPrefs(session.user.id);
-  return { ok: true, athlete, language: prefs.language };
-}
 
 /**
  * The server-enforced gate on AI processing: refuses unless the athlete's

@@ -1,3 +1,6 @@
+import type { EquipmentItem } from '@/features/equipment/equipment';
+import { DirectIdentifierError, shapedIdentifierIn } from '@/lib/identifiers';
+
 /**
  * The plain-data inputs the Coach prompts reason about.
  *
@@ -19,20 +22,6 @@ export interface Onboarding {
   hasHumanCoach?: string | null;
   targetTime?: string | null;
   trackedMetrics?: string | string[] | null;
-}
-
-/** Kit the athlete trains on — referenced by the Coach only when relevant. */
-export interface Equipment {
-  bikeType?: string | null;
-  bikeModel?: string | null;
-  powerMeter?: string | null;
-  trainingShoes?: string | null;
-  raceShoes?: string | null;
-  wetsuit?: string | null;
-  gpsWatch?: string | null;
-  hrMonitor?: string | null;
-  bikeComputer?: string | null;
-  notes?: string | null;
 }
 
 /**
@@ -107,7 +96,7 @@ export interface CheckIn {
   commStyle?: string;
   experienceLevel?: string;
   language?: string;
-  equipment?: Equipment | null;
+  equipment?: EquipmentItem[];
   raceTarget?: string | null;
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
@@ -115,8 +104,6 @@ export interface CheckIn {
   weeklySessionNumber?: number;
 }
 
-/** Anything shaped like `local@domain` — the cheapest tell of a leaked email. */
-const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
 
 /**
  * Fails closed if a check-in built from app data would carry a direct identifier
@@ -128,7 +115,7 @@ const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
  * harness; the app path must never set it from a real athlete, so here it must be
  * absent. No field may look like an email — and the walk is deep, because the
  * places an identifier realistically hides are the free-text leaves (an
- * onboarding answer, `equipment.notes`), not the top-level scalars. This is the
+ * onboarding answer, an equipment item's `details`), not the top-level scalars. This is the
  * assertion the "no direct identifier reaches the LLM" standard requires the
  * prompt builders to make — enforced once, at the seam where app data becomes
  * prompt input.
@@ -144,23 +131,40 @@ export function assertNoIdentity(checkIn: CheckIn): void {
 }
 
 /**
- * Walks every nested string leaf of an app-assembled prompt input looking for an
- * email shape, and throws if one is found (GDPR decision 1 / ADR 0006).
+ * Walks every nested string leaf of an app-assembled prompt input looking for a
+ * *shape-detectable* identifier, and throws if one is found (GDPR decision 1 /
+ * ADR 0006).
  *
  * The same runtime guarantee {@link assertNoIdentity} makes for a check-in,
  * exposed for any prompt builder that assembles its own material from an
  * athlete's opaque record — the Coach Briefing (slice 13) is the second caller.
  * The walk is deep because an identifier realistically hides in a free-text leaf
  * (an onboarding answer, a session note), not the top-level scalars.
+ *
+ * **What this does and does not guarantee.** AGENTS.md names four identifiers —
+ * name, email, DOB, location — and only some of those have a shape a regex can
+ * recognise. So the control is in two layers, and this function is the second:
+ *
+ *  1. **Structural (primary).** Identity is separated from training data by
+ *     opaque athlete id (ADR 0006): training tables carry no name, email, DOB or
+ *     location column, so a prompt assembled from an athlete's training record
+ *     has nothing to interpolate. `personaName` is refused outright by
+ *     {@link assertNoIdentity}. This is what actually makes the promise true.
+ *  2. **Shape guard (backstop, here).** Athlete *free text* — a session note, an
+ *     onboarding answer — can say anything, and no pattern can recognise a name
+ *     or a place name in prose. What it can catch is email and phone shapes, so
+ *     it catches those and fails closed.
+ *
+ * A name typed into a session note is therefore *not* caught here, by design —
+ * it is covered by the consent disclosure that says athlete free text reaches
+ * the model (`CONTEXT.md`, Privacy Proxy). Do not describe this function as
+ * asserting that no identifier of any kind can reach a prompt; it asserts the
+ * detectable ones.
  */
 export function assertNoDirectIdentifier(value: unknown): void {
   if (typeof value === 'string') {
-    if (EMAIL_SHAPED.test(value)) {
-      throw new Error(
-        'Prompt input carries an email-shaped value — no direct identifier may ' +
-          'reach a prompt (GDPR decision 1).',
-      );
-    }
+    const kind = shapedIdentifierIn(value);
+    if (kind) throw new DirectIdentifierError(kind);
     return;
   }
   if (Array.isArray(value)) {
