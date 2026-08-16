@@ -247,7 +247,8 @@
     "inputLabel": "Ask the Coach about this athlete",
     "placeholder": "How has their sleep trended?",
     "send": "Send",
-    "error": "That didn't work. Try again."
+    "error": "That didn't work. Try again.",
+    "unsafeContent": "Something in this athlete's training notes looks like an email address or phone number. The Coach can't read that, so this briefing can't be built until it's edited out."
   },
   "Auth": {
     "signInTitle": "Sign in",
@@ -466,7 +467,9 @@
     "ended": "This Weekly Session is done. Your plan is on the calendar.",
     "consentRequired": "Your Coach is paused until you agree to how your data is processed.",
     "consentRequiredLink": "Open Privacy & consent",
-    "error": "That didn't work. Try again."
+    "error": "That didn't work. Try again.",
+    "coachUnavailable": "Your Coach didn't answer that one. Nothing was lost — send it again.",
+    "unsafeContent": "Something saved in your training — a note or a piece of gear — looks like an email address or phone number. Your Coach can't read that. Edit it out and try again."
   },
   "Messaging": {
     "title": "Coaching Channel",

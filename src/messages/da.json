@@ -247,7 +247,8 @@
     "inputLabel": "Spørg Coachen om denne atlet",
     "placeholder": "Spørg om søvn, belastning eller restitution",
     "send": "Send besked",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "unsafeContent": "Noget i denne atlets træningsnoter ligner en e-mailadresse eller et telefonnummer. Coach kan ikke læse det, så briefingen kan ikke bygges, før det er fjernet."
   },
   "Auth": {
     "signInTitle": "Log ind",
@@ -438,7 +439,7 @@
     "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
     "consentRequiredLink": "Åbn Privatliv & samtykke",
     "error": "Beskeden blev ikke sendt. Prøv igen.",
-    "unsafeContent": "En note eller et udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
+    "unsafeContent": "En note eller et stykke udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
   },
   "WeeklySession": {
     "title": "Ugentlig session",
@@ -466,7 +467,9 @@
     "ended": "Denne ugentlige session er færdig. Din plan ligger i kalenderen.",
     "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
     "consentRequiredLink": "Åbn Privatliv & samtykke",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "coachUnavailable": "Din Coach svarede ikke på den. Intet gik tabt — send den igen.",
+    "unsafeContent": "Noget gemt i din træning — en note eller et stykke udstyr — ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
   },
   "Messaging": {
     "title": "Coaching Channel",

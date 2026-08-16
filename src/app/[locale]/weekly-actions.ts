@@ -15,7 +15,7 @@ import {
   type CommitResult,
   type ContinueResult,
   type DeclineResult,
-  type WeeklySessionState,
+  type StartWeeklySessionResult,
 } from '@/features/coach/weekly-session-service';
 
 /**
@@ -51,7 +51,7 @@ async function aiConsentOk(athleteId: string): Promise<boolean> {
 }
 
 export type StartWeeklyResult =
-  | ({ ok: true } & WeeklySessionState)
+  | StartWeeklySessionResult
   | AuthFailure
   | ConsentFailure;
 
@@ -62,12 +62,7 @@ export async function startWeeklySessionAction(): Promise<StartWeeklyResult> {
     return { ok: false, reason: 'consent-required' };
   }
 
-  const state = await startWeeklySession(
-    resolved.athlete,
-    dateKey(new Date()),
-    resolved.language,
-  );
-  return { ok: true, ...state };
+  return startWeeklySession(resolved.athlete, dateKey(new Date()), resolved.language);
 }
 
 export async function sendWeeklyMessageAction(

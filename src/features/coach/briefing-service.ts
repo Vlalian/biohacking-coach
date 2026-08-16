@@ -3,7 +3,8 @@ import {
   getBriefingPlan,
   getBriefingReflections,
 } from '@/features/session/session-repository';
-import { callCoach } from './coach-client';
+import { callCoach, type CoachReply } from './coach-client';
+import { DirectIdentifierError } from '@/lib/identifiers';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
@@ -51,6 +52,15 @@ import {
  */
 
 const BRIEFING_MAX_TOKENS = 1400;
+
+/**
+ * Which refusal a thrown Coach call is. Content the guard rejects will be
+ * rejected identically on a retry, so it must not be reported as an unreachable
+ * Coach — the same split the athlete-facing services make.
+ */
+function refusalReason(error: unknown): 'unsafe-content' | 'coach-unavailable' {
+  return error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable';
+}
 
 /**
  * Renders the briefing system prompt from exactly the material the link permits.
@@ -115,7 +125,7 @@ export interface BriefingState {
 
 export type StartBriefingResult =
   | ({ ok: true } & BriefingState)
-  | { ok: false; reason: 'not-linked' | 'failed' };
+  | { ok: false; reason: 'not-linked' | 'failed' | 'coach-unavailable' | 'unsafe-content' };
 
 /**
  * Opens — or resumes — a briefing about a linked athlete. Refuses when no active
@@ -150,12 +160,24 @@ export async function startBriefing(
     };
   }
 
-  const system = await buildBriefingSystem(link, today, language);
-  const reply = await callCoach({
-    system,
-    messages: [{ role: 'user', content: BRIEFING_OPENER }],
-    maxTokens: BRIEFING_MAX_TOKENS,
-  });
+  let reply: CoachReply;
+  try {
+    // Prompt rendering is inside the boundary with the call: it asserts on free
+    // text and throws, and `callCoach` now throws on a turn with nothing in it.
+    const system = await buildBriefingSystem(link, today, language);
+    reply = await callCoach({
+      system,
+      messages: [{ role: 'user', content: BRIEFING_OPENER }],
+      maxTokens: BRIEFING_MAX_TOKENS,
+    });
+  } catch (error) {
+    // Briefing material carries athlete free text too — Session Reflection
+    // comments and onboarding answers reach `buildBriefingContext` — so a
+    // refused identifier is as reachable here as on the athlete side, and gets
+    // the same distinct answer rather than "the Coach is unavailable".
+    return { ok: false, reason: refusalReason(error) };
+  }
+
   const conversation = await createBriefing({ coachId, athleteId });
   // appendBriefingMessages returns null only when coach ownership fails — which
   // it cannot on a row this coach just created — but a null must never be
@@ -171,7 +193,7 @@ export async function startBriefing(
 
 export type ContinueBriefingResult =
   | { ok: true; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'not-linked' | 'empty' };
+  | { ok: false; reason: 'not-owner' | 'not-linked' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
 
 /**
  * Adds the Head Coach's turn and the Coach's reply to a briefing this coach
@@ -197,21 +219,29 @@ export async function continueBriefing(
   const link = await getActiveLink(coachId, briefing.athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
 
-  const afterCoach = await appendBriefingMessages(coachId, conversationId, [
-    { role: 'head_coach', content: trimmed },
-  ]);
-  if (!afterCoach) return { ok: false, reason: 'not-owner' };
-
+  // Nothing is written until the Coach has answered — the same ordering the
+  // athlete-facing services use. Persisting the Head Coach's turn first left it
+  // stranded with no answer whenever the call failed, and a retry would post it
+  // twice.
   const transcript = await getMessages(conversationId);
-  const system = await buildBriefingSystem(link, today, language);
-  const reply = await callCoach({
-    system,
-    messages: toBriefingApiMessages(transcript),
-    maxTokens: BRIEFING_MAX_TOKENS,
-  });
-  await appendBriefingMessages(coachId, conversationId, [
+
+  let reply: CoachReply;
+  try {
+    const system = await buildBriefingSystem(link, today, language);
+    reply = await callCoach({
+      system,
+      messages: [...toBriefingApiMessages(transcript), { role: 'user', content: trimmed }],
+      maxTokens: BRIEFING_MAX_TOKENS,
+    });
+  } catch (error) {
+    return { ok: false, reason: refusalReason(error) };
+  }
+
+  const afterBoth = await appendBriefingMessages(coachId, conversationId, [
+    { role: 'head_coach', content: trimmed },
     { role: 'coach_ai', content: reply.text },
   ]);
+  if (!afterBoth) return { ok: false, reason: 'not-owner' };
 
   return { ok: true, messages: await getMessages(conversationId) };
 }

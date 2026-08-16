@@ -7,11 +7,13 @@ import {
   replaceCoachPlanForDateRange,
 } from '@/features/session/session-repository';
 import { buildWeeklyContext, renderWeeklyPrompt } from './prompts';
-import { callCoach } from './coach-client';
+import { callCoach, type CoachReply } from './coach-client';
+import { DirectIdentifierError } from '@/lib/identifiers';
 import {
   appendMessages,
   countWeeklySessions,
   createConversation,
+  deleteOwnedConversation,
   endConversation,
   getMessages,
   getOwnedConversation,
@@ -133,31 +135,64 @@ export interface WeeklySessionState {
   endedAt: Date | null;
 }
 
-/** Opens a new Weekly Session: the Coach speaks first, and it is persisted. */
+export type StartWeeklySessionResult =
+  | ({ ok: true } & WeeklySessionState)
+  | { ok: false; reason: 'coach-unavailable' | 'unsafe-content' | 'failed' };
+
+/**
+ * Opens a new Weekly Session: the Coach speaks first, and it is persisted.
+ *
+ * The conversation is created only *after* the Coach has actually spoken. Minted
+ * first, a failed or empty opening turn would leave an empty Weekly Session in
+ * the athlete's history — counted by `countWeeklySessions`, which decides the
+ * Presence Arc stage, so a failed start would silently advance the relationship
+ * a week.
+ */
 export async function startWeeklySession(
   athlete: Athlete,
   today: string,
   language?: string,
-): Promise<WeeklySessionState> {
+): Promise<StartWeeklySessionResult> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
+
+  let reply: CoachReply;
+  try {
+    // Prompt rendering inside the boundary with the call — it asserts on free
+    // text and throws, same as in `continueWeeklySession`.
+    const system = await renderSystem(athlete, weeklySessionNumber, today, language);
+    reply = await callCoach({
+      system,
+      messages: [{ role: 'user', content: WEEKLY_OPENER }],
+      maxTokens: WEEKLY_MAX_TOKENS,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable',
+    };
+  }
+
   const conversation = await createConversation({
     athleteId: athlete.id,
     kind: 'weekly_session',
     weeklySessionNumber,
   });
-
-  const system = await renderSystem(athlete, weeklySessionNumber, today, language);
-  const reply = await callCoach({
-    system,
-    messages: [{ role: 'user', content: WEEKLY_OPENER }],
-    maxTokens: WEEKLY_MAX_TOKENS,
-  });
-  const messages =
-    (await appendMessages(athlete.id, conversation.id, [
-      { role: 'coach_ai', content: reply.text },
-    ])) ?? [];
+  const messages = await appendMessages(athlete.id, conversation.id, [
+    { role: 'coach_ai', content: reply.text },
+  ]);
+  if (!messages) {
+    // Returning `failed` is not enough on its own: the row already exists, and
+    // `countWeeklySessions` counts it by kind, not by message count — so an
+    // unusable session would still advance the Presence Arc a week. (An earlier
+    // version of this comment claimed the ordering above prevented that. It
+    // prevented the row being created on a *failed Coach call*; it did nothing
+    // about a failed append.) Remove the row, then report.
+    await deleteOwnedConversation(athlete.id, conversation.id);
+    return { ok: false, reason: 'failed' };
+  }
 
   return {
+    ok: true,
     conversationId: conversation.id,
     weeklySessionNumber,
     messages,
@@ -168,7 +203,7 @@ export async function startWeeklySession(
 
 export type ContinueResult =
   | { ok: true; messages: Message[]; proposal: PlanProposal | null }
-  | { ok: false; reason: 'not-owner' | 'empty' };
+  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
 
 /**
  * Adds the athlete's turn and the Coach's reply to an owned Weekly Session,
@@ -190,26 +225,71 @@ export async function continueWeeklySession(
   const conversation = await getOwnedConversation(athlete.id, conversationId);
   if (!conversation) return { ok: false, reason: 'not-owner' };
 
-  const afterAthlete = await appendMessages(athlete.id, conversationId, [
-    { role: 'athlete', content: trimmed },
-  ]);
-  if (!afterAthlete) return { ok: false, reason: 'not-owner' };
-
+  // Nothing is written until the Coach has answered — the same ordering Coach
+  // Chat uses. Persisting the athlete's turn first is the obvious order and the
+  // wrong one: the API call is the step that realistically fails, and doing it
+  // second leaves a transcript holding a question with no answer, which the
+  // athlete cannot retry without their message appearing twice.
   const transcript = await getMessages(conversationId);
-  const system = await renderSystem(athlete, conversation.weeklySessionNumber ?? 1, today, language);
-  const reply = await callCoach({
-    system,
-    messages: toApiMessages(transcript),
-    maxTokens: WEEKLY_MAX_TOKENS,
-    tools: [PLAN_TOOL],
-    toolResult: PROPOSAL_ACK,
-  });
 
-  await appendMessages(athlete.id, conversationId, [{ role: 'coach_ai', content: reply.text }]);
+  let reply: CoachReply;
+  try {
+    // `renderSystem` is inside the boundary too, not just the API call: it
+    // asserts on athlete free text and throws (`assertNoDirectIdentifier`).
+    // Leaving it outside was the exact mistake this branch fixed in Coach Chat.
+    const system = await renderSystem(
+      athlete,
+      conversation.weeklySessionNumber ?? 1,
+      today,
+      language,
+    );
+    reply = await callCoach({
+      system,
+      // The athlete's turn joins the history here rather than being stored
+      // first — the same messages the API would have seen either way.
+      messages: [...toApiMessages(transcript), { role: 'user', content: trimmed }],
+      maxTokens: WEEKLY_MAX_TOKENS,
+      tools: [PLAN_TOOL],
+      toolResult: PROPOSAL_ACK,
+    });
+  } catch (error) {
+    // Refused content and an unreachable Coach are different problems and get
+    // different answers, the same split Coach Chat makes: "try again" is useless
+    // advice for text that will be refused identically every time.
+    return {
+      ok: false,
+      reason: error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable',
+    };
+  }
 
-  // If the Coach proposed a week, validate it (the server is the authority) and
-  // stage it for the athlete to confirm. An invalid proposal simply isn't staged
-  // — the Coach's text still shows and the conversation continues.
+  // A turn with no words is refused, proposal or not.
+  //
+  // `callCoach` allows a wordless tool call because the adapter cannot know
+  // whether a card will follow; here we do know, and the answer is still no. An
+  // earlier version stored the athlete's message alone and let the card speak,
+  // which fails twice over: the transcript then holds two consecutive athlete
+  // turns (the API expects alternation, and the Coach loses the context that it
+  // proposed at all), and a proposal arriving with no explanation is a poor
+  // proposal anyway — ADR 0003 has the Coach propose and the athlete decide,
+  // which the athlete cannot do well from a bare card.
+  //
+  // Rare in practice: the adapter already makes a follow-up request precisely to
+  // get a closing line, so reaching here means that came back empty too. The
+  // athlete resends and normally gets prose. Nothing is written, and no proposal
+  // is staged for a turn that was never stored.
+  if (reply.text === '') return { ok: false, reason: 'coach-unavailable' };
+
+  const afterBoth = await appendMessages(athlete.id, conversationId, [
+    { role: 'athlete', content: trimmed },
+    { role: 'coach_ai', content: reply.text },
+  ]);
+  if (!afterBoth) return { ok: false, reason: 'not-owner' };
+
+  // Validated and staged only once the turn is safely stored — the server is the
+  // authority on what is a legal week (ADR 0003), and a proposal recorded
+  // against a turn that failed to persist would outlive the conversation it
+  // belongs to. An invalid proposal simply isn't staged; the Coach's text still
+  // shows and the conversation continues.
   let proposal: PlanProposal | null = null;
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (call) {

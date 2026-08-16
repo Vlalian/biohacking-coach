@@ -53,17 +53,62 @@ type Notice =
   | { kind: 'none' }
   | { kind: 'error' }
   | { kind: 'consentRequired' }
+  | { kind: 'coachUnavailable' }
+  | { kind: 'unsafeContent' }
   | { kind: 'stale' }
   | { kind: 'planned'; count: number };
 
+/** Every refusal the Weekly Session actions can return. */
+type FailureReason =
+  | 'consent-required'
+  | 'coach-unavailable'
+  | 'unsafe-content'
+  | 'not-authenticated'
+  | 'not-owner'
+  | 'empty'
+  | 'failed'
+  | 'stale';
+
 /**
- * Turns an action failure into a notice. A `consent-required` refusal is its own
- * notice with a route back to Privacy & consent — not the generic error — so the
- * one case where the Coach is paused for a lawful-basis reason tells the athlete
- * how to lift it (the server gate is the control; this is its front door).
+ * Turns an action failure into a notice.
+ *
+ * Typed against the union rather than `string`. The widened parameter is why a
+ * newly added reason could reach here with nowhere to go and silently land in
+ * the generic error — the compiler had nothing to check. Adding a reason is now
+ * a type error until it is answered.
+ *
+ * `consent-required` keeps its own notice with a route back to Privacy &
+ * consent — the one case where the Coach is paused for a lawful-basis reason
+ * tells the athlete how to lift it. `coach-unavailable` says the Coach could not
+ * be reached, so the message is worth resending; `unsafe-content` says why
+ * resending will not help.
  */
-function failureNotice(reason: string): Notice {
-  return reason === 'consent-required' ? { kind: 'consentRequired' } : { kind: 'error' };
+function failureNotice(reason: FailureReason): Notice {
+  switch (reason) {
+    case 'consent-required':
+      return { kind: 'consentRequired' };
+    case 'coach-unavailable':
+      return { kind: 'coachUnavailable' };
+    case 'unsafe-content':
+      return { kind: 'unsafeContent' };
+    case 'stale':
+      return { kind: 'stale' };
+    // The remaining reasons are real but not separately actionable by the
+    // athlete: signed out, not their conversation, an empty send, a failed
+    // write. Listed rather than caught by `default`, so the exhaustiveness
+    // check below is not silently satisfied by a catch-all — a `default` was
+    // exactly why the doc comment above could claim a guarantee the code did
+    // not make.
+    case 'not-authenticated':
+    case 'not-owner':
+    case 'empty':
+    case 'failed':
+      return { kind: 'error' };
+  }
+  // Unreachable while the union is fully handled; a newly added reason makes
+  // this a compile error rather than a silent fall-through to the generic notice.
+  const unhandled: never = reason;
+  return unhandled;
 }
 
 /**
@@ -324,6 +369,16 @@ export function WeeklySession({
           {notice.kind === 'stale' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('proposalStale')}
+            </Banner>
+          )}
+          {notice.kind === 'coachUnavailable' && (
+            <Banner tone="warn" icon={AlertTriangle}>
+              {t('coachUnavailable')}
+            </Banner>
+          )}
+          {notice.kind === 'unsafeContent' && (
+            <Banner tone="warn" icon={AlertTriangle}>
+              {t('unsafeContent')}
             </Banner>
           )}
           {notice.kind === 'error' && (

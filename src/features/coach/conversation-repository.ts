@@ -41,6 +41,25 @@ export async function createConversation(input: {
 }
 
 /**
+ * Deletes a conversation this athlete owns. Scoped to the owner in the WHERE, so
+ * a conversation that is not theirs is never touched (ADR 0006).
+ *
+ * Narrow on purpose: this exists to undo a conversation that was created and
+ * then could not be given its first message. A Weekly Session row counts toward
+ * {@link countWeeklySessions} — and so toward the Presence Arc — from the moment
+ * it exists, whether or not it holds anything, so an unusable row must not
+ * survive. Not a general "delete my history" path; erasure is its own concern.
+ */
+export async function deleteOwnedConversation(
+  athleteId: string,
+  conversationId: string,
+): Promise<void> {
+  await getDb()
+    .delete(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.athleteId, athleteId)));
+}
+
+/**
  * How many Weekly Sessions this athlete has had. The next one is this + 1, which
  * selects the conversational arc (Session 1 welcomes, Session 4+ reviews).
  */

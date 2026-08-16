@@ -96,6 +96,34 @@ export interface CoachReply {
   toolCalls: CoachToolCall[];
 }
 
+/**
+ * Thrown when a turn comes back with nothing to say — no text and no tool call.
+ *
+ * Raised here, in the adapter, rather than left to each caller, because the
+ * damage is done by *persisting* it: an empty assistant turn is written into the
+ * transcript, shows the athlete a blank Coach message, and is replayed as
+ * history on every later request. One throw covers every call site, and every
+ * caller already treats a thrown Coach call as a failed turn that writes
+ * nothing.
+ *
+ * Seen in the wild (2026-08-16): an athlete asked to start the Weekly Session
+ * and got a blank reply, which persisted; on the next turn the Coach apologised
+ * for a message that "seemed to be cut off". `max_tokens` is the likeliest
+ * cause — a response can spend its whole budget before emitting a text block —
+ * which is why the stop reason travels with the error, where it is the one thing
+ * that makes the failure diagnosable.
+ */
+export class EmptyCoachReplyError extends Error {
+  constructor(readonly stopReason: string | null) {
+    super(
+      `The Coach returned no text and called no tool (stop_reason: ${stopReason ?? 'unknown'}). ` +
+        'An empty turn is never stored: the athlete would see a blank message, ' +
+        'and it would be replayed as history on every later request.',
+    );
+    this.name = 'EmptyCoachReplyError';
+  }
+}
+
 const joinText = (content: Anthropic.ContentBlock[]): string =>
   content
     .filter((block): block is Anthropic.TextBlock => block.type === 'text')
@@ -139,7 +167,12 @@ export async function callCoach(input: {
 
   const toolUses = toolUsesIn(first.content);
   if (toolUses.length === 0) {
-    return { text: joinText(first.content), toolCalls: [] };
+    const text = joinText(first.content);
+    // Nothing to say and nothing to do is not a turn. Refusing here keeps it out
+    // of the transcript entirely, rather than storing a blank Coach message the
+    // athlete sees and every later request replays.
+    if (text === '') throw new EmptyCoachReplyError(first.stop_reason);
+    return { text, toolCalls: [] };
   }
 
   // The Coach proposed something. Acknowledge every tool call and ask for a brief
@@ -168,6 +201,10 @@ export async function callCoach(input: {
   const text = [joinText(first.content), joinText(second.content)]
     .filter((part) => part !== '')
     .join('\n\n');
+  // A tool call with no words around it is still a turn here — the proposal card
+  // can carry the meaning — so it is not refused the way a wholly empty reply is.
+  // The caller decides: `continueWeeklySession` refuses it when the proposal
+  // fails validation, because then there is no card either.
   return {
     text,
     toolCalls: toolUses.map((use) => ({ name: use.name, input: use.input })),
