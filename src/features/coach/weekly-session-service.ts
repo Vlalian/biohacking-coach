@@ -7,7 +7,7 @@ import {
   replaceCoachPlanForDateRange,
 } from '@/features/session/session-repository';
 import { buildWeeklyContext, renderWeeklyPrompt } from './prompts';
-import { callCoach } from './coach-client';
+import { callCoach, type CoachReply } from './coach-client';
 import {
   appendMessages,
   countWeeklySessions,
@@ -133,24 +133,42 @@ export interface WeeklySessionState {
   endedAt: Date | null;
 }
 
-/** Opens a new Weekly Session: the Coach speaks first, and it is persisted. */
+export type StartResult =
+  | ({ ok: true } & WeeklySessionState)
+  | { ok: false; reason: 'coach-unavailable' };
+
+/**
+ * Opens a new Weekly Session: the Coach speaks first, and it is persisted.
+ *
+ * The conversation is created only *after* the Coach has actually spoken. Minted
+ * first, a failed or empty opening turn would leave an empty Weekly Session in
+ * the athlete's history — counted by `countWeeklySessions`, which decides the
+ * Presence Arc stage, so a failed start would silently advance the relationship
+ * a week.
+ */
 export async function startWeeklySession(
   athlete: Athlete,
   today: string,
   language?: string,
-): Promise<WeeklySessionState> {
+): Promise<StartResult> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
+  const system = await renderSystem(athlete, weeklySessionNumber, today, language);
+
+  let reply: CoachReply;
+  try {
+    reply = await callCoach({
+      system,
+      messages: [{ role: 'user', content: WEEKLY_OPENER }],
+      maxTokens: WEEKLY_MAX_TOKENS,
+    });
+  } catch {
+    return { ok: false, reason: 'coach-unavailable' };
+  }
+
   const conversation = await createConversation({
     athleteId: athlete.id,
     kind: 'weekly_session',
     weeklySessionNumber,
-  });
-
-  const system = await renderSystem(athlete, weeklySessionNumber, today, language);
-  const reply = await callCoach({
-    system,
-    messages: [{ role: 'user', content: WEEKLY_OPENER }],
-    maxTokens: WEEKLY_MAX_TOKENS,
   });
   const messages =
     (await appendMessages(athlete.id, conversation.id, [
@@ -158,6 +176,7 @@ export async function startWeeklySession(
     ])) ?? [];
 
   return {
+    ok: true,
     conversationId: conversation.id,
     weeklySessionNumber,
     messages,
@@ -168,7 +187,7 @@ export async function startWeeklySession(
 
 export type ContinueResult =
   | { ok: true; messages: Message[]; proposal: PlanProposal | null }
-  | { ok: false; reason: 'not-owner' | 'empty' };
+  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' };
 
 /**
  * Adds the athlete's turn and the Coach's reply to an owned Weekly Session,
@@ -190,22 +209,36 @@ export async function continueWeeklySession(
   const conversation = await getOwnedConversation(athlete.id, conversationId);
   if (!conversation) return { ok: false, reason: 'not-owner' };
 
-  const afterAthlete = await appendMessages(athlete.id, conversationId, [
-    { role: 'athlete', content: trimmed },
-  ]);
-  if (!afterAthlete) return { ok: false, reason: 'not-owner' };
-
+  // Nothing is written until the Coach has answered — the same ordering Coach
+  // Chat uses. Persisting the athlete's turn first is the obvious order and the
+  // wrong one: the API call is the step that realistically fails, and doing it
+  // second leaves a transcript holding a question with no answer, which the
+  // athlete cannot retry without their message appearing twice.
   const transcript = await getMessages(conversationId);
   const system = await renderSystem(athlete, conversation.weeklySessionNumber ?? 1, today, language);
-  const reply = await callCoach({
-    system,
-    messages: toApiMessages(transcript),
-    maxTokens: WEEKLY_MAX_TOKENS,
-    tools: [PLAN_TOOL],
-    toolResult: PROPOSAL_ACK,
-  });
 
-  await appendMessages(athlete.id, conversationId, [{ role: 'coach_ai', content: reply.text }]);
+  let reply: CoachReply;
+  try {
+    reply = await callCoach({
+      system,
+      // The athlete's turn joins the history here rather than being stored
+      // first — the same messages the API would have seen either way.
+      messages: [...toApiMessages(transcript), { role: 'user', content: trimmed }],
+      maxTokens: WEEKLY_MAX_TOKENS,
+      tools: [PLAN_TOOL],
+      toolResult: PROPOSAL_ACK,
+    });
+  } catch {
+    // Covers an unreachable API and an empty turn alike (EmptyCoachReplyError):
+    // either way there is no reply, so there is nothing worth storing.
+    return { ok: false, reason: 'coach-unavailable' };
+  }
+
+  const afterBoth = await appendMessages(athlete.id, conversationId, [
+    { role: 'athlete', content: trimmed },
+    { role: 'coach_ai', content: reply.text },
+  ]);
+  if (!afterBoth) return { ok: false, reason: 'not-owner' };
 
   // If the Coach proposed a week, validate it (the server is the authority) and
   // stage it for the athlete to confirm. An invalid proposal simply isn't staged

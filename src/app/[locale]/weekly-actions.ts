@@ -52,6 +52,7 @@ async function aiConsentOk(athleteId: string): Promise<boolean> {
 
 export type StartWeeklyResult =
   | ({ ok: true } & WeeklySessionState)
+  | { ok: false; reason: 'coach-unavailable' }
   | AuthFailure
   | ConsentFailure;
 
@@ -62,12 +63,7 @@ export async function startWeeklySessionAction(): Promise<StartWeeklyResult> {
     return { ok: false, reason: 'consent-required' };
   }
 
-  const state = await startWeeklySession(
-    resolved.athlete,
-    dateKey(new Date()),
-    resolved.language,
-  );
-  return { ok: true, ...state };
+  return startWeeklySession(resolved.athlete, dateKey(new Date()), resolved.language);
 }
 
 export async function sendWeeklyMessageAction(
