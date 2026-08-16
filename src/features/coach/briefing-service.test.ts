@@ -205,8 +205,14 @@ describe('startBriefing — persistence', () => {
     getActiveLink.mockResolvedValue(activeLink(true, false));
     callCoach.mockRejectedValue(new Error('anthropic down'));
 
-    await expect(startBriefing('coach_1', 'a1', TODAY)).rejects.toThrow('anthropic down');
+    // Returned now, not thrown: `callCoach` refuses an empty turn as well as an
+    // unreachable API, and a Head Coach staring at a rejected server action
+    // learns nothing. The row must still not exist either way.
+    const result = await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
     expect(createBriefing).not.toHaveBeenCalled();
+    expect(appendBriefingMessages).not.toHaveBeenCalled();
   });
 });
 
@@ -252,12 +258,24 @@ describe('continueBriefing — the gates', () => {
     const result = await continueBriefing('coach_1', 'b1', 'how is her sleep?', TODAY);
 
     expect(result.ok).toBe(true);
-    // The coach's turn is stored as head_coach, then the AI reply as coach_ai.
-    expect(appendBriefingMessages).toHaveBeenNthCalledWith(1, 'coach_1', 'b1', [
+    // Both turns land in ONE append, after the Coach has answered. Storing the
+    // Head Coach's question first left it stranded with no answer whenever the
+    // call failed, and a retry would have posted it twice.
+    expect(appendBriefingMessages).toHaveBeenCalledTimes(1);
+    expect(appendBriefingMessages).toHaveBeenCalledWith('coach_1', 'b1', [
       { role: 'head_coach', content: 'how is her sleep?' },
-    ]);
-    expect(appendBriefingMessages).toHaveBeenNthCalledWith(2, 'coach_1', 'b1', [
       { role: 'coach_ai', content: 'my read' },
     ]);
+  });
+
+  it('writes nothing when the Coach turn fails — the Briefing path had the same bug', async () => {
+    getOwnedBriefing.mockResolvedValue({ id: 'b1', athleteId: 'a1', coachId: 'coach_1', kind: 'coach_briefing' });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    callCoach.mockRejectedValue(new Error('empty turn'));
+
+    const result = await continueBriefing('coach_1', 'b1', 'how is her sleep?', TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+    expect(appendBriefingMessages).not.toHaveBeenCalled();
   });
 });

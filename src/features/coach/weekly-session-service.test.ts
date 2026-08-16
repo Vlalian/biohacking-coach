@@ -75,7 +75,6 @@ beforeEach(() => {
   callCoach.mockReset().mockResolvedValue({
     text: 'How did the week feel?',
     toolCalls: [],
-    stopReason: 'end_turn',
   });
   appendMessages.mockReset().mockResolvedValue([]);
   countWeeklySessions.mockClear();
@@ -107,6 +106,17 @@ describe('startWeeklySession', () => {
     expect(createConversation).not.toHaveBeenCalled();
     expect(appendMessages).not.toHaveBeenCalled();
   });
+
+  it('reports a failed append instead of returning an empty session', async () => {
+    // `?? []` used to launder this into ok-with-no-messages. The row is counted
+    // by `countWeeklySessions` either way, so the Presence Arc would advance a
+    // week on a session holding nothing.
+    appendMessages.mockResolvedValue(null);
+
+    const result = await startWeeklySession(ATHLETE, TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'failed' });
+  });
 });
 
 describe('continueWeeklySession', () => {
@@ -130,6 +140,50 @@ describe('continueWeeklySession', () => {
 
     expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
     expect(appendMessages).not.toHaveBeenCalled();
+  });
+
+  it('refuses a wordless turn whose proposal failed validation', async () => {
+    // The remaining path to the reported symptom: `callCoach` lets a tool call
+    // through with no prose because the confirm card carries the meaning — but
+    // if the plan then fails validation there is no card either, and storing the
+    // turn would put a blank bubble in the thread exactly as reported.
+    callCoach.mockResolvedValue({
+      text: '',
+      toolCalls: [{ name: 'propose_week_plan', input: { garbage: true } }],
+    });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+    expect(appendMessages).not.toHaveBeenCalled();
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+
+  it('stores no empty Coach bubble when a valid proposal carries the turn', async () => {
+    // The other half: a wordless turn that DID stage a plan is meaningful, so it
+    // is kept — but only the athlete's message is written. The card speaks for
+    // the Coach; an empty bubble beside it is the same defect, better dressed.
+    callCoach.mockResolvedValue({
+      text: '',
+      toolCalls: [
+        {
+          name: 'propose_week_plan',
+          input: {
+            sessions: [
+              { date: '2026-08-17', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
+      { role: 'athlete', content: 'plan my week' },
+    ]);
+    expect(recordProposal).toHaveBeenCalled();
   });
 
   it("sends the athlete's turn to the Coach even though it is not stored yet", async () => {

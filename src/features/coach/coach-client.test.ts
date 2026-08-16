@@ -93,7 +93,7 @@ describe('callCoach — an empty turn is refused, never returned', () => {
     ).rejects.toThrow(/no text and called no tool/i);
   });
 
-  it('reports the stop reason on a normal reply', async () => {
+  it('returns a normal reply unchanged', async () => {
     create.mockResolvedValue({
       content: [{ type: 'text', text: 'Easy day.' }],
       usage: {},
@@ -106,7 +106,7 @@ describe('callCoach — an empty turn is refused, never returned', () => {
       maxTokens: 100,
     });
 
-    expect(reply).toMatchObject({ text: 'Easy day.', stopReason: 'end_turn' });
+    expect(reply).toMatchObject({ text: 'Easy day.', toolCalls: [] });
   });
 
   it('allows a tool call with no words around it — the card carries the meaning', async () => {

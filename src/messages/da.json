@@ -466,7 +466,9 @@
     "ended": "Denne ugentlige session er færdig. Din plan ligger i kalenderen.",
     "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
     "consentRequiredLink": "Åbn Privatliv & samtykke",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "coachUnavailable": "Din Coach svarede ikke på den. Intet gik tabt — send den igen.",
+    "unsafeContent": "Noget gemt i din træning — en note eller et udstyr — ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
   },
   "Messaging": {
     "title": "Coaching Channel",
