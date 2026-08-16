@@ -47,10 +47,14 @@ export function Briefing({
     initial?.messages ?? [],
   );
   const [draft, setDraft] = useState('');
-  const [error, setError] = useState(false);
+  // Three states, not a boolean: content the guard refuses will be refused
+  // identically on a retry, so telling the coach to "try again" would be wrong.
+  const [error, setError] = useState<'none' | 'generic' | 'unsafeContent'>('none');
+  const failed = (reason?: string) =>
+    setError(reason === 'unsafe-content' ? 'unsafeContent' : 'generic');
 
   function start() {
-    setError(false);
+    setError('none');
     startTransition(async () => {
       // A server action can reject outright (the Anthropic call fails, a query
       // throws), not only resolve to { ok: false }. Without the catch the
@@ -62,10 +66,10 @@ export function Briefing({
           setConversationId(result.conversationId);
           setMessages(result.messages);
         } else {
-          setError(true);
+          failed(result.reason);
         }
       } catch {
-        setError(true);
+        failed();
       }
     });
   }
@@ -74,7 +78,7 @@ export function Briefing({
     e.preventDefault();
     const content = draft.trim();
     if (!content || !conversationId) return;
-    setError(false);
+    setError('none');
     startTransition(async () => {
       try {
         const result = await sendBriefingMessageAction(conversationId, content);
@@ -82,10 +86,10 @@ export function Briefing({
           setMessages(result.messages);
           setDraft('');
         } else {
-          setError(true);
+          failed(result.reason);
         }
       } catch {
-        setError(true);
+        failed();
       }
     });
   }
@@ -152,9 +156,9 @@ export function Briefing({
         </>
       )}
 
-      {error && (
+      {error !== 'none' && (
         <p role="alert" className="text-sm text-red-600">
-          {t('error')}
+          {error === 'unsafeContent' ? t('unsafeContent') : t('error')}
         </p>
       )}
     </section>

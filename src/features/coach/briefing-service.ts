@@ -4,6 +4,7 @@ import {
   getBriefingReflections,
 } from '@/features/session/session-repository';
 import { callCoach, type CoachReply } from './coach-client';
+import { DirectIdentifierError } from '@/lib/identifiers';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
@@ -51,6 +52,15 @@ import {
  */
 
 const BRIEFING_MAX_TOKENS = 1400;
+
+/**
+ * Which refusal a thrown Coach call is. Content the guard rejects will be
+ * rejected identically on a retry, so it must not be reported as an unreachable
+ * Coach — the same split the athlete-facing services make.
+ */
+function refusalReason(error: unknown): 'unsafe-content' | 'coach-unavailable' {
+  return error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable';
+}
 
 /**
  * Renders the briefing system prompt from exactly the material the link permits.
@@ -115,7 +125,7 @@ export interface BriefingState {
 
 export type StartBriefingResult =
   | ({ ok: true } & BriefingState)
-  | { ok: false; reason: 'not-linked' | 'failed' | 'coach-unavailable' };
+  | { ok: false; reason: 'not-linked' | 'failed' | 'coach-unavailable' | 'unsafe-content' };
 
 /**
  * Opens — or resumes — a briefing about a linked athlete. Refuses when no active
@@ -160,8 +170,12 @@ export async function startBriefing(
       messages: [{ role: 'user', content: BRIEFING_OPENER }],
       maxTokens: BRIEFING_MAX_TOKENS,
     });
-  } catch {
-    return { ok: false, reason: 'coach-unavailable' };
+  } catch (error) {
+    // Briefing material carries athlete free text too — Session Reflection
+    // comments and onboarding answers reach `buildBriefingContext` — so a
+    // refused identifier is as reachable here as on the athlete side, and gets
+    // the same distinct answer rather than "the Coach is unavailable".
+    return { ok: false, reason: refusalReason(error) };
   }
 
   const conversation = await createBriefing({ coachId, athleteId });
@@ -179,7 +193,7 @@ export async function startBriefing(
 
 export type ContinueBriefingResult =
   | { ok: true; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'not-linked' | 'empty' | 'coach-unavailable' };
+  | { ok: false; reason: 'not-owner' | 'not-linked' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
 
 /**
  * Adds the Head Coach's turn and the Coach's reply to a briefing this coach
@@ -219,8 +233,8 @@ export async function continueBriefing(
       messages: [...toBriefingApiMessages(transcript), { role: 'user', content: trimmed }],
       maxTokens: BRIEFING_MAX_TOKENS,
     });
-  } catch {
-    return { ok: false, reason: 'coach-unavailable' };
+  } catch (error) {
+    return { ok: false, reason: refusalReason(error) };
   }
 
   const afterBoth = await appendBriefingMessages(coachId, conversationId, [

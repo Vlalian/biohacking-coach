@@ -13,6 +13,7 @@ import {
   appendMessages,
   countWeeklySessions,
   createConversation,
+  deleteOwnedConversation,
   endConversation,
   getMessages,
   getOwnedConversation,
@@ -176,13 +177,19 @@ export async function startWeeklySession(
     kind: 'weekly_session',
     weeklySessionNumber,
   });
-  // `?? []` here would launder a failed append into an ok-but-empty session —
-  // and `countWeeklySessions` counts the row either way, so the Presence Arc
-  // would advance a week on a session that holds nothing. Surface the failure.
   const messages = await appendMessages(athlete.id, conversation.id, [
     { role: 'coach_ai', content: reply.text },
   ]);
-  if (!messages) return { ok: false, reason: 'failed' };
+  if (!messages) {
+    // Returning `failed` is not enough on its own: the row already exists, and
+    // `countWeeklySessions` counts it by kind, not by message count — so an
+    // unusable session would still advance the Presence Arc a week. (An earlier
+    // version of this comment claimed the ordering above prevented that. It
+    // prevented the row being created on a *failed Coach call*; it did nothing
+    // about a failed append.) Remove the row, then report.
+    await deleteOwnedConversation(athlete.id, conversation.id);
+    return { ok: false, reason: 'failed' };
+  }
 
   return {
     ok: true,
@@ -255,31 +262,43 @@ export async function continueWeeklySession(
     };
   }
 
-  // The plan is validated BEFORE anything is written, because whether it staged
-  // decides whether a wordless turn is meaningful. `callCoach` lets a tool call
-  // through with no prose — the confirm card carries the meaning — but if the
-  // proposal then fails validation there is no card and no text, which is the
-  // blank bubble this branch exists to stop.
-  let proposal: PlanProposal | null = null;
-  const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
-  const validated = call ? validateProposedPlan(call.input, today) : null;
-  if (validated?.ok) proposal = { sessions: validated.sessions };
+  // A turn with no words is refused, proposal or not.
+  //
+  // `callCoach` allows a wordless tool call because the adapter cannot know
+  // whether a card will follow; here we do know, and the answer is still no. An
+  // earlier version stored the athlete's message alone and let the card speak,
+  // which fails twice over: the transcript then holds two consecutive athlete
+  // turns (the API expects alternation, and the Coach loses the context that it
+  // proposed at all), and a proposal arriving with no explanation is a poor
+  // proposal anyway — ADR 0003 has the Coach propose and the athlete decide,
+  // which the athlete cannot do well from a bare card.
+  //
+  // Rare in practice: the adapter already makes a follow-up request precisely to
+  // get a closing line, so reaching here means that came back empty too. The
+  // athlete resends and normally gets prose. Nothing is written, and no proposal
+  // is staged for a turn that was never stored.
+  if (reply.text === '') return { ok: false, reason: 'coach-unavailable' };
 
-  if (reply.text === '' && !proposal) return { ok: false, reason: 'coach-unavailable' };
-
-  // A wordless turn that DID stage a proposal stores the athlete's message only:
-  // the card is the Coach's contribution, and an empty bubble beside it would be
-  // the same defect in a friendlier position.
   const afterBoth = await appendMessages(athlete.id, conversationId, [
     { role: 'athlete', content: trimmed },
-    ...(reply.text === '' ? [] : [{ role: 'coach_ai' as const, content: reply.text }]),
+    { role: 'coach_ai', content: reply.text },
   ]);
   if (!afterBoth) return { ok: false, reason: 'not-owner' };
 
-  // Staged only once the turn is safely stored — the server is the authority on
-  // what is a legal week (ADR 0003), and a proposal recorded against a turn that
-  // failed to persist would outlive the conversation it belongs to.
-  if (proposal) await recordProposal(athlete.id, conversationId, proposal.sessions);
+  // Validated and staged only once the turn is safely stored — the server is the
+  // authority on what is a legal week (ADR 0003), and a proposal recorded
+  // against a turn that failed to persist would outlive the conversation it
+  // belongs to. An invalid proposal simply isn't staged; the Coach's text still
+  // shows and the conversation continues.
+  let proposal: PlanProposal | null = null;
+  const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
+  if (call) {
+    const validated = validateProposedPlan(call.input, today);
+    if (validated.ok) {
+      await recordProposal(athlete.id, conversationId, validated.sessions);
+      proposal = { sessions: validated.sessions };
+    }
+  }
 
   return { ok: true, messages: await getMessages(conversationId), proposal };
 }

@@ -93,9 +93,22 @@ function failureNotice(reason: FailureReason): Notice {
       return { kind: 'unsafeContent' };
     case 'stale':
       return { kind: 'stale' };
-    default:
+    // The remaining reasons are real but not separately actionable by the
+    // athlete: signed out, not their conversation, an empty send, a failed
+    // write. Listed rather than caught by `default`, so the exhaustiveness
+    // check below is not silently satisfied by a catch-all — a `default` was
+    // exactly why the doc comment above could claim a guarantee the code did
+    // not make.
+    case 'not-authenticated':
+    case 'not-owner':
+    case 'empty':
+    case 'failed':
       return { kind: 'error' };
   }
+  // Unreachable while the union is fully handled; a newly added reason makes
+  // this a compile error rather than a silent fall-through to the generic notice.
+  const unhandled: never = reason;
+  return unhandled;
 }
 
 /**

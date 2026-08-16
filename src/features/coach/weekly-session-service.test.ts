@@ -18,6 +18,7 @@ const {
   appendMessages,
   countWeeklySessions,
   createConversation,
+  deleteOwnedConversation,
   getMessages,
   getOwnedConversation,
   getEquipmentItems,
@@ -28,6 +29,7 @@ const {
   appendMessages: vi.fn(),
   countWeeklySessions: vi.fn(() => Promise.resolve(0)),
   createConversation: vi.fn(),
+  deleteOwnedConversation: vi.fn(() => Promise.resolve()),
   getMessages: vi.fn(),
   getOwnedConversation: vi.fn(),
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
@@ -40,6 +42,7 @@ vi.mock('./conversation-repository', () => ({
   appendMessages,
   countWeeklySessions,
   createConversation,
+  deleteOwnedConversation,
   endConversation: vi.fn(),
   getMessages,
   getOwnedConversation,
@@ -79,6 +82,7 @@ beforeEach(() => {
   appendMessages.mockReset().mockResolvedValue([]);
   countWeeklySessions.mockClear();
   createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+  deleteOwnedConversation.mockClear();
   getMessages.mockReset().mockResolvedValue([]);
   getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', weeklySessionNumber: 2 });
   recordProposal.mockClear();
@@ -107,15 +111,17 @@ describe('startWeeklySession', () => {
     expect(appendMessages).not.toHaveBeenCalled();
   });
 
-  it('reports a failed append instead of returning an empty session', async () => {
-    // `?? []` used to launder this into ok-with-no-messages. The row is counted
-    // by `countWeeklySessions` either way, so the Presence Arc would advance a
-    // week on a session holding nothing.
+  it('removes the row when the first message cannot be stored', async () => {
+    // `?? []` used to launder this into ok-with-no-messages, and merely
+    // returning `failed` is not enough either: `countWeeklySessions` counts the
+    // row by kind, not by message count, so an unusable session would still
+    // advance the Presence Arc a week.
     appendMessages.mockResolvedValue(null);
 
     const result = await startWeeklySession(ATHLETE, TODAY);
 
     expect(result).toEqual({ ok: false, reason: 'failed' });
+    expect(deleteOwnedConversation).toHaveBeenCalledWith('athlete_1', 'conv_new');
   });
 });
 
@@ -143,10 +149,9 @@ describe('continueWeeklySession', () => {
   });
 
   it('refuses a wordless turn whose proposal failed validation', async () => {
-    // The remaining path to the reported symptom: `callCoach` lets a tool call
-    // through with no prose because the confirm card carries the meaning — but
-    // if the plan then fails validation there is no card either, and storing the
-    // turn would put a blank bubble in the thread exactly as reported.
+    // `callCoach` lets a tool call through with no prose because the adapter
+    // cannot know whether a card will follow. Here we do: the plan fails
+    // validation, so there is no card and no text — the reported blank bubble.
     callCoach.mockResolvedValue({
       text: '',
       toolCalls: [{ name: 'propose_week_plan', input: { garbage: true } }],
@@ -159,10 +164,13 @@ describe('continueWeeklySession', () => {
     expect(recordProposal).not.toHaveBeenCalled();
   });
 
-  it('stores no empty Coach bubble when a valid proposal carries the turn', async () => {
-    // The other half: a wordless turn that DID stage a plan is meaningful, so it
-    // is kept — but only the athlete's message is written. The card speaks for
-    // the Coach; an empty bubble beside it is the same defect, better dressed.
+  it('refuses a wordless turn even when its proposal is valid', async () => {
+    // Storing the athlete's message alone would leave two consecutive athlete
+    // turns in the transcript — the API expects alternation, and the Coach would
+    // lose the context that it proposed at all. A plan arriving with no
+    // explanation is also a poor proposal: ADR 0003 has the athlete decide, and
+    // they cannot decide well from a bare card. Nothing is written, nothing is
+    // staged; the athlete resends and normally gets prose.
     callCoach.mockResolvedValue({
       text: '',
       toolCalls: [
@@ -179,11 +187,9 @@ describe('continueWeeklySession', () => {
 
     const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
 
-    expect(result).toMatchObject({ ok: true });
-    expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
-      { role: 'athlete', content: 'plan my week' },
-    ]);
-    expect(recordProposal).toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+    expect(appendMessages).not.toHaveBeenCalled();
+    expect(recordProposal).not.toHaveBeenCalled();
   });
 
   it("sends the athlete's turn to the Coach even though it is not stored yet", async () => {
