@@ -387,7 +387,7 @@ function AthleteSessionForm({
   }) => void;
 }) {
   const [type, setType] = useState(initial?.type ?? ATHLETE_SESSION_TYPES[0]);
-  const [durationMin, setDurationMin] = useState(initial?.durationMin ?? 30);
+  const [durationMin, setDurationMin] = useState<number | null>(initial?.durationMin ?? 30);
   const [isTraining, setIsTraining] = useState(initial?.isTraining ?? true);
   const [note, setNote] = useState(initial?.note ?? '');
   const isPast = date <= todayKey;
@@ -441,8 +441,16 @@ function AthleteSessionForm({
           type="number"
           min={5}
           step={5}
-          value={durationMin}
-          onChange={(e) => setDurationMin(Number(e.target.value))}
+          value={durationMin ?? ''}
+          onChange={(e) => {
+            // A number input yields '' when cleared and for input the browser
+            // cannot parse. `Number('')` is 0 and `Number('abc')` is NaN, both of
+            // which the server then refuses as invalid — so read them as "no
+            // duration", which the domain allows, instead of a bad number.
+            const raw = e.target.value.trim();
+            const parsed = Number(raw);
+            setDurationMin(raw === '' || !Number.isFinite(parsed) ? null : parsed);
+          }}
           className="mt-2 w-full border border-border bg-background px-3 py-2 font-mono text-sm text-foreground outline-none focus:border-signal"
         />
       </label>

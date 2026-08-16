@@ -1,4 +1,5 @@
 import type { Athlete } from '@/features/athlete/athlete';
+import { DirectIdentifierError } from '@/lib/identifiers';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getOwnedSession } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
@@ -119,7 +120,7 @@ export async function getOpenCoachChat(athleteId: string): Promise<CoachChatStat
 
 export type SendChatResult =
   | { ok: true; conversationId: string; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' };
+  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
 
 /**
  * Sends the athlete's turn and returns the Coach's reply, creating the chat on
@@ -159,10 +160,16 @@ export async function sendCoachChatMessage(
   if (conversationId && !existing) return { ok: false, reason: 'not-owner' };
 
   const transcript = conversationId ? await getMessages(conversationId) : [];
-  const system = await renderSystem(athlete, today, language, referenceSessionId);
 
   let replyText: string;
   try {
+    // `renderSystem` is inside the boundary too, not just the API call: it reads
+    // the athlete's equipment and Reference and runs them through the prompt
+    // builder's identifier assertion, which throws. A session note is free text
+    // and unvalidated, so this is reachable — an athlete who typed an email into
+    // one and then discussed that session would otherwise get an unhandled
+    // rejection instead of an answer.
+    const system = await renderSystem(athlete, today, language, referenceSessionId);
     replyText = (
       await callCoach({
         system,
@@ -172,8 +179,14 @@ export async function sendCoachChatMessage(
         maxTokens: CHAT_MAX_TOKENS,
       })
     ).text;
-  } catch {
-    return { ok: false, reason: 'coach-unavailable' };
+  } catch (error) {
+    // Told apart deliberately: "the Coach could not be reached" invites a retry,
+    // and retrying refused content just fails again. The athlete needs to know
+    // which one happened.
+    return {
+      ok: false,
+      reason: error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable',
+    };
   }
 
   // Lazily created: the resting conversation costs nothing until it is used,
@@ -191,30 +204,3 @@ export async function sendCoachChatMessage(
   return { ok: true, conversationId: id, messages: await getMessages(id) };
 }
 
-/**
- * Whether the Coach should offer the Weekly Session today — the single
- * sanctioned proactive nudge (ADR 0007: "Offered every week, forced never").
- *
- * True only on the athlete's stored Weekly Session Day, and only when they have
- * not already *held* a Weekly Session this week. "Flexible" (or unset) means no
- * preferred day, so no nudge — an athlete who declined to name a day is not
- * asking to be chased; they can still start one whenever they like.
- *
- * The "already done" test is the conversation, not the plan. A week that has a
- * plan is not a week that has been discussed: once generation lands, an
- * auto-drafted week must still be offered, or generation would silence its own
- * offer (coach-overlay issue 04, decision 4).
- *
- * Pure given its inputs: the caller supplies today's weekday and the answer to
- * the "already held" question, so this is decided without a clock or a query.
- */
-export function shouldOfferWeeklySession(params: {
-  weeklySessionDay: string | null | undefined;
-  todayWeekday: string;
-  hasHeldWeeklySessionThisWeek: boolean;
-}): boolean {
-  const { weeklySessionDay, todayWeekday, hasHeldWeeklySessionThisWeek } = params;
-  if (!weeklySessionDay || weeklySessionDay === 'Flexible') return false;
-  if (weeklySessionDay !== todayWeekday) return false;
-  return !hasHeldWeeklySessionThisWeek;
-}

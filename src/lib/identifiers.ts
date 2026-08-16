@@ -38,6 +38,24 @@ const SHAPED_IDENTIFIERS: ReadonlyArray<{ kind: string; pattern: RegExp }> = [
   { kind: 'phone', pattern: PHONE_SHAPED },
 ];
 
+/**
+ * Thrown when app data carrying a shaped identifier reaches a prompt builder.
+ *
+ * A named type rather than a bare Error so a caller can tell this apart from an
+ * upstream failure. The difference matters to the athlete: a Coach that could
+ * not be reached deserves "try again", while content that will be refused
+ * identically every time does not.
+ */
+export class DirectIdentifierError extends Error {
+  constructor(readonly kind: string) {
+    super(
+      `Prompt input carries a ${kind}-shaped value — no direct identifier may ` +
+        'reach a prompt (GDPR decision 1).',
+    );
+    this.name = 'DirectIdentifierError';
+  }
+}
+
 /** The kind of identifier this string looks like, or null if none. */
 export function shapedIdentifierIn(value: string): string | null {
   return SHAPED_IDENTIFIERS.find(({ pattern }) => pattern.test(value))?.kind ?? null;

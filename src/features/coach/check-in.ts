@@ -1,5 +1,5 @@
 import type { EquipmentItem } from '@/features/equipment/equipment';
-import { shapedIdentifierIn } from '@/lib/identifiers';
+import { DirectIdentifierError, shapedIdentifierIn } from '@/lib/identifiers';
 
 /**
  * The plain-data inputs the Coach prompts reason about.
@@ -164,12 +164,7 @@ export function assertNoIdentity(checkIn: CheckIn): void {
 export function assertNoDirectIdentifier(value: unknown): void {
   if (typeof value === 'string') {
     const kind = shapedIdentifierIn(value);
-    if (kind) {
-      throw new Error(
-        `Prompt input carries a ${kind}-shaped value — no direct identifier ` +
-          'may reach a prompt (GDPR decision 1).',
-      );
-    }
+    if (kind) throw new DirectIdentifierError(kind);
     return;
   }
   if (Array.isArray(value)) {

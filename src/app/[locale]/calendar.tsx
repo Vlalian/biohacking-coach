@@ -358,7 +358,10 @@ function WeekRow({
         <button
           type="button"
           onClick={onToggleWeek}
-          className="flex items-center gap-1 px-2 py-3 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-signal"
+          // The chevron's rotation is the only cue that a week is expanded, and
+          // rotation is invisible to a screen reader.
+          aria-expanded={expanded}
+          className="flex items-center gap-1 px-2 py-3 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground outline-none transition-colors hover:text-signal focus-visible:text-signal focus-visible:ring-1 focus-visible:ring-signal"
         >
           <ChevronDown
             className={['h-3 w-3 transition-transform', expanded ? '' : '-rotate-90'].join(' ')}
@@ -433,7 +436,10 @@ function WeekRow({
                       type="button"
                       onClick={() => onOpenCreate(day.date)}
                       aria-label={t('addSession')}
-                      className="text-muted-foreground opacity-0 transition-opacity hover:text-signal group-hover:opacity-100"
+                      // Revealed on focus as well as hover: it is invisible at
+                      // rest, so without this a keyboard user tabs onto a
+                      // control they cannot see. The ✕ above already does this.
+                      className="text-muted-foreground opacity-0 transition-opacity hover:text-signal focus:opacity-100 focus-visible:text-signal group-hover:opacity-100"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>

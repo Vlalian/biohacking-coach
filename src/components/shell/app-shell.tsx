@@ -217,9 +217,14 @@ export function AppShell({
         )}
 
         {/* Navigation Drawer — overlaps content (~20% desktop, full-width slide-over on phone) */}
+        {/* `inert`, not `aria-hidden`: the closed drawer stays mounted and only
+            slides out of sight, so its buttons remain focusable — Tab would
+            walk into an invisible drawer. `aria-hidden` hides it from the
+            accessibility tree but does nothing about focus; `inert` removes it
+            from both, and supersedes aria-hidden rather than pairing with it. */}
         <nav
           aria-label={t.navLandmark}
-          aria-hidden={!navDrawerOpen}
+          inert={!navDrawerOpen}
           className={[
             'absolute inset-y-0 left-0 z-40 flex w-[86%] max-w-[300px] flex-col border-r border-border bg-sidebar transition-transform duration-200 ease-out sm:w-[20%] sm:min-w-[220px]',
             navDrawerOpen ? 'translate-x-0' : '-translate-x-full',

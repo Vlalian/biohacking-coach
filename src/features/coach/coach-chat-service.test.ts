@@ -35,7 +35,7 @@ vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
 }));
 
-const { sendCoachChatMessage, shouldOfferWeeklySession, toChatApiMessages } = await import(
+const { sendCoachChatMessage, toChatApiMessages } = await import(
   './coach-chat-service'
 );
 
@@ -134,6 +134,36 @@ describe('sendCoachChatMessage', () => {
     expect(appendMessages).not.toHaveBeenCalled();
   });
 
+  it('reports unsafe-content when prompt rendering refuses an identifier', async () => {
+    // A session note is free text and unvalidated, so an athlete who typed an
+    // email into one and then discussed that session hits the prompt builder's
+    // assertion. Told apart from coach-unavailable deliberately: "try again"
+    // is useless advice for content that will be refused identically.
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedSession.mockResolvedValue({
+      id: 'sess_1',
+      type: 'Endurance',
+      date: '2026-08-18',
+      duration: 90,
+      zone: 'Z2',
+      note: 'ride with me — mads@example.com',
+      status: 'planned',
+    });
+
+    const result = await sendCoachChatMessage(
+      ATHLETE,
+      'conv_1',
+      'about this one?',
+      '2026-08-12',
+      undefined,
+      'sess_1',
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'unsafe-content' });
+    expect(appendMessages).not.toHaveBeenCalled();
+    expect(callCoach).not.toHaveBeenCalled();
+  });
+
   it('does not mint a conversation when the Coach call rejects', async () => {
     callCoach.mockRejectedValue(new Error('upstream 529'));
 
@@ -219,46 +249,5 @@ describe('sendCoachChatMessage', () => {
 
     expect(result).toMatchObject({ ok: true });
     expect(callCoach.mock.calls[0][0].system).not.toContain('SESSION DISCUSSION');
-  });
-});
-
-describe('shouldOfferWeeklySession', () => {
-  const base = {
-    weeklySessionDay: 'Monday',
-    todayWeekday: 'Monday',
-    hasHeldWeeklySessionThisWeek: false,
-  };
-
-  it('offers on the preferred day when no Weekly Session has been held', () => {
-    expect(shouldOfferWeeklySession(base)).toBe(true);
-  });
-
-  it('stays silent on any other day', () => {
-    expect(shouldOfferWeeklySession({ ...base, todayWeekday: 'Wednesday' })).toBe(false);
-  });
-
-  it('stays silent once the athlete has held this week’s session', () => {
-    // The nudge is an offer to talk, not a reminder to talk again.
-    expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: true })).toBe(false);
-  });
-
-  it('still offers when a plan exists but no session was held', () => {
-    // The gate keys on the conversation, not the plan — otherwise automatic
-    // generation would silence its own offer (coach-overlay issue 04, decision
-    // 4). A drafted week is exactly the week worth discussing.
-    expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: false })).toBe(true);
-  });
-
-  it('never nudges an athlete who chose Flexible', () => {
-    // "Flexible" is a declared absence of a rhythm — ADR 0007 allows exactly one
-    // sanctioned nudge, and an athlete who named no day is not asking for it.
-    expect(
-      shouldOfferWeeklySession({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Flexible' }),
-    ).toBe(false);
-  });
-
-  it('never nudges when no day is stored at all', () => {
-    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: null })).toBe(false);
-    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: undefined })).toBe(false);
   });
 });

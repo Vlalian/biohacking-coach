@@ -154,6 +154,62 @@ export async function mergeAthleteProfile(
 }
 
 /**
+ * Adds one day to Fixed Constraints, atomically, and idempotently.
+ *
+ * {@link mergeAthleteProfile} is atomic about *replacing* a key, which is not
+ * enough here: the next array was being computed in JS from a previous read, so
+ * two edits in flight together — a double-tap, or two tabs — would each write a
+ * list missing the other's day. The whole array is derived inside the statement
+ * instead, from the row's own current value.
+ *
+ * Idempotent by construction (`@>` before appending), so a retried request adds
+ * the day once rather than twice.
+ */
+export async function addFixedConstraint(athleteId: string, day: string): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({
+      profile: sql`
+        COALESCE(${athlete.profile}, '{}'::jsonb) || jsonb_build_object(
+          'fixedConstraints',
+          CASE
+            WHEN COALESCE(${athlete.profile} -> 'fixedConstraints', '[]'::jsonb) @> to_jsonb(${day}::text)
+              THEN ${athlete.profile} -> 'fixedConstraints'
+            ELSE COALESCE(${athlete.profile} -> 'fixedConstraints', '[]'::jsonb) || to_jsonb(${day}::text)
+          END
+        )`,
+      updatedAt: new Date(),
+    })
+    .where(eq(athlete.id, athleteId));
+}
+
+/** Removes one day from Fixed Constraints, atomically. Same reasoning as
+ *  {@link addFixedConstraint}: the surviving array is derived in the statement,
+ *  never from a value this process read a moment earlier. */
+export async function removeFixedConstraint(athleteId: string, day: string): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({
+      profile: sql`
+        COALESCE(${athlete.profile}, '{}'::jsonb) || jsonb_build_object(
+          'fixedConstraints',
+          COALESCE(
+            (
+              SELECT jsonb_agg(value)
+              FROM jsonb_array_elements(
+                COALESCE(${athlete.profile} -> 'fixedConstraints', '[]'::jsonb)
+              ) AS value
+              WHERE value <> to_jsonb(${day}::text)
+            ),
+            '[]'::jsonb
+          )
+        )`,
+      updatedAt: new Date(),
+    })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The completion write for MCQ onboarding: the profile columns a finished
  * questionnaire produces — phase, experience, communication style, race target —
  * together with the final `profile` JSONB merge, in ONE update statement.

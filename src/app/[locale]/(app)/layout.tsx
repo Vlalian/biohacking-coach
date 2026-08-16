@@ -14,7 +14,7 @@ import {
   hasHeldWeeklySessionInWeek,
 } from '@/features/coach/conversation-repository';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
-import { shouldOfferWeeklySession } from '@/features/coach/coach-chat-service';
+import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
@@ -66,7 +66,7 @@ export default async function AppShellLayout({
   // read-only: opening the overlay must never mint a conversation or call the
   // API, so a chat is created lazily on the athlete's first message.
   let chatInitial: CoachChatInitial | null = null;
-  let offerWeeklySession = false;
+  let weeklyOffer: WeeklyOfferInput | null = null;
 
   if (athlete) {
     const today = dateKey(new Date());
@@ -115,13 +115,15 @@ export default async function AppShellLayout({
       };
     }
 
-    // The single sanctioned proactive nudge (ADR 0007). Weekday is resolved
-    // here, server-side, in the same en-US names the Athlete Profile stores.
-    offerWeeklySession = shouldOfferWeeklySession({
-      weeklySessionDay: athlete.profile?.weeklySessionDay,
-      todayWeekday: new Date(`${today}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
+    // The single sanctioned proactive nudge (ADR 0007) — the server supplies the
+    // half it knows and stops there. Which weekday it is *for the athlete* is
+    // decided in the browser: the profile stores no timezone, so resolving the
+    // day here would read the server's clock, and a nudge decided at 23:30 in
+    // Copenhagen would be answering for a UTC date that already rolled over.
+    weeklyOffer = {
+      weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
       hasHeldWeeklySessionThisWeek: heldWeeklySession,
-    });
+    };
   }
 
   return (
@@ -134,7 +136,7 @@ export default async function AppShellLayout({
           weeklyInitial={weeklyInitial}
           athleteFirstName={firstName}
           raceTarget={athlete?.raceTarget}
-          offerWeeklySession={offerWeeklySession}
+          weeklyOffer={weeklyOffer}
         />
       }
     >

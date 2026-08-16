@@ -4,7 +4,9 @@ import { hasLocale } from 'next-intl';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import {
+  addFixedConstraint,
   mergeAthleteProfile,
+  removeFixedConstraint,
   updateCommunicationStyle,
   updateRaceTarget,
 } from '@/features/athlete/athlete-repository';
@@ -103,10 +105,12 @@ export async function updateWeeklySessionDayAction(
 }
 
 /**
- * Adds one recurring no-train day to Fixed Constraints. Reads the athlete's
- * current list first — the JSONB merge replaces the whole `fixedConstraints`
- * array (`profileMergedWith`), so the next value is computed here, not
- * appended in the database.
+ * Adds one recurring no-train day to Fixed Constraints.
+ *
+ * The next array is derived inside the UPDATE ({@link addFixedConstraint}), not
+ * computed here from a value read a moment ago: two edits in flight together
+ * would otherwise each write a list missing the other's day. The repository
+ * function is idempotent, so the "already there" case needs no check here.
  */
 export async function addFixedConstraintAction(
   day: string,
@@ -116,24 +120,18 @@ export async function addFixedConstraintAction(
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  const current = athlete.profile?.fixedConstraints ?? [];
-  if (current.includes(day)) return { ok: true };
-
-  await mergeAthleteProfile(athlete.id, { fixedConstraints: [...current, day] });
+  await addFixedConstraint(athlete.id, day);
   return { ok: true };
 }
 
-/** Removes one day from Fixed Constraints. */
+/** Removes one day from Fixed Constraints — same atomicity reasoning as adding. */
 export async function removeFixedConstraintAction(
   day: string,
 ): Promise<SettingsActionResult> {
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  const current = athlete.profile?.fixedConstraints ?? [];
-  await mergeAthleteProfile(athlete.id, {
-    fixedConstraints: current.filter((d) => d !== day),
-  });
+  await removeFixedConstraint(athlete.id, day);
   return { ok: true };
 }
 

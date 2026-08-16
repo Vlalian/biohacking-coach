@@ -4,6 +4,8 @@ const {
   getSession,
   getAthleteByUserId,
   mergeAthleteProfile,
+  addFixedConstraint,
+  removeFixedConstraint,
   updateCommunicationStyle,
   updateLinkVisibility,
   severLinkForAthlete,
@@ -12,6 +14,8 @@ const {
   getSession: vi.fn(),
   getAthleteByUserId: vi.fn(),
   mergeAthleteProfile: vi.fn(() => Promise.resolve()),
+  addFixedConstraint: vi.fn(() => Promise.resolve()),
+  removeFixedConstraint: vi.fn(() => Promise.resolve()),
   updateCommunicationStyle: vi.fn(() => Promise.resolve()),
   updateLinkVisibility: vi.fn(() => Promise.resolve()),
   severLinkForAthlete: vi.fn(() => Promise.resolve()),
@@ -23,6 +27,8 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({
   getAthleteByUserId,
   mergeAthleteProfile,
+  addFixedConstraint,
+  removeFixedConstraint,
   updateCommunicationStyle,
 }));
 vi.mock('@/features/coach/coach-repository', () => ({
@@ -105,53 +111,67 @@ describe('updateWeeklySessionDayAction', () => {
   });
 });
 
+// The next list is derived inside the UPDATE, not computed here from a value
+// read a moment earlier — two edits in flight together would each write a list
+// missing the other's day. So the action's job is the closed-set check and the
+// athlete scope; what the array becomes is the repository's (and Postgres').
 describe('addFixedConstraintAction', () => {
-  it('appends a day to an empty list', async () => {
+  it('delegates the append, scoped to the acting athlete', async () => {
     const result = await addFixedConstraintAction('Monday');
     expect(result).toEqual({ ok: true });
-    expect(mergeAthleteProfile).toHaveBeenCalledWith('athlete_1', {
-      fixedConstraints: ['Monday'],
-    });
+    expect(addFixedConstraint).toHaveBeenCalledWith('athlete_1', 'Monday');
   });
 
-  it('appends onto an existing list without duplicating', async () => {
+  it('does not read the current list to decide the next one', async () => {
+    // The old shape read the profile, appended in JS and wrote the whole array.
+    // Asserting the absence keeps that race from creeping back in.
     getAthleteByUserId.mockResolvedValue(
       athlete({ profile: { fixedConstraints: ['Monday'] } }),
     );
 
     await addFixedConstraintAction('Thursday');
-    expect(mergeAthleteProfile).toHaveBeenCalledWith('athlete_1', {
-      fixedConstraints: ['Monday', 'Thursday'],
-    });
 
-    vi.clearAllMocks();
-    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    expect(addFixedConstraint).toHaveBeenCalledWith('athlete_1', 'Thursday');
+    expect(mergeAthleteProfile).not.toHaveBeenCalled();
+  });
+
+  it('leaves the duplicate case to the idempotent write, not a pre-check', async () => {
     getAthleteByUserId.mockResolvedValue(
       athlete({ profile: { fixedConstraints: ['Monday'] } }),
     );
+
     const result = await addFixedConstraintAction('Monday');
+
     expect(result).toEqual({ ok: true });
-    expect(mergeAthleteProfile).not.toHaveBeenCalled();
+    expect(addFixedConstraint).toHaveBeenCalledWith('athlete_1', 'Monday');
   });
 
   it('rejects anything outside the weekday set — including "Flexible"', async () => {
     const result = await addFixedConstraintAction('Flexible');
     expect(result).toEqual({ ok: false, reason: 'invalid' });
-    expect(mergeAthleteProfile).not.toHaveBeenCalled();
+    expect(addFixedConstraint).not.toHaveBeenCalled();
   });
 });
 
 describe('removeFixedConstraintAction', () => {
-  it('drops the day from the stored list', async () => {
+  it('delegates the removal, scoped to the acting athlete', async () => {
     getAthleteByUserId.mockResolvedValue(
       athlete({ profile: { fixedConstraints: ['Monday', 'Thursday'] } }),
     );
 
     const result = await removeFixedConstraintAction('Monday');
     expect(result).toEqual({ ok: true });
-    expect(mergeAthleteProfile).toHaveBeenCalledWith('athlete_1', {
-      fixedConstraints: ['Thursday'],
-    });
+    expect(removeFixedConstraint).toHaveBeenCalledWith('athlete_1', 'Monday');
+    expect(mergeAthleteProfile).not.toHaveBeenCalled();
+  });
+
+  it('refuses when nobody is signed in', async () => {
+    getSession.mockResolvedValue(null);
+
+    const result = await removeFixedConstraintAction('Monday');
+
+    expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(removeFixedConstraint).not.toHaveBeenCalled();
   });
 });
 

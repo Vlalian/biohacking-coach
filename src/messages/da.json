@@ -437,7 +437,8 @@
     "clearReference": "Fjern denne session fra samtalen",
     "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
     "consentRequiredLink": "Åbn Privatliv & samtykke",
-    "error": "Beskeden blev ikke sendt. Prøv igen."
+    "error": "Beskeden blev ikke sendt. Prøv igen.",
+    "unsafeContent": "En note eller et udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
   },
   "WeeklySession": {
     "title": "Ugentlig session",

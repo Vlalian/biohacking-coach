@@ -8,7 +8,6 @@ const {
   getMessages,
   getPendingProposal,
   hasHeldWeeklySessionInWeek,
-  shouldOfferWeeklySession,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -24,7 +23,6 @@ const {
   getMessages: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getPendingProposal: vi.fn(() => Promise.resolve(null)),
   hasHeldWeeklySessionInWeek: vi.fn(() => Promise.resolve(false)),
-  shouldOfferWeeklySession: vi.fn(() => false),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -40,7 +38,6 @@ vi.mock('@/features/coach/conversation-repository', () => ({
   hasHeldWeeklySessionInWeek,
 }));
 vi.mock('@/features/coach/plan-proposal-repository', () => ({ getPendingProposal }));
-vi.mock('@/features/coach/coach-chat-service', () => ({ shouldOfferWeeklySession }));
 // Client components pulling in browser deps; the layout's own wiring is under
 // test here, not their rendering.
 vi.mock('@/components/shell/shell-chrome', () => ({ ShellChrome: () => null }));
@@ -65,7 +62,6 @@ describe('AppShellLayout', () => {
     getMessages.mockReset();
     getMessages.mockResolvedValue([]);
     hasHeldWeeklySessionInWeek.mockClear();
-    shouldOfferWeeklySession.mockClear();
   });
 
   it('redirects a signed-out visitor to sign-in instead of rendering the shell', async () => {
@@ -119,24 +115,27 @@ describe('AppShellLayout', () => {
     expect(getMessages).toHaveBeenCalledWith('chat_1');
   });
 
-  it('decides the weekly offer from the stored Weekly Session Day', async () => {
-    // ADR 0007's single sanctioned nudge. The layout must pass the athlete's own
-    // stored day, not assume one — an athlete who never chose a day is never
-    // nudged, and that decision is the service's to make from real inputs.
+  it('hands the nudge inputs down without deciding the day itself', async () => {
+    // ADR 0007's single sanctioned nudge, split deliberately: the server answers
+    // what it knows (the stored day, whether a session was held) and stops. The
+    // weekday is resolved in the browser, because the profile stores no timezone
+    // — deciding it here would read the server's clock and nudge on the wrong
+    // local day near midnight. So the layout must pass inputs, not a verdict.
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({
       id: 'athlete_1',
       syntheticLabel: null,
       profile: { weeklySessionDay: 'Monday' },
     });
-    await render();
+    const element = await render();
 
     expect(hasHeldWeeklySessionInWeek).toHaveBeenCalledWith('athlete_1', expect.any(String));
-    expect(shouldOfferWeeklySession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        weeklySessionDay: 'Monday',
-        hasHeldWeeklySessionThisWeek: false,
-      }),
-    );
+
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    const coachContent = props.coachContent as { props: Record<string, unknown> };
+    expect(coachContent.props.weeklyOffer).toEqual({
+      weeklySessionDay: 'Monday',
+      hasHeldWeeklySessionThisWeek: false,
+    });
   });
 });

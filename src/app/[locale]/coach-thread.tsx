@@ -1,9 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import { CalendarDays } from 'lucide-react';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
+import {
+  localWeekday,
+  shouldOfferWeeklySession,
+  type WeeklyOfferInput,
+} from '@/features/coach/weekly-offer';
 import { CoachChat, type CoachChatInitial } from './coach-chat';
 import { WeeklySession, type WeeklySessionInitial } from './weekly-session';
 
@@ -29,18 +34,40 @@ export function CoachThread({
   weeklyInitial,
   athleteFirstName,
   raceTarget,
-  offerWeeklySession = false,
+  weeklyOffer = null,
 }: {
   chatInitial: CoachChatInitial | null;
   weeklyInitial: WeeklySessionInitial | null;
   /** Header only — never sent anywhere (ADR 0006). */
   athleteFirstName?: string;
   raceTarget?: string | null;
-  /** True only on the athlete's Weekly Session Day with the week still unplanned. */
-  offerWeeklySession?: boolean;
+  /** The server's half of the nudge decision: the athlete's stored day, and
+   *  whether they have already held this week's session. Which weekday it
+   *  actually is gets decided here, in the athlete's own timezone. */
+  weeklyOffer?: WeeklyOfferInput | null;
 }) {
   const t = useTranslations('CoachThread');
   const { reference, weeklyOfferDismissed, dismissWeeklyOffer } = useCoachOverlay();
+
+  // Decided on the client only. The server and the browser can disagree about
+  // what day it is — no timezone is stored on the profile — so answering this
+  // server-side would nudge on the wrong local day near midnight *and* mismatch
+  // on hydration. `false` is the server snapshot, so the first paint matches and
+  // the offer appears a beat later: right for an offer, wrong for a gate.
+  // Same mounted-detection shape `settings-view.tsx` uses for its theme tiles.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  const offerWeeklySession =
+    mounted && weeklyOffer
+      ? shouldOfferWeeklySession({
+          weeklySessionDay: weeklyOffer.weeklySessionDay,
+          todayWeekday: localWeekday(new Date()),
+          hasHeldWeeklySessionThisWeek: weeklyOffer.hasHeldWeeklySessionThisWeek,
+        })
+      : false;
 
   // Mode on mount. The Reference wins over a restored Weekly Session: the
   // overlay is unmounted while closed, so "Discuss with Coach" *mounts* this
@@ -107,7 +134,13 @@ export function CoachThread({
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setMode('weekly')}
+              onClick={() => {
+                // Accepting answers the offer as surely as dismissing it does.
+                // Without this the banner is still pending, so returning to
+                // chat re-offers a session the athlete is already in.
+                dismissWeeklyOffer();
+                setMode('weekly');
+              }}
               className="bg-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal-foreground transition-opacity hover:opacity-90"
             >
               {t('offerAccept')}

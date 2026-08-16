@@ -529,11 +529,14 @@ function Banner({
   icon: typeof AlertTriangle;
   children: React.ReactNode;
 }) {
+  // `warn` used to render exactly like `signal`, so the one notice meant to
+  // give the athlete pause — a plan that went stale — looked identical to an
+  // informational one. Three tones, three colours.
   const toneClass =
     tone === 'signal'
       ? 'border-signal text-signal'
       : tone === 'warn'
-        ? 'border-signal text-signal'
+        ? 'border-warning text-warning'
         : 'border-destructive text-destructive';
   return (
     <div role={tone === 'signal' ? undefined : 'alert'} className={`flex items-start gap-2 border-l-2 ${toneClass} bg-panel px-3 py-2`}>

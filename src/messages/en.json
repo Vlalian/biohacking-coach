@@ -437,7 +437,8 @@
     "clearReference": "Remove this session from the conversation",
     "consentRequired": "Your Coach is paused until you agree to how your data is processed.",
     "consentRequiredLink": "Open Privacy & consent",
-    "error": "That didn't send. Try again."
+    "error": "That didn't send. Try again.",
+    "unsafeContent": "A note or a piece of gear you have saved contains what looks like an email address or phone number. Your Coach cannot read that. Edit it out and try again."
   },
   "WeeklySession": {
     "title": "Weekly Session",

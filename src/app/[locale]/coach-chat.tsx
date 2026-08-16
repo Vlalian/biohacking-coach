@@ -28,7 +28,11 @@ export interface CoachChatInitial {
   messages: UiMessage[];
 }
 
-type Notice = { kind: 'none' } | { kind: 'error' } | { kind: 'consentRequired' };
+type Notice =
+  | { kind: 'none' }
+  | { kind: 'error' }
+  | { kind: 'consentRequired' }
+  | { kind: 'unsafeContent' };
 
 export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   const t = useTranslations('CoachChat');
@@ -67,7 +71,11 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
 
       if (!result.ok) {
         setNotice(
-          result.reason === 'consent-required' ? { kind: 'consentRequired' } : { kind: 'error' },
+          result.reason === 'consent-required'
+            ? { kind: 'consentRequired' }
+            : result.reason === 'unsafe-content'
+              ? { kind: 'unsafeContent' }
+              : { kind: 'error' },
         );
         // Hand the message back so a failure never eats what they typed.
         setDraft(content);
@@ -118,7 +126,10 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
       </div>
 
       {notice.kind !== 'none' && (
-        <div className="shrink-0 px-4 pt-2">
+        // role="alert" so the failure is announced: the notice appears far from
+        // the composer the athlete is looking at, and a screen-reader user
+        // otherwise gets no signal that their message did not send.
+        <div className="shrink-0 px-4 pt-2" role="alert">
           <div className="flex items-start gap-2 border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-foreground">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
             <span>
@@ -129,6 +140,8 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
                     {t('consentRequiredLink')}
                   </Link>
                 </>
+              ) : notice.kind === 'unsafeContent' ? (
+                t('unsafeContent')
               ) : (
                 t('error')
               )}

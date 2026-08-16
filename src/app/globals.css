@@ -22,6 +22,7 @@
   --color-panel: var(--panel);
   --color-rule: var(--rule);
   --color-signal: var(--signal);
+  --color-warning: var(--warning);
   --color-signal-foreground: var(--signal-foreground);
   --color-accent-signal: var(--accent-signal);
   --color-session-endurance: var(--session-endurance);
@@ -109,6 +110,10 @@
   --sidebar-border: oklch(0.16 0.01 60 / 10%);
   --sidebar-ring: oklch(0.62 0.19 35);
   --signal: oklch(0.55 0.22 25);
+  /* Warnings must not read as the signal red: a caution is not an error and not
+     an informational accent. Amber, distinct from both, and from the session
+     colours it sits near. */
+  --warning: oklch(0.62 0.16 65);
   --signal-foreground: oklch(0.99 0.005 85);
   --session-endurance: oklch(0.55 0.14 245);
   --session-intensity: oklch(0.55 0.22 25);
@@ -154,6 +159,7 @@
   --sidebar-border: oklch(1 0 0 / 9%);
   --sidebar-ring: oklch(0.72 0.17 40);
   --signal: oklch(0.68 0.24 25);
+  --warning: oklch(0.78 0.15 75);
   --signal-foreground: oklch(0.14 0.008 60);
   --session-endurance: oklch(0.68 0.15 245);
   --session-intensity: oklch(0.68 0.24 25);
