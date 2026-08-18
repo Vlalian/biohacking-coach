@@ -9,7 +9,7 @@ import {
 } from './prompt-blocks';
 import { reflectionScoreToTen } from './weekly-session';
 import type { CoachMessage } from './coach-client';
-import type { Message } from './conversation';
+import { toApiMessages, type Message } from './conversation';
 
 /**
  * The Coach Briefing's pure orchestration and prompt rendering — the AI briefing
@@ -257,11 +257,5 @@ export function renderBriefingPrompt(ctx: BriefingContext): string {
  * device, never persisted. The Head Coach's turns are the user turns.
  */
 export function toBriefingApiMessages(transcript: Message[]): CoachMessage[] {
-  return [
-    { role: 'user', content: BRIEFING_OPENER },
-    ...transcript.map((m): CoachMessage => ({
-      role: m.role === 'coach_ai' ? 'assistant' : 'user',
-      content: m.content,
-    })),
-  ];
+  return toApiMessages(transcript, BRIEFING_OPENER);
 }

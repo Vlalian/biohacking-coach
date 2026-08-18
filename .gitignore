@@ -48,3 +48,7 @@ coverage/
 /skills-lock.json
 /.fallowrc.json
 /lovable/
+
+# Coach reply captures from `npm run coach:say` — local reading material,
+# real API output, never committed.
+.coach-say/

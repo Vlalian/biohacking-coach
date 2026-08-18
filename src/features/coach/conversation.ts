@@ -1,4 +1,5 @@
 import type { ConversationRow, MessageRow } from '@/db/schema';
+import type { CoachMessage } from './coach-client';
 
 /**
  * The four kinds of Coach conversation (the schema check constraint mirrors this).
@@ -110,4 +111,34 @@ export function coachOwnedOrNull(
   if (conversation.kind !== 'coach_briefing') return null;
   if (conversation.coachId !== coachId) return null;
   return conversation;
+}
+
+/**
+ * A stored transcript, as the Anthropic API wants to see it.
+ *
+ * Every Coach conversation needs this and the mapping itself is the same in all
+ * of them: the Coach's turns are the assistant's, everyone else's are the user's.
+ * What differs is only whether a conversation opens with a **primer** — a fixed
+ * first user turn that exists so the Coach has something to answer.
+ *
+ * The Weekly Session and the Coach Briefing both need one, because in those the
+ * Coach speaks first and the API will not accept a history that opens with an
+ * assistant turn. Coach Chat must NOT have one: there the athlete speaks first,
+ * so a primer would fabricate a turn they never took.
+ *
+ * That difference is a value, so it is a parameter. Everything else is shared,
+ * so it is written once. The primer is a prompt device and is never persisted —
+ * it exists only for the length of one API call.
+ */
+export function toApiMessages(
+  transcript: Message[],
+  primer?: string,
+): CoachMessage[] {
+  const turns = transcript.map(
+    (m): CoachMessage => ({
+      role: m.role === 'coach_ai' ? 'assistant' : 'user',
+      content: m.content,
+    }),
+  );
+  return primer ? [{ role: 'user', content: primer }, ...turns] : turns;
 }
