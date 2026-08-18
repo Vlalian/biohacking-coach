@@ -1,9 +1,7 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { resolveAthleteId } from './current-actor';
 import {
   importGarminSessions,
   type ImportResult,
@@ -29,15 +27,12 @@ export async function uploadGarminAction(
     return { ok: false, reason: 'empty' };
   }
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
-
-  const athlete = await getAthleteByUserId(session.user.id);
-  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const result = await importGarminSessions({
-    athleteId: athlete.id,
+    athleteId,
     filename: file.name,
     buffer,
   });

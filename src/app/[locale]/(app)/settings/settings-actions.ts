@@ -1,8 +1,6 @@
 'use server';
 
 import { hasLocale } from 'next-intl';
-import { headers } from 'next/headers';
-import { auth } from '@/lib/auth';
 import {
   addFixedConstraint,
   mergeAthleteProfile,
@@ -10,7 +8,7 @@ import {
   updateCommunicationStyle,
   updateRaceTarget,
 } from '@/features/athlete/athlete-repository';
-import { resolveAthlete } from '../../current-athlete';
+import { resolveAthlete, resolveUserId } from '../../current-actor';
 import {
   severLinkForAthlete,
   updateLinkVisibility,
@@ -148,10 +146,10 @@ export async function updateLanguageAction(
     return { ok: false, reason: 'invalid' };
   }
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
+  const userId = await resolveUserId();
+  if (!userId) return { ok: false, reason: 'not-authenticated' };
 
-  await setUiLanguage(session.user.id, language);
+  await setUiLanguage(userId, language);
   return { ok: true };
 }
 

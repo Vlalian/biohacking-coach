@@ -2,7 +2,7 @@
 
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { dateKey } from '@/lib/date';
-import { resolveAthleteWithLanguage, type AuthFailure } from './current-athlete';
+import { resolveAthleteWithLanguage, type AuthFailure } from './current-actor';
 import {
   sendCoachChatMessage,
   type SendChatResult,

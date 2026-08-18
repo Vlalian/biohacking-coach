@@ -1,9 +1,7 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { resolveAthleteId } from './current-actor';
 import { moveSession, type MoveResult } from '@/features/session/session-move';
 import { dateKey, isValidDateKey } from '@/lib/date';
 
@@ -24,15 +22,12 @@ export async function moveSessionAction(
   // real 'YYYY-MM-DD' before it reaches the rules or the database.
   if (!isValidDateKey(targetDate)) return { ok: false, reason: 'bounce' };
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
-
-  const athlete = await getAthleteByUserId(session.user.id);
-  // Signed in but no athlete row to act as — not a valid actor for a move.
-  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+  // Signed in but no athlete row to act as is not a valid actor for a move.
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const result = await moveSession({
-    athleteId: athlete.id,
+    athleteId,
     sessionId,
     targetDate,
     today: dateKey(new Date()),

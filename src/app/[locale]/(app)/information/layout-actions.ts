@@ -1,8 +1,6 @@
 'use server';
 
-import { headers } from 'next/headers';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { resolveAthleteId } from '../../current-actor';
 import { saveLayout, type SaveLayoutResult } from '@/features/information-view/save-layout';
 
 export type SaveLayoutActionResult =
@@ -21,11 +19,8 @@ export async function saveLayoutAction(
   favorites: string[],
   range: string,
 ): Promise<SaveLayoutActionResult> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  const athlete = await getAthleteByUserId(session.user.id);
-  if (!athlete) return { ok: false, reason: 'not-authenticated' };
-
-  return saveLayout(athlete.id, favorites, range);
+  return saveLayout(athleteId, favorites, range);
 }

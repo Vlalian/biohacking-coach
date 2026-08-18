@@ -1,8 +1,6 @@
 'use server';
 
-import { headers } from 'next/headers';
-import { auth } from '@/lib/auth';
-import { getCoachByUserId } from '@/features/coach/coach-repository';
+import { resolveCoachId } from '../../../current-actor';
 import { saveCoachLayout } from '@/features/coach/save-coach-layout';
 import type { SaveLayoutResult } from '@/features/information-view/save-layout';
 
@@ -21,11 +19,8 @@ export async function saveCoachLayoutAction(
   favorites: string[],
   range: string,
 ): Promise<SaveCoachLayoutActionResult> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
+  const coachId = await resolveCoachId();
+  if (!coachId) return { ok: false, reason: 'not-a-coach' };
 
-  const coach = await getCoachByUserId(session.user.id);
-  if (!coach) return { ok: false, reason: 'not-a-coach' };
-
-  return saveCoachLayout(coach.id, favorites, range);
+  return saveCoachLayout(coachId, favorites, range);
 }
