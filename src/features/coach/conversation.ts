@@ -1,11 +1,21 @@
 import type { ConversationRow, MessageRow } from '@/db/schema';
 
-/** The six kinds of Coach conversation (schema check constraint mirrors this). */
+/**
+ * The four kinds of Coach conversation (the schema check constraint mirrors this).
+ *
+ * Was six. `negotiation` and `reflection` were removed 2026-08-18: neither was
+ * ever written by any code path. Session Negotiation is not a conversation kind
+ * — it is a *behavior* inside Coach Chat, carrying the Session as a Reference
+ * (CONTEXT.md, decided 2026-08-12); giving it a kind of its own would recreate
+ * one of the six talk-to-the-Coach surfaces ADR-0007 retired. A Session
+ * Reflection is two RPE ratings and an optional comment stored against the
+ * session — not a transcript, so not a conversation.
+ *
+ * `onboarding` stays: it is live, written by `onboarding-service`.
+ */
 export type ConversationKind =
   | 'weekly_session'
   | 'coach_chat'
-  | 'negotiation'
-  | 'reflection'
   | 'onboarding'
   | 'coach_briefing';
 

@@ -1,6 +1,12 @@
 import type { Onboarding } from './check-in';
 import { assertNoDirectIdentifier } from './check-in';
-import { buildOnboardingLines, languageDirective } from './prompts';
+import {
+  assemble,
+  block,
+  buildOnboardingLines,
+  languageDirective,
+  type PromptBlock,
+} from './prompt-blocks';
 import { reflectionScoreToTen } from './weekly-session';
 import type { CoachMessage } from './coach-client';
 import type { Message } from './conversation';
@@ -166,60 +172,82 @@ function profileLines(p: BriefingProfile): string[] {
   return lines;
 }
 
-/** Serialises a BriefingContext into the coach-facing system prompt. Pure. */
-export function renderBriefingPrompt(ctx: BriefingContext): string {
-  const { today, language, plan, reports, transcripts } = ctx;
+/**
+ * The plan is always visible: the calendar carries no Link Visibility flag, so a
+ * Head Coach can always see it (ADR 0003).
+ */
+function planBlock(plan: BriefingPlanEntry[]): string {
+  if (plan.length === 0) return "PLAN: No sessions on this athlete's calendar yet.";
+  return `PLAN (always visible — the calendar and its sessions):\n${plan.map(planLine).join('\n')}`;
+}
 
-  const planBlock =
-    plan.length > 0
-      ? `PLAN (always visible — the calendar and its sessions):\n${plan.map(planLine).join('\n')}`
-      : 'PLAN: No sessions on this athlete\'s calendar yet.';
+/**
+ * The athlete's self-reported material, or the sentence that says it is withheld.
+ *
+ * `reports` is null when `shareAthleteReports` is off — and the service never
+ * fetched it, so this is not "fetched then hidden". The withheld branch tells the
+ * Coach plainly what it does not have, which is what stops it speculating.
+ */
+function reportsBlocks(reports: BriefingReports | null): PromptBlock[] {
+  if (!reports) {
+    return [
+      "SELF-REPORTED DATA: withheld. This athlete has not shared their reflections, check-ins, or profile stats with the coach. You have the plan only. Do not speculate about how they felt or their private stats — say plainly you don't have it if asked.",
+    ];
+  }
+  const profile = profileLines(reports.profile);
+  return [
+    block(
+      'PROFILE (self-reported):',
+      profile.map((l) => `- ${l}`),
+    ),
+    reports.reflections.length > 0
+      ? `SESSION REFLECTIONS (Body/Mind the athlete reported):\n${reports.reflections
+          .map(reflectionLine)
+          .join('\n')}`
+      : 'SESSION REFLECTIONS: none rated yet.',
+  ];
+}
 
-  const reportsBlock = reports
-    ? (() => {
-        const profile = profileLines(reports.profile);
-        const profileText =
-          profile.length > 0
-            ? `PROFILE (self-reported):\n${profile.map((l) => `- ${l}`).join('\n')}`
-            : '';
-        const reflectionsText =
-          reports.reflections.length > 0
-            ? `SESSION REFLECTIONS (Body/Mind the athlete reported):\n${reports.reflections
-                .map(reflectionLine)
-                .join('\n')}`
-            : 'SESSION REFLECTIONS: none rated yet.';
-        return [profileText, reflectionsText].filter(Boolean).join('\n\n');
-      })()
-    : `SELF-REPORTED DATA: withheld. This athlete has not shared their reflections, check-ins, or profile stats with the coach. You have the plan only. Do not speculate about how they felt or their private stats — say plainly you don't have it if asked.`;
+/** The shared transcripts, or the sentence that says they are not shared. */
+function transcriptsBlock(transcripts: BriefingTranscript[] | null): string {
+  if (!transcripts) {
+    return 'ATHLETE CONVERSATIONS: withheld. The athlete has not shared their private Coach Chat and Weekly Session transcripts. Do not quote or paraphrase them.';
+  }
+  if (transcripts.length === 0) return 'ATHLETE CONVERSATIONS: shared, but none yet.';
+  return `ATHLETE CONVERSATIONS (shared by the athlete):\n${transcripts
+    .map(
+      (t) =>
+        `[${t.kind === 'coach_chat' ? 'Coach Chat' : 'Weekly Session'}]\n${t.lines.join('\n')}`,
+    )
+    .join('\n\n')}`;
+}
 
-  const transcriptsBlock = transcripts
-    ? transcripts.length > 0
-      ? `ATHLETE CONVERSATIONS (shared by the athlete):\n${transcripts
-          .map(
-            (t) =>
-              `[${t.kind === 'coach_chat' ? 'Coach Chat' : 'Weekly Session'}]\n${t.lines.join('\n')}`,
-          )
-          .join('\n\n')}`
-      : 'ATHLETE CONVERSATIONS: shared, but none yet.'
-    : `ATHLETE CONVERSATIONS: withheld. The athlete has not shared their private Coach Chat and Weekly Session transcripts. Do not quote or paraphrase them.`;
-
-  return `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).
-
-You are talking TO the human coach, ABOUT their athlete. Report and analyse; never coach the athlete here and never address the athlete directly. Refer to the athlete in the third person; never use a real name.
+const BRIEFING_POSTURE = `You are talking TO the human coach, ABOUT their athlete. Report and analyse; never coach the athlete here and never address the athlete directly. Refer to the athlete in the third person; never use a real name.
 
 POSTURE: Confident, evidence-led, direct — a peer to the coach. State your read, back it with the material below, and invite the coach to interrogate it (patterns, a week summary, "how has their sleep trended?"). No markdown, no lists unless the coach asks for a breakdown. Concise.
 
 BOUNDARIES:
 - Draw ONLY on the material below. If the coach asks about something not here, say plainly you don't have it — never invent sessions, feelings, or numbers.
-- This is one athlete. You do not analyse the coach's other athletes or compare across a roster.
+- This is one athlete. You do not analyse the coach's other athletes or compare across a roster.`;
 
-TODAY: ${today}
+/**
+ * Serialises a BriefingContext into the coach-facing system prompt. Pure.
+ *
+ * Assembled from blocks, like the athlete-facing prompts — same helper, so the
+ * upward and downward halves of Hyper Intelligence cannot drift in how they are
+ * built even though what they say is deliberately different.
+ */
+export function renderBriefingPrompt(ctx: BriefingContext): string {
+  const { today, language, plan, reports, transcripts } = ctx;
 
-${planBlock}
-
-${reportsBlock}
-
-${transcriptsBlock}`;
+  return assemble([
+    `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
+    BRIEFING_POSTURE,
+    `TODAY: ${today}`,
+    planBlock(plan),
+    ...reportsBlocks(reports),
+    transcriptsBlock(transcripts),
+  ]);
 }
 
 /**
