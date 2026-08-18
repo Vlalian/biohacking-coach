@@ -3,11 +3,13 @@ import {
   buildWeeklyContext,
   renderWeeklyPrompt,
   buildChatPrompt,
+  formatWeekPlan,
   formatSkippedSessions,
   formatWeekActivity,
   formatWeekFeedback,
 } from './prompts';
 import type { CheckIn, Onboarding } from './check-in';
+import type { WeekPlanSession } from './week-plan';
 
 const BASE: CheckIn = {
   body: 7,
@@ -383,5 +385,121 @@ describe('no real identity reaches a prompt', () => {
     const chat = buildChatPrompt(BASE);
     expect(weekly).not.toContain('@');
     expect(chat).not.toContain('@');
+  });
+});
+
+// ── Coach Chat sees the Week Plan ────────────────────────────────────────────
+
+const planned = (over: Partial<WeekPlanSession> = {}): WeekPlanSession => ({
+  date: '2026-08-18',
+  sessionType: 'Intensity',
+  status: 'planned',
+  origin: 'coach',
+  durationMinutes: 60,
+  zone: '4',
+  note: null,
+  ...over,
+});
+
+describe('formatWeekPlan', () => {
+  it('renders day, date, type, status and authorship', () => {
+    const line = formatWeekPlan([planned()]);
+    expect(line).toContain('2026-08-18');
+    expect(line).toContain('Intensity');
+    expect(line).toContain('planned');
+    expect(line).toContain('you planned this');
+  });
+
+  it('names the Head Coach as the author of a Prescribed Session', () => {
+    expect(formatWeekPlan([planned({ origin: 'head_coach' })])).toContain('Head Coach');
+  });
+
+  it('is null for an empty week — a heading with nothing under it says nothing', () => {
+    expect(formatWeekPlan([])).toBeNull();
+    expect(formatWeekPlan(undefined)).toBeNull();
+  });
+
+  // CONTEXT.md, Week Activity: the qualifier exists only for same-type Doubles.
+  it('qualifies a same-type Double by position', () => {
+    const lines = formatWeekPlan([
+      planned({ sessionType: 'Endurance', position: 1 }),
+      planned({ sessionType: 'Endurance', position: 2 }),
+    ]);
+    expect(lines).toContain('1st Endurance');
+    expect(lines).toContain('2nd Endurance');
+  });
+
+  it('renders the tapped session short, deferring its detail to the Reference', () => {
+    const lines = formatWeekPlan([
+      planned({ isReference: true, note: 'threshold set, hold 4x8', durationMinutes: 75 }),
+    ]);
+    expect(lines).toContain('detail below');
+    expect(lines).not.toContain('threshold set');
+    expect(lines).not.toContain('75 min');
+    // Status and authorship still ride along — the week stays complete.
+    expect(lines).toContain('planned');
+  });
+});
+
+describe('the week block inside the Coach Chat prompt', () => {
+  it('renders the week with its heading', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned()]);
+    expect(prompt).toContain('THIS WEEK');
+    expect(prompt).toContain('Intensity');
+  });
+
+  it('renders no week block at all for an athlete with no sessions this week', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, []);
+    expect(prompt).not.toContain('THIS WEEK');
+  });
+
+  // ADR 0003 / CONTEXT.md, Prescribed Session: the AI explains and holds on a
+  // Head-Coach-authored session. Without this the Coach offers changes it is
+  // forbidden to make and the athlete meets a refusal instead of coaching.
+  it('carries the authority rule when the week holds a Prescribed Session', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [
+      planned({ origin: 'head_coach' }),
+    ]);
+    expect(prompt).toContain('AUTHORITY');
+    expect(prompt).toMatch(/never offer to change/i);
+  });
+
+  it('spends no prompt on the authority rule when no session is the Head Coach’s', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned({ origin: 'coach' })]);
+    expect(prompt).not.toContain('AUTHORITY');
+  });
+
+  // The tapped session is described once: the week lists it, the SESSION
+  // DISCUSSION block carries its parameters and note.
+  it('does not render a tapped Reference twice', () => {
+    const reference = {
+      type: 'Intensity',
+      dayLabel: '2026-08-18',
+      duration: '60 min',
+      zone: '4',
+      note: 'threshold set, hold 4x8',
+      status: 'planned',
+    };
+    const prompt = buildChatPrompt(BASE, '2026-08-17', reference, [
+      planned({ isReference: true, note: 'threshold set, hold 4x8' }),
+    ]);
+    expect(prompt.match(/threshold set/g)).toHaveLength(1);
+  });
+
+  it('carries no entity id', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned()]);
+    expect(prompt).not.toMatch(/sess_/);
+  });
+
+  // The week arrives as its own argument, so it bypasses the check-in
+  // assertion — the same hole the Reference had. Note: this catches a *shaped*
+  // identifier (email, phone). A bare name in a note is NOT caught here, by
+  // design — see `assertNoDirectIdentifier`.
+  it('refuses a week whose session note carries an email', () => {
+    expect(() =>
+      buildChatPrompt(BASE, '2026-08-17', null, [
+        planned({ note: 'ride with me, reach me at jane.realname@example.com' }),
+      ]),
+    ).toThrow(/identifier/i);
   });
 });

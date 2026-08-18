@@ -10,6 +10,8 @@ import {
   type PromptBlock,
 } from './prompt-blocks';
 import { assertNoDirectIdentifier } from './check-in';
+import type { SessionOrigin } from '@/features/session/session';
+import type { WeekPlanSession } from './week-plan';
 import type {
   CheckIn,
   SessionContext,
@@ -397,6 +399,7 @@ export function buildChatPrompt(
   checkIn: CheckIn,
   today: string = todayISO(),
   sessionContext: SessionContext | null = null,
+  weekPlan: WeekPlanSession[] = [],
 ): string {
   // Asserted here, at the prompt builder, because that is where AGENTS.md says
   // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
@@ -406,6 +409,10 @@ export function buildChatPrompt(
   // assembled a CheckIn itself.
   assertNoDirectIdentifier(checkIn);
   if (sessionContext) assertNoDirectIdentifier(sessionContext);
+  // The week arrives separately and carries athlete and Coach free text in its
+  // notes, so it is asserted here for the same reason the Reference is: at the
+  // prompt builder, not per caller.
+  assertNoDirectIdentifier(weekPlan);
 
   const {
     body,
@@ -443,6 +450,8 @@ export function buildChatPrompt(
     `CONTEXT (use silently — never cite scores/numbers):
 phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${race}${noTrain}`,
 
+    weekPlanBlock(weekPlan),
+
     equipmentBlock(buildEquipmentLines(equipment)),
 
     onboardingBlock(onboarding),
@@ -455,6 +464,79 @@ phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} 
 
     "PRIVACY: Never use athlete's name. Second person only. No PII reproduction.",
   ]);
+}
+
+/**
+ * How each authorship reads to the Coach.
+ *
+ * Plain second-person phrases rather than the stored `origin` values, because
+ * the model reasons about them: "you planned this" and "the athlete's Head Coach
+ * set this" are the difference between a Coach that reshapes its own session and
+ * one that explains and holds on someone else's (ADR 0003).
+ */
+const ORIGIN_LABEL: Record<SessionOrigin, string> = {
+  coach: 'you planned this',
+  head_coach: "the athlete's Head Coach set this",
+  athlete: 'the athlete added this themselves',
+  garmin: "logged from the athlete's watch",
+};
+
+/**
+ * The week's sessions as natural references — weekday + ISO date + type, with
+ * the position qualifier only for same-type Doubles. Never an entity id
+ * (CONTEXT.md, Week Activity).
+ *
+ * The session the athlete tapped renders short: its parameters and note belong
+ * to the SESSION DISCUSSION block below, so the one session the athlete is
+ * actually asking about is described once rather than twice.
+ */
+export function formatWeekPlan(weekPlan?: WeekPlanSession[]): string | null {
+  if (!weekPlan || weekPlan.length === 0) return null;
+  return weekPlan
+    .map((s) => {
+      const qualifier = s.position ? `${ordinal(s.position)} ` : '';
+      const head = `- ${weekdayShort(s.date)} ${s.date}: ${qualifier}${s.sessionType}`;
+      const authorship = ORIGIN_LABEL[s.origin];
+
+      if (s.isReference) {
+        return `${head} — ${s.status} (${authorship}) · this is the one they tapped, detail below`;
+      }
+
+      const params = [
+        s.durationMinutes ? `${s.durationMinutes} min` : null,
+        s.zone ? `Zone ${s.zone}` : null,
+      ].filter(Boolean);
+      const paramPart = params.length > 0 ? ` · ${params.join(' · ')}` : '';
+      const notePart = s.note ? ` · "${s.note}"` : '';
+      return `${head}${paramPart} — ${s.status} (${authorship})${notePart}`;
+    })
+    .join('\n');
+}
+
+/**
+ * The athlete's current week (Mon–Sun) in the Coach Chat prompt.
+ *
+ * The current week and not next week: the week is the planning unit — the same
+ * reasoning that retired the Cross-Week Move — and next week is the Weekly
+ * Session's to present, so a Coach discussing it here would preempt that
+ * conversation's Review phase.
+ *
+ * The authority paragraph rides with the sessions rather than sitting in the
+ * static posture text, because it is only meaningful next to the labels it
+ * refers to, and because a week with no Head-Coach session should not spend
+ * prompt on a rule that cannot apply.
+ */
+function weekPlanBlock(weekPlan: WeekPlanSession[]): PromptBlock {
+  const lines = formatWeekPlan(weekPlan);
+  if (!lines) return null;
+
+  const hasPrescribed = weekPlan.some((s) => s.origin === 'head_coach');
+  const authority = hasPrescribed
+    ? `\n\nAUTHORITY: The Head Coach's sessions are theirs, not yours. Explain and defend them — why they were set, why they are a good idea — as one team, one plan, one voice. Never offer to change or remove one; the Head Coach decides. For your own sessions, talk freely about alternatives.`
+    : '';
+
+  return `THIS WEEK (Mon-Sun, the athlete's current Week Plan — refer to a session by its day and type, never by a number or id):
+${lines}${authority}`;
 }
 
 /**
