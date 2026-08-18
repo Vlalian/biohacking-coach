@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useSave, useSaveStatus } from './use-save';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { Check, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-react';
@@ -191,8 +192,7 @@ function PreferencesSection({
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const { pending, error, run } = useSave();
   // next-themes cannot know the stored theme until it runs in the browser, so
   // the server renders no tile as active and the client renders one — a real
   // hydration mismatch (caught in the console while browser-testing). Gating on
@@ -210,20 +210,7 @@ function PreferencesSection({
 
   async function chooseLanguage(next: string) {
     if (next === language) return;
-    setPending(true);
-    setError(false);
-    try {
-      const result = await onUpdateLanguage(next);
-      if (!result.ok) {
-        setError(true);
-        return;
-      }
-      router.replace(pathname, { locale: next });
-    } catch {
-      setError(true);
-    } finally {
-      setPending(false);
-    }
+    if (await run(() => onUpdateLanguage(next))) router.replace(pathname, { locale: next });
   }
 
   return (
@@ -361,20 +348,10 @@ function RaceTargetField({
 }) {
   const t = useTranslations('Settings');
   const [draft, setDraft] = useState(value);
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const { status, reset, run } = useSaveStatus();
   const dirty = draft.trim() !== value.trim();
 
-  async function save() {
-    setStatus('saving');
-    try {
-      const result = await onSave(draft);
-      setStatus(result.ok ? 'saved' : 'error');
-    } catch {
-      // A rejected server action (network drop, redeploy) must still clear
-      // 'saving', or the button stays disabled until the athlete reloads.
-      setStatus('error');
-    }
-  }
+  const save = () => run(() => onSave(draft));
 
   return (
     <div>
@@ -388,7 +365,7 @@ function RaceTargetField({
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
-            setStatus('idle');
+            reset();
           }}
           placeholder={t('raceTargetPlaceholder')}
           maxLength={120}
@@ -417,20 +394,10 @@ function CommunicationStyleField({
 }) {
   const t = useTranslations('Settings');
   const [draft, setDraft] = useState(value);
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const { status, reset, run } = useSaveStatus();
   const dirty = draft.trim() !== value.trim();
 
-  async function save() {
-    setStatus('saving');
-    try {
-      const result = await onSave(draft);
-      setStatus(result.ok ? 'saved' : 'error');
-    } catch {
-      // A rejected server action (network drop, redeploy) must still clear
-      // 'saving', or the button stays disabled until the athlete reloads.
-      setStatus('error');
-    }
-  }
+  const save = () => run(() => onSave(draft));
 
   return (
     <div>
@@ -445,7 +412,7 @@ function CommunicationStyleField({
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
-            setStatus('idle');
+            reset();
           }}
           placeholder={t('communicationStylePlaceholder')}
           rows={3}
@@ -475,26 +442,12 @@ function WeeklySessionDayField({
 }) {
   const t = useTranslations('Settings');
   const [current, setCurrent] = useState(value);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const { pending, error, run } = useSave();
   const options = [...DAYS, 'Flexible'];
 
   async function choose(day: string) {
     if (day === current) return;
-    setPending(true);
-    setError(false);
-    try {
-      const result = await onSave(day);
-      if (!result.ok) {
-        setError(true);
-        return;
-      }
-      setCurrent(day);
-    } catch {
-      setError(true);
-    } finally {
-      setPending(false);
-    }
+    if (await run(() => onSave(day))) setCurrent(day);
   }
 
   return (
@@ -532,25 +485,12 @@ function FixedConstraintsField({
 }) {
   const t = useTranslations('Settings');
   const [current, setCurrent] = useState(value);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const { pending, error, run } = useSave();
 
   async function toggle(day: string) {
-    setPending(true);
-    setError(false);
     const isSet = current.includes(day);
-    try {
-      const result = isSet ? await onRemove(day) : await onAdd(day);
-      if (!result.ok) {
-        setError(true);
-        return;
-      }
-      setCurrent((prev) => (isSet ? prev.filter((d) => d !== day) : [...prev, day]));
-    } catch {
-      setError(true);
-    } finally {
-      setPending(false);
-    }
+    const ok = await run(() => (isSet ? onRemove(day) : onAdd(day)));
+    if (ok) setCurrent((prev) => (isSet ? prev.filter((d) => d !== day) : [...prev, day]));
   }
 
   return (
@@ -657,25 +597,11 @@ function VisibilityToggle({
 }) {
   const t = useTranslations('Settings');
   const [on, setOn] = useState(value);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const { pending, error, run } = useSave();
 
   async function flip() {
     const next = !on;
-    setPending(true);
-    setError(false);
-    try {
-      const result = await onSetLinkVisibility(section, next);
-      if (!result.ok) {
-        setError(true);
-        return;
-      }
-      setOn(next);
-    } catch {
-      setError(true);
-    } finally {
-      setPending(false);
-    }
+    if (await run(() => onSetLinkVisibility(section, next))) setOn(next);
   }
 
   return (
@@ -719,24 +645,10 @@ function SeverControl({
 }) {
   const t = useTranslations('Settings');
   const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const { pending, error, run } = useSave();
 
   async function confirmSever() {
-    setPending(true);
-    setError(false);
-    try {
-      const result = await onSeverCoachingLink();
-      if (!result.ok) {
-        setError(true);
-        return;
-      }
-      onSevered();
-    } catch {
-      setError(true);
-    } finally {
-      setPending(false);
-    }
+    if (await run(onSeverCoachingLink)) onSevered();
   }
 
   if (!confirming) {
