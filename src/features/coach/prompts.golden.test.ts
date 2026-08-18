@@ -12,7 +12,17 @@ import type { CheckIn, SessionContext } from './check-in';
  * restructuring of assembly must be a no-op on output — one changed newline is a
  * regression, not a tidy-up.
  *
- * Captured 2026-08-18, immediately before the block-composition refactor.
+ * Provenance, stated exactly: the snapshots were captured by running this file
+ * against the pre-refactor `prompts.ts`, but the file, its snapshots and the
+ * refactor all landed in ONE commit — so git alone does not prove the no-op, and
+ * this comment should not pretend otherwise. What was actually verified, and can
+ * be re-verified from history, is that every snapshot is identical to the
+ * pre-refactor output once whitespace runs are normalised: the only change is
+ * blank-line separation between sections, plus one dropped trailing newline.
+ * Two independent reviewers reproduced that by rendering `origin/main`'s
+ * `prompts.ts` beside this branch's.
+ *
+ * From here on the file does what it says: it pins output against future change.
  *
  * When a prompt is *deliberately* changed — new copy, a new block, retired
  * guidance — these snapshots are meant to be updated (`vitest -u`) and the diff
@@ -105,6 +115,38 @@ describe('golden — the Weekly Session prompt, per arc', () => {
       },
       TODAY,
     );
+    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+  });
+
+  // The PLANNING DAY line is suppressed on two different conditions, and a
+  // suppressed line is exactly the kind of thing a whitespace refactor breaks
+  // quietly — the block simply vanishes and nothing else looks wrong.
+  it('renders identically when today IS the preferred Weekly Session Day', () => {
+    // 2026-08-17 is a Monday, and BASE prefers Monday: no PLANNING DAY line.
+    const ctx = buildWeeklyContext(
+      { ...BASE, weeklySessionNumber: 4 },
+      [],
+      [],
+      [],
+      [],
+      null,
+      '2026-08-17',
+    );
+    expect(renderWeeklyPrompt(ctx)).not.toContain('PLANNING DAY');
+    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+  });
+
+  it('renders identically when the Weekly Session Day is Flexible', () => {
+    const ctx = buildWeeklyContext(
+      { ...BASE, weeklySessionNumber: 4, weeklySessionDay: 'Flexible' },
+      [],
+      [],
+      [],
+      [],
+      null,
+      TODAY,
+    );
+    expect(renderWeeklyPrompt(ctx)).not.toContain('PLANNING DAY');
     expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
   });
 

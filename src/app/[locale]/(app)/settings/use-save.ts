@@ -18,11 +18,34 @@ import { useState } from 'react';
  *     an `ok: false` result — otherwise the field stays disabled until the
  *     athlete reloads the page.
  *
- * Both live here now, once.
+ * Both live here now, once. Two hooks rather than one because the two output
+ * shapes are genuinely different and both are used: most fields only disable
+ * their controls while in flight, while the two free-text fields show an
+ * explicit saved/error status beside a Save button. They share {@link attempt},
+ * so the try/catch itself is written once.
  */
 
-/** What a Settings server action returns: ok, or a reason the UI shows as an error. */
+/**
+ * All these hooks need of a Settings server action: whether it succeeded. The
+ * actions return richer results, but no field of them is read here — a field
+ * that reached this far would be a reason to widen the type deliberately.
+ */
 type ActionResult = { ok: boolean };
+
+/**
+ * Run the action and say only whether it worked, turning both failure modes into
+ * the same `false`: a refusal (`ok: false`) and a rejected call (network drop,
+ * redeploy mid-click). Both hooks below share it, so neither can forget the
+ * second — which is the one that leaves a field disabled until the athlete
+ * reloads the page.
+ */
+async function attempt(action: () => Promise<ActionResult>): Promise<boolean> {
+  try {
+    return (await action()).ok;
+  } catch {
+    return false;
+  }
+}
 
 export interface SaveState {
   /** True while the action is in flight — fields disable their controls on it. */
@@ -44,19 +67,10 @@ export function useSave(): SaveState {
   async function run(action: () => Promise<ActionResult>): Promise<boolean> {
     setPending(true);
     setError(false);
-    try {
-      const result = await action();
-      if (!result.ok) {
-        setError(true);
-        return false;
-      }
-      return true;
-    } catch {
-      setError(true);
-      return false;
-    } finally {
-      setPending(false);
-    }
+    const ok = await attempt(action);
+    if (!ok) setError(true);
+    setPending(false);
+    return ok;
   }
 
   return { pending, error, run };
@@ -83,14 +97,7 @@ export function useSaveStatus(): SaveStatusState {
 
   async function run(action: () => Promise<ActionResult>): Promise<void> {
     setStatus('saving');
-    try {
-      const result = await action();
-      setStatus(result.ok ? 'saved' : 'error');
-    } catch {
-      // A rejected server action (network drop, redeploy) must still leave
-      // 'saving', or the button stays disabled until the athlete reloads.
-      setStatus('error');
-    }
+    setStatus((await attempt(action)) ? 'saved' : 'error');
   }
 
   return { status, reset: () => setStatus('idle'), run };

@@ -1,6 +1,6 @@
 'use server';
 
-import { resolveCoachWithLanguage } from '../../../current-actor';
+import { resolveHeadCoachWithLanguage } from '../../../current-actor';
 import { dateKey } from '@/lib/date';
 import {
   continueBriefing,
@@ -24,7 +24,7 @@ type AuthFailure = { ok: false; reason: 'not-a-coach' };
 export async function startBriefingAction(
   athleteId: string,
 ): Promise<StartBriefingResult | AuthFailure> {
-  const resolved = await resolveCoachWithLanguage();
+  const resolved = await resolveHeadCoachWithLanguage();
   if (!resolved.ok) return resolved;
 
   return startBriefing(
@@ -39,7 +39,7 @@ export async function sendBriefingMessageAction(
   conversationId: string,
   content: string,
 ): Promise<ContinueBriefingResult | AuthFailure> {
-  const resolved = await resolveCoachWithLanguage();
+  const resolved = await resolveHeadCoachWithLanguage();
   if (!resolved.ok) return resolved;
 
   return continueBriefing(

@@ -54,7 +54,8 @@ export function buildOnboardingLines(onboarding?: Onboarding | null): string[] {
  *
  * That matters beyond tidiness. The Knowledge Oracle adds a grounding section
  * carrying retrieved passages and their citations to the Weekly Session prompt,
- * to Coach Chat, and to plan generation (`docs/nfr.md` SAFE-3). With this model
+ * to Coach Chat, and to plan generation (the SAFE-3 grounding requirement). With
+ * this model
  * that is one `groundingBlock()` appearing in three lists. Without it, it was
  * three hand-edits into three different nested conditionals, each with its own
  * whitespace to get right — and prompt whitespace is not self-checking.

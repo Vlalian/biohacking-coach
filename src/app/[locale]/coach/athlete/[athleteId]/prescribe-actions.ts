@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolveCoachId } from '../../../current-actor';
+import { resolveHeadCoachId } from '../../../current-actor';
 import {
   deletePrescribedSession,
   editPrescribedSession,
@@ -27,7 +27,7 @@ export async function prescribeSessionAction(
   athleteId: string,
   input: PrescriptionInput,
 ): Promise<PrescribeActionResult> {
-  const headCoachId = await resolveCoachId();
+  const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await prescribeSession({ headCoachId, athleteId, input });
@@ -40,7 +40,7 @@ export async function editPrescribedSessionAction(
   sessionId: string,
   input: PrescriptionInput,
 ): Promise<PrescribeActionResult> {
-  const headCoachId = await resolveCoachId();
+  const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await editPrescribedSession({ headCoachId, athleteId, sessionId, input });
@@ -52,7 +52,7 @@ export async function deletePrescribedSessionAction(
   athleteId: string,
   sessionId: string,
 ): Promise<PrescribeActionResult> {
-  const headCoachId = await resolveCoachId();
+  const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await deletePrescribedSession({ headCoachId, athleteId, sessionId });

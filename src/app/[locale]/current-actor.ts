@@ -83,31 +83,40 @@ export async function resolveUserId(): Promise<string | null> {
 }
 
 /**
- * The coach a signed-in user *is* — or null when they hold no coach row.
+ * The Head Coach a signed-in user *is* — or null when they hold no coach row.
  *
  * A Head Coach is a relationship, not a kind of person (CONTEXT.md): the same
- * account can hold a Roster and train as an athlete, so this resolves the
- * coach capacity independently of {@link resolveAthleteId}. Holding no coach row
- * is not an error, it is the normal case for a solo athlete — the caller decides
+ * account can hold a Roster and train as an athlete, so this resolves that
+ * capacity independently of {@link resolveAthleteId}. Holding no coach row is
+ * not an error, it is the normal case for a solo athlete — the caller decides
  * what to do about it.
+ *
+ * Named for the human, per the glossary: "Coach" is the AI agent, "Head Coach"
+ * is the person. The repository call it wraps (`getCoachByUserId`) and the table
+ * it reads are both still spelled `coach`; renaming those is a wider change than
+ * this one and is filed separately.
  */
-export async function resolveCoachId(): Promise<string | null> {
+export async function resolveHeadCoachId(): Promise<string | null> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return null;
   const coach = await getCoachByUserId(session.user.id);
   return coach?.id ?? null;
 }
 
-/** The failure the coach-side actions return when the caller holds no Roster. */
-export type NotACoach = { ok: false; reason: 'not-a-coach' };
+/**
+ * The failure the Head-Coach-side actions return when the caller holds no Roster.
+ * The `reason` string is the pre-existing wire value the UI already switches on,
+ * so it keeps its spelling.
+ */
+export type NotAHeadCoach = { ok: false; reason: 'not-a-coach' };
 
 /**
- * The coach plus their chosen language — what the Coach Briefing actions need.
- * Same shape and same reasoning as {@link resolveAthleteWithLanguage}: the
+ * The Head Coach plus their chosen language — what the Coach Briefing actions
+ * need. Same shape and same reasoning as {@link resolveAthleteWithLanguage}: the
  * language is read through the user seam and passed onward as plain data.
  */
-export async function resolveCoachWithLanguage(): Promise<
-  { ok: true; coachId: string; language?: string } | NotACoach
+export async function resolveHeadCoachWithLanguage(): Promise<
+  { ok: true; coachId: string; language?: string } | NotAHeadCoach
 > {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, reason: 'not-a-coach' };
