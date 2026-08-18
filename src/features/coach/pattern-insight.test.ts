@@ -47,13 +47,24 @@ describe('detectPatterns', () => {
 
     const three = detectPatterns([hit, hit, hit, filler]);
     expect(three).toHaveLength(1);
-    expect(three[0]).toContain('pushed back on intensity sessions 3 times');
+    expect(three[0]).toContain('pushed back on an intensity session 3 times');
+    // Not "always" — the filter counts only the sessions that matched all three
+    // criteria, so it cannot claim anything about the ones that did not.
+    expect(three[0]).not.toContain('always');
   });
 
   it('reads elevated resting pulse alongside pushback', () => {
     const hit = item({ pulse: 70, pushedBack: true });
     const found = detectPatterns([hit, hit, hit]);
-    expect(found.some((p) => p.includes('resting pulse was elevated'))).toBe(true);
+    expect(found.some((p) => p.includes('resting pulse was at or above'))).toBe(true);
+  });
+
+  it('describes the pulse threshold inclusively, because the filter is >=', () => {
+    // A pulse of exactly 65 counts, so "above 65" would misdescribe the data the
+    // Coach is reasoning from.
+    const atThreshold = item({ pulse: 65, pushedBack: true });
+    const found = detectPatterns([atThreshold, atThreshold, atThreshold]);
+    expect(found.some((p) => p.includes('at or above 65 bpm'))).toBe(true);
   });
 
   it('correlates low mood with short sleep', () => {

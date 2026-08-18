@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 /**
  * The one save dance every Settings field performs.
@@ -94,11 +94,26 @@ export interface SaveStatusState {
 
 export function useSaveStatus(): SaveStatusState {
   const [status, setStatus] = useState<SaveStatusValue>('idle');
+  // Which save the displayed status belongs to. A save that finishes after the
+  // athlete has already edited the draft again must not paint 'saved' over the
+  // idle state that edit produced — that is precisely the stale "saved" beside
+  // changed text this hook exists to prevent, arriving by a slower route.
+  const generation = useRef(0);
 
   async function run(action: () => Promise<ActionResult>): Promise<void> {
+    const mine = ++generation.current;
     setStatus('saving');
-    setStatus((await attempt(action)) ? 'saved' : 'error');
+    const ok = await attempt(action);
+    if (generation.current !== mine) return;
+    setStatus(ok ? 'saved' : 'error');
   }
 
-  return { status, reset: () => setStatus('idle'), run };
+  function reset() {
+    // Invalidates any save still in flight, so its result is discarded rather
+    // than landing on top of the athlete's newer draft.
+    generation.current += 1;
+    setStatus('idle');
+  }
+
+  return { status, reset, run };
 }

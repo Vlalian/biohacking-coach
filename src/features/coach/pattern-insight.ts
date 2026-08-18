@@ -44,7 +44,11 @@ export function detectPatterns(sessionHistory: SessionHistoryItem[]): string[] {
   );
   if (sleepIntensityPushbacks.length >= T.minOccurrences) {
     patterns.push(
-      `pushed back on intensity sessions ${sleepIntensityPushbacks.length} times — always after sleeping under ${T.poorSleepHours} hours`,
+      // Not "always": the filter counts sessions matching all three criteria and
+      // says nothing about intensity sessions pushed back after good sleep. The
+      // Coach shapes real coaching decisions on these sentences, so an
+      // unjustified universal is not a wording nit.
+      `pushed back on an intensity session ${sleepIntensityPushbacks.length} times after sleeping under ${T.poorSleepHours} hours`,
     );
   }
 
@@ -53,7 +57,8 @@ export function detectPatterns(sessionHistory: SessionHistoryItem[]): string[] {
   );
   if (pulsePushbacks.length >= T.minOccurrences) {
     patterns.push(
-      `pushed back on sessions ${pulsePushbacks.length} times when resting pulse was elevated above ${T.elevatedPulseBpm} bpm`,
+      // `>=`, so "at or above" — the threshold value itself is included.
+      `pushed back on sessions ${pulsePushbacks.length} times when resting pulse was at or above ${T.elevatedPulseBpm} bpm`,
     );
   }
 

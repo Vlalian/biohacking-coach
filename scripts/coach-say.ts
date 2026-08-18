@@ -161,6 +161,17 @@ async function main() {
     process.exit(1);
   }
 
+  // `label` becomes a directory name, so it must be exactly one safe path
+  // segment. A local dev script is a low-stakes place for this, but writing
+  // outside .coach-say/ is never what anyone meant by a label.
+  if (!/^[A-Za-z0-9._-]+$/.test(label) || label === '.' || label === '..') {
+    console.error(
+      `Invalid --label "${label}". Use letters, digits, dot, dash or underscore — ` +
+        'it becomes a directory name under .coach-say/.',
+    );
+    process.exit(1);
+  }
+
   const outDir = join(process.cwd(), '.coach-say', label);
   mkdirSync(outDir, { recursive: true });
 
