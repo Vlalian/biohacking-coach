@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message } from './conversation';
+import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 const {
   callCoach,
@@ -252,5 +253,18 @@ describe('sendCoachChatMessage', () => {
 
     expect(result).toMatchObject({ ok: true });
     expect(callCoach.mock.calls[0][0].system).not.toContain('SESSION DISCUSSION');
+  });
+});
+
+// code-health/07 — Coach Chat held its own copy of the same invented baseline.
+describe('the Coach Chat system prompt carries no invented readiness', () => {
+
+  it('sends no readiness scores when the athlete has never given a Check-in', async () => {
+    await sendCoachChatMessage(ATHLETE, null, 'how should I pace Sunday?', '2026-08-12');
+
+    const { system } = callCoach.mock.calls[0][0];
+    for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
+    expect(system).toContain('NO CHECK-IN DATA');
+    expect(system).toContain('phase=Peak');
   });
 });

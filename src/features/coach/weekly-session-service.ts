@@ -56,17 +56,15 @@ import {
  * lands ({@link commitWeeklyPlan}), and it replaces only coach-planned days.
  */
 
-// Until a daily Check-in feature exists, the numeric STATE the prompt carries is
-// a neutral baseline — the conversational P1 ("where are you physically?")
-// gathers the athlete's real state in words. Swapping this for real readiness is
-// a one-line change once that data exists.
-const BASELINE_READINESS: Readiness = {
-  body: 7,
-  mental: 7,
-  energy: 7,
-  sleep: 7.5,
-  pulse: 55,
-};
+// No daily Check-in feature exists yet, so the athlete has never reported a
+// readiness — and `null` says exactly that. The prompt then renders a STATE line
+// without scores and tells the Coach to ask, which the conversational P1 ("where
+// are you physically?") already does. This was a hardcoded 7/7/7/7.5/55 until
+// code-health/07: honestly commented, but the prompt presented it to the Coach as
+// coaching intelligence, so every athlete read as equally, mildly fine and one
+// who said otherwise in words was contradicted by data nobody had gathered.
+// Passing a real Readiness here is the one-line change once that data exists.
+const NO_CHECK_IN: Readiness | null = null;
 
 const WEEKLY_MAX_TOKENS = 1400;
 
@@ -96,7 +94,7 @@ async function renderSystem(
   ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
-    BASELINE_READINESS,
+    NO_CHECK_IN,
     weeklySessionNumber,
     language,
     equipmentItems,

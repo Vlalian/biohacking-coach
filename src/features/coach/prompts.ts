@@ -12,6 +12,7 @@ import {
 import { assertNoDirectIdentifier } from './check-in';
 import type {
   CheckIn,
+  Readiness,
   SessionContext,
   SessionHistoryItem,
   SkippedSession,
@@ -252,18 +253,65 @@ function todayBlock(
   return lines.join('\n');
 }
 
-/** The readiness STATE line — coaching intelligence, never quoted back to the athlete. */
+/** The readiness scores as prompt text, or '' when the athlete never gave any. */
+function readinessFragment(readiness?: Readiness): string {
+  if (!readiness) return '';
+  const { body, mental, energy, sleep, pulse } = readiness;
+  return ` body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm`;
+}
+
+/**
+ * What the Coach is told when it has no Check-in to reason from.
+ *
+ * The prompts instruct the Coach to read these scores as coaching intelligence,
+ * so with none present it must be told that plainly and told to ask — which is
+ * what the Presence Arc's P1 already has it doing. Without this the Coach is left
+ * to infer a state from silence, which is the same failure the invented baseline
+ * caused, arrived at differently (code-health/07).
+ */
+const NO_CHECK_IN = `NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.`;
+
+/** The STATE line — coaching intelligence, never quoted back to the athlete. */
 function stateBlock(s: {
   phase?: string;
   sessionCount?: number;
-  body: number;
-  mental: number;
-  energy: number;
-  sleep: number;
-  pulse: number;
   experienceLevel?: string;
+  readiness?: Readiness;
 }): string {
-  return `STATE: phase=${s.phase} sessions=${s.sessionCount} body=${s.body}/10 mental=${s.mental}/10 energy=${s.energy}/10 sleep=${s.sleep}h pulse=${s.pulse}bpm xp=${s.experienceLevel || 'intermediate'}`;
+  return `STATE: phase=${s.phase} sessions=${s.sessionCount}${readinessFragment(s.readiness)} xp=${s.experienceLevel || 'intermediate'}`;
+}
+
+/**
+ * How the Coach is told to weigh what it has.
+ *
+ * The readiness half is instructions for reading numbers; with no numbers to read
+ * it is not merely useless, it invites the Coach to act as though it had them.
+ * The Session Reflection half is real data either way and stays.
+ */
+function dataUseBlock(readiness?: Readiness): string {
+  if (readiness) {
+    return `DATA USE: Scores = coaching intelligence, never cite directly.
+Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → protect easy days. Strong feedback → validate. Mixed → name inconsistency.`;
+  }
+  return `DATA USE: Session Reflections = coaching intelligence, never cite directly.
+Strong feedback → validate. Mixed → name inconsistency. What the athlete tells you in words about body, sleep and energy is your only read on those — weigh it as such.`;
+}
+
+/**
+ * Last week's Session Reflections, or what to do without them.
+ *
+ * The no-feedback line used to send the Coach to "check-in signals", which was
+ * written when a check-in was always sent — with none, it points the Coach at
+ * data it does not have.
+ */
+function lastWeekFeedbackBlock(
+  feedbackSummary: string | null,
+  readiness?: Readiness,
+): string {
+  if (feedbackSummary) return `LAST WEEK FEEDBACK:
+${feedbackSummary}`;
+  if (readiness) return 'No feedback this week — use check-in signals and self-assessment.';
+  return 'No feedback this week, and no check-in data — go on what the athlete tells you.';
 }
 
 /** Pattern Insight: surfaced at most once, and only when multi-week consistent. */
@@ -300,11 +348,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     today,
   } = ctx;
   const {
-    body,
-    mental,
-    energy,
-    sleep,
-    pulse,
+    readiness,
     phase,
     commStyle,
     experienceLevel,
@@ -321,6 +365,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const equipmentLines = buildEquipmentLines(equipment);
   const hasEquipment = equipmentLines.length > 0;
 
+
   return assemble([
     openingBlock(language, 'Weekly Session — primary structured conversation, once per week.'),
 
@@ -332,13 +377,13 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     equipmentBlock(equipmentLines),
 
-    stateBlock({ phase, sessionCount, body, mental, energy, sleep, pulse, experienceLevel }),
+    stateBlock({ phase, sessionCount, experienceLevel, readiness }),
+
+    readiness ? null : NO_CHECK_IN,
 
     onboardingBlock(onboarding),
 
-    feedbackSummary
-      ? `LAST WEEK FEEDBACK:\n${feedbackSummary}`
-      : 'No feedback this week — use check-in signals and self-assessment.',
+    lastWeekFeedbackBlock(feedbackSummary, readiness),
 
     commStyleBlock(commStyle),
 
@@ -362,8 +407,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     CONSTRAINT_SIGNALS,
 
-    `DATA USE: Scores = coaching intelligence, never cite directly.
-Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → protect easy days. Strong feedback → validate. Mixed → name inconsistency.`,
+    dataUseBlock(readiness),
 
     // The Guided Tour's first beat, delivered in the Coach's voice at the one
     // moment the athlete is oriented — never as a UI overlay (ADR 0001).
@@ -408,11 +452,7 @@ export function buildChatPrompt(
   if (sessionContext) assertNoDirectIdentifier(sessionContext);
 
   const {
-    body,
-    mental,
-    energy,
-    sleep,
-    pulse,
+    readiness,
     phase,
     commStyle,
     experienceLevel,
@@ -441,7 +481,9 @@ export function buildChatPrompt(
     `TODAY: ${today}`,
 
     `CONTEXT (use silently — never cite scores/numbers):
-phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${race}${noTrain}`,
+phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount}${readinessFragment(readiness)}${race}${noTrain}`,
+
+    readiness ? null : NO_CHECK_IN,
 
     equipmentBlock(buildEquipmentLines(equipment)),
 

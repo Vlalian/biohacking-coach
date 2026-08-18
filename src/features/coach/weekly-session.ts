@@ -3,7 +3,7 @@ import type { EquipmentItem } from '@/features/equipment/equipment';
 import type { Session } from '@/features/session/session';
 import type { NewSessionRow } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
-import { assertNoIdentity, type CheckIn, type SkippedSession, type WeekFeedbackEntry } from './check-in';
+import { assertNoIdentity, type CheckIn, type Readiness, type SkippedSession, type WeekFeedbackEntry } from './check-in';
 import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
 
@@ -18,14 +18,10 @@ import { toApiMessages, type Message } from './conversation';
  * never touches a name or an email, so no direct identifier can reach a prompt.
  */
 
-/** The readiness the athlete reports at the start of a Weekly Session. */
-export interface Readiness {
-  body: number;
-  mental: number;
-  energy: number;
-  sleep: number;
-  pulse: number;
-}
+// `Readiness` now lives beside `CheckIn` in `check-in.ts` — it is check-in data,
+// and nesting it there is what makes a half-filled readiness unconstructible.
+// Re-exported here because this is where callers have always imported it from.
+export type { Readiness };
 
 /** The user-turn primer that opens a Weekly Session (never persisted). */
 export const WEEKLY_OPENER = "Let's do our weekly session.";
@@ -33,6 +29,13 @@ export const WEEKLY_OPENER = "Let's do our weekly session.";
 /**
  * Assembles the check-in the Weekly Session prompt reasons about, from the
  * athlete's opaque profile and today's reported readiness.
+ *
+ * `readiness` is nullable because until a Check-in feature exists the athlete
+ * has never reported one. Null means the five scores are *left out entirely* —
+ * not defaulted — so the prompt renders a STATE line without them and tells the
+ * Coach to ask instead. Inventing a neutral baseline made every athlete read as
+ * equally, mildly fine, and contradicted anyone who said otherwise in words
+ * (code-health/07).
  *
  * No name, email, DOB or location is read here — only the opaque profile columns
  * and the onboarding answers. `personaName` is deliberately left unset: the
@@ -46,17 +49,15 @@ export const WEEKLY_OPENER = "Let's do our weekly session.";
  */
 export function buildWeeklyCheckIn(
   athlete: Athlete,
-  readiness: Readiness,
+  readiness: Readiness | null,
   weeklySessionNumber: number,
   language?: string,
   equipmentItems: EquipmentItem[] = [],
 ): CheckIn {
   const checkIn: CheckIn = {
-    body: readiness.body,
-    mental: readiness.mental,
-    energy: readiness.energy,
-    sleep: readiness.sleep,
-    pulse: readiness.pulse,
+    // Omitted entirely when absent, rather than set to undefined: nothing can
+    // then interpolate "undefined" into a prompt.
+    ...(readiness ? { readiness } : {}),
     phase: athlete.trainingPhase ?? undefined,
     experienceLevel: athlete.experienceLevel ?? undefined,
     commStyle: athlete.communicationStyle ?? undefined,
