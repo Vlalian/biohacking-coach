@@ -1,4 +1,4 @@
-import type Anthropic from '@anthropic-ai/sdk';
+import { refusalReason } from '@/lib/identifiers';
 import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
@@ -8,7 +8,6 @@ import {
 } from '@/features/session/session-repository';
 import { buildWeeklyContext, renderWeeklyPrompt } from './prompts';
 import { callCoach, type CoachReply } from './coach-client';
-import { DirectIdentifierError } from '@/lib/identifiers';
 import {
   appendMessages,
   countWeeklySessions,
@@ -30,7 +29,7 @@ import {
   proposalDateRange,
   proposedToNewSessionRows,
   skippedFrom,
-  toApiMessages,
+  toWeeklyApiMessages,
   validateProposedPlan,
   weekFeedbackFrom,
   PROPOSE_WEEK_PLAN_TOOL,
@@ -77,7 +76,6 @@ const PROPOSAL_ACK =
   'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
   'invite them to confirm when ready. Do not say it has been saved.';
 
-const PLAN_TOOL = PROPOSE_WEEK_PLAN_TOOL as unknown as Anthropic.Tool;
 
 /**
  * Renders the Weekly Session system prompt for this athlete, reviewing the week
@@ -168,7 +166,7 @@ export async function startWeeklySession(
   } catch (error) {
     return {
       ok: false,
-      reason: error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable',
+      reason: refusalReason(error),
     };
   }
 
@@ -247,9 +245,9 @@ export async function continueWeeklySession(
       system,
       // The athlete's turn joins the history here rather than being stored
       // first — the same messages the API would have seen either way.
-      messages: [...toApiMessages(transcript), { role: 'user', content: trimmed }],
+      messages: [...toWeeklyApiMessages(transcript), { role: 'user', content: trimmed }],
       maxTokens: WEEKLY_MAX_TOKENS,
-      tools: [PLAN_TOOL],
+      tools: [PROPOSE_WEEK_PLAN_TOOL],
       toolResult: PROPOSAL_ACK,
     });
   } catch (error) {
@@ -258,7 +256,7 @@ export async function continueWeeklySession(
     // advice for text that will be refused identically every time.
     return {
       ok: false,
-      reason: error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable',
+      reason: refusalReason(error),
     };
   }
 

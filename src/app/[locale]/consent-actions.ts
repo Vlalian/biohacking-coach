@@ -1,9 +1,7 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { resolveAthleteId } from './current-actor';
 import {
   grantConsent,
   withdrawConsent,
@@ -26,14 +24,6 @@ export type ConsentActionResult =
   | { ok: true }
   | { ok: false; reason: 'not-authenticated' | 'invalid-purpose' };
 
-/** Resolves the acting athlete's opaque id from the session, or null. */
-async function actingAthleteId(): Promise<string | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return null;
-  const athlete = await getAthleteByUserId(session.user.id);
-  return athlete?.id ?? null;
-}
-
 /**
  * Grants a set of purposes. The consent screen submits the purposes the athlete
  * ticked; each is granted under the current disclosure version. An empty set is
@@ -47,7 +37,7 @@ export async function grantConsentsAction(
     return { ok: false, reason: 'invalid-purpose' };
   }
 
-  const athleteId = await actingAthleteId();
+  const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   // De-duplicate so a repeated purpose in the payload is one grant.
@@ -67,7 +57,7 @@ export async function withdrawConsentAction(
     return { ok: false, reason: 'invalid-purpose' };
   }
 
-  const athleteId = await actingAthleteId();
+  const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   await withdrawConsent(athleteId, purpose);

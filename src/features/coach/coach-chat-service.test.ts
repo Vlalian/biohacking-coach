@@ -35,9 +35,12 @@ vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
 }));
 
-const { sendCoachChatMessage, toChatApiMessages } = await import(
-  './coach-chat-service'
-);
+const { sendCoachChatMessage } = await import('./coach-chat-service');
+// Coach Chat's history is the shared conversion with no primer — the athlete
+// speaks first here, so there is no fabricated opening turn. Imported from the
+// shared module rather than re-exported by the service, so the test asserts the
+// behaviour Coach Chat actually gets.
+const { toApiMessages } = await import('./conversation');
 
 const ATHLETE = {
   id: 'athlete_1',
@@ -54,12 +57,12 @@ function msg(role: Message['role'], content: string, seq: number): Message {
   return { id: `m${seq}`, role, content, seq, createdAt: new Date('2026-08-12T09:00:00Z') };
 }
 
-describe('toChatApiMessages', () => {
+describe('toApiMessages, as Coach Chat uses it (no primer)', () => {
   it('maps the transcript without inventing an opening turn', () => {
     // The Weekly Session's mapper prepends a fixed user primer because the Coach
     // speaks first there. In Coach Chat the athlete speaks first, so a primer
     // would fabricate a turn they never took — the first message must be theirs.
-    const api = toChatApiMessages([
+    const api = toApiMessages([
       msg('athlete', 'what should I eat before a long ride?', 0),
       msg('coach_ai', 'Start fuelling early.', 1),
     ]);
@@ -72,13 +75,13 @@ describe('toChatApiMessages', () => {
 
   it('maps a head_coach turn to the user role, not assistant', () => {
     // Only the AI is the assistant. A Head Coach turn is another human speaking.
-    expect(toChatApiMessages([msg('head_coach', 'Ease off Thursday.', 0)])).toEqual([
+    expect(toApiMessages([msg('head_coach', 'Ease off Thursday.', 0)])).toEqual([
       { role: 'user', content: 'Ease off Thursday.' },
     ]);
   });
 
   it('returns an empty history for a fresh chat', () => {
-    expect(toChatApiMessages([])).toEqual([]);
+    expect(toApiMessages([])).toEqual([]);
   });
 });
 

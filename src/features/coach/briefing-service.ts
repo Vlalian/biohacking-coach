@@ -1,10 +1,10 @@
+import { refusalReason } from '@/lib/identifiers';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import {
   getBriefingPlan,
   getBriefingReflections,
 } from '@/features/session/session-repository';
 import { callCoach, type CoachReply } from './coach-client';
-import { DirectIdentifierError } from '@/lib/identifiers';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
@@ -52,15 +52,6 @@ import {
  */
 
 const BRIEFING_MAX_TOKENS = 1400;
-
-/**
- * Which refusal a thrown Coach call is. Content the guard rejects will be
- * rejected identically on a retry, so it must not be reported as an unreachable
- * Coach — the same split the athlete-facing services make.
- */
-function refusalReason(error: unknown): 'unsafe-content' | 'coach-unavailable' {
-  return error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable';
-}
 
 /**
  * Renders the briefing system prompt from exactly the material the link permits.

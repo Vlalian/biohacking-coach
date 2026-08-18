@@ -1,9 +1,7 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { resolveAthleteId } from './current-actor';
 import {
   markUnavailableDate,
   clearUnavailableDate,
@@ -20,18 +18,6 @@ export type AvailabilityActionResult =
   | { ok: false; reason: 'not-authenticated' | 'invalid-date' | 'past-date' };
 
 /**
- * Resolves the acting athlete from the authenticated session — never from the
- * request body (ADR 0006). Returns the opaque athlete id, or null when there is
- * no valid actor to mark days for.
- */
-async function actingAthleteId(): Promise<string | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return null;
-  const athlete = await getAthleteByUserId(session.user.id);
-  return athlete?.id ?? null;
-}
-
-/**
  * Server action: the athlete marks a date unavailable. The date is untrusted
  * client input, validated before it reaches the rules or the database; `today`
  * is the server's, so the past-date boundary is judged against a clock the
@@ -42,7 +28,7 @@ export async function markUnavailableDateAction(
 ): Promise<AvailabilityActionResult> {
   if (!isValidDateKey(date)) return { ok: false, reason: 'invalid-date' };
 
-  const athleteId = await actingAthleteId();
+  const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const result = await markUnavailableDate({
@@ -65,7 +51,7 @@ export async function clearUnavailableDateAction(
 ): Promise<AvailabilityActionResult> {
   if (!isValidDateKey(date)) return { ok: false, reason: 'invalid-date' };
 
-  const athleteId = await actingAthleteId();
+  const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const result = await clearUnavailableDate({

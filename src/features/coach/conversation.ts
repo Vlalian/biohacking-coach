@@ -1,11 +1,22 @@
 import type { ConversationRow, MessageRow } from '@/db/schema';
+import type { CoachMessage } from './coach-client';
 
-/** The six kinds of Coach conversation (schema check constraint mirrors this). */
+/**
+ * The four kinds of Coach conversation (the schema check constraint mirrors this).
+ *
+ * Was six. `negotiation` and `reflection` were removed 2026-08-18: neither was
+ * ever written by any code path. Session Negotiation is not a conversation kind
+ * — it is a *behavior* inside Coach Chat, carrying the Session as a Reference
+ * (CONTEXT.md, decided 2026-08-12); giving it a kind of its own would recreate
+ * one of the six talk-to-the-Coach surfaces ADR-0007 retired. A Session
+ * Reflection is two RPE ratings and an optional comment stored against the
+ * session — not a transcript, so not a conversation.
+ *
+ * `onboarding` stays: it is live, written by `onboarding-service`.
+ */
 export type ConversationKind =
   | 'weekly_session'
   | 'coach_chat'
-  | 'negotiation'
-  | 'reflection'
   | 'onboarding'
   | 'coach_briefing';
 
@@ -100,4 +111,34 @@ export function coachOwnedOrNull(
   if (conversation.kind !== 'coach_briefing') return null;
   if (conversation.coachId !== coachId) return null;
   return conversation;
+}
+
+/**
+ * A stored transcript, as the Anthropic API wants to see it.
+ *
+ * Every Coach conversation needs this and the mapping itself is the same in all
+ * of them: the Coach's turns are the assistant's, everyone else's are the user's.
+ * What differs is only whether a conversation opens with a **primer** — a fixed
+ * first user turn that exists so the Coach has something to answer.
+ *
+ * The Weekly Session and the Coach Briefing both need one, because in those the
+ * Coach speaks first and the API will not accept a history that opens with an
+ * assistant turn. Coach Chat must NOT have one: there the athlete speaks first,
+ * so a primer would fabricate a turn they never took.
+ *
+ * That difference is a value, so it is a parameter. Everything else is shared,
+ * so it is written once. The primer is a prompt device and is never persisted —
+ * it exists only for the length of one API call.
+ */
+export function toApiMessages(
+  transcript: Message[],
+  primer?: string,
+): CoachMessage[] {
+  const turns = transcript.map(
+    (m): CoachMessage => ({
+      role: m.role === 'coach_ai' ? 'assistant' : 'user',
+      content: m.content,
+    }),
+  );
+  return primer ? [{ role: 'user', content: primer }, ...turns] : turns;
 }

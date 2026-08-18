@@ -311,11 +311,15 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * A Coach conversation, persisted server-side (ticket 05, ballot 4).
  *
  * Every kind of Coach exchange lands here uniformly — the Weekly Session, Coach
- * Chat, a Session Negotiation, a Session Reflection, MCQ onboarding, the Coach
- * Briefing — so a refresh never loses a transcript and the Briefing and the
- * ai-transcripts toggle become real later. This slice writes `weekly_session`
- * and reads it back; the `kind` set is deliberately the full six so the table is
- * not narrowed to one and re-migrated for every later slice.
+ * Chat, MCQ onboarding, the Coach Briefing — so a refresh never loses a
+ * transcript and the Briefing and the ai-transcripts toggle become real later.
+ *
+ * The set was six until 2026-08-18, held wide so the table would not be
+ * re-migrated per slice. Two of the six turned out never to be written at all:
+ * `negotiation` and `reflection` are gone (migration 0011). Session Negotiation
+ * is a *behavior* inside Coach Chat carrying a Session as a Reference, not a
+ * kind (CONTEXT.md, 2026-08-12); a Session Reflection is ratings on a session,
+ * not a transcript. The four that remain are each written by live code.
  *
  * `athleteId` scopes a conversation to its owner. Every read and write resolves
  * that owner from the authenticated session; a client-supplied conversation id is
@@ -346,11 +350,11 @@ export const conversations = pgTable(
   },
   (table) => [
     index('conversations_athlete_idx').on(table.athleteId, table.createdAt),
-    // The six conversation kinds are a closed set — encode it so a bad write
+    // The four conversation kinds are a closed set — encode it so a bad write
     // fails at the database, not silently downstream.
     check(
       'conversations_kind_valid',
-      sql`${table.kind} IN ('weekly_session', 'coach_chat', 'negotiation', 'reflection', 'onboarding', 'coach_briefing')`,
+      sql`${table.kind} IN ('weekly_session', 'coach_chat', 'onboarding', 'coach_briefing')`,
     ),
   ],
 );

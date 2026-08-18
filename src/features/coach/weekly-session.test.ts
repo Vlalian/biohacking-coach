@@ -8,7 +8,7 @@ import {
   proposedToNewSessionRows,
   reflectionScoreToTen,
   skippedFrom,
-  toApiMessages,
+  toWeeklyApiMessages,
   validateProposedPlan,
   weekFeedbackFrom,
   WEEKLY_OPENER,
@@ -153,13 +153,13 @@ describe('skippedFrom', () => {
   });
 });
 
-describe('toApiMessages', () => {
+describe('toWeeklyApiMessages', () => {
   it('opens with the user primer then alternates from the transcript', () => {
     const transcript: Message[] = [
       { id: 'm0', role: 'coach_ai', content: 'Welcome.', seq: 0, createdAt: new Date() },
       { id: 'm1', role: 'athlete', content: 'In rhythm.', seq: 1, createdAt: new Date() },
     ];
-    expect(toApiMessages(transcript)).toEqual([
+    expect(toWeeklyApiMessages(transcript)).toEqual([
       { role: 'user', content: WEEKLY_OPENER },
       { role: 'assistant', content: 'Welcome.' },
       { role: 'user', content: 'In rhythm.' },

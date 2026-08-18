@@ -69,3 +69,27 @@ export function shapedIdentifierIn(value: string): string | null {
 export function isFreeOfShapedIdentifiers(value: string | null | undefined): boolean {
   return typeof value !== 'string' || shapedIdentifierIn(value) === null;
 }
+
+/** Why a Coach turn was refused, in the terms every caller reports upward. */
+export type RefusalReason = 'unsafe-content' | 'coach-unavailable';
+
+/**
+ * Which refusal a thrown Coach call is.
+ *
+ * The split matters to the athlete, not just to the log: "the Coach could not be
+ * reached" invites a retry, while content this module refused will be refused
+ * identically every time. That is the difference between a retry button that can
+ * work and one that cannot.
+ *
+ * Lives here, next to {@link DirectIdentifierError}, rather than in the Coach
+ * adapter: the whole question is "is this that error?", which is this module's
+ * concept, and nothing about it involves the Anthropic SDK. It is also why the
+ * services can use it while still mocking the adapter wholesale in their tests.
+ *
+ * Written once because all three Coach services made this same call, and
+ * `briefing-service` had already extracted it locally — three agreeing copies of
+ * a rule is the moment to move it, before a fourth caller gets it subtly wrong.
+ */
+export function refusalReason(error: unknown): RefusalReason {
+  return error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable';
+}

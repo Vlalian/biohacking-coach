@@ -87,6 +87,25 @@ export interface CoachToolCall {
 }
 
 /**
+ * A tool the app offers the Coach, in the app's own terms.
+ *
+ * This exists so the pure modules that *define* tools never import the Anthropic
+ * SDK. `PROPOSE_WEEK_PLAN_TOOL` lives in `weekly-session.ts`, which is
+ * framework-free by design — a tool definition is a description of a domain
+ * action, not a vendor detail — so it must be expressible without an SDK type.
+ *
+ * `readonly` throughout because those definitions are declared `as const`. The
+ * SDK's own `Tool` type wants mutable arrays, and that mismatch is the entire
+ * reason a cast was previously sitting in the service. The cast now happens
+ * once, here, in the module that already owns the SDK.
+ */
+export interface CoachTool {
+  readonly name: string;
+  readonly description: string;
+  readonly input_schema: { readonly type: 'object'; readonly [key: string]: unknown };
+}
+
+/**
  * A Coach turn: the visible text, plus any tool the Coach called. `toolCalls` is
  * the app's channel for structured proposals (the Week Plan); it never carries
  * the raw Anthropic block shapes, so callers and the transcript stay text-only.
@@ -151,7 +170,7 @@ export async function callCoach(input: {
   system: string;
   messages: CoachMessage[];
   maxTokens: number;
-  tools?: Anthropic.Tool[];
+  tools?: readonly CoachTool[];
   toolResult?: string;
 }): Promise<CoachReply> {
   const client = getClient();
@@ -161,7 +180,9 @@ export async function callCoach(input: {
       max_tokens: input.maxTokens,
       system: input.system,
       messages: input.messages,
-      ...(input.tools && input.tools.length > 0 ? { tools: input.tools } : {}),
+      ...(input.tools && input.tools.length > 0
+        ? { tools: input.tools as unknown as Anthropic.Tool[] }
+        : {}),
     }),
   );
 

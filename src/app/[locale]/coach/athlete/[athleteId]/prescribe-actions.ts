@@ -1,9 +1,7 @@
 'use server';
 
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
-import { getCoachByUserId } from '@/features/coach/coach-repository';
+import { resolveHeadCoachId } from '../../../current-actor';
 import {
   deletePrescribedSession,
   editPrescribedSession,
@@ -24,13 +22,6 @@ import {
 export type PrescribeActionResult =
   | HeadCoachActionResult
   | { ok: false; reason: 'not-a-coach' };
-
-async function resolveHeadCoachId(): Promise<string | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return null;
-  const coach = await getCoachByUserId(session.user.id);
-  return coach?.id ?? null;
-}
 
 export async function prescribeSessionAction(
   athleteId: string,

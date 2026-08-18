@@ -5,7 +5,7 @@ import type { NewSessionRow } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import { assertNoIdentity, type CheckIn, type SkippedSession, type WeekFeedbackEntry } from './check-in';
 import type { CoachMessage } from './coach-client';
-import type { Message } from './conversation';
+import { toApiMessages, type Message } from './conversation';
 
 /**
  * The Weekly Session's pure orchestration logic — the deterministic seam between
@@ -119,14 +119,8 @@ export function skippedFrom(sessions: Session[]): SkippedSession[] {
  * Anthropic API expects. The Coach speaks first in a Weekly Session, so a fixed
  * user-turn primer opens the history; it is a prompt device, never persisted.
  */
-export function toApiMessages(transcript: Message[]): CoachMessage[] {
-  return [
-    { role: 'user', content: WEEKLY_OPENER },
-    ...transcript.map((m): CoachMessage => ({
-      role: m.role === 'coach_ai' ? 'assistant' : 'user',
-      content: m.content,
-    })),
-  ];
+export function toWeeklyApiMessages(transcript: Message[]): CoachMessage[] {
+  return toApiMessages(transcript, WEEKLY_OPENER);
 }
 
 // ── The Week Plan proposal tool ───────────────────────────────────────────────

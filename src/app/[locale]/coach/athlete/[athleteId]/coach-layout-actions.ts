@@ -1,14 +1,16 @@
 'use server';
 
-import { headers } from 'next/headers';
-import { auth } from '@/lib/auth';
-import { getCoachByUserId } from '@/features/coach/coach-repository';
+import { resolveHeadCoachId } from '../../../current-actor';
 import { saveCoachLayout } from '@/features/coach/save-coach-layout';
 import type { SaveLayoutResult } from '@/features/information-view/save-layout';
 
+// Signed out and signed-in-but-not-a-Head-Coach both resolve to no coach row,
+// and this action treats them the same: there is no Roster layout to write
+// either way, and telling the two apart would leak whether an account exists.
+// The union says only what the action can actually return.
 export type SaveCoachLayoutActionResult =
   | SaveLayoutResult
-  | { ok: false; reason: 'not-authenticated' | 'not-a-coach' };
+  | { ok: false; reason: 'not-a-coach' };
 
 /**
  * Server action persisting the coach's ONE roster-wide Information View layout
@@ -21,11 +23,8 @@ export async function saveCoachLayoutAction(
   favorites: string[],
   range: string,
 ): Promise<SaveCoachLayoutActionResult> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return { ok: false, reason: 'not-authenticated' };
+  const coachId = await resolveHeadCoachId();
+  if (!coachId) return { ok: false, reason: 'not-a-coach' };
 
-  const coach = await getCoachByUserId(session.user.id);
-  if (!coach) return { ok: false, reason: 'not-a-coach' };
-
-  return saveCoachLayout(coach.id, favorites, range);
+  return saveCoachLayout(coachId, favorites, range);
 }

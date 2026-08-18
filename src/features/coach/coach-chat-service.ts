@@ -1,11 +1,11 @@
+import { refusalReason } from '@/lib/identifiers';
 import type { Athlete } from '@/features/athlete/athlete';
-import { DirectIdentifierError } from '@/lib/identifiers';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getOwnedSession } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
 import type { SessionContext } from './check-in';
 import { buildChatPrompt } from './prompts';
-import { callCoach, type CoachMessage } from './coach-client';
+import { callCoach } from './coach-client';
 import {
   appendMessages,
   createConversation,
@@ -13,7 +13,7 @@ import {
   getMessages,
   getOwnedConversation,
 } from './conversation-repository';
-import type { Message } from './conversation';
+import { toApiMessages, type Message } from './conversation';
 import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
 
 /**
@@ -43,22 +43,6 @@ const BASELINE_READINESS: Readiness = {
 };
 
 const CHAT_MAX_TOKENS = 1200;
-
-/**
- * Renders a stored chat transcript into the alternating history the Anthropic
- * API expects.
- *
- * Deliberately not {@link weekly-session}'s `toApiMessages`: that one prepends
- * a fixed user-turn primer because the Coach speaks first in a Weekly Session.
- * In Coach Chat the *athlete* speaks first, so a primer would fabricate a turn
- * they never took.
- */
-export function toChatApiMessages(transcript: Message[]): CoachMessage[] {
-  return transcript.map((m): CoachMessage => ({
-    role: m.role === 'coach_ai' ? 'assistant' : 'user',
-    content: m.content,
-  }));
-}
 
 /** The Reference the athlete brought into the thread, as the prompt sees it. */
 function toSessionContext(session: Session): SessionContext {
@@ -175,7 +159,7 @@ export async function sendCoachChatMessage(
         system,
         // The athlete's turn joins the history here rather than being stored
         // first — same messages the API would have seen, no orphan on failure.
-        messages: [...toChatApiMessages(transcript), { role: 'user', content: trimmed }],
+        messages: [...toApiMessages(transcript), { role: 'user', content: trimmed }],
         maxTokens: CHAT_MAX_TOKENS,
       })
     ).text;
@@ -185,7 +169,7 @@ export async function sendCoachChatMessage(
     // which one happened.
     return {
       ok: false,
-      reason: error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable',
+      reason: refusalReason(error),
     };
   }
 

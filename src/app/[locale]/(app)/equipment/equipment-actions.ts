@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolveAthleteId, type AuthFailure } from '../../current-athlete';
+import { resolveAthleteId, type AuthFailure } from '../../current-actor';
 import {
   createEquipmentItem,
   deleteEquipmentItem,

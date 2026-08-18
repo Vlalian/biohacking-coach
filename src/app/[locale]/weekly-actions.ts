@@ -6,7 +6,7 @@ import { dateKey } from '@/lib/date';
 import {
   resolveAthleteWithLanguage as currentAthlete,
   type AuthFailure,
-} from './current-athlete';
+} from './current-actor';
 import {
   commitWeeklyPlan,
   continueWeeklySession,

@@ -12,7 +12,8 @@
     "seed": "tsx scripts/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "coach:say": "tsx --conditions=react-server scripts/coach-say.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.114.0",
