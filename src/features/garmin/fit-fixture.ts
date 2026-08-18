@@ -25,32 +25,15 @@
  * needs one real file, read locally and never committed (showable-version/06).
  */
 
+// The checksum comes from the module under test rather than a second copy here.
+// Deliberate, and the tradeoff is named in `fitCrc`'s own doc: the two agree
+// with each other, not necessarily with Garmin. What a shared implementation
+// still proves is the property the corrupt-upload guard rests on — bytes altered
+// after writing no longer match the checksum stored with them.
+import { fitCrc } from './garmin';
+
 /** Seconds between the Unix epoch and the FIT epoch (1989-12-31T00:00:00Z). */
 const FIT_EPOCH_OFFSET_S = 631_065_600;
-
-/**
- * The FIT CRC-16, from the spec's reference implementation. Nibble-at-a-time
- * against a 16-entry table — not a CRC any generic library will match, which is
- * why it is written out here.
- */
-const CRC_TABLE = [
-  0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001, 0x6c00,
-  0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400,
-];
-
-function fitCrc(data: Buffer): number {
-  let crc = 0;
-  for (const byte of data) {
-    let tmp = CRC_TABLE[crc & 0xf];
-    crc = (crc >> 4) & 0x0fff;
-    crc = crc ^ tmp ^ CRC_TABLE[byte & 0xf];
-
-    tmp = CRC_TABLE[crc & 0xf];
-    crc = (crc >> 4) & 0x0fff;
-    crc = crc ^ tmp ^ CRC_TABLE[(byte >> 4) & 0xf];
-  }
-  return crc & 0xffff;
-}
 
 // FIT base types. The 0x80 bit marks a type whose byte order follows the
 // message's architecture field; we always write little-endian.

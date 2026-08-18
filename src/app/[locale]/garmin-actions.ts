@@ -5,7 +5,11 @@ import { resolveAthleteId } from './current-actor';
 import {
   importGarminSessions,
   type ImportResult,
+  type ImportFailure,
 } from '@/features/garmin/garmin-import';
+
+/** Every way an upload can fail, including the two this action decides itself. */
+export type UploadFailure = ImportFailure | 'not-authenticated' | 'empty';
 
 export type UploadResult =
   | ImportResult

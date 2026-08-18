@@ -254,14 +254,135 @@ function fitSession(s: FitSession, allRecords: FitRecord[]): ParsedSession | nul
   };
 }
 
-export function parseFit(buffer: Buffer): Promise<ParsedSession[]> {
+/**
+ * Why a FIT upload failed, in the terms the athlete needs to hear.
+ *
+ * One message for every failure is what turns a recoverable mistake into a dead
+ * end for a tester who cannot ask (showable-version/06), so the parser reports
+ * *which* failure it was and the copy says so.
+ */
+export type FitParseFailure = 'not-a-fit-file' | 'corrupt' | 'unreadable';
+
+export type FitParseResult =
+  | { ok: true; sessions: ParsedSession[] }
+  | { ok: false; reason: FitParseFailure };
+
+/** Bytes 8-11 of every FIT file, and the cheapest way to know this is not one. */
+const FIT_MAGIC = '.FIT';
+
+/** The two header lengths the FIT spec defines: 12 bytes, or 14 with a header CRC. */
+const HEADER_SIZES = [12, 14];
+
+/**
+ * The FIT checksum, straight from the spec's reference implementation.
+ *
+ * Exported so the test fixture writes files with the same function that reads
+ * them. That is deliberate but worth naming: it means these two agree with each
+ * other, not necessarily with Garmin — what it does prove is that a file whose
+ * bytes were altered after writing no longer matches its own checksum, which is
+ * the property the corrupt-upload guard actually rests on.
+ */
+export function fitCrc(data: Buffer): number {
+  const table = [
+    0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001,
+    0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400,
+  ];
+  let crc = 0;
+  for (const byte of data) {
+    let tmp = table[crc & 0xf];
+    crc = (crc >> 4) & 0x0fff;
+    crc = crc ^ tmp ^ table[byte & 0xf];
+
+    tmp = table[crc & 0xf];
+    crc = (crc >> 4) & 0x0fff;
+    crc = crc ^ tmp ^ table[(byte >> 4) & 0xf];
+  }
+  return crc & 0xffff;
+}
+
+/**
+ * Reads the FIT header and checksum before the decoder ever sees the buffer.
+ *
+ * This exists because `fit-file-parser` does not fail on input it cannot make
+ * sense of — it simply never calls its callback, so the promise never settles
+ * and a server action hangs until the platform kills it, with the athlete
+ * watching a spinner (showable-version/06, found 2026-08-18). Renaming a `.txt`
+ * is the ordinary way to reach that, and an unattended tester is exactly who
+ * will do it.
+ *
+ * The checksum half is a separate decision (Mads, 2026-08-18): the parser runs
+ * with `force: true`, which tolerates real-world quirks but also ignores the
+ * CRC, so a file corrupted in transit used to decode into the training record
+ * silently. The record is immutable once written, so a file that fails its own
+ * checksum is refused rather than trusted.
+ *
+ * Returns the failure, or null when the bytes are a well-formed FIT file.
+ */
+export function inspectFitFile(buffer: Buffer): FitParseFailure | null {
+  if (buffer.length < 12) return 'not-a-fit-file';
+
+  const headerSize = buffer.readUInt8(0);
+  if (!HEADER_SIZES.includes(headerSize)) return 'not-a-fit-file';
+  if (buffer.length < headerSize) return 'not-a-fit-file';
+  if (buffer.toString('ascii', 8, 12) !== FIT_MAGIC) return 'not-a-fit-file';
+
+  // Past this point the file says it is FIT, so every remaining fault is damage
+  // to a real file rather than the wrong file entirely — which is the
+  // distinction the athlete-facing copy turns on.
+  const dataSize = buffer.readUInt32LE(4);
+  const expected = headerSize + dataSize + 2; // + the trailing file CRC
+  if (buffer.length < expected) return 'corrupt';
+
+  const stored = buffer.readUInt16LE(headerSize + dataSize);
+  if (stored !== fitCrc(buffer.subarray(0, headerSize + dataSize))) return 'corrupt';
+
+  return null;
+}
+
+/**
+ * How long the decoder gets before it is treated as never returning.
+ *
+ * The header check above catches every malformed input we know of, but the
+ * failure mode is "the callback is never invoked" — and a guard that depends on
+ * having enumerated every bad input is a guard that will be wrong again. This is
+ * the backstop that makes the hang structurally impossible rather than merely
+ * unlikely. Generous, because it must never fire for a large but valid file.
+ */
+const PARSE_TIMEOUT_MS = 15_000;
+
+/**
+ * Decodes an uploaded FIT file into sessions.
+ *
+ * Validates the header and checksum first, then decodes with `force: true` —
+ * tolerant of the field-level quirks a real Garmin export carries, since the
+ * structural checks it would otherwise perform have already been made here,
+ * deterministically and with a reason attached.
+ */
+export function parseFit(buffer: Buffer): Promise<FitParseResult> {
+  const problem = inspectFitFile(buffer);
+  if (problem) return Promise.resolve({ ok: false, reason: problem });
+
   return new Promise((resolve) => {
+    // Settles exactly once, whichever arrives first — the decoder or the clock.
+    let settled = false;
+    const finish = (result: FitParseResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => finish({ ok: false, reason: 'unreadable' }), PARSE_TIMEOUT_MS);
+    // Node keeps the process alive for a pending timer; this one is a backstop,
+    // so it must never hold a server (or a test run) open on its own.
+    timer.unref?.();
+
     const parser = new FitParser({ force: true, mode: 'list' });
     // Cast around a @types/node quirk: the parser types the argument as
     // Buffer<ArrayBuffer>, while a plain Buffer is Buffer<ArrayBufferLike>. Same
     // value at runtime.
     parser.parse(buffer as Buffer<ArrayBuffer>, (error: unknown, data: unknown) => {
-      if (error || !data) return resolve([]);
+      if (error || !data) return finish({ ok: false, reason: 'unreadable' });
       const d = data as {
         activity?: { sessions?: FitSession[]; records?: FitRecord[] };
         sessions?: FitSession[];
@@ -269,11 +390,12 @@ export function parseFit(buffer: Buffer): Promise<ParsedSession[]> {
       };
       const sessions = d.activity?.sessions || d.sessions || [];
       const allRecords = d.records || d.activity?.records || [];
-      resolve(
-        sessions
+      finish({
+        ok: true,
+        sessions: sessions
           .map((s) => fitSession(s, allRecords))
           .filter((s): s is ParsedSession => s !== null),
-      );
+      });
     });
   });
 }

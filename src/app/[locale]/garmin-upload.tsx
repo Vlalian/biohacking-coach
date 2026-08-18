@@ -3,18 +3,35 @@
 import { useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { uploadGarminAction } from './garmin-actions';
+import { uploadGarminAction, type UploadFailure } from './garmin-actions';
 
 type Status =
   | { kind: 'idle' }
   | { kind: 'done'; count: number }
-  | { kind: 'error' };
+  | { kind: 'error'; reason: UploadFailure };
+
+/**
+ * Failure reason to message key.
+ *
+ * A total map rather than a lookup with a fallback: adding a reason to
+ * `UploadResult` and forgetting the copy is then a type error, not a raw key on
+ * screen for a tester who cannot ask what it means (showable-version/06).
+ */
+const ERROR_KEY: Record<UploadFailure, string> = {
+  'not-a-fit-file': 'errorNotAFitFile',
+  corrupt: 'errorCorrupt',
+  'no-sessions': 'errorNoSessions',
+  unreadable: 'error',
+  'not-authenticated': 'error',
+  empty: 'error',
+};
 
 /**
  * Upload a Garmin .fit/.gpx file. The file goes straight to the server action,
  * which parses and persists it; on success the calendar revalidates and the new
- * session appears. Failures (a malformed file, an empty pick) surface as one
- * generic localized message — nothing was written.
+ * session appears. A failure names which failure it was — the wrong kind of file
+ * and a damaged one need different things from the athlete — and nothing was
+ * written in any of those cases.
  */
 export function GarminUpload() {
   const t = useTranslations('Garmin');
@@ -36,7 +53,7 @@ export function GarminUpload() {
         setStatus({ kind: 'done', count: result.count });
         router.refresh();
       } else {
-        setStatus({ kind: 'error' });
+        setStatus({ kind: 'error', reason: result.reason });
       }
     });
   }
@@ -64,7 +81,7 @@ export function GarminUpload() {
       )}
       {status.kind === 'error' && (
         <p role="alert" className="text-sm text-red-600">
-          {t('error')}
+          {t(ERROR_KEY[status.reason])}
         </p>
       )}
     </div>
