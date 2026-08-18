@@ -22,17 +22,27 @@ exactly, don't drift to synonyms) and `OVERVIEW.md` says where truth lives.
 
 ## Working rules
 
-### Review code before committing it
+### Do not run `/code-review` yourself — Mads does
 
-Run the `/code-review` skill on product code before committing it, and before opening a pull request. Mads's standing instruction, 2026-07-16.
+**Never invoke the `/code-review` skill on your own initiative.** Mads runs it when he wants it. Standing instruction, 2026-08-19 — this **reverses** the 2026-07-16 rule that told agents to run it before every commit. That rule is gone, not merely relaxed; if you find it quoted somewhere else, that copy is stale.
 
-This applies to **code** — `src/`, `scripts/`, config that affects the build. It does not apply to tracker files, ADRs, PRDs, or issue markdown; reviewing prose with a code-review skill wastes a session and teaches you to ignore the rule.
+Why it changed: the skill spawns parallel sub-agents and costs a session's worth of tokens. Whether to spend that on a given change is his call, not yours. An agent that reviews everything it touches is not being careful — it is spending someone else's budget by reflex.
 
-Fix what the review finds, or say plainly why you are not fixing it. A review whose findings you skip silently is theatre.
+What to do instead, when product code is ready:
 
-This is an instruction, not an enforced hook: no hook can verify a skill ran, only that a command was typed. `.claude/hooks/block-dangerous-git.sh` is the enforced layer and it guards different things (force pushes, hard resets, bulk discards). Do not confuse the two — this one holds only because agents follow it.
+- Say so plainly, and say the review has **not** been run. Do not let "done" imply "reviewed".
+- Commit and push. Opening the PR is Mads's call, as always.
+- If you have a specific reason to think a review would earn its keep here — the change is load-bearing, or you are genuinely unsure of it — say that in one sentence and let him decide. Do not run it, and do not ask twice.
 
-CodeRabbit reviews every PR on GitHub as well. That is the second pair of eyes, not the first: it runs after the code is pushed, and the point of this rule is to not push work you already know is wrong.
+If he does ask for one: fix what it finds, or say plainly why you are not fixing it. A review whose findings you skip silently is theatre.
+
+This governs `/code-review` specifically, not ordinary care. The definition of done below is still yours to run, every time, unasked.
+
+**Where this rule lives, and why that matters.** The `mattpocock-skills:implement` skill ends with "use /code-review to review the work". That file sits in the plugin cache (`~/.claude/plugins/cache/…/<version>/`), and **a plugin update overwrites it** — an edit there is not durable. This file is: it is checked into git and loads into every session through `CLAUDE.md`. Where the two disagree, **this file wins.**
+
+There is also a local enforced layer, `.claude/hooks/block-review-skill.sh`, which refuses the tool call outright. Note the asymmetry with what the old rule observed — that "no hook can verify a skill ran". True, and the mirror image is still enforceable: a hook cannot prove a review happened, but it can certainly stop one from starting. `.claude/` is gitignored, so that hook exists only where it has been set up; this file is the part that travels.
+
+CodeRabbit still reviews PRs on GitHub, on request (`@coderabbitai review`).
 
 ### One worktree per implementation session
 
@@ -88,7 +98,9 @@ Product code (`src/`, `scripts/`, build config) is not done until all four pass:
     npm test              # vitest green
     npm run build         # next build succeeds (for changes that affect the build)
 
-Run them yourself and iterate against them before you call the work done — "looks done" is not a signal, a passing check is. Then run `/code-review` (the standing rule above) before committing or opening a PR. If a check fails and you are leaving it failing, say so plainly and why; a silently skipped check is the same failure mode as a silently skipped review.
+Run them yourself and iterate against them before you call the work done — "looks done" is not a signal, a passing check is. If a check fails and you are leaving it failing, say so plainly and why; a silently skipped check is the worst kind, because it looks exactly like a passed one.
+
+These four are yours, unasked, every time. `/code-review` is **not** among them — see the rule above: you never start that one, Mads does.
 ### Check a document's claim about the code against the code
 
 When a tracker file, ADR, or decision log states something factual about the code — "X never happens", "**Where enforced:** `some/file.js`", "this table carries no name column" — **read the code before you repeat it.** Mads's standing instruction, 2026-07-17.
