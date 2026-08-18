@@ -1,4 +1,3 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
@@ -77,7 +76,6 @@ const PROPOSAL_ACK =
   'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
   'invite them to confirm when ready. Do not say it has been saved.';
 
-const PLAN_TOOL = PROPOSE_WEEK_PLAN_TOOL as unknown as Anthropic.Tool;
 
 /**
  * Renders the Weekly Session system prompt for this athlete, reviewing the week
@@ -249,7 +247,7 @@ export async function continueWeeklySession(
       // first — the same messages the API would have seen either way.
       messages: [...toApiMessages(transcript), { role: 'user', content: trimmed }],
       maxTokens: WEEKLY_MAX_TOKENS,
-      tools: [PLAN_TOOL],
+      tools: [PROPOSE_WEEK_PLAN_TOOL],
       toolResult: PROPOSAL_ACK,
     });
   } catch (error) {
