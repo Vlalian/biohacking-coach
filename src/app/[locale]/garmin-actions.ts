@@ -8,12 +8,17 @@ import {
   type ImportFailure,
 } from '@/features/garmin/garmin-import';
 
-/** Every way an upload can fail, including the two this action decides itself. */
-export type UploadFailure = ImportFailure | 'not-authenticated' | 'empty';
+/** The two failures this action decides itself, before the importer is reached. */
+export type ActionFailure = 'not-authenticated' | 'empty';
 
-export type UploadResult =
-  | ImportResult
-  | { ok: false; reason: 'not-authenticated' | 'empty' };
+/** Every way an upload can fail, including the two above. */
+export type UploadFailure = ImportFailure | ActionFailure;
+
+/**
+ * Derived from {@link ActionFailure} rather than repeating it: the two lists
+ * drifting apart is how a failure reaches the UI with no message mapped to it.
+ */
+export type UploadResult = ImportResult | { ok: false; reason: ActionFailure };
 
 /**
  * Server action for a Garmin upload.

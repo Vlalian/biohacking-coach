@@ -332,7 +332,9 @@
     "error": "Kunne ikke læse filen. Prøv en .fit- eller .gpx-eksport.",
     "errorNotAFitFile": "Det ligner ikke en .fit-fil. Åbn aktiviteten i Garmin Connect og vælg Export Original — en omdøbt fil virker ikke.",
     "errorCorrupt": "Den .fit-fil er beskadiget eller ufuldstændig. Hent den fra Garmin Connect igen, og upload på ny.",
-    "errorNoSessions": "Filen kunne læses, men indeholdt ingen aktivitet. Eksportér selve aktiviteten — ikke et resumé eller en rute."
+    "errorNoSessions": "Filen kunne læses, men indeholdt ingen aktivitet. Eksportér selve aktiviteten — ikke et resumé eller en rute.",
+    "errorEmpty": "Den fil er tom. Vælg den .fit- eller .gpx-fil, du eksporterede fra Garmin Connect.",
+    "errorNotAuthenticated": "Du er blevet logget ud. Log ind, og upload igen — intet gik tabt."
   },
   "ThemeToggle": {
     "switch": "Skift tema: lyst, mørkt eller system"

@@ -1,3 +1,9 @@
+// TEST FIXTURES ONLY — never import this from app code.
+//
+// It builds FIT and GPX files byte by byte so the decode path can be tested
+// without a real export. Same rule as `information-view/synthetic-fixtures.ts`:
+// invented data must never reach a real athlete's record.
+
 /**
  * A minimal FIT encoder, for fixtures.
  *

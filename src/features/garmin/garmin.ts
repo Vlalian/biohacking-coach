@@ -276,11 +276,18 @@ const HEADER_SIZES = [12, 14];
 /**
  * The FIT checksum, straight from the spec's reference implementation.
  *
- * Exported so the test fixture writes files with the same function that reads
- * them. That is deliberate but worth naming: it means these two agree with each
- * other, not necessarily with Garmin — what it does prove is that a file whose
- * bytes were altered after writing no longer matches its own checksum, which is
- * the property the corrupt-upload guard actually rests on.
+ * This is CRC-16/ARC (the reflected 0xA001 polynomial), computed with the FIT
+ * SDK's 16-entry nibble table — not a convention private to this repo.
+ *
+ * That distinction is load-bearing, because {@link inspectFitFile} now *refuses*
+ * an upload whose checksum does not match. The fixture writes files with this
+ * same function, so a round-trip test proves only that the two halves agree with
+ * each other; if this implementation were subtly wrong it would reject every
+ * real Garmin export and the fixture would never notice. The review raised
+ * exactly that, so the algorithm is pinned to an external constant instead: the
+ * published CRC-16/ARC check value, `0xBB3D` for the ASCII string "123456789"
+ * (see `garmin.test.ts`). A file Garmin considers valid computes the same way
+ * here.
  */
 export function fitCrc(data: Buffer): number {
   const table = [
@@ -340,63 +347,76 @@ export function inspectFitFile(buffer: Buffer): FitParseFailure | null {
 }
 
 /**
- * How long the decoder gets before it is treated as never returning.
- *
- * The header check above catches every malformed input we know of, but the
- * failure mode is "the callback is never invoked" — and a guard that depends on
- * having enumerated every bad input is a guard that will be wrong again. This is
- * the backstop that makes the hang structurally impossible rather than merely
- * unlikely. Generous, because it must never fire for a large but valid file.
- */
-const PARSE_TIMEOUT_MS = 15_000;
-
-/**
  * Decodes an uploaded FIT file into sessions.
  *
  * Validates the header and checksum first, then decodes with `force: true` —
  * tolerant of the field-level quirks a real Garmin export carries, since the
  * structural checks it would otherwise perform have already been made here,
  * deterministically and with a reason attached.
+ *
+ * **Why there is no timeout around the decode.** An earlier version wrapped this
+ * in a 15-second `setTimeout`, described as the backstop that made the hang
+ * "structurally impossible". It was inert, and the review caught it:
+ * `FitParser.parse` is *fully synchronous* — every one of its callbacks, the
+ * success path included, fires on the same tick — so the hang it was meant to
+ * catch is a blocked event loop, and a blocked event loop is exactly what stops
+ * a timer from running. A guard that cannot fire is worse than no guard, because
+ * it stops anyone looking for a real one.
+ *
+ * What actually bounds the decode is {@link inspectFitFile}, and it does so
+ * structurally rather than by enumerating bad inputs: the runaway is the
+ * decoder's `while (loopIndex < crcStart)` loop, `crcStart` is
+ * `headerSize + dataSize` read from the file's own header, and the check refuses
+ * any file shorter than `headerSize + dataSize + 2`. So `crcStart` can never
+ * exceed the bytes actually present, and the loop is bounded by the length of
+ * the upload — which the platform already caps. A file that passes the header
+ * check terminates.
+ *
+ * If the decode ever does need a real time bound, it has to run somewhere with
+ * its own event loop — a worker thread — not behind a timer on this one.
  */
 export function parseFit(buffer: Buffer): Promise<FitParseResult> {
   const problem = inspectFitFile(buffer);
   if (problem) return Promise.resolve({ ok: false, reason: problem });
 
   return new Promise((resolve) => {
-    // Settles exactly once, whichever arrives first — the decoder or the clock.
+    // `force: true` makes the decoder report a structural complaint and then
+    // carry on regardless, so it genuinely can call back twice — once to object
+    // and once with the data. First result wins; the rest are dropped.
     let settled = false;
     const finish = (result: FitParseResult) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
       resolve(result);
     };
 
-    const timer = setTimeout(() => finish({ ok: false, reason: 'unreadable' }), PARSE_TIMEOUT_MS);
-    // Node keeps the process alive for a pending timer; this one is a backstop,
-    // so it must never hold a server (or a test run) open on its own.
-    timer.unref?.();
-
     const parser = new FitParser({ force: true, mode: 'list' });
-    // Cast around a @types/node quirk: the parser types the argument as
-    // Buffer<ArrayBuffer>, while a plain Buffer is Buffer<ArrayBufferLike>. Same
-    // value at runtime.
-    parser.parse(buffer as Buffer<ArrayBuffer>, (error: unknown, data: unknown) => {
-      if (error || !data) return finish({ ok: false, reason: 'unreadable' });
-      const d = data as {
-        activity?: { sessions?: FitSession[]; records?: FitRecord[] };
-        sessions?: FitSession[];
-        records?: FitRecord[];
-      };
-      const sessions = d.activity?.sessions || d.sessions || [];
-      const allRecords = d.records || d.activity?.records || [];
-      finish({
-        ok: true,
-        sessions: sessions
-          .map((s) => fitSession(s, allRecords))
-          .filter((s): s is ParsedSession => s !== null),
+    try {
+      // Cast around a @types/node quirk: the parser types the argument as
+      // Buffer<ArrayBuffer>, while a plain Buffer is Buffer<ArrayBufferLike>.
+      // Same value at runtime.
+      parser.parse(buffer as Buffer<ArrayBuffer>, (error: unknown, data: unknown) => {
+        if (error || !data) return finish({ ok: false, reason: 'unreadable' });
+        const d = data as {
+          activity?: { sessions?: FitSession[]; records?: FitRecord[] };
+          sessions?: FitSession[];
+          records?: FitRecord[];
+        };
+        const sessions = d.activity?.sessions || d.sessions || [];
+        const allRecords = d.records || d.activity?.records || [];
+        finish({
+          ok: true,
+          sessions: sessions
+            .map((s) => fitSession(s, allRecords))
+            .filter((s): s is ParsedSession => s !== null),
+        });
       });
-    });
+    } catch {
+      // The decoder throws synchronously on shapes its own guards miss. Since
+      // `parse` runs on this tick, that throw would otherwise escape the
+      // executor and reject the promise — and no caller catches it.
+      finish({ ok: false, reason: 'unreadable' });
+    }
   });
 }
 

@@ -17,13 +17,19 @@ type Status =
  * `UploadResult` and forgetting the copy is then a type error, not a raw key on
  * screen for a tester who cannot ask what it means (showable-version/06).
  */
+/**
+ * One message per failure, because one message for all of them is what turns a
+ * recoverable mistake into a dead end for a tester who cannot ask
+ * (showable-version/06). `unreadable` keeps the generic string on purpose: it is
+ * the case where the decoder itself could not say what was wrong.
+ */
 const ERROR_KEY: Record<UploadFailure, string> = {
   'not-a-fit-file': 'errorNotAFitFile',
   corrupt: 'errorCorrupt',
   'no-sessions': 'errorNoSessions',
+  empty: 'errorEmpty',
+  'not-authenticated': 'errorNotAuthenticated',
   unreadable: 'error',
-  'not-authenticated': 'error',
-  empty: 'error',
 };
 
 /**
