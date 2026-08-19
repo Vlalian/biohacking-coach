@@ -317,11 +317,21 @@ export function fitCrc(data: Buffer): number {
  * is the ordinary way to reach that, and an unattended tester is exactly who
  * will do it.
  *
- * The checksum half is a separate decision (Mads, 2026-08-18): the parser runs
- * with `force: true`, which tolerates real-world quirks but also ignores the
- * CRC, so a file corrupted in transit used to decode into the training record
- * silently. The record is immutable once written, so a file that fails its own
- * checksum is refused rather than trusted.
+ * The checksum half is a separate decision (Mads, 2026-08-18, reaffirmed
+ * 2026-08-19 after review raised it as out of scope): the parser runs with
+ * `force: true`, which tolerates real-world quirks but also ignores the CRC, so
+ * a file corrupted in transit used to decode into the training record silently.
+ * The record is immutable once written, so a file that fails its own checksum is
+ * refused rather than trusted.
+ *
+ * **This rule has never met a real Garmin file.** The checksum arithmetic is not
+ * the risk — `fitCrc` is pinned to the published CRC-16/ARC check value, so it
+ * cannot be quietly wrong — but every file that has ever reached this function
+ * was written by our own fixture. Whether a genuine export from an older watch,
+ * a multisport activity, or a device writing developer fields still satisfies
+ * these four checks is unknown, and refusing a valid export is the failure to
+ * watch for. Deliberately left strict rather than lenient, and scheduled for a
+ * real file in showable-version/06 round 2.
  *
  * Returns the failure, or null when the bytes are a well-formed FIT file.
  */
