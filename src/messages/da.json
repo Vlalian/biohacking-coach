@@ -493,5 +493,19 @@
     "title": "Det kunne ikke indlæses",
     "body": "Noget gik galt hos os. Dine træningsdata er i sikkerhed — prøv igen, og hvis det bliver ved, så kom tilbage om et øjeblik.",
     "retry": "Prøv igen"
+  },
+  "Narration": {
+    "single": "{clause}.",
+    "item": "• {clause}",
+    "multiLead": "Der er sket et par ting i din plan, siden du sidst var her:",
+    "withReason": "{clause} — {reason}",
+    "prescribed": "{coach} har lagt en {type}-session ind {day}",
+    "prescribedNoType": "{coach} har lagt en session ind {day}",
+    "edited": "{coach} har ændret din {type}-session {day}",
+    "editedNoType": "{coach} har ændret en session {day}",
+    "deleted": "{coach} har taget {type}-sessionen af {day}",
+    "deletedNoType": "{coach} har taget en session af {day}",
+    "yourHeadCoach": "Din Head Coach",
+    "recently": "for nylig"
   }
 }

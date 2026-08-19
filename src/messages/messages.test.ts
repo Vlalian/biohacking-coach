@@ -83,10 +83,17 @@ describe('message catalogues', () => {
       // "Session Type" is the domain term (CONTEXT.md) — the calendar legend
       // names it verbatim in both languages, like Information's "Type" already does.
       path === 'Calendar.legend';
+    // Simple ICU placeholders are not words — "{clause} — {reason}" is
+    // structure, and is identical in every language by definition. Deliberately
+    // narrow: `\w+` inside the braces, so plural forms like
+    // "{count, plural, one {# session} other {# sessions}}" keep their real
+    // words and stay under the guard.
+    const placeholders = /\{\s*\w+\s*\}/g;
     // Strip punctuation left behind by removed terms ("Peak Power (W)" → "()"),
     // so a message that was nothing but terms compares as empty.
     const translatable = (message: string, path: string) =>
       message
+        .replace(placeholders, '')
         .replace(technicalTerms, '')
         .replace(cognateScope(path) ? cognates : /$^/g, '')
         .replace(/[^\p{L}]+/gu, ' ')

@@ -1,5 +1,5 @@
 import { hasLocale } from 'next-intl';
-import { setRequestLocale } from 'next-intl/server';
+import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { ViewId } from '@/components/shell/app-shell';
@@ -14,6 +14,7 @@ import {
   hasHeldWeeklySessionInWeek,
 } from '@/features/coach/conversation-repository';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
+import { narratePendingEvents } from '@/features/coach/narration-service';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
@@ -70,6 +71,30 @@ export default async function AppShellLayout({
 
   if (athlete) {
     const today = dateKey(new Date());
+
+    // Narration runs *before* the transcript is read, so anything the Head
+    // Coach did while the athlete was away is already in the thread this render
+    // hands to the Coach Overlay — rather than appearing only on the next
+    // navigation (ADR 0003, "no silent plan mutations"; `coached-mode/03`).
+    //
+    // App-open is the trigger, not the Weekly Session: that is offered and
+    // never forced (ADR 0007), so hanging narration off it would let an athlete
+    // who dismisses the offer never learn their plan changed.
+    //
+    // A write on a render path is deliberate and is safe by construction: with
+    // nothing pending — the overwhelmingly common case — this is one indexed
+    // read and no write at all, and when there is something, the stamp and the
+    // message land in one batch that re-asserts `narrated_at IS NULL`, so two
+    // concurrent renders cannot narrate the same change twice. It never calls
+    // the Anthropic API.
+    const narrationCopy = await getTranslations('Narration');
+    const weekdayOf = new Intl.DateTimeFormat(locale, { weekday: 'long' });
+    await narratePendingEvents(
+      athlete.id,
+      (key, values) => narrationCopy(key, values),
+      (key) => weekdayOf.format(new Date(`${key}T12:00:00Z`)),
+    );
+
     // One query for whatever is open, across kinds — the Overlay is one surface
     // hosting several behaviors (ADR 0007), so the shell does not ask for a kind
     // by name. Both can be open at once by design: the resting Coach Chat, and
