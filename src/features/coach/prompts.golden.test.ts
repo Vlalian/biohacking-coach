@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildWeeklyContext, renderWeeklyPrompt, buildChatPrompt } from './prompts';
 import type { CheckIn, SessionContext } from './check-in';
-import type { WeekPlanSession } from './week-plan';
+import type { WeekSession } from './week';
 
 /**
  * Golden prompts — the regression net for prompt *assembly*, not prompt content.
@@ -205,12 +205,13 @@ describe('golden — the Coach Chat prompt', () => {
   // mixed status, a same-type Double, and the tapped session rendered short
   // because the Reference block below carries its detail.
   it('renders identically with the current week rendered', () => {
-    const week: WeekPlanSession[] = [
+    const week: WeekSession[] = [
       {
         date: '2026-08-17',
         sessionType: 'Endurance',
         status: 'completed',
         origin: 'coach',
+        title: null,
         durationMinutes: 90,
         zone: '2',
         note: 'steady, hold the low end',
@@ -221,6 +222,7 @@ describe('golden — the Coach Chat prompt', () => {
         sessionType: 'Endurance',
         status: 'planned',
         origin: 'athlete',
+        title: 'masters squad',
         durationMinutes: 40,
         zone: null,
         note: 'club swim',
@@ -231,6 +233,7 @@ describe('golden — the Coach Chat prompt', () => {
         sessionType: 'Intensity',
         status: 'planned',
         origin: 'head_coach',
+        title: null,
         durationMinutes: 75,
         zone: '4',
         note: 'threshold set — race sharpness',
@@ -241,6 +244,7 @@ describe('golden — the Coach Chat prompt', () => {
         sessionType: 'Recovery',
         status: 'skipped',
         origin: 'coach',
+        title: null,
         durationMinutes: 45,
         zone: '1',
         note: null,
@@ -260,12 +264,13 @@ describe('golden — the Coach Chat prompt', () => {
   // The counterpart: a week with no Head-Coach session spends no prompt on a
   // rule that cannot apply.
   it('renders identically for a week the Coach planned alone', () => {
-    const week: WeekPlanSession[] = [
+    const week: WeekSession[] = [
       {
         date: '2026-08-18',
         sessionType: 'Tempo',
         status: 'planned',
         origin: 'coach',
+        title: null,
         durationMinutes: 60,
         zone: '3',
         note: null,

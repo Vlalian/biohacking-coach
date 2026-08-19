@@ -5,7 +5,7 @@ import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-
 import type { Session } from '@/features/session/session';
 import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
-import { weekPlanFrom } from './week-plan';
+import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
 import { callCoach } from './coach-client';
 import {
@@ -98,7 +98,7 @@ async function renderSystem(
     checkIn,
     today,
     reference ? toSessionContext(reference) : null,
-    weekPlanFrom(weekSessions, reference?.id),
+    weekFrom(weekSessions, reference?.id),
   );
 }
 

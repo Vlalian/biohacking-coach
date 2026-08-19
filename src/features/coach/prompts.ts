@@ -11,7 +11,7 @@ import {
 } from './prompt-blocks';
 import { assertNoDirectIdentifier } from './check-in';
 import type { SessionOrigin } from '@/features/session/session';
-import type { WeekPlanSession } from './week-plan';
+import type { WeekSession } from './week';
 import type {
   CheckIn,
   SessionContext,
@@ -55,6 +55,25 @@ const weekdayShort = (dateKey: string): string =>
   });
 
 /**
+ * A day as every prompt names one: 'Mon 2026-08-17'.
+ *
+ * The weekday is redundant with the ISO date and carried anyway — the model
+ * reasons about "tomorrow" and "the weekend" far more reliably when it does not
+ * have to derive the weekday itself.
+ */
+const dayReference = (dateKey: string): string => `${weekdayShort(dateKey)} ${dateKey}`;
+
+/**
+ * A Session Type with its Double qualifier, when it has one: '2nd Endurance'.
+ *
+ * Shared by every formatter below because the rule is one rule (CONTEXT.md,
+ * Week Activity): the qualifier appears only for same-type Doubles, since that
+ * is the single case where a day and a type do not identify a session.
+ */
+const qualifiedType = (sessionType: string, position?: number): string =>
+  `${position ? `${ordinal(position)} ` : ''}${sessionType}`;
+
+/**
  * Natural references for skipped sessions: date + type, with the position
  * qualifier ("2nd Endurance") only when two same-type sessions share a day.
  * Entity ids never appear in prompts.
@@ -65,8 +84,7 @@ export function formatSkippedSessions(
   if (!skippedSessions || skippedSessions.length === 0) return null;
   return skippedSessions
     .map((s) => {
-      const qualifier = s.position ? `${ordinal(s.position)} ` : '';
-      return `${weekdayShort(s.date)} ${s.date}: ${qualifier}${s.sessionType}, skipped`;
+      return `${dayReference(s.date)}: ${qualifiedType(s.sessionType, s.position)}, skipped`;
     })
     .join('; ');
 }
@@ -80,14 +98,13 @@ export function formatWeekActivity(weekActivity?: WeekActivity | null): string |
   if (!weekActivity) return null;
   const lines: string[] = [];
   (weekActivity.moves || []).forEach((m) => {
-    const qualifier = m.position ? `${ordinal(m.position)} ` : '';
     lines.push(
-      `- moved ${weekdayShort(m.from)} ${m.from} ${qualifier}${m.sessionType} to ${weekdayShort(m.to)} ${m.to}`,
+      `- moved ${dayReference(m.from)} ${qualifiedType(m.sessionType, m.position)} to ${dayReference(m.to)}`,
     );
   });
   (weekActivity.creations || []).forEach((c) => {
     lines.push(
-      `- added ${weekdayShort(c.dateKey)} ${c.dateKey} ${c.sessionType}${c.retro ? ' (retro-logged as done)' : ''}`,
+      `- added ${dayReference(c.dateKey)} ${c.sessionType}${c.retro ? ' (retro-logged as done)' : ''}`,
     );
   });
   return lines.length > 0 ? lines.join('\n') : null;
@@ -399,7 +416,7 @@ export function buildChatPrompt(
   checkIn: CheckIn,
   today: string = todayISO(),
   sessionContext: SessionContext | null = null,
-  weekPlan: WeekPlanSession[] = [],
+  week: WeekSession[] = [],
 ): string {
   // Asserted here, at the prompt builder, because that is where AGENTS.md says
   // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
@@ -412,7 +429,7 @@ export function buildChatPrompt(
   // The week arrives separately and carries athlete and Coach free text in its
   // notes, so it is asserted here for the same reason the Reference is: at the
   // prompt builder, not per caller.
-  assertNoDirectIdentifier(weekPlan);
+  assertNoDirectIdentifier(week);
 
   const {
     body,
@@ -450,7 +467,7 @@ export function buildChatPrompt(
     `CONTEXT (use silently — never cite scores/numbers):
 phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm${race}${noTrain}`,
 
-    weekPlanBlock(weekPlan),
+    weekBlock(week),
 
     equipmentBlock(buildEquipmentLines(equipment)),
 
@@ -473,6 +490,11 @@ phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount} 
  * the model reasons about them: "you planned this" and "the athlete's Head Coach
  * set this" are the difference between a Coach that reshapes its own session and
  * one that explains and holds on someone else's (ADR 0003).
+ *
+ * The `garmin` origin is a **Detected Activity** in `CONTEXT.md`'s terms. The
+ * label stays plain language for the same reason the others do — the model is
+ * being told what happened, not taught the glossary — but the domain term is
+ * named here so a reader of this code can find the entry that governs it.
  */
 const ORIGIN_LABEL: Record<SessionOrigin, string> = {
   coach: 'you planned this',
@@ -490,12 +512,14 @@ const ORIGIN_LABEL: Record<SessionOrigin, string> = {
  * to the SESSION DISCUSSION block below, so the one session the athlete is
  * actually asking about is described once rather than twice.
  */
-export function formatWeekPlan(weekPlan?: WeekPlanSession[]): string | null {
-  if (!weekPlan || weekPlan.length === 0) return null;
-  return weekPlan
+export function formatWeekSessions(week?: WeekSession[]): string | null {
+  if (!week || week.length === 0) return null;
+  return week
     .map((s) => {
-      const qualifier = s.position ? `${ordinal(s.position)} ` : '';
-      const head = `- ${weekdayShort(s.date)} ${s.date}: ${qualifier}${s.sessionType}`;
+      // The athlete's own label, when they gave one: a session typed `Other`
+      // says nothing on its own, and "Other" is not a thing a Coach can discuss.
+      const label = s.title ? ` "${s.title}"` : '';
+      const head = `- ${dayReference(s.date)}: ${qualifiedType(s.sessionType, s.position)}${label}`;
       const authorship = ORIGIN_LABEL[s.origin];
 
       if (s.isReference) {
@@ -526,16 +550,16 @@ export function formatWeekPlan(weekPlan?: WeekPlanSession[]): string | null {
  * refers to, and because a week with no Head-Coach session should not spend
  * prompt on a rule that cannot apply.
  */
-function weekPlanBlock(weekPlan: WeekPlanSession[]): PromptBlock {
-  const lines = formatWeekPlan(weekPlan);
+function weekBlock(week: WeekSession[]): PromptBlock {
+  const lines = formatWeekSessions(week);
   if (!lines) return null;
 
-  const hasPrescribed = weekPlan.some((s) => s.origin === 'head_coach');
+  const hasPrescribed = week.some((s) => s.origin === 'head_coach');
   const authority = hasPrescribed
     ? `\n\nAUTHORITY: The Head Coach's sessions are theirs, not yours. Explain and defend them — why they were set, why they are a good idea — as one team, one plan, one voice. Never offer to change or remove one; the Head Coach decides. For your own sessions, talk freely about alternatives.`
     : '';
 
-  return `THIS WEEK (Mon-Sun, the athlete's current Week Plan — refer to a session by its day and type, never by a number or id):
+  return `THIS WEEK (Mon-Sun, every session on the athlete's calendar — refer to a session by its day and type, never by a number or id):
 ${lines}${authority}`;
 }
 

@@ -1,4 +1,4 @@
-import type { Session, SessionOrigin } from '@/features/session/session';
+import type { SessionOrigin } from '@/features/session/session';
 
 /**
  * The athlete's current week as a Coach prompt sees it.
@@ -23,8 +23,37 @@ import type { Session, SessionOrigin } from '@/features/session/session';
  *    prompt the Coach offers changes it is forbidden to make, and the athlete
  *    meets a server-side refusal instead of a coaching answer.
  *
+ * Naming: a **week** here, not a Week Plan. `CONTEXT.md` reserves Week Plan for
+ * the Coach's recommended schedule, whose entries are Planned Sessions; this
+ * block also carries Athlete Sessions ("extras on top"), Prescribed Sessions and
+ * Detected Activities, so calling the whole thing a Week Plan would name it
+ * after only one of its authors.
+ *
  * Pure: plain data in, plain data out. No DB, no HTTP, no Anthropic client.
  */
+
+/**
+ * What this module needs of a stored session, declared here rather than taken
+ * from `features/session`.
+ *
+ * The prompt layer should not have to change when a column the calendar renders
+ * is added or reshaped — it reads eight fields and an id, and saying so keeps
+ * the dependency pointed at a shape this module owns. `SessionOrigin` is the
+ * deliberate exception: it is a closed set enforced by a database check
+ * constraint, and a local copy would drift from the stored values silently,
+ * which is precisely the failure the authority checks must never have.
+ */
+export interface StoredSessionForWeek {
+  id: string;
+  date: string;
+  type: string;
+  status: string;
+  origin: SessionOrigin;
+  title: string | null;
+  duration: number | null;
+  zone: string | null;
+  note: string | null;
+}
 
 /**
  * One session of the current week, as the prompt sees it — never an id.
@@ -33,12 +62,19 @@ import type { Session, SessionOrigin } from '@/features/session/session';
  * a day genuinely holds two sessions of one type, because that is the only case
  * where a date and a type do not identify a session between two humans.
  */
-export interface WeekPlanSession {
+export interface WeekSession {
   /** ISO 'YYYY-MM-DD', matching the `TODAY:` line so the Coach can read "tomorrow". */
   date: string;
   sessionType: string;
   status: string;
   origin: SessionOrigin;
+  /**
+   * The athlete's own label for an Athlete Session. Carried because a session
+   * typed `Other` says nothing on its own — "Other" and "Other, called Yoga"
+   * are different things to coach about. Free text, so it is covered by the
+   * prompt builder's identifier assertion like every other note.
+   */
+  title: string | null;
   durationMinutes: number | null;
   zone: string | null;
   note: string | null;
@@ -60,10 +96,10 @@ export interface WeekPlanSession {
  * carrying an id into the renderer purely to compare it, and the renderer's
  * whole guarantee is that it never sees one.
  */
-export function weekPlanFrom(
-  sessions: Session[],
+export function weekFrom(
+  sessions: StoredSessionForWeek[],
   referenceSessionId?: string | null,
-): WeekPlanSession[] {
+): WeekSession[] {
   const sameTypeDayCounts = new Map<string, number>();
   for (const s of sessions) {
     const key = `${s.date}|${s.type}`;
@@ -83,6 +119,7 @@ export function weekPlanFrom(
       sessionType: s.type,
       status: s.status,
       origin: s.origin,
+      title: s.title,
       durationMinutes: s.duration,
       zone: s.zone,
       note: s.note,

@@ -3,13 +3,13 @@ import {
   buildWeeklyContext,
   renderWeeklyPrompt,
   buildChatPrompt,
-  formatWeekPlan,
+  formatWeekSessions,
   formatSkippedSessions,
   formatWeekActivity,
   formatWeekFeedback,
 } from './prompts';
 import type { CheckIn, Onboarding } from './check-in';
-import type { WeekPlanSession } from './week-plan';
+import type { WeekSession } from './week';
 
 const BASE: CheckIn = {
   body: 7,
@@ -390,20 +390,21 @@ describe('no real identity reaches a prompt', () => {
 
 // ── Coach Chat sees the Week Plan ────────────────────────────────────────────
 
-const planned = (over: Partial<WeekPlanSession> = {}): WeekPlanSession => ({
+const planned = (over: Partial<WeekSession> = {}): WeekSession => ({
   date: '2026-08-18',
   sessionType: 'Intensity',
   status: 'planned',
   origin: 'coach',
+  title: null,
   durationMinutes: 60,
   zone: '4',
   note: null,
   ...over,
 });
 
-describe('formatWeekPlan', () => {
+describe('formatWeekSessions', () => {
   it('renders day, date, type, status and authorship', () => {
-    const line = formatWeekPlan([planned()]);
+    const line = formatWeekSessions([planned()]);
     expect(line).toContain('2026-08-18');
     expect(line).toContain('Intensity');
     expect(line).toContain('planned');
@@ -411,17 +412,27 @@ describe('formatWeekPlan', () => {
   });
 
   it('names the Head Coach as the author of a Prescribed Session', () => {
-    expect(formatWeekPlan([planned({ origin: 'head_coach' })])).toContain('Head Coach');
+    expect(formatWeekSessions([planned({ origin: 'head_coach' })])).toContain('Head Coach');
+  });
+
+  // An Athlete Session typed `Other` carries its meaning in the label alone.
+  it("renders the athlete's own label beside the type", () => {
+    const line = formatWeekSessions([planned({ sessionType: 'Other', title: 'Yoga' })]);
+    expect(line).toContain('Other "Yoga"');
+  });
+
+  it('renders no empty quotes when the session has no label', () => {
+    expect(formatWeekSessions([planned()])).not.toContain('""');
   });
 
   it('is null for an empty week — a heading with nothing under it says nothing', () => {
-    expect(formatWeekPlan([])).toBeNull();
-    expect(formatWeekPlan(undefined)).toBeNull();
+    expect(formatWeekSessions([])).toBeNull();
+    expect(formatWeekSessions(undefined)).toBeNull();
   });
 
   // CONTEXT.md, Week Activity: the qualifier exists only for same-type Doubles.
   it('qualifies a same-type Double by position', () => {
-    const lines = formatWeekPlan([
+    const lines = formatWeekSessions([
       planned({ sessionType: 'Endurance', position: 1 }),
       planned({ sessionType: 'Endurance', position: 2 }),
     ]);
@@ -430,7 +441,7 @@ describe('formatWeekPlan', () => {
   });
 
   it('renders the tapped session short, deferring its detail to the Reference', () => {
-    const lines = formatWeekPlan([
+    const lines = formatWeekSessions([
       planned({ isReference: true, note: 'threshold set, hold 4x8', durationMinutes: 75 }),
     ]);
     expect(lines).toContain('detail below');
