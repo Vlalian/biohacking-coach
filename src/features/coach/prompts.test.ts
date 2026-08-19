@@ -388,7 +388,7 @@ describe('no real identity reaches a prompt', () => {
   });
 });
 
-// ── Coach Chat sees the Week Plan ────────────────────────────────────────────
+// ── Coach Chat sees the week ─────────────────────────────────────────────────
 
 const planned = (over: Partial<WeekSession> = {}): WeekSession => ({
   date: '2026-08-18',

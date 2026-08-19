@@ -256,7 +256,7 @@ describe('sendCoachChatMessage', () => {
   });
 });
 
-describe('Coach Chat sees the Week Plan', () => {
+describe('Coach Chat sees the week', () => {
   beforeEach(() => {
     callCoach.mockReset().mockResolvedValue({ text: 'Fuel early.', toolCalls: [] });
     appendMessages.mockReset().mockResolvedValue([]);
