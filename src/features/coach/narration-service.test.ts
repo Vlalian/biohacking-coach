@@ -3,7 +3,6 @@ import type { NarratableEvent } from './narration';
 
 const getPendingNarrationEvents = vi.fn<(a: string) => Promise<NarratableEvent[]>>();
 const claimAndNarrate = vi.fn();
-const getCoachFirstNames = vi.fn<(ids: string[]) => Promise<Record<string, string>>>();
 const getLatestOpenConversation = vi.fn();
 const createConversation = vi.fn();
 
@@ -11,7 +10,6 @@ vi.mock('./narration-repository', () => ({
   getPendingNarrationEvents,
   claimAndNarrate,
 }));
-vi.mock('./coach-repository', () => ({ getCoachFirstNames }));
 vi.mock('./conversation-repository', () => ({
   getLatestOpenConversation,
   createConversation,
@@ -34,7 +32,6 @@ const event = (over: Partial<NarratableEvent> = {}): NarratableEvent => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getCoachFirstNames.mockResolvedValue({ coach_1: 'Lars' });
   getLatestOpenConversation.mockResolvedValue({ id: 'conv_1' });
   createConversation.mockResolvedValue({ id: 'conv_new' });
 });
@@ -50,7 +47,6 @@ describe('narratePendingEvents — nothing pending', () => {
 
     expect(claimAndNarrate).not.toHaveBeenCalled();
     expect(createConversation).not.toHaveBeenCalled();
-    expect(getCoachFirstNames).not.toHaveBeenCalled();
     expect(getLatestOpenConversation).not.toHaveBeenCalled();
   });
 });
@@ -101,17 +97,34 @@ describe('narratePendingEvents — what it claims', () => {
     );
   });
 
-  it('resolves names for every acting coach, not just the first', async () => {
+  it('never resolves a real name — no first or last name may reach the Coach', async () => {
+    // Mads's rule, 2026-08-21. Narration is stored in the Coach Chat transcript,
+    // and `toApiMessages` replays that transcript to Anthropic on every later
+    // turn — so a name written here would reach the model for the rest of the
+    // athlete's history, not once. Attribution stays neutral until a *preferred
+    // name* (a self-chosen handle, not identity) exists; that is not built.
     getPendingNarrationEvents.mockResolvedValue([
       event(),
       event({ id: 'ev_2', actorId: 'coach_2' }),
-      event({ id: 'ev_3', actorId: 'coach_1' }),
     ]);
 
     await narratePendingEvents('a1', t, weekday);
 
-    const asked = getCoachFirstNames.mock.calls[0][0];
-    expect([...asked].sort()).toEqual(['coach_1', 'coach_2']);
+    const written = claimAndNarrate.mock.calls[0][0].content as string;
+    expect(written).toContain('Narration.yourHeadCoach');
+    expect(written).not.toContain('Lars');
+  });
+
+  it('reads no identity table at all on this path', async () => {
+    // Structural, not incidental: if someone later imports a name resolver here,
+    // this is the assertion that should make them stop and think rather than a
+    // name quietly appearing in every athlete's transcript.
+    const source = await import('node:fs').then((fs) =>
+      fs.readFileSync('src/features/coach/narration-service.ts', 'utf8'),
+    );
+    expect(source).not.toContain('user.name');
+    expect(source).not.toContain('FirstNames');
+    expect(source).not.toContain('getAthleteName');
   });
 
   it('makes no Anthropic call — narration is composed, never generated', async () => {

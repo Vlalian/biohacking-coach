@@ -1,5 +1,4 @@
 import { composeNarration, type Translate, type WeekdayOf } from './narration';
-import { getCoachFirstNames } from './coach-repository';
 import { createConversation, getLatestOpenConversation } from './conversation-repository';
 import { claimAndNarrate, getPendingNarrationEvents } from './narration-repository';
 
@@ -38,13 +37,24 @@ export async function narratePendingEvents(
   const pending = await getPendingNarrationEvents(athleteId);
   if (pending.length === 0) return;
 
-  const actorIds = [...new Set(pending.flatMap((e) => (e.actorId ? [e.actorId] : [])))];
-  const [coachFirstNames, openChat] = await Promise.all([
-    getCoachFirstNames(actorIds),
-    getLatestOpenConversation(athleteId, 'coach_chat'),
-  ]);
+  const openChat = await getLatestOpenConversation(athleteId, 'coach_chat');
 
-  const content = composeNarration(pending, coachFirstNames, t, weekdayOf);
+  // **No real name is resolved here, deliberately** (Mads, 2026-08-21): no
+  // first or last name may reach the Coach. Narration is stored in the Coach
+  // Chat transcript, and `toApiMessages` replays that transcript to Anthropic on
+  // every later turn — so a name written here would reach the model for the rest
+  // of the athlete's history, not just once.
+  //
+  // So attribution renders as the neutral "your Head Coach" until a **preferred
+  // name** exists — a self-chosen handle that is not identity. That feature is
+  // not built (`athlete.display_name` was renamed to `synthetic_label` in
+  // migration 0001, and it only ever covered athletes with no user row), and the
+  // placement question is still open in `coach-eval-mvp-route/06`.
+  //
+  // The empty map is the seam that feature plugs into: the composer already
+  // attributes per acting coach rather than per current link, so when preferred
+  // names land, only this line changes.
+  const content = composeNarration(pending, {}, t, weekdayOf);
   // Defensive: the composer only returns null for an empty list, which is
   // already handled. Checked anyway so a future change there can never mint a
   // conversation to hold nothing.

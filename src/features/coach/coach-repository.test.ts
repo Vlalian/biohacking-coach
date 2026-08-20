@@ -41,7 +41,6 @@ const {
   getRoster,
   getActiveLink,
   getAthleteName,
-  getCoachFirstNames,
   getLinkForAthlete,
   updateLinkVisibility,
   severLinkForAthlete,
@@ -260,36 +259,5 @@ describe('getSharedTranscripts — gated on the link', () => {
       visibility: { shareAthleteReports: true, shareAiTranscripts: true },
     };
     expect(await getSharedTranscripts(severed)).toBeNull();
-  });
-});
-
-describe('getCoachFirstNames — attribution for narration', () => {
-  it('maps each coach id to a first name', async () => {
-    nextRows = [
-      { coachId: 'coach_1', userName: 'Lars Nielsen' },
-      { coachId: 'coach_2', userName: 'Mette' },
-    ];
-
-    expect(await getCoachFirstNames(['coach_1', 'coach_2'])).toEqual({
-      coach_1: 'Lars',
-      coach_2: 'Mette',
-    });
-  });
-
-  it('omits a coach whose user row is gone, rather than inventing a name', async () => {
-    // The caller falls back to a neutral label. A blank or placeholder name
-    // interpolated into "___ added a session Thursday" would read as a bug to
-    // the athlete, and narration is a trust surface.
-    nextRows = [
-      { coachId: 'coach_1', userName: null },
-      { coachId: 'coach_2', userName: '   ' },
-    ];
-
-    expect(await getCoachFirstNames(['coach_1', 'coach_2'])).toEqual({});
-  });
-
-  it('asks nothing of the database for an empty id list', async () => {
-    nextRows = [{ coachId: 'coach_1', userName: 'Lars' }];
-    expect(await getCoachFirstNames([])).toEqual({});
   });
 });

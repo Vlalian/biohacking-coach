@@ -203,44 +203,6 @@ export async function getAthleteName(
 }
 
 /**
- * First names for a set of Head Coaches, keyed by coach id — the attribution
- * narration puts in the Coach's mouth ("Lars added a brick session Thursday",
- * CONTEXT.md).
- *
- * Keyed by **coach id, not by the athlete's current link**, because narration
- * names whoever actually acted. An athlete who severed one link and formed
- * another must not see the new coach's name on the old coach's change, and the
- * event carries the actor's id precisely so that stays possible.
- *
- * First name only: it is the register a coach is spoken about in, it matches
- * the CONTEXT.md example, and it is the smaller piece of identity to carry —
- * this string ends up in a stored transcript.
- *
- * A coach whose user row is missing is **absent from the result** rather than
- * mapped to a placeholder. The caller substitutes a neutral label, which reads
- * as coaching; a blank interpolated into "___ added a session Thursday" would
- * read as a bug, on a surface whose whole job is trust.
- */
-export async function getCoachFirstNames(
-  coachIds: string[],
-): Promise<Record<string, string>> {
-  if (coachIds.length === 0) return {};
-
-  const rows = await getDb()
-    .select({ coachId: coach.id, userName: user.name })
-    .from(coach)
-    .innerJoin(user, eq(coach.userId, user.id))
-    .where(inArray(coach.id, coachIds));
-
-  const names: Record<string, string> = {};
-  for (const row of rows) {
-    const first = row.userName?.trim().split(/\s+/)[0];
-    if (first) names[row.coachId] = first;
-  }
-  return names;
-}
-
-/**
  * Persists the coach's roster-wide Information View layout (ONE layout across
  * the whole roster, ADR 0004). The value arrives validated — the
  * information-view feature owns what a legal layout is — and this is the write
