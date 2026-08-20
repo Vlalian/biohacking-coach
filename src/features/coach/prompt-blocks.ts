@@ -28,8 +28,11 @@ export function buildOnboardingLines(onboarding?: Onboarding | null): string[] {
   if (!onboarding) return lines;
   if (onboarding.sportBackground)
     lines.push(`Sport background: ${joinValue(onboarding.sportBackground)}`);
-  if (onboarding.weeklyHours)
-    lines.push(`Current weekly training hours: ${onboarding.weeklyHours}`);
+  // A budget, not an observation: this is the ceiling the week is planned
+  // within, so it is phrased as capacity rather than as a fact about what the
+  // athlete has been doing. Asked of every experience level.
+  if (onboarding.availableHours)
+    lines.push(`Training time available: ${onboarding.availableHours} per week`);
   if (onboarding.motivation) lines.push(`Motivation: ${onboarding.motivation}`);
   if (onboarding.bestTime) lines.push(`Best Ironman time: ${onboarding.bestTime}`);
   if (onboarding.weakestDiscipline)

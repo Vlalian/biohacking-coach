@@ -176,7 +176,7 @@ describe('renderWeeklyPrompt — Week 1 raceTarget', () => {
 
 const ONBOARDING: Onboarding = {
   sportBackground: ['Runner', 'Gym'],
-  weeklyHours: '3–6h',
+  availableHours: '3–6h',
   motivation: 'Completion',
   bestTime: null,
   weakestDiscipline: null,
@@ -198,7 +198,7 @@ describe('onboarding answers reach every Coach prompt', () => {
     expect(prompt).toContain('ONBOARDING PROFILE');
     expect(prompt).toContain('NEVER ask for this information again');
     expect(prompt).toContain('Sport background: Runner, Gym');
-    expect(prompt).toContain('Current weekly training hours: 3–6h');
+    expect(prompt).toContain('Training time available: 3–6h per week');
     expect(prompt).toContain('Motivation: Completion');
   });
 

@@ -46,9 +46,16 @@ export interface OnboardingAnswers {
   language?: string;
   experienceLevel?: ExperienceLevel;
   raceTarget?: string;
+  /**
+   * Adaptive — asked of every level: how many hours a week the athlete *can*
+   * train. A ceiling the plan plans within, not a description of what they do
+   * today — which is why it is not in a branch. Target Athlete is defined by
+   * this number ("8–15 hours/week alongside a full life", CONTEXT.md), and
+   * Fixed Constraint only covers which *days* are blocked, never the volume.
+   */
+  availableHours?: string;
   // Adaptive — beginner
   sportBackground?: string[];
-  weeklyHours?: string;
   motivation?: string;
   // Adaptive — intermediate
   bestTime?: string;
@@ -67,7 +74,7 @@ export const ONBOARDING_OPTIONS = {
   language: ['en', 'da'],
   experienceLevel: ['beginner', 'intermediate', 'veteran'],
   sportBackground: ['Runner', 'Cyclist', 'Swimmer', 'Gym', 'None'],
-  weeklyHours: ['Under 3h', '3–6h', '6–10h', '10h+'],
+  availableHours: ['Under 3h', '3–6h', '6–10h', '10h+'],
   motivation: ['Completion', 'Personal challenge', 'Community', 'Performance'],
   weakestDiscipline: ['Swim', 'Bike', 'Run', 'Equal'],
   hasHumanCoach: ['Yes', 'No'],
@@ -102,8 +109,8 @@ export type StepAnswer =
   | { step: 'race'; raceTarget: string }
   | {
       step: 'adaptive';
+      availableHours?: string;
       sportBackground?: string[];
-      weeklyHours?: string;
       motivation?: string;
       bestTime?: string;
       weakestDiscipline?: string[];
@@ -177,7 +184,10 @@ export function applyAnswer(
     case 'adaptive': {
       if (!allInSet(payload.sportBackground, ONBOARDING_OPTIONS.sportBackground))
         return null;
-      if (payload.weeklyHours && !inSet(payload.weeklyHours, ONBOARDING_OPTIONS.weeklyHours))
+      if (
+        payload.availableHours &&
+        !inSet(payload.availableHours, ONBOARDING_OPTIONS.availableHours)
+      )
         return null;
       if (payload.motivation && !inSet(payload.motivation, ONBOARDING_OPTIONS.motivation))
         return null;
@@ -196,8 +206,8 @@ export function applyAnswer(
       return {
         answers: {
           ...answers,
+          availableHours: payload.availableHours,
           sportBackground: payload.sportBackground,
-          weeklyHours: payload.weeklyHours,
           motivation: payload.motivation,
           bestTime: bestTime || undefined,
           weakestDiscipline: payload.weakestDiscipline,
@@ -324,7 +334,7 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
   const arr = (v: string[] | undefined) => (v && v.length > 0 ? v : null);
   return {
     sportBackground: arr(answers.sportBackground),
-    weeklyHours: answers.weeklyHours || null,
+    availableHours: answers.availableHours || null,
     motivation: answers.motivation || null,
     bestTime: answers.bestTime || null,
     weakestDiscipline: arr(answers.weakestDiscipline),

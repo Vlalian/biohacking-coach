@@ -45,8 +45,8 @@ function answerText(payload: StepAnswer): string {
       return payload.raceTarget;
     case 'adaptive': {
       const parts = [
+        payload.availableHours,
         payload.sportBackground?.join(', '),
-        payload.weeklyHours,
         payload.motivation,
         payload.bestTime,
         payload.weakestDiscipline?.join(', '),

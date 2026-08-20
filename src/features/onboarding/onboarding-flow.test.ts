@@ -221,12 +221,12 @@ describe('toCoachOnboarding', () => {
     expect(
       toCoachOnboarding({
         sportBackground: ['Runner', 'Gym'],
-        weeklyHours: '3–6h',
+        availableHours: '3–6h',
         motivation: 'Completion',
       }),
     ).toEqual({
       sportBackground: ['Runner', 'Gym'],
-      weeklyHours: '3–6h',
+      availableHours: '3–6h',
       motivation: 'Completion',
       bestTime: null,
       weakestDiscipline: null,

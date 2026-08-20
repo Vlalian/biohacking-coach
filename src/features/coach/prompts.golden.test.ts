@@ -84,7 +84,7 @@ describe('golden — the Weekly Session prompt, per arc', () => {
         ],
         onboarding: {
           sportBackground: ['running', 'swimming'],
-          weeklyHours: '10-12',
+          availableHours: '6–10h',
           motivation: 'finish under 11 hours',
           weakestDiscipline: 'swim',
         },
@@ -190,7 +190,7 @@ describe('golden — the Coach Chat prompt', () => {
           equipment: [
             { id: 'e1', category: 'shoes', name: 'Vaporfly 3', details: null, addedDate: '2026-03-02' },
           ],
-          onboarding: { weeklyHours: '8-10', motivation: 'first Ironman' },
+          onboarding: { availableHours: '10h+', motivation: 'first Ironman' },
         },
         TODAY,
         reference,
