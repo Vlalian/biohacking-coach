@@ -1,6 +1,6 @@
 import '../src/db/load-env';
 import { getAllAthleteIds, getMetricsInput } from '../src/features/metrics/metrics-repository';
-import { athleteMetrics, EXTENDED_WEEKLY_SESSION_TURNS } from '../src/features/metrics/metrics';
+import { athleteMetrics } from '../src/features/metrics/metrics';
 
 /**
  * The metrics query for an unattended test (`showable-version/05`, item 1).
@@ -49,8 +49,8 @@ async function main() {
   console.log('');
   console.log('Athlete metrics — one row per athlete, opaque ids only.');
   console.log(
-    `"Extended" Weekly Session = ${EXTENDED_WEEKLY_SESSION_TURNS}+ athlete turns ` +
-      '(a tuneable guess — see metrics.ts).',
+    'engage counts a week with an athlete-sent Coach Chat turn, or one where ' +
+      'they declined the proposed plan.',
   );
   console.log('');
   console.log(

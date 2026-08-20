@@ -25,30 +25,15 @@ export interface MetricsInput {
   sessions: MetricSession[];
   /** Week-start keys in which the athlete sent at least one Coach Chat turn. */
   chatTurnWeeks: string[];
-  /** Athlete turns taken inside a Weekly Session, by week-start key. */
-  weeklySessionTurnsByWeek: Record<string, number>;
+  /** Week-start keys in which the athlete declined a Week Plan proposal. */
+  planDeclinedWeeks: string[];
+  /** Week-start keys in which the athlete took a turn in a Weekly Session. */
+  weeklySessionTurnWeeks: string[];
   /** Every day the athlete did something the app recorded. */
   activityDays: string[];
   /** The date of each `session_moved` event. */
   moveEventDates: string[];
 }
-
-/**
- * How many athlete turns make a Weekly Session an *extended discussion* rather
- * than the minimum needed to close a plan.
- *
- * `CONTEXT.md` names "an extended discussion within the Weekly Session" as
- * engagement but does not say how long extended is. Closing a week takes
- * roughly three athlete turns — answer the check-in, respond to the review,
- * accept or adjust the plan — so a fourth is the first turn that is not simply
- * completing the ritual.
- *
- * **This number is a guess and is meant to be tuned**, which is why it is a
- * named export rather than a literal buried in a comparison: the first real
- * transcripts will say what the true floor is. The Coach Chat arm below is the
- * unambiguous half of the metric and does not depend on it.
- */
-export const EXTENDED_WEEKLY_SESSION_TURNS = 4;
 
 /** A count over a total, with the ratio — null when the total is zero. */
 export interface Ratio {
@@ -80,8 +65,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *
  * - **"beyond the mandatory Weekly Session"** — holding the weekly ritual is
  *   compliance, not engagement, so a week whose only Coach contact was a
- *   Weekly Session of ordinary length counts for nothing. Getting this wrong
- *   is what would make the metric meaningless, so it has its own test.
+ *   Weekly Session the athlete simply agreed to counts for nothing. Getting
+ *   this wrong is what would make the metric meaningless, so it has its own
+ *   test.
  * - **"active training weeks"** — the denominator is weeks the athlete actually
  *   trained in, not calendar weeks since signup. A quiet fortnight does not
  *   dilute the rate; it simply is not counted.
@@ -91,6 +77,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * its own conversation kind (CONTEXT.md, decided 2026-08-12) and is now a
  * message in Coach Chat carrying the Session as a Reference, so it is already
  * inside the Coach Chat arm.
+ *
+ * **"An extended discussion within the Weekly Session" is measured as declining
+ * a proposal, not by counting turns** (Mads, 2026-08-21). The Weekly Session
+ * runs until the athlete presses yes, so turn count measures how long agreeing
+ * took — a thorough athlete would score as engaged for being thorough, which is
+ * the ritual working, not engagement. Cancelling the Coach's proposed week and
+ * carrying on is the athlete refusing to just accept what they were handed, and
+ * `week_plan_declined` already records it. No threshold, and nothing to tune.
  */
 function coachEngagement(input: MetricsInput) {
   const activeWeeks = new Set(
@@ -100,12 +94,9 @@ function coachEngagement(input: MetricsInput) {
   );
 
   const engaged = new Set(
-    [
-      ...input.chatTurnWeeks,
-      ...Object.entries(input.weeklySessionTurnsByWeek)
-        .filter(([, turns]) => turns >= EXTENDED_WEEKLY_SESSION_TURNS)
-        .map(([week]) => week),
-    ].filter((week) => activeWeeks.has(week)),
+    [...input.chatTurnWeeks, ...input.planDeclinedWeeks].filter((week) =>
+      activeWeeks.has(week),
+    ),
   );
 
   return {

@@ -1,15 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import {
-  athleteMetrics,
-  EXTENDED_WEEKLY_SESSION_TURNS,
-  type MetricsInput,
-} from './metrics';
+import { athleteMetrics, type MetricsInput } from './metrics';
 
 const input = (over: Partial<MetricsInput> = {}): MetricsInput => ({
   athleteId: 'a1',
   sessions: [],
   chatTurnWeeks: [],
-  weeklySessionTurnsByWeek: {},
+  planDeclinedWeeks: [],
+  weeklySessionTurnWeeks: [],
   activityDays: [],
   moveEventDates: [],
   ...over,
@@ -34,7 +31,7 @@ describe('Coach Engagement Rate', () => {
     const m = athleteMetrics(
       input({
         sessions: [{ date: '2026-08-17', status: 'completed', rated: true }],
-        weeklySessionTurnsByWeek: { '2026-08-17': 2 },
+        weeklySessionTurnWeeks: ['2026-08-17'],
       }),
     );
 
@@ -42,13 +39,29 @@ describe('Coach Engagement Rate', () => {
     expect(m.coachEngagement.rate).toBe(0);
   });
 
-  it('counts an *extended* Weekly Session — more athlete turns than closing the plan needs', () => {
+  it('does not count a long Weekly Session either — talking until you press yes IS the ritual', () => {
+    // Mads, 2026-08-21. A Weekly Session runs until the athlete agrees, so
+    // length measures how long agreeing took. Counting turns would score a
+    // thorough athlete as engaged for being thorough.
     const m = athleteMetrics(
       input({
         sessions: [{ date: '2026-08-17', status: 'completed', rated: true }],
-        weeklySessionTurnsByWeek: {
-          '2026-08-17': EXTENDED_WEEKLY_SESSION_TURNS,
-        },
+        weeklySessionTurnWeeks: Array(12).fill('2026-08-17'),
+      }),
+    );
+
+    expect(m.coachEngagement.engagedWeeks).toBe(0);
+  });
+
+  it('counts a week where the athlete DECLINED the proposed plan', () => {
+    // Cancelling the week the Coach proposed and carrying on is the athlete
+    // refusing to take what they were handed — engagement rather than
+    // compliance, and already recorded as `week_plan_declined`.
+    const m = athleteMetrics(
+      input({
+        sessions: [{ date: '2026-08-17', status: 'completed', rated: true }],
+        weeklySessionTurnWeeks: ['2026-08-17'],
+        planDeclinedWeeks: ['2026-08-17'],
       }),
     );
 

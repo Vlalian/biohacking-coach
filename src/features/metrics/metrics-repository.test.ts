@@ -41,6 +41,7 @@ describe('getMetricsInput', () => {
       [],
       [],
       [],
+      [],
     ];
 
     const input = await getMetricsInput('a1');
@@ -51,23 +52,38 @@ describe('getMetricsInput', () => {
     ]);
   });
 
-  it('counts Weekly Session athlete turns per week, not per conversation', async () => {
-    // "An extended discussion" is about how much the athlete said in a week —
-    // two short Weekly Sessions in one week are still that week's conversation.
+  it('reads declined Week Plan proposals as the in-session engagement signal', async () => {
+    // Read order: sessions, chat turns, weekly turns, moves, declines.
+    queue = [
+      [],
+      [],
+      [],
+      [],
+      [{ createdAt: new Date('2026-08-19T09:00:00Z') }],
+    ];
+
+    const input = await getMetricsInput('a1');
+
+    expect(input.planDeclinedWeeks).toEqual(['2026-08-17']);
+  });
+
+  it('keeps Weekly Session turns for activity only, never as engagement', async () => {
     queue = [
       [],
       [],
       [
         { createdAt: new Date('2026-08-17T09:00:00Z') },
         { createdAt: new Date('2026-08-17T09:05:00Z') },
-        { createdAt: new Date('2026-08-24T09:00:00Z') },
       ],
+      [],
       [],
     ];
 
     const input = await getMetricsInput('a1');
 
-    expect(input.weeklySessionTurnsByWeek).toEqual({ '2026-08-17': 2, '2026-08-24': 1 });
+    expect(input.weeklySessionTurnWeeks).toEqual(['2026-08-17', '2026-08-17']);
+    expect(input.planDeclinedWeeks).toEqual([]);
+    expect(input.activityDays).toEqual(['2026-08-17', '2026-08-17']);
   });
 
   it('counts only sessions that actually happened as activity, not the plan', async () => {
@@ -82,6 +98,7 @@ describe('getMetricsInput', () => {
       [],
       [],
       [],
+      [],
     ];
 
     const input = await getMetricsInput('a1');
@@ -91,7 +108,7 @@ describe('getMetricsInput', () => {
   });
 
   it('carries the athlete through by opaque id', async () => {
-    queue = [[], [], [], []];
+    queue = [[], [], [], [], []];
     expect((await getMetricsInput('athlete_opaque_1')).athleteId).toBe('athlete_opaque_1');
   });
 });

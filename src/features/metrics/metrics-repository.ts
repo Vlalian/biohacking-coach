@@ -30,7 +30,8 @@ export async function getAllAthleteIds(): Promise<string[]> {
 export async function getMetricsInput(athleteId: string): Promise<MetricsInput> {
   const db = getDb();
 
-  const [sessionRows, chatTurnRows, weeklyTurnRows, moveRows] = await Promise.all([
+  const [sessionRows, chatTurnRows, weeklyTurnRows, moveRows, declinedRows] =
+    await Promise.all([
     db
       .select({ date: sessions.date, status: sessions.status, ratedAt: sessions.ratedAt })
       .from(sessions)
@@ -65,15 +66,23 @@ export async function getMetricsInput(athleteId: string): Promise<MetricsInput> 
       .where(
         sql`${events.athleteId} = ${athleteId} AND ${events.type} = 'session_moved'`,
       ),
+
+    // The engagement signal from inside the Weekly Session: the athlete
+    // cancelled the week the Coach proposed rather than accepting it (Mads,
+    // 2026-08-21). `actor_type = 'athlete'` matters — `week_plan_declined` is
+    // only ever written by the athlete's own cancel, but filtering on it keeps
+    // that true if a future path ever declines on their behalf.
+    db
+      .select({ createdAt: events.createdAt })
+      .from(events)
+      .where(
+        sql`${events.athleteId} = ${athleteId}
+            AND ${events.type} = 'week_plan_declined'
+            AND ${events.actorType} = 'athlete'`,
+      ),
   ]);
 
   const dayOf = (d: Date) => d.toISOString().slice(0, 10);
-
-  const weeklySessionTurnsByWeek: Record<string, number> = {};
-  for (const row of weeklyTurnRows) {
-    const week = weekStartOf(dayOf(row.createdAt));
-    weeklySessionTurnsByWeek[week] = (weeklySessionTurnsByWeek[week] ?? 0) + 1;
-  }
 
   return {
     athleteId,
@@ -83,7 +92,11 @@ export async function getMetricsInput(athleteId: string): Promise<MetricsInput> 
       rated: s.ratedAt !== null,
     })),
     chatTurnWeeks: chatTurnRows.map((r) => weekStartOf(dayOf(r.createdAt))),
-    weeklySessionTurnsByWeek,
+    planDeclinedWeeks: declinedRows.map((r) => weekStartOf(dayOf(r.createdAt))),
+    // Weekly Session turns are read for *activity* (retention) only — they are
+    // deliberately not an engagement signal, because the session runs until the
+    // athlete agrees, so its length measures how long agreeing took.
+    weeklySessionTurnWeeks: weeklyTurnRows.map((r) => weekStartOf(dayOf(r.createdAt))),
     // "Activity" is the athlete doing something the app recorded — a session
     // that happened, or a turn they typed. A planned session they have not
     // reached yet is the app's intention, not their activity, so it is excluded
