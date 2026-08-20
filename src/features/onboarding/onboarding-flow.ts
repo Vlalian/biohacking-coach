@@ -184,17 +184,26 @@ export function applyAnswer(
     case 'adaptive': {
       if (!allInSet(payload.sportBackground, ONBOARDING_OPTIONS.sportBackground))
         return null;
+      // `!== undefined`, not a truthy check: undefined means the optional
+      // question was left unanswered, but `null`, `''`, `0` and `false` are all
+      // *present* values a forged payload can send, and a truthy guard would
+      // wave them past `inSet` into the stored profile — exactly what the note
+      // above says this file must not do. `allInSet` and `optionalText` already
+      // draw the line here; these three were the outliers.
       if (
-        payload.availableHours &&
+        payload.availableHours !== undefined &&
         !inSet(payload.availableHours, ONBOARDING_OPTIONS.availableHours)
       )
         return null;
-      if (payload.motivation && !inSet(payload.motivation, ONBOARDING_OPTIONS.motivation))
+      if (
+        payload.motivation !== undefined &&
+        !inSet(payload.motivation, ONBOARDING_OPTIONS.motivation)
+      )
         return null;
       if (!allInSet(payload.weakestDiscipline, ONBOARDING_OPTIONS.weakestDiscipline))
         return null;
       if (
-        payload.hasHumanCoach &&
+        payload.hasHumanCoach !== undefined &&
         !inSet(payload.hasHumanCoach, ONBOARDING_OPTIONS.hasHumanCoach)
       )
         return null;

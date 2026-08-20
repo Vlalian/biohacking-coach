@@ -97,6 +97,29 @@ describe('applyAnswer', () => {
     ).toBeNull();
   });
 
+  // Regression (CodeRabbit, PR #38): these three optional fields were guarded by
+  // a truthy check, so a *present but malformed* value — null, '', 0, false —
+  // skipped `inSet` entirely and was written into the stored profile despite the
+  // declared string type. Only `undefined` means "left unanswered".
+  it.each([
+    ['availableHours', null],
+    ['availableHours', ''],
+    ['availableHours', 0],
+    ['motivation', null],
+    ['motivation', false],
+    ['hasHumanCoach', ''],
+  ])('refuses a present-but-malformed %s (%p)', (field, value) => {
+    expect(
+      applyAnswer({}, {}, { step: 'adaptive', [field]: value } as never),
+    ).toBeNull();
+  });
+
+  it('still treats an omitted optional answer as legitimate', () => {
+    // The other half of the same rule: an empty adaptive submission is a valid
+    // answer (every question there is optional), so it must not be refused.
+    expect(applyAnswer({}, {}, { step: 'adaptive' })).not.toBeNull();
+  });
+
   it('refuses empty or oversized free text', () => {
     expect(applyAnswer({}, {}, { step: 'race', raceTarget: '   ' })).toBeNull();
     expect(
