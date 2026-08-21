@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolveHeadCoachId } from '../../../current-actor';
+import { resolveHeadCoachId } from '../../../../current-actor';
 import {
   deletePrescribedSession,
   editPrescribedSession,

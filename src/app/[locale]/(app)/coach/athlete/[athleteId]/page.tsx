@@ -42,9 +42,9 @@ export default async function CoachAthletePage({
   const coach = await getCoachByUserId(session!.user.id);
   if (!coach) {
     return (
-      <main className="flex min-h-screen flex-col items-center gap-6 p-8">
+      <div className="flex flex-col items-center gap-6 p-6 sm:p-8">
         <p className="text-neutral-500">{t('notACoach')}</p>
-      </main>
+      </div>
     );
   }
 
@@ -69,7 +69,7 @@ export default async function CoachAthletePage({
   const briefing = await getLatestBriefingWithMessages(coach.id, athleteId);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center gap-6 p-8">
+    <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 p-6 sm:p-8">
       <header className="flex w-full flex-col items-center gap-1">
         <h1 className="text-2xl font-semibold">{view.athleteName}</h1>
         <Link href="/coach" className="text-sm text-blue-500 underline">
@@ -110,6 +110,6 @@ export default async function CoachAthletePage({
             : null
         }
       />
-    </main>
+    </div>
   );
 }
