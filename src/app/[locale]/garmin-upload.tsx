@@ -13,15 +13,19 @@ type Status =
 /**
  * Failure reason to message key.
  *
- * A total map rather than a lookup with a fallback: adding a reason to
- * `UploadResult` and forgetting the copy is then a type error, not a raw key on
- * screen for a tester who cannot ask what it means (showable-version/06).
- */
-/**
  * One message per failure, because one message for all of them is what turns a
  * recoverable mistake into a dead end for a tester who cannot ask
  * (showable-version/06). `unreadable` keeps the generic string on purpose: it is
  * the case where the decoder itself could not say what was wrong.
+ *
+ * A total map rather than a lookup with a fallback, so adding a reason to
+ * `UploadResult` and forgetting the copy is a type error rather than a raw key
+ * on screen. Note the guarantee stops there: `Record<UploadFailure, string>`
+ * proves every *reason* has an entry, not that every entry names a message that
+ * exists — the value type is `string`. Catching a mistyped key would need
+ * next-intl's `AppConfig.Messages` augmentation, which this repo does not have;
+ * `as const satisfies` alone would not do it. (CodeRabbit, PR #35, correcting
+ * its own earlier suggestion on PR #37.)
  */
 const ERROR_KEY: Record<UploadFailure, string> = {
   'not-a-fit-file': 'errorNotAFitFile',

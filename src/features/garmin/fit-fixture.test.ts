@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { parseFit, parseGpx } from './garmin';
+import { parseFit, parseGpx, fitCrc } from './garmin';
 
 /**
  * The FIT decode path, tested for the first time.
@@ -107,6 +107,39 @@ describe('parseFit — the wrong file fails fast, and says which failure', () =>
     corrupt[40] = corrupt[40] ^ 0xff;
 
     await expect(parseFit(corrupt)).resolves.toEqual({ ok: false, reason: 'corrupt' });
+  });
+
+  // Both cases below re-stamp the trailing file CRC after touching the header.
+  // Without that they prove nothing about the header check: the file CRC covers
+  // the header bytes too, so it would catch the damage on its own and the test
+  // would pass whether or not the header CRC is ever read.
+  const restampFileCrc = (file: Buffer) => {
+    const end = file.length - 2;
+    file.writeUInt16LE(fitCrc(file.subarray(0, end)), end);
+    return file;
+  };
+
+  it('catches a damaged header by its own CRC, before trusting its data size', { timeout: 2000 }, async () => {
+    // CodeRabbit, PR #35. A damaged header that still satisfies the file CRC is
+    // exactly the case the header CRC exists for — otherwise `dataSize` is read
+    // from bytes nothing has verified.
+    const damaged = restampFileCrc(Buffer.from(buildFitFile({ samples: 10 })));
+    damaged.writeUInt16LE(damaged.readUInt16LE(2) ^ 0xff, 2); // profile version
+    restampFileCrc(damaged);
+
+    await expect(parseFit(damaged)).resolves.toEqual({ ok: false, reason: 'corrupt' });
+  });
+
+  it('still accepts a header whose optional CRC is absent', { timeout: 2000 }, async () => {
+    // Zero means "not written" in the spec, not "checksum of zero". Writers
+    // that omit it are common, and refusing a valid export is the failure this
+    // path watches for — so the zero case must stay legitimate.
+    const noHeaderCrc = Buffer.from(buildFitFile({ samples: 10 }));
+    noHeaderCrc.writeUInt16LE(0, 12);
+    restampFileCrc(noHeaderCrc);
+
+    const result = await parseFit(noHeaderCrc);
+    expect(result.ok).toBe(true);
   });
 
   it('still reads a well-formed file', { timeout: 2000 }, async () => {

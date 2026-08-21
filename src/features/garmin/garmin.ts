@@ -346,6 +346,22 @@ export function inspectFitFile(buffer: Buffer): FitParseFailure | null {
   // Past this point the file says it is FIT, so every remaining fault is damage
   // to a real file rather than the wrong file entirely — which is the
   // distinction the athlete-facing copy turns on.
+
+  // A 14-byte header carries an optional CRC over its own first 12 bytes. Where
+  // it is present it proves the header is intact *before* `dataSize` is read
+  // from it — otherwise a damaged header is only ever caught indirectly, by the
+  // file CRC failing at an offset the bad header chose.
+  //
+  // Zero means "not written" in the spec, not "checksum of zero", so a zero is
+  // allowed through rather than treated as a mismatch. Writers that omit it are
+  // common, and refusing a valid export is the failure this function watches
+  // for. (CodeRabbit, PR #35.)
+  if (headerSize === 14) {
+    const headerCrc = buffer.readUInt16LE(12);
+    if (headerCrc !== 0 && headerCrc !== fitCrc(buffer.subarray(0, 12)))
+      return 'corrupt';
+  }
+
   const dataSize = buffer.readUInt32LE(4);
   const expected = headerSize + dataSize + 2; // + the trailing file CRC
   if (buffer.length < expected) return 'corrupt';
