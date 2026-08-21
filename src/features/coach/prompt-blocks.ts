@@ -28,8 +28,21 @@ export function buildOnboardingLines(onboarding?: Onboarding | null): string[] {
   if (!onboarding) return lines;
   if (onboarding.sportBackground)
     lines.push(`Sport background: ${joinValue(onboarding.sportBackground)}`);
-  if (onboarding.weeklyHours)
-    lines.push(`Current weekly training hours: ${onboarding.weeklyHours}`);
+  // A budget, not an observation: this is the ceiling the week is planned
+  // within, so it is phrased as capacity rather than as a fact about what the
+  // athlete has been doing. Asked of every experience level.
+  //
+  // The parenthetical is not padding. `npm run coach:say` on 2026-08-21 showed
+  // the model reading the bare "Training time available: 13–16h per week" as
+  // current volume — "you carry higher weekly volume (13-16h)" — which is the
+  // exact confusion the rename from `weeklyHours` existed to end. The intent
+  // was documented in this comment and nowhere the model could see it. Now the
+  // string says what it means.
+  if (onboarding.availableHours)
+    lines.push(
+      `Time available to train: ${onboarding.availableHours} per week ` +
+        `(a ceiling to plan within — not what they currently do)`,
+    );
   if (onboarding.motivation) lines.push(`Motivation: ${onboarding.motivation}`);
   if (onboarding.bestTime) lines.push(`Best Ironman time: ${onboarding.bestTime}`);
   if (onboarding.weakestDiscipline)
