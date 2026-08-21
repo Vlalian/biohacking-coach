@@ -18,9 +18,20 @@ import { parseFit, parseGpx } from './garmin';
  * upload from a real tester realistically goes wrong.
  */
 
+/**
+ * The sessions of a file expected to decode. Fails loudly rather than returning
+ * an empty list, so a happy-path test that starts failing says *why* instead of
+ * dying on a destructure two lines later.
+ */
+async function readFit(buffer: Buffer) {
+  const result = await parseFit(buffer);
+  if (!result.ok) throw new Error(`expected a decodable FIT file, got: ${result.reason}`);
+  return result.sessions;
+}
+
 describe('parseFit — a well-formed file', () => {
   it('decodes a session with its streams', async () => {
-    const sessions = await parseFit(buildFitFile({ samples: 60 }));
+    const sessions = await readFit(buildFitFile({ samples: 60 }));
 
     expect(sessions).toHaveLength(1);
     const s = sessions[0];
@@ -33,13 +44,13 @@ describe('parseFit — a well-formed file', () => {
 
   it('carries the channels a .fit has and a .gpx does not', async () => {
     // The whole reason the guide recommends .fit over .gpx.
-    const [s] = await parseFit(buildFitFile({ power: 240, cadence: 92 }));
+    const [s] = await readFit(buildFitFile({ power: 240, cadence: 92 }));
     expect(s.streams.powerW?.some((v) => v === 240)).toBe(true);
     expect(s.streams.cadenceRpm?.some((v) => v === 92)).toBe(true);
   });
 
   it('reports the session summary the calendar shows', async () => {
-    const [s] = await parseFit(buildFitFile({ samples: 120, heartRate: 150 }));
+    const [s] = await readFit(buildFitFile({ samples: 120, heartRate: 150 }));
     expect(s.summary.avgHr).toBe(150);
     expect(s.summary.maxHr).toBe(162);
     expect(s.summary.distanceM).not.toBeNull();
@@ -53,53 +64,56 @@ describe('parseFit — a well-formed file', () => {
 
 describe('parseFit — the failures a real upload hits', () => {
   // These matter more than the happy path. An athlete who picks the wrong file
-  // gets one generic error today; these pin what the parser does so the copy can
-  // eventually tell the cases apart (showable-version/06).
+  // used to get one generic error; each case now carries its own reason so the
+  // copy can tell them apart (showable-version/06).
 
-  // SKIPPED, and the skip IS the finding — see showable-version/06.
-  //
-  // `parseFit` does not return [] here. It never returns at all: the promise
-  // stays pending, because `fit-file-parser` is constructed with `force: true`
-  // and its callback is never invoked for input it cannot make sense of. On a
-  // server action that is a request that hangs until the platform kills it.
-  //
-  // Left as `skip` rather than deleted so the next reader finds the evidence
-  // rather than re-discovering it, and rather than `fails` so the suite never
-  // waits on a promise that will not settle.
-  it.skip('returns [] for a file that is not FIT at all', async () => {
-    await expect(parseFit(Buffer.from('this is a text file'))).resolves.toEqual([]);
+  it('names an empty file rather than throwing', async () => {
+    await expect(parseFit(Buffer.alloc(0))).resolves.toEqual({
+      ok: false,
+      reason: 'not-a-fit-file',
+    });
   });
 
-  it('returns [] for an empty file rather than throwing', async () => {
-    await expect(parseFit(Buffer.alloc(0))).resolves.toEqual([]);
-  });
-
-  it('returns [] for a truncated file — the half-finished download case', async () => {
+  it('names a truncated file — the half-finished download case', async () => {
+    // It still claims to be FIT: the magic is in the surviving header, so this
+    // is damage to a real file, not the wrong file entirely.
     const whole = buildFitFile({ samples: 60 });
-    await expect(parseFit(whole.subarray(0, Math.floor(whole.length / 2)))).resolves.toEqual([]);
+    await expect(
+      parseFit(whole.subarray(0, Math.floor(whole.length / 2))),
+    ).resolves.toEqual({ ok: false, reason: 'corrupt' });
+  });
+});
+
+describe('parseFit — the wrong file fails fast, and says which failure', () => {
+  it('names a file that is not FIT at all', { timeout: 2000 }, async () => {
+    await expect(parseFit(Buffer.from('this is a text file'))).resolves.toEqual({
+      ok: false,
+      reason: 'not-a-fit-file',
+    });
   });
 
-  // NOT skipped, and it does not pass either — it is written to record what the
-  // parser actually does, which is accept the file. `force: true` ignores the
-  // CRC, so a corrupted upload decodes into the training record silently rather
-  // than being refused. Asserted as the current behaviour, with the finding in
-  // showable-version/06; flip this expectation when that is decided on.
-  it('accepts a file whose CRC does not match — force:true ignores it', async () => {
-    // A corrupted byte in transit. The last two bytes are the file CRC, so
-    // flipping one in the middle leaves a valid-looking file that fails its
-    // own checksum.
-    const corrupt = Buffer.from(buildFitFile({ samples: 60 }));
-    corrupt[40] = corrupt[40] ^ 0xff;
-    // Documents reality: a session comes back despite the checksum failing.
-    await expect(parseFit(corrupt)).resolves.not.toEqual([]);
-  });
-
-  // SKIPPED for the same reason: same hang, reached by a different malformed
-  // header. See showable-version/06.
-  it.skip('does not throw on a file claiming a data size it does not have', async () => {
+  it('names a header claiming a data size the file does not have', { timeout: 2000 }, async () => {
     const lying = Buffer.from(buildFitFile({ samples: 10 }));
     lying.writeUInt32LE(999_999, 4);
-    await expect(parseFit(lying)).resolves.toBeInstanceOf(Array);
+
+    await expect(parseFit(lying)).resolves.toEqual({ ok: false, reason: 'corrupt' });
+  });
+
+  it('refuses a file that fails its own CRC', { timeout: 2000 }, async () => {
+    // Mads's decision, 2026-08-18: the training record is immutable once
+    // written, so corrupt data must not enter it silently. This replaces the
+    // earlier test that recorded `force: true` accepting the file.
+    const corrupt = Buffer.from(buildFitFile({ samples: 60 }));
+    corrupt[40] = corrupt[40] ^ 0xff;
+
+    await expect(parseFit(corrupt)).resolves.toEqual({ ok: false, reason: 'corrupt' });
+  });
+
+  it('still reads a well-formed file', { timeout: 2000 }, async () => {
+    const result = await parseFit(buildFitFile({ samples: 60 }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.sessions).toHaveLength(1);
   });
 });
 

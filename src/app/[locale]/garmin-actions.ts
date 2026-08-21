@@ -5,11 +5,20 @@ import { resolveAthleteId } from './current-actor';
 import {
   importGarminSessions,
   type ImportResult,
+  type ImportFailure,
 } from '@/features/garmin/garmin-import';
 
-export type UploadResult =
-  | ImportResult
-  | { ok: false; reason: 'not-authenticated' | 'empty' };
+/** The two failures this action decides itself, before the importer is reached. */
+export type ActionFailure = 'not-authenticated' | 'empty';
+
+/** Every way an upload can fail, including the two above. */
+export type UploadFailure = ImportFailure | ActionFailure;
+
+/**
+ * Derived from {@link ActionFailure} rather than repeating it: the two lists
+ * drifting apart is how a failure reaches the UI with no message mapped to it.
+ */
+export type UploadResult = ImportResult | { ok: false; reason: ActionFailure };
 
 /**
  * Server action for a Garmin upload.
