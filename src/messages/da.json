@@ -21,7 +21,7 @@
     "viewMessaging": "Beskeder",
     "viewSettings": "Indstillinger",
     "viewPrivacy": "Privatliv & vilkår",
-    "viewRoster": "Atletliste"
+    "viewRoster": "Atleter"
   },
   "AthletePage": {
     "greeting": "Velkommen tilbage, {name}",
@@ -203,11 +203,14 @@
     "severed": "Forbindelsen er brudt — du træner nu solo igen."
   },
   "Roster": {
-    "title": "Atletliste",
+    "title": "Atleter",
     "subtitle": "De atleter, du coacher.",
     "empty": "Ingen atleter tilknyttet endnu.",
     "notACoach": "Du har ingen coach-konto.",
-    "backToRoster": "Tilbage til atletlisten",
+    "tabPlan": "Plan",
+    "tabData": "Data",
+    "tabBriefing": "Briefing",
+    "backToRoster": "Tilbage til atleter",
     "reportsWithheld": "Rapporter private",
     "transcriptsWithheld": "Udskrifter private"
   },

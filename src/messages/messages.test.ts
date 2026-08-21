@@ -69,7 +69,8 @@ describe('message catalogues', () => {
     // Danish cognates — words whose correct Danish spelling IS the English one
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.
-    const cognates = /\b(Information|Session|Sport|Type|Distance|Motivation|System|min)\b/g;
+    const cognates =
+      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing)\b/g;
     const cognateScope = (path: string) =>
       path.startsWith('Information.') ||
       path.startsWith('SessionDrawer.') ||
@@ -82,7 +83,13 @@ describe('message catalogues', () => {
       path === 'Shell.themeSystem' ||
       // "Session Type" is the domain term (CONTEXT.md) — the calendar legend
       // names it verbatim in both languages, like Information's "Type" already does.
-      path === 'Calendar.legend';
+      path === 'Calendar.legend' ||
+      // The Head Coach's three athlete tabs. "Plan", "Data" and "Briefing" are
+      // each spelled identically in Danish — plan and data are ordinary Danish
+      // words, and briefing is the loanword this catalogue already uses in
+      // lowercase ("Åbn briefing", "Coach-briefing"). A one-word tab label has
+      // nowhere to hide a forgotten translation, which is what the guard is for.
+      path.startsWith('Roster.tab');
     // Simple ICU placeholders are not words — "• {clause}" is structure, and is
     // identical in every language by definition. Deliberately narrow twice
     // over. First in shape: `\w+` inside the braces, so plural forms like

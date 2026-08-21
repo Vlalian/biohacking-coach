@@ -31,7 +31,7 @@ export async function prescribeSessionAction(
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await prescribeSession({ headCoachId, athleteId, input });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -44,7 +44,7 @@ export async function editPrescribedSessionAction(
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await editPrescribedSession({ headCoachId, athleteId, sessionId, input });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -56,6 +56,6 @@ export async function deletePrescribedSessionAction(
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await deletePrescribedSession({ headCoachId, athleteId, sessionId });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }

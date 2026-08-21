@@ -207,6 +207,9 @@
     "subtitle": "The athletes you coach.",
     "empty": "No athletes linked yet.",
     "notACoach": "You don't have a coach account.",
+    "tabPlan": "Plan",
+    "tabData": "Data",
+    "tabBriefing": "Briefing",
     "backToRoster": "Back to Roster",
     "reportsWithheld": "Reports private",
     "transcriptsWithheld": "Transcripts private"
