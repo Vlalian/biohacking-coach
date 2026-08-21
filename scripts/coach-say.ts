@@ -75,7 +75,7 @@ const FIXTURE: CheckIn = {
   ],
   onboarding: {
     sportBackground: 'running',
-    availableHours: '10h+',
+    availableHours: '13–16h',
     motivation: 'finish under 11 hours',
     weakestDiscipline: 'swim',
     hasHumanCoach: 'no',

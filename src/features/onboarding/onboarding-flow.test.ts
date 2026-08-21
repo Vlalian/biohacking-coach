@@ -97,8 +97,8 @@ describe('applyAnswer', () => {
     ).toBeNull();
   });
 
-  // Regression (CodeRabbit, PR #38): these three optional fields were guarded by
-  // a truthy check, so a *present but malformed* value — null, '', 0, false —
+  // Regression (CodeRabbit, PR #38): these optional fields were guarded by a
+  // truthy check, so a *present but malformed* value — null, '', 0, false —
   // skipped `inSet` entirely and was written into the stored profile despite the
   // declared string type. Only `undefined` means "left unanswered".
   it.each([
@@ -112,6 +112,29 @@ describe('applyAnswer', () => {
     expect(
       applyAnswer({}, {}, { step: 'adaptive', [field]: value } as never),
     ).toBeNull();
+  });
+
+  // The same hole, on a different step, missed by the fix above — which claimed
+  // in its commit message that the three adaptive fields "were the outliers, not
+  // the rule". They were not: there were four. Found by review, 2026-08-21.
+  //
+  // This one is the most consequential of them: `weeklySessionDay` is a named
+  // domain concept (CONTEXT.md, Weekly Session Day) that decides when the Coach
+  // opens the Weekly Session, so a malformed value stored here misroutes the
+  // product's primary ritual rather than just a prompt line.
+  it.each([
+    ['weeklySessionDay', null],
+    ['weeklySessionDay', ''],
+    ['weeklySessionDay', 0],
+    ['weeklySessionDay', false],
+  ])('refuses a present-but-malformed %s (%p)', (field, value) => {
+    expect(
+      applyAnswer({}, {}, { step: 'constraints', [field]: value } as never),
+    ).toBeNull();
+  });
+
+  it('still treats an omitted weeklySessionDay as legitimate', () => {
+    expect(applyAnswer({}, {}, { step: 'constraints' })).not.toBeNull();
   });
 
   it('still treats an omitted optional answer as legitimate', () => {

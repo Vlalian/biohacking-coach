@@ -190,7 +190,7 @@ describe('golden — the Coach Chat prompt', () => {
           equipment: [
             { id: 'e1', category: 'shoes', name: 'Vaporfly 3', details: null, addedDate: '2026-03-02' },
           ],
-          onboarding: { availableHours: '10h+', motivation: 'first Ironman' },
+          onboarding: { availableHours: '13–16h', motivation: 'first Ironman' },
         },
         TODAY,
         reference,
