@@ -8,6 +8,7 @@ const {
   getMessages,
   getPendingProposal,
   hasHeldWeeklySessionInWeek,
+  holdsActiveCoachingLinks,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -23,6 +24,7 @@ const {
   getMessages: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getPendingProposal: vi.fn(() => Promise.resolve(null)),
   hasHeldWeeklySessionInWeek: vi.fn(() => Promise.resolve(false)),
+  holdsActiveCoachingLinks: vi.fn(() => Promise.resolve(false)),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -38,6 +40,7 @@ vi.mock('@/features/coach/conversation-repository', () => ({
   hasHeldWeeklySessionInWeek,
 }));
 vi.mock('@/features/coach/plan-proposal-repository', () => ({ getPendingProposal }));
+vi.mock('@/features/coach/coach-repository', () => ({ holdsActiveCoachingLinks }));
 // Client components pulling in browser deps; the layout's own wiring is under
 // test here, not their rendering.
 vi.mock('@/components/shell/shell-chrome', () => ({ ShellChrome: () => null }));
@@ -137,5 +140,39 @@ describe('AppShellLayout', () => {
       weeklySessionDay: 'Monday',
       hasHeldWeeklySessionThisWeek: false,
     });
+  });
+});
+
+describe('the Roster entry in the Navigation Drawer', () => {
+  // Head Coach is a role on a normal account (CONTEXT.md), so the entry cannot
+  // be a module constant — which is why it was missing entirely until
+  // 2026-08-21: the coach's pages worked and nothing ever linked to them.
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'u1', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'a1', profile: {} });
+  });
+
+  async function viewsFor(isHeadCoach: boolean) {
+    holdsActiveCoachingLinks.mockResolvedValue(isHeadCoach);
+    const element = await render();
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    return props.availableViews as string[];
+  }
+
+  it('is offered to an account holding active Coaching Links', async () => {
+    expect(await viewsFor(true)).toContain('roster');
+  });
+
+  it('is withheld from an account holding none', async () => {
+    expect(await viewsFor(false)).not.toContain('roster');
+  });
+
+  it('never costs a Head Coach their own athlete Views', async () => {
+    // The dual-role case the seed actually creates: a coach row alongside an
+    // athlete row. Their own training is still why they open the app.
+    const views = await viewsFor(true);
+    for (const view of ['training-plan', 'information', 'equipment', 'settings', 'privacy']) {
+      expect(views).toContain(view);
+    }
   });
 });

@@ -8,6 +8,7 @@ import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { holdsActiveCoachingLinks } from '@/features/coach/coach-repository';
 import {
   getOpenConversations,
   getMessages,
@@ -20,16 +21,30 @@ import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import type { WeeklySessionInitial } from '../weekly-session';
 
-// The Views this port has real pages for. Glossary/Roster join this list as
-// their own tasks land (lovable/briefs build order) — left out for now rather
-// than linking to a page that 404s.
-const AVAILABLE_VIEWS: ViewId[] = [
+// The Views this port has real pages for. Glossary joins this list as its own
+// task lands (lovable/briefs build order) — left out for now rather than
+// linking to a page that 404s.
+const ATHLETE_VIEWS: ViewId[] = [
   'training-plan',
   'information',
   'equipment',
   'settings',
   'privacy',
 ];
+
+/**
+ * Roster is not in that list because it is not available to everyone: CONTEXT.md
+ * makes the entry conditional on the account holding active Coaching Links, so
+ * it cannot be a module constant. Adding it unconditionally would show every
+ * solo athlete a link to a page that tells them they are not a coach.
+ *
+ * It sits after the athlete's own Views rather than at the top — a Head Coach is
+ * usually also an athlete (the seed creates exactly that), and their own
+ * training is still what they open the app for.
+ */
+function availableViewsFor(isHeadCoach: boolean): ViewId[] {
+  return isHeadCoach ? [...ATHLETE_VIEWS, 'roster'] : ATHLETE_VIEWS;
+}
 
 /**
  * Shared frame for every View (ADR 0007): Navigation Drawer, theme cycle, and
@@ -57,6 +72,7 @@ export default async function AppShellLayout({
   }
 
   const athlete = await getAthleteByUserId(session!.user.id);
+  const isHeadCoach = await holdsActiveCoachingLinks(session!.user.id);
   const firstName = session!.user.name.trim().split(/\s+/)[0] ?? '';
 
   // Restore an in-progress Weekly Session on refresh: the transcript is server
@@ -129,7 +145,7 @@ export default async function AppShellLayout({
   return (
     <ShellChrome
       athleteName={session!.user.name}
-      availableViews={AVAILABLE_VIEWS}
+      availableViews={availableViewsFor(isHeadCoach)}
       coachContent={
         <CoachThread
           chatInitial={chatInitial}
