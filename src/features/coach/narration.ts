@@ -76,13 +76,6 @@ function subject(event: NarratableEvent): { day?: string; type?: string } {
   }
 }
 
-/** The Head Coach's note, which is the only honest source of a *reason*. */
-function reason(event: NarratableEvent): string | undefined {
-  return event.type === 'session_edited'
-    ? field(event.payload, 'to', 'note')
-    : field(event.payload, 'note');
-}
-
 const CLAUSE_KEY = {
   session_prescribed: 'prescribed',
   session_edited: 'edited',
@@ -102,19 +95,28 @@ function clause(
   // coach's name on the old coach's change.
   const coach =
     (event.actorId ? coachFirstNames[event.actorId] : undefined) ??
-    t('Narration.yourHeadCoach');
+    t('yourHeadCoach');
   const values = {
     coach,
-    day: day ? weekdayOf(day) : t('Narration.recently'),
+    day: day ? weekdayOf(day) : t('recently'),
     ...(type ? { type } : {}),
   };
   // A delete never carries a type, and any payload can be malformed — so there
   // is a typeless phrasing for every kind rather than a placeholder word.
-  const key = `Narration.${CLAUSE_KEY[event.type]}${type ? '' : 'NoType'}`;
-  const sentence = t(key, values);
-
-  const why = reason(event);
-  return why ? t('Narration.withReason', { clause: sentence, reason: why }) : sentence;
+  const key = `${CLAUSE_KEY[event.type]}${type ? '' : 'NoType'}`;
+  // **The Head Coach's note is deliberately not read** (Mads, 2026-08-21). It
+  // is the one honest source of a *reason* — "he wants you race-sharp" — and
+  // dropping it costs real warmth. But it is human free text, and this sentence
+  // is stored in the Coach Chat transcript, which `toApiMessages` replays to
+  // Anthropic on every later turn: a coach writing "I want you sharp for Lars's
+  // ride" would put a name in front of the model for the rest of that athlete's
+  // history. `assertNoDirectIdentifier` cannot catch that — it recognises email
+  // and phone *shapes*, never a name in prose — so the guarantee has to be
+  // structural: the note is not sent, rather than filtered.
+  //
+  // Restoring it for the athlete alone would need the transcript to separate
+  // what is displayed from what is replayed to the model, which it does not.
+  return t(key, values);
 }
 
 /**
@@ -139,10 +141,10 @@ export function composeNarration(
   // and a list item are each finished — punctuation differs by language, and it
   // is copy, not logic.
   const clauses = events.map((e) => clause(e, coachFirstNames, t, weekdayOf));
-  if (clauses.length === 1) return t('Narration.single', { clause: clauses[0] });
+  if (clauses.length === 1) return t('single', { clause: clauses[0] });
 
   return [
-    t('Narration.multiLead'),
-    ...clauses.map((c) => t('Narration.item', { clause: c })),
+    t('multiLead'),
+    ...clauses.map((c) => t('item', { clause: c })),
   ].join('\n');
 }

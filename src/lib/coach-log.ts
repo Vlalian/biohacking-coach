@@ -71,3 +71,29 @@ export function logCoachFailure(failure: CoachFailure): void {
     // Deliberately silent: see above.
   }
 }
+
+/**
+ * Writes one structured line for narration that could not be delivered.
+ *
+ * Narration makes no Anthropic call, so it is not a {@link CoachFailure} and
+ * does not share its `surface` taxonomy — but it runs on a render path, where a
+ * throw would take down the app shell. The caller swallows the error to keep
+ * the shell up; this is what stops that swallow from being silent. Nothing was
+ * stamped, so the events stay pending and narrate on the next app-open.
+ *
+ * Same discipline as above: the opaque athlete id, and the error's class rather
+ * than its message.
+ */
+export function logNarrationFailure(athleteId: string, error: unknown): void {
+  try {
+    console.error(
+      JSON.stringify({
+        event: 'narration_failed',
+        athleteId,
+        errorType: error instanceof Error ? error.name : typeof error,
+      }),
+    );
+  } catch {
+    // Deliberately silent: see above.
+  }
+}

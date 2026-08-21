@@ -15,6 +15,7 @@ import {
 } from '@/features/coach/conversation-repository';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
+import { logNarrationFailure } from '@/lib/coach-log';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
@@ -87,13 +88,23 @@ export default async function AppShellLayout({
     // message land in one batch that re-asserts `narrated_at IS NULL`, so two
     // concurrent renders cannot narrate the same change twice. It never calls
     // the Anthropic API.
+    //
+    // It is guarded, though, because *safe* is not the same as *infallible*: a
+    // transient database failure here would otherwise reject the render and
+    // take down the whole app shell for that athlete. Narration is not lost by
+    // catching — nothing was stamped, so it stays pending and is narrated on
+    // the next app-open. A missed narration retries; a thrown render does not.
     const narrationCopy = await getTranslations('Narration');
     const weekdayOf = new Intl.DateTimeFormat(locale, { weekday: 'long' });
-    await narratePendingEvents(
-      athlete.id,
-      (key, values) => narrationCopy(key, values),
-      (key) => weekdayOf.format(new Date(`${key}T12:00:00Z`)),
-    );
+    try {
+      await narratePendingEvents(
+        athlete.id,
+        (key, values) => narrationCopy(key, values),
+        (key) => weekdayOf.format(new Date(`${key}T12:00:00Z`)),
+      );
+    } catch (error) {
+      logNarrationFailure(athlete.id, error);
+    }
 
     // One query for whatever is open, across kinds — the Overlay is one surface
     // hosting several behaviors (ADR 0007), so the shell does not ask for a kind

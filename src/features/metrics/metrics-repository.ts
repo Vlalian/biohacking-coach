@@ -93,10 +93,10 @@ export async function getMetricsInput(athleteId: string): Promise<MetricsInput> 
     })),
     chatTurnWeeks: chatTurnRows.map((r) => weekStartOf(dayOf(r.createdAt))),
     planDeclinedWeeks: declinedRows.map((r) => weekStartOf(dayOf(r.createdAt))),
-    // Weekly Session turns are read for *activity* (retention) only — they are
-    // deliberately not an engagement signal, because the session runs until the
-    // athlete agrees, so its length measures how long agreeing took.
-    weeklySessionTurnWeeks: weeklyTurnRows.map((r) => weekStartOf(dayOf(r.createdAt))),
+    // Weekly Session turns feed *activity* (retention) below and nothing else:
+    // they are deliberately not an engagement signal, because the session runs
+    // until the athlete agrees, so its length measures how long agreeing took.
+    //
     // "Activity" is the athlete doing something the app recorded — a session
     // that happened, or a turn they typed. A planned session they have not
     // reached yet is the app's intention, not their activity, so it is excluded

@@ -498,7 +498,6 @@
     "single": "{clause}.",
     "item": "• {clause}",
     "multiLead": "Der er sket et par ting i din plan, siden du sidst var her:",
-    "withReason": "{clause} — {reason}",
     "prescribed": "{coach} har lagt en {type}-session ind {day}",
     "prescribedNoType": "{coach} har lagt en session ind {day}",
     "edited": "{coach} har ændret din {type}-session {day}",

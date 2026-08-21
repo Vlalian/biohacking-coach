@@ -6,7 +6,6 @@ const input = (over: Partial<MetricsInput> = {}): MetricsInput => ({
   sessions: [],
   chatTurnWeeks: [],
   planDeclinedWeeks: [],
-  weeklySessionTurnWeeks: [],
   activityDays: [],
   moveEventDates: [],
   ...over,
@@ -31,7 +30,6 @@ describe('Coach Engagement Rate', () => {
     const m = athleteMetrics(
       input({
         sessions: [{ date: '2026-08-17', status: 'completed', rated: true }],
-        weeklySessionTurnWeeks: ['2026-08-17'],
       }),
     );
 
@@ -46,7 +44,6 @@ describe('Coach Engagement Rate', () => {
     const m = athleteMetrics(
       input({
         sessions: [{ date: '2026-08-17', status: 'completed', rated: true }],
-        weeklySessionTurnWeeks: Array(12).fill('2026-08-17'),
       }),
     );
 
@@ -60,7 +57,6 @@ describe('Coach Engagement Rate', () => {
     const m = athleteMetrics(
       input({
         sessions: [{ date: '2026-08-17', status: 'completed', rated: true }],
-        weeklySessionTurnWeeks: ['2026-08-17'],
         planDeclinedWeeks: ['2026-08-17'],
       }),
     );

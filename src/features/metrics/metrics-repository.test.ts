@@ -80,8 +80,6 @@ describe('getMetricsInput', () => {
     ];
 
     const input = await getMetricsInput('a1');
-
-    expect(input.weeklySessionTurnWeeks).toEqual(['2026-08-17', '2026-08-17']);
     expect(input.planDeclinedWeeks).toEqual([]);
     expect(input.activityDays).toEqual(['2026-08-17', '2026-08-17']);
   });

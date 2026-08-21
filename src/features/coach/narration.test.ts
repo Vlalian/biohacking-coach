@@ -1,15 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import { composeNarration, type NarratableEvent } from './narration';
+import en from '@/messages/en.json';
 
 /**
- * A stub translator that renders `key(values)` rather than real copy.
+ * A stub translator that renders `key(values)` rather than real copy — but
+ * **refuses a key the catalogue does not have.**
  *
  * The composer's job is *which* clause, with *which* values — not what English
  * or Danish reads like. Asserting against rendered ICU strings would test the
  * message catalogue instead, and would go red every time the wording is
- * softened. This keeps the tests about the decision.
+ * softened. So the rendering stays symbolic and the tests stay about the
+ * decision.
+ *
+ * The key check is not decoration. Until 2026-08-21 this stub accepted any
+ * string, and the composer was passing *absolute* keys (`Narration.single`) to
+ * a translator the layout had already namespaced to `Narration` — so next-intl
+ * resolved `Narration.Narration.single` and the athlete would have seen a raw
+ * message key in the Coach thread. Every test here passed. A stub that accepts
+ * anything tests nothing about the contract it stands in for, so this one holds
+ * the composer to the same namespace the real caller gives it.
  */
+const NARRATION = en.Narration as Record<string, string>;
+
 const t = (key: string, values: Record<string, string | number> = {}) => {
+  if (!(key in NARRATION)) {
+    throw new Error(
+      `no such message "Narration.${key}" — the translator is namespaced to ` +
+        `"Narration", so keys must be relative to it`,
+    );
+  }
   const rendered = Object.entries(values)
     .map(([k, v]) => `${k}=${v}`)
     .join(',');
@@ -35,43 +54,42 @@ describe('composeNarration — one event', () => {
     const message = composeNarration([prescribed()], NAMES, t, weekday);
 
     expect(message).toBe(
-      'Narration.single(clause=Narration.prescribed(coach=Lars,day=day:2026-08-20,type=Endurance))',
+      'single(clause=prescribed(coach=Lars,day=day:2026-08-20,type=Endurance))',
     );
   });
 
-  it("carries the Head Coach's own note through as the reason", () => {
+  it("never carries the Head Coach's note — it is free text bound for the model", () => {
+    // Mads, 2026-08-21. The note is the only honest source of a *reason*, and
+    // dropping it costs warmth — but this sentence is stored in the Coach Chat
+    // transcript, and `toApiMessages` replays that transcript to Anthropic on
+    // every later turn. A coach writing a name into a note would put it in
+    // front of the model for the rest of the athlete's history.
+    // `assertNoDirectIdentifier` cannot catch that (email and phone shapes
+    // only, never a name in prose), so the note is not sent rather than
+    // filtered.
     const withNote = prescribed({
       payload: {
         sessionId: 's1',
         date: '2026-08-20',
         type: 'Endurance',
-        note: 'we need the volume before the taper',
+        // A third party's name, typed by a human into a free-text field —
+        // deliberately not one of NAMES, which are the *attributed* coaches and
+        // legitimately appear in the sentence.
+        note: "ride with Bjorn on Saturday, he'll hold your pace",
       },
     });
 
     const message = composeNarration([withNote], NAMES, t, weekday);
 
-    expect(message).toContain('Narration.withReason(');
-    expect(message).toContain('reason=we need the volume before the taper');
-  });
-
-  it('reads cleanly with no note — no empty reason clause', () => {
-    const message = composeNarration([prescribed()], NAMES, t, weekday);
-    expect(message).not.toContain('withReason');
-  });
-
-  it('never invents a reason the Head Coach did not give', () => {
-    // A blank note is the same as no note. The whole point of sourcing the
-    // reason from the payload is that the app cannot make one up.
-    const blank = prescribed({
-      payload: { sessionId: 's1', date: '2026-08-20', type: 'Endurance', note: '   ' },
-    });
-    expect(composeNarration([blank], NAMES, t, weekday)).not.toContain('withReason');
+    expect(message).not.toContain('Bjorn');
+    expect(message).not.toContain('hold your pace');
+    // Identical to the same event with no note at all: the note changes nothing.
+    expect(message).toBe(composeNarration([prescribed()], NAMES, t, weekday));
   });
 });
 
 describe('composeNarration — the other two verbs', () => {
-  it('narrates an edit from the new content, and its note', () => {
+  it('narrates an edit from the new content, without its note', () => {
     const edited: NarratableEvent = {
       id: 'ev_2',
       actorId: 'coach_1',
@@ -86,10 +104,11 @@ describe('composeNarration — the other two verbs', () => {
 
     const message = composeNarration([edited], NAMES, t, weekday);
 
-    expect(message).toContain('Narration.edited(');
+    expect(message).toContain('edited(');
     expect(message).toContain('day=day:2026-08-21');
     expect(message).toContain('type=Tempo');
-    expect(message).toContain('reason=move it off your long day');
+    // The note rides in the same payload and is deliberately not read.
+    expect(message).not.toContain('move it off your long day');
   });
 
   it('narrates a delete without naming a session type — the event does not record one', () => {
@@ -107,7 +126,7 @@ describe('composeNarration — the other two verbs', () => {
     const message = composeNarration([deleted], NAMES, t, weekday);
 
     expect(message).toBe(
-      'Narration.single(clause=Narration.deletedNoType(coach=Lars,day=day:2026-08-22))',
+      'single(clause=deletedNoType(coach=Lars,day=day:2026-08-22))',
     );
   });
 
@@ -137,7 +156,7 @@ describe('composeNarration — a batch', () => {
 
     expect(message).not.toBeNull();
     const lines = message!.split('\n');
-    expect(lines[0]).toBe('Narration.multiLead');
+    expect(lines[0]).toBe('multiLead');
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain('type=Endurance');
     expect(lines[2]).toContain('type=Tempo');
@@ -158,7 +177,7 @@ describe('composeNarration — a batch', () => {
   it('falls back to a neutral label when the actor cannot be named', () => {
     const orphan = prescribed({ actorId: null });
     expect(composeNarration([orphan], NAMES, t, weekday)).toContain(
-      'coach=Narration.yourHeadCoach',
+      'coach=yourHeadCoach',
     );
   });
 

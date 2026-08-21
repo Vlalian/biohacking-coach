@@ -27,17 +27,10 @@ export interface MetricsInput {
   chatTurnWeeks: string[];
   /** Week-start keys in which the athlete declined a Week Plan proposal. */
   planDeclinedWeeks: string[];
-  /** Week-start keys in which the athlete took a turn in a Weekly Session. */
-  weeklySessionTurnWeeks: string[];
   /** Every day the athlete did something the app recorded. */
   activityDays: string[];
   /** The date of each `session_moved` event. */
   moveEventDates: string[];
-}
-
-/** A count over a total, with the ratio — null when the total is zero. */
-export interface Ratio {
-  rate: number | null;
 }
 
 export interface AthleteMetrics {

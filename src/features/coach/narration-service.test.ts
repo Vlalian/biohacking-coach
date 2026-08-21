@@ -111,7 +111,7 @@ describe('narratePendingEvents — what it claims', () => {
     await narratePendingEvents('a1', t, weekday);
 
     const written = claimAndNarrate.mock.calls[0][0].content as string;
-    expect(written).toContain('Narration.yourHeadCoach');
+    expect(written).toContain('yourHeadCoach');
     expect(written).not.toContain('Lars');
   });
 

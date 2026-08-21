@@ -498,7 +498,6 @@
     "single": "{clause}.",
     "item": "• {clause}",
     "multiLead": "A few things changed in your plan while you were away:",
-    "withReason": "{clause} — {reason}",
     "prescribed": "{coach} added a {type} session on {day}",
     "prescribedNoType": "{coach} added a session on {day}",
     "edited": "{coach} changed your {type} session on {day}",
