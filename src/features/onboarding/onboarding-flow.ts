@@ -90,6 +90,70 @@ export const ONBOARDING_OPTIONS = {
 } as const;
 
 /**
+ * The option groups the UI renders as labelled tiles, and the message key each
+ * value carries. Language and experience level are not here: they are rendered
+ * with their own inline labels at their own steps.
+ *
+ * This map is exhaustive *by type*. `LabelledOption` is derived from
+ * `ONBOARDING_OPTIONS` itself, so adding a value to any group above without
+ * giving it a label here fails `tsc` — which is the point. Three of the
+ * available-hours buckets shipped to the deployment as raw message keys
+ * (`Onboarding.10-13h`) precisely because the old map was a plain
+ * `Record<string, string>`, and a plain record cannot notice what is missing.
+ *
+ * A key present here still has to exist in every locale catalogue; that half is
+ * enforced by the colocated test, not by the type.
+ */
+type LabelledGroup =
+  | 'sportBackground'
+  | 'availableHours'
+  | 'motivation'
+  | 'weakestDiscipline'
+  | 'hasHumanCoach'
+  | 'trackedMetrics'
+  | 'days'
+  | 'weeklySessionDay';
+
+/** Every option value the UI renders as a labelled tile. */
+export type LabelledOption = (typeof ONBOARDING_OPTIONS)[LabelledGroup][number];
+
+export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
+  Runner: 'optRunner',
+  Cyclist: 'optCyclist',
+  Swimmer: 'optSwimmer',
+  Gym: 'optGym',
+  None: 'optNone',
+  'Under 3h': 'optUnder3',
+  '3–6h': 'opt36',
+  '6–10h': 'opt610',
+  '10–13h': 'opt1013',
+  '13–16h': 'opt1316',
+  '16h+': 'opt16plus',
+  Completion: 'optCompletion',
+  'Personal challenge': 'optChallenge',
+  Community: 'optCommunity',
+  Performance: 'optPerformance',
+  Swim: 'optSwim',
+  Bike: 'optBike',
+  Run: 'optRun',
+  Equal: 'optEqual',
+  Yes: 'optYes',
+  No: 'optNo',
+  'Heart Rate': 'optHR',
+  Power: 'optPower',
+  HRV: 'optHRV',
+  Pace: 'optPace',
+  Monday: 'dayMonday',
+  Tuesday: 'dayTuesday',
+  Wednesday: 'dayWednesday',
+  Thursday: 'dayThursday',
+  Friday: 'dayFriday',
+  Saturday: 'daySaturday',
+  Sunday: 'daySunday',
+  Flexible: 'optFlexible',
+};
+
+/**
  * The first unanswered step, or 'done'. The adaptive step counts as answered
  * once any of its level's answers exist OR it was explicitly submitted — all its
  * questions are optional in the POC, so submission is tracked by the caller
