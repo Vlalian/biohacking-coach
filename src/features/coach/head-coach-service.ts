@@ -3,7 +3,12 @@ import { getDb } from '@/db';
 import { events, sessions } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import { getActiveLink } from './coach-repository';
-import { canHeadCoachEditContent, HEAD_COACH_ORIGIN } from './head-coach-authority';
+import {
+  canHeadCoachEditContent,
+  canHeadCoachMove,
+  HEAD_COACH_ORIGIN,
+} from './head-coach-authority';
+import { applyMove, type MoveResult } from '@/features/session/session-move';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -207,4 +212,43 @@ export async function deletePrescribedSession(params: {
   ]);
 
   return { ok: true, sessionId };
+}
+
+/**
+ * The Head Coach moving a session on a linked athlete's plan (ADR 0003,
+ * 2026-08-21 amendment — placement is shared, not transferred).
+ *
+ * Two gates before anything is written, the same shape as every other action
+ * here: the Coaching Link must be active, and the session's origin must be
+ * within the coach's placement authority — an Athlete Session is not.
+ *
+ * The Move rules themselves are NOT re-implemented for the coach. This delegates
+ * to {@link applyMove}, the same function the athlete's own move runs through,
+ * so "no moving into the past", "not across the week boundary" and "a completed
+ * session is frozen" cannot mean one thing for the athlete and another for their
+ * coach. What differs is only the actor recorded on the `session_moved` event —
+ * which is what will let narration tell the athlete who moved their training.
+ */
+export async function moveSessionAsHeadCoach(params: {
+  headCoachId: string;
+  athleteId: string;
+  sessionId: string;
+  targetDate: string;
+  today: string;
+}): Promise<MoveResult | { ok: false; reason: 'not-linked' }> {
+  const { headCoachId, athleteId, sessionId, targetDate, today } = params;
+
+  if (!isValidDateKey(targetDate)) return { ok: false, reason: 'bounce' };
+
+  const link = await getActiveLink(headCoachId, athleteId);
+  if (!link) return { ok: false, reason: 'not-linked' };
+
+  return applyMove({
+    athleteId,
+    sessionId,
+    targetDate,
+    today,
+    actor: { type: 'head_coach', headCoachId },
+    permittedOrigin: canHeadCoachMove,
+  });
 }
