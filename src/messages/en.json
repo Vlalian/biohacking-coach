@@ -329,7 +329,12 @@
     "upload": "Upload Garmin file",
     "uploading": "Uploading…",
     "imported": "{count, plural, one {# session imported} other {# sessions imported}}",
-    "error": "Couldn't read that file. Try a .fit or .gpx export."
+    "error": "Couldn't read that file. Try a .fit or .gpx export.",
+    "errorNotAFitFile": "That doesn't look like a .fit file. In Garmin Connect, open the activity and choose Export Original — a renamed file won't work.",
+    "errorCorrupt": "That .fit file is damaged or incomplete. Download it from Garmin Connect again and re-upload.",
+    "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
+    "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
+    "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"

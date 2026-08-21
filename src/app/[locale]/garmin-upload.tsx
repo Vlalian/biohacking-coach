@@ -3,18 +3,45 @@
 import { useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { uploadGarminAction } from './garmin-actions';
+import { uploadGarminAction, type UploadFailure } from './garmin-actions';
 
 type Status =
   | { kind: 'idle' }
   | { kind: 'done'; count: number }
-  | { kind: 'error' };
+  | { kind: 'error'; reason: UploadFailure };
+
+/**
+ * Failure reason to message key.
+ *
+ * One message per failure, because one message for all of them is what turns a
+ * recoverable mistake into a dead end for a tester who cannot ask
+ * (showable-version/06). `unreadable` keeps the generic string on purpose: it is
+ * the case where the decoder itself could not say what was wrong.
+ *
+ * A total map rather than a lookup with a fallback, so adding a reason to
+ * `UploadResult` and forgetting the copy is a type error rather than a raw key
+ * on screen. Note the guarantee stops there: `Record<UploadFailure, string>`
+ * proves every *reason* has an entry, not that every entry names a message that
+ * exists — the value type is `string`. Catching a mistyped key would need
+ * next-intl's `AppConfig.Messages` augmentation, which this repo does not have;
+ * `as const satisfies` alone would not do it. (CodeRabbit, PR #35, correcting
+ * its own earlier suggestion on PR #37.)
+ */
+const ERROR_KEY: Record<UploadFailure, string> = {
+  'not-a-fit-file': 'errorNotAFitFile',
+  corrupt: 'errorCorrupt',
+  'no-sessions': 'errorNoSessions',
+  empty: 'errorEmpty',
+  'not-authenticated': 'errorNotAuthenticated',
+  unreadable: 'error',
+};
 
 /**
  * Upload a Garmin .fit/.gpx file. The file goes straight to the server action,
  * which parses and persists it; on success the calendar revalidates and the new
- * session appears. Failures (a malformed file, an empty pick) surface as one
- * generic localized message — nothing was written.
+ * session appears. A failure names which failure it was — the wrong kind of file
+ * and a damaged one need different things from the athlete — and nothing was
+ * written in any of those cases.
  */
 export function GarminUpload() {
   const t = useTranslations('Garmin');
@@ -36,7 +63,7 @@ export function GarminUpload() {
         setStatus({ kind: 'done', count: result.count });
         router.refresh();
       } else {
-        setStatus({ kind: 'error' });
+        setStatus({ kind: 'error', reason: result.reason });
       }
     });
   }
@@ -64,7 +91,7 @@ export function GarminUpload() {
       )}
       {status.kind === 'error' && (
         <p role="alert" className="text-sm text-red-600">
-          {t('error')}
+          {t(ERROR_KEY[status.reason])}
         </p>
       )}
     </div>

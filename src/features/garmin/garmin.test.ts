@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { downsampleRecords, summarizeRecords, parseGpx } from './garmin';
+import { downsampleRecords, summarizeRecords, parseGpx, fitCrc } from './garmin';
 
-// All fixture values are synthetic (privacy rule 2026-07-09). FIT is a binary
-// format not worth authoring a fixture for; it is covered at the record-mapping
-// seam by the shared stream functions, which the GPX path also exercises.
+// All fixture values are synthetic (privacy rule 2026-07-09).
+//
+// FIT used to be described here as "not worth authoring a fixture for". That is
+// no longer true and the sentence is replaced rather than left: `fit-fixture.ts`
+// builds real FIT bytes and `fit-fixture.test.ts` round-trips them through the
+// decoder. What lives here is the part a round-trip cannot prove — see below.
 
 describe('downsampleRecords', () => {
   it('returns empty t and no channels for empty or missing input', () => {
@@ -147,5 +150,35 @@ describe('parseGpx', () => {
     const badTime = `<gpx><trk><trkseg><trkpt lat="55" lon="12"><ele>10</ele><time>not-a-date</time></trkpt></trkseg></trk></gpx>`;
     expect(() => parseGpx(Buffer.from(badTime))).not.toThrow();
     expect(parseGpx(Buffer.from(badTime))).toEqual([]);
+  });
+});
+
+/**
+ * The one property a round-trip test cannot establish.
+ *
+ * `inspectFitFile` refuses an upload whose checksum does not match, and the
+ * fixture signs its files with this same function — so `fit-fixture.test.ts`
+ * proves only that the two halves agree with each other. If `fitCrc` were
+ * subtly wrong, it would reject every real Garmin export and the round-trip
+ * would still pass.
+ *
+ * So the algorithm is pinned to something outside this repo instead. FIT uses
+ * CRC-16/ARC, whose published check value is `0xBB3D` for the ASCII string
+ * "123456789" — the standard conformance vector for that algorithm. A file
+ * Garmin considers valid computes the same way here.
+ */
+describe('fitCrc', () => {
+  it('matches the published CRC-16/ARC check value', () => {
+    expect(fitCrc(Buffer.from('123456789', 'ascii'))).toBe(0xbb3d);
+  });
+
+  it('is 0 for no bytes, matching the zero-initialised register', () => {
+    expect(fitCrc(Buffer.alloc(0))).toBe(0);
+  });
+
+  it('changes when any byte changes — the property the corrupt guard rests on', () => {
+    const clean = Buffer.from([1, 2, 3, 4, 5]);
+    const altered = Buffer.from([1, 2, 99, 4, 5]);
+    expect(fitCrc(altered)).not.toBe(fitCrc(clean));
   });
 });
