@@ -1,6 +1,6 @@
 'use server';
 
-import { resolveHeadCoachWithLanguage } from '../../../current-actor';
+import { resolveHeadCoachWithLanguage } from '../../../../current-actor';
 import { dateKey } from '@/lib/date';
 import {
   continueBriefing,
