@@ -16,10 +16,19 @@
  *   - **`garmin`** — an imported activity is the immutable record of what
  *     happened; no one edits reality.
  *
- * Placement (the Session Move) is deliberately NOT decided here: the athlete may
- * move a Prescribed Session like any other, because placement is the athlete's
- * tier regardless of who authored the content (ADR 0002/0003, the Move rules).
- * This module is only about content.
+ * Placement used to be outside this module entirely — "the athlete's tier
+ * regardless of who authored the content". That changed on 2026-08-21 (ADR 0003
+ * amendment): the Head Coach may move sessions on a linked athlete's plan, so
+ * placement is now *shared* rather than transferred. The athlete keeps every
+ * placement right they had, including moving a session the coach just moved;
+ * what the coach gains is a say in when the training they authored happens.
+ *
+ * So this module owns two guards now, and they are deliberately separate
+ * functions over the same origins: {@link canHeadCoachEditContent} for what the
+ * coach may rewrite, {@link canHeadCoachMove} for what they may re-place. They
+ * happen to agree today. Keeping them apart is what lets one change without
+ * silently changing the other — an Athlete Session becoming coach-movable, say,
+ * without becoming coach-editable.
  */
 
 /** The origin a Head Coach's newly prescribed session carries. */
@@ -39,5 +48,23 @@ export const HEAD_COACH_EDITABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN] as const
  * Sessions" true on the server, not just in the UI.
  */
 export function canHeadCoachEditContent(origin: string): boolean {
+  return (HEAD_COACH_EDITABLE_ORIGINS as readonly string[]).includes(origin);
+}
+
+/**
+ * True when a session of this origin is within the Head Coach's *placement*
+ * authority (ADR 0003, 2026-08-21 amendment).
+ *
+ * False for Athlete Sessions: that rule was not reversed, and the athlete's own
+ * entries stay their territory — a coach sees them and leaves them where they
+ * are. False for Garmin imports too, though the Move rules would refuse those
+ * anyway as completed sessions; stating it here means the answer does not
+ * depend on that coincidence.
+ *
+ * The rest — whether the day is in the past, the week, or frozen — is not this
+ * module's business. Those are the Move rules, and they apply identically to
+ * both actors.
+ */
+export function canHeadCoachMove(origin: string): boolean {
   return (HEAD_COACH_EDITABLE_ORIGINS as readonly string[]).includes(origin);
 }
