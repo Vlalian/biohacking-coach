@@ -531,7 +531,16 @@ export function formatWeekSessions(week?: WeekSession[]): string | null {
         s.zone ? `Zone ${s.zone}` : null,
       ].filter(Boolean);
       const paramPart = params.length > 0 ? ` · ${params.join(' · ')}` : '';
-      const notePart = s.note ? ` · "${s.note}"` : '';
+      // **A Head Coach's note is never sent** (Mads, 2026-08-21). The other
+      // origins are fine here: a `coach` note is the Coach's own words coming
+      // back, and an `athlete` or `garmin` note is the athlete's own free text,
+      // which the consent disclosure covers. A Head Coach's note is neither —
+      // it is a third party's prose *about* the athlete, written by someone who
+      // never agreed to have it processed, and "I want you sharp for Lars's
+      // ride" puts a name in front of the model that
+      // `assertNoDirectIdentifier` cannot see (it recognises email and phone
+      // shapes, never a name in prose). Structural, not filtered: not sent.
+      const notePart = s.note && s.origin !== 'head_coach' ? ` · "${s.note}"` : '';
       return `${head}${paramPart} — ${s.status} (${authorship})${notePart}`;
     })
     .join('\n');
@@ -559,7 +568,7 @@ function weekBlock(week: WeekSession[]): PromptBlock {
     ? `\n\nAUTHORITY: The Head Coach's sessions are theirs, not yours. Explain and defend them — why they were set, why they are a good idea — as one team, one plan, one voice. Never offer to change or remove one; the Head Coach decides. For your own sessions, talk freely about alternatives.`
     : '';
 
-  return `THIS WEEK (Mon-Sun, every session on the athlete's calendar — refer to a session by its day and type, never by a number or id):
+  return `THIS WEEK (Mon-Sun, every session on the athlete's calendar this week — refer to a session by its day and type, never by a number or id):
 ${lines}${authority}`;
 }
 

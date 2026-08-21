@@ -240,6 +240,18 @@ describe('golden — the Coach Chat prompt', () => {
         isReference: true,
       },
       {
+        // A Head Coach session the athlete did *not* tap, carrying a note: the
+        // one path where a note would have been rendered. It must not be.
+        date: '2026-08-20',
+        sessionType: 'Endurance',
+        status: 'planned',
+        origin: 'head_coach',
+        title: null,
+        durationMinutes: 120,
+        zone: '2',
+        note: 'steady — ride it with Bjorn if you can',
+      },
+      {
         date: '2026-08-21',
         sessionType: 'Recovery',
         status: 'skipped',

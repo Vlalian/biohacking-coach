@@ -403,6 +403,33 @@ const planned = (over: Partial<WeekSession> = {}): WeekSession => ({
 });
 
 describe('formatWeekSessions', () => {
+  it("never sends a Head Coach's note, and keeps every other origin's", () => {
+    // Mads, 2026-08-21. A Head Coach's note is a third party's prose *about*
+    // the athlete, written by someone who never agreed to have it processed —
+    // and a name in it ("I want you sharp for Lars's ride") is invisible to
+    // `assertNoDirectIdentifier`, which recognises email and phone shapes only.
+    // So it is not sent, rather than filtered.
+    //
+    // The other origins are deliberately unaffected: a `coach` note is the
+    // Coach's own words coming back to it, and an `athlete` note is the
+    // athlete's own free text, which the consent disclosure covers. Dropping
+    // those too would cost the Coach real context for no privacy gain.
+    const fromHeadCoach = formatWeekSessions([
+      planned({ origin: 'head_coach', note: "ride with Bjorn, he'll hold your pace" }),
+    ]);
+    expect(fromHeadCoach).not.toContain('Bjorn');
+    expect(fromHeadCoach).not.toContain('hold your pace');
+    // The session itself still appears, attributed — only the prose is gone.
+    expect(fromHeadCoach).toContain('Head Coach');
+
+    for (const origin of ['coach', 'athlete', 'garmin'] as const) {
+      expect(
+        formatWeekSessions([planned({ origin, note: 'easy spin, keep it social' })]),
+        `a ${origin} note should still reach the Coach`,
+      ).toContain('easy spin, keep it social');
+    }
+  });
+
   it('renders day, date, type, status and authorship', () => {
     const line = formatWeekSessions([planned()]);
     expect(line).toContain('2026-08-18');
