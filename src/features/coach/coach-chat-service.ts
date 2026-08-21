@@ -1,9 +1,11 @@
 import { refusalReason } from '@/lib/identifiers';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
-import { getOwnedSession } from '@/features/session/session-repository';
+import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
+import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
+import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
 import { callCoach } from './coach-client';
 import {
@@ -65,6 +67,12 @@ function toSessionContext(session: Session): SessionContext {
  * No name or email is assembled into the check-in (GDPR decision 1 lives in
  * {@link buildWeeklyCheckIn}, which this reuses precisely so the guarantee is
  * enforced once rather than re-implemented).
+ *
+ * The athlete's current week is fetched the same way — athlete-scoped, from the
+ * Monday of `today` — because Coach Chat is where "should I do tomorrow's
+ * intervals?" gets asked, and a Coach that cannot see the week answers it
+ * confidently anyway. The Weekly Session's prompt has always read the week; this
+ * one did not until now.
  */
 async function renderSystem(
   athlete: Athlete,
@@ -72,8 +80,9 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<string> {
-  const [equipmentItems, reference] = await Promise.all([
+  const [equipmentItems, weekSessions, reference] = await Promise.all([
     getEquipmentItems(athlete.id),
+    getSessionsForWeek(athlete.id, weekStartOf(today)),
     referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
   ]);
 
@@ -83,7 +92,14 @@ async function renderSystem(
   // week with.
   const checkIn = buildWeeklyCheckIn(athlete, BASELINE_READINESS, 1, language, equipmentItems);
 
-  return buildChatPrompt(checkIn, today, reference ? toSessionContext(reference) : null);
+  // The Reference is matched against the week by id here, where ids still
+  // exist; downstream of this call nothing knows what a session id is.
+  return buildChatPrompt(
+    checkIn,
+    today,
+    reference ? toSessionContext(reference) : null,
+    weekFrom(weekSessions, reference?.id),
+  );
 }
 
 export interface CoachChatState {

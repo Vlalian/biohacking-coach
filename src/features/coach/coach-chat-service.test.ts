@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 
 const {
@@ -18,7 +19,7 @@ const {
   getMessages: vi.fn(),
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
   getOwnedSession: vi.fn(),
-  getSessionsForWeek: vi.fn(() => Promise.resolve([])),
+  getSessionsForWeek: vi.fn(() => Promise.resolve([] as Session[])),
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
@@ -252,5 +253,82 @@ describe('sendCoachChatMessage', () => {
 
     expect(result).toMatchObject({ ok: true });
     expect(callCoach.mock.calls[0][0].system).not.toContain('SESSION DISCUSSION');
+  });
+});
+
+describe('Coach Chat sees the week', () => {
+  beforeEach(() => {
+    callCoach.mockReset().mockResolvedValue({ text: 'Fuel early.', toolCalls: [] });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getEquipmentItems.mockClear();
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1' });
+    getOwnedSession.mockReset().mockResolvedValue(undefined);
+    getSessionsForWeek.mockReset().mockResolvedValue([]);
+  });
+
+  const weekSession = (over: Partial<Session> = {}): Session => ({
+    id: 'sess_1',
+    date: '2026-08-13',
+    type: 'Intensity',
+    status: 'planned',
+    parked: false,
+    dayOrder: 0,
+    title: null,
+    duration: 60,
+    zone: '4',
+    note: null,
+    feedbackBody: null,
+    feedbackMind: null,
+    feedbackComment: null,
+    origin: 'coach',
+    isTraining: true,
+    ...over,
+  });
+
+  // The bug this slice exists for: an athlete asking "should I do tomorrow's
+  // intervals?" was talking to a Coach that could not see tomorrow, and it
+  // answered confidently anyway.
+  it('fetches the athlete’s current week from the Monday of today', async () => {
+    getSessionsForWeek.mockResolvedValue([weekSession()]);
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I do tomorrow?', '2026-08-12');
+
+    // 2026-08-12 is a Wednesday; its week starts Monday 2026-08-10.
+    expect(getSessionsForWeek).toHaveBeenCalledWith('athlete_1', '2026-08-10');
+    expect(callCoach.mock.calls[0][0].system).toContain('THIS WEEK');
+    expect(callCoach.mock.calls[0][0].system).toContain('Intensity');
+  });
+
+  it('renders no week block when the athlete has no sessions this week', async () => {
+    getSessionsForWeek.mockResolvedValue([]);
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'hello', '2026-08-12');
+
+    expect(callCoach.mock.calls[0][0].system).not.toContain('THIS WEEK');
+  });
+
+  // Entity ids never appear in prompts (CONTEXT.md, Week Activity) — a model
+  // that reads an id in its own prompt can recite it back.
+  it('puts no session id in the prompt', async () => {
+    getSessionsForWeek.mockResolvedValue([weekSession({ id: 'sess_secret' })]);
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'hello', '2026-08-12');
+
+    expect(callCoach.mock.calls[0][0].system).not.toContain('sess_secret');
+  });
+
+  it('describes a tapped Reference once, not twice', async () => {
+    const tapped = weekSession({ id: 'sess_1', note: 'threshold set, hold 4x8' });
+    getSessionsForWeek.mockResolvedValue([tapped]);
+    getOwnedSession.mockResolvedValue(tapped);
+
+    await sendCoachChatMessage(
+      ATHLETE, 'conv_1', 'why this one?', '2026-08-12', undefined, 'sess_1',
+    );
+
+    const system = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('SESSION DISCUSSION');
+    expect(system.match(/threshold set/g)).toHaveLength(1);
   });
 });
