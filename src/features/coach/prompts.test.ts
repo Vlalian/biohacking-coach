@@ -198,7 +198,12 @@ describe('onboarding answers reach every Coach prompt', () => {
     expect(prompt).toContain('ONBOARDING PROFILE');
     expect(prompt).toContain('NEVER ask for this information again');
     expect(prompt).toContain('Sport background: Runner, Gym');
-    expect(prompt).toContain('Training time available: 3–6h per week');
+    // The ceiling framing is the point of this field, so the assertion pins it
+    // rather than just the number: a bare "Training time available: 3–6h" read
+    // as current volume when `coach:say` was run against it (2026-08-21).
+    expect(prompt).toContain(
+      'Time available to train: 3–6h per week (a ceiling to plan within — not what they currently do)',
+    );
     expect(prompt).toContain('Motivation: Completion');
   });
 
