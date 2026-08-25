@@ -80,6 +80,39 @@ describe('logCoachFailure', () => {
     expect(line).not.toContain('I slept badly');
   });
 
+  it('never forwards a name written onto the error', () => {
+    // CodeRabbit, PR #39. `Error.name` is writable, so reading it would reopen
+    // the channel that dropping `error.message` was meant to close. The
+    // classification comes from a closed list of constructors instead.
+    const planted = new Error('boom');
+    planted.name = 'mads@example.com';
+
+    logCoachFailure({
+      surface: 'coach_chat',
+      athleteId: 'a1',
+      conversationId: 'conv_1',
+      error: planted,
+    });
+
+    const line = written[0];
+    expect(line).not.toContain('mads@example.com');
+    expect(JSON.parse(line).errorType).toBe('error');
+  });
+
+  it('still tells an empty reply apart from any other failure', () => {
+    // The classification has to stay useful, or dropping detail has just made
+    // the log worthless. This is the case that already bit once in the wild
+    // (`fix/coach-empty-reply`).
+    logCoachFailure({
+      surface: 'coach_chat',
+      athleteId: 'a1',
+      conversationId: 'conv_1',
+      error: new EmptyCoachReplyError('max_tokens'),
+    });
+
+    expect(JSON.parse(written[0]).errorType).toBe('empty_coach_reply');
+  });
+
   it('never throws — a logger that fails must not fail the request', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {
       throw new Error('transport gone');

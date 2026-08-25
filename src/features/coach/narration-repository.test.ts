@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 
 // Same mocked-chain shape as the other repository tests: every builder method
 // returns the chain, awaiting it resolves the queued rows. Two things are
@@ -11,6 +13,7 @@ let whereArgs: unknown[] = [];
 let batchCalls: unknown[][] = [];
 let updateSets: unknown[] = [];
 let insertValues: unknown[] = [];
+let executed: { sql: string; params: unknown[] }[] = [];
 
 const CHAIN_METHODS = [
   'select',
@@ -48,8 +51,18 @@ const batch = vi.fn(async (statements: unknown[]) => {
   return [];
 });
 
+// `claimAndNarrate` is one raw statement, so the tests render it to real SQL
+// with the same dialect the driver uses and assert against that. Mocking the
+// driver cannot prove behaviour under two live connections — see the note on
+// `claimAndNarrate` — but it can prove the gate is present and parameterised,
+// which is what silently went missing before.
+const execute = vi.fn(async (statement: unknown) => {
+  executed.push(new PgDialect().sqlToQuery(statement as SQL));
+  return [];
+});
+
 vi.mock('@/db', () => ({
-  getDb: () => Object.assign(chain(), { batch }),
+  getDb: () => Object.assign(chain(), { batch, execute }),
 }));
 
 const { getPendingNarrationEvents, claimAndNarrate } = await import(
@@ -114,9 +127,11 @@ beforeEach(() => {
   nextRows = [];
   whereArgs = [];
   batchCalls = [];
+  executed = [];
   updateSets = [];
   insertValues = [];
   batch.mockClear();
+  execute.mockClear();
 });
 
 describe('getPendingNarrationEvents', () => {
@@ -154,53 +169,80 @@ describe('getPendingNarrationEvents', () => {
 });
 
 describe('claimAndNarrate', () => {
-  it('stamps the events and appends the message in ONE batch', async () => {
+  it('claims the events and appends the message in ONE statement', async () => {
     // Atomicity is the point, not the order: a stamp without a message loses
     // the narration silently, a message without a stamp repeats it on the next
-    // app-open. Both writes in one batch make each impossible.
+    // app-open. One statement makes each impossible.
     await claimAndNarrate({
       athleteId: 'a1',
       eventIds: ['ev_1', 'ev_2'],
       conversationId: 'conv_1',
-      content: 'Lars added a session Thursday.',
+      content: 'Your Head Coach added a session Thursday.',
     });
 
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(batchCalls[0]).toHaveLength(2);
-    expect(updateSets[0]).toMatchObject({ narratedAt: expect.any(Date) });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(batch).not.toHaveBeenCalled();
+
+    const { sql } = executed[0];
+    expect(sql).toMatch(/UPDATE "events" SET "narrated_at" = now\(\)/);
+    expect(sql).toMatch(/INSERT INTO "messages"/);
   });
 
-  it('stores the narration as the Coach speaking, not the Head Coach', async () => {
-    // The attribution lives in the words ("Lars added…"), per CONTEXT.md: the
-    // Coach narrates the Head Coach's action. Stored as `coach_ai` so it also
-    // replays as an assistant turn in later chat history rather than as
-    // something the athlete or a third party said.
+  it('gates the INSERT on having claimed every event, so a losing render writes nothing', async () => {
+    // The bug this replaces (CodeRabbit, PR #39): the INSERT used to sit beside
+    // the UPDATE in a batch and did not depend on it, so a render whose UPDATE
+    // matched zero rows still appended the message and the athlete read the
+    // same narration twice. The gate is the fix, so the gate is what is pinned.
     await claimAndNarrate({
       athleteId: 'a1',
-      eventIds: ['ev_1'],
-      conversationId: 'conv_1',
-      content: 'Lars added a session Thursday.',
-    });
-
-    expect(insertValues[0]).toMatchObject({
-      conversationId: 'conv_1',
-      role: 'coach_ai',
-      content: 'Lars added a session Thursday.',
-    });
-  });
-
-  it('re-asserts narrated_at IS NULL and the athlete id, so a concurrent render claims nothing', async () => {
-    await claimAndNarrate({
-      athleteId: 'a1',
-      eventIds: ['ev_1'],
+      eventIds: ['ev_1', 'ev_2'],
       conversationId: 'conv_1',
       content: 'x',
     });
 
-    expect(boundValues(whereArgs[0])).toContain('a1');
-    // The claim is what makes a race safe: the loser of two concurrent renders
-    // matches no rows, so it narrates nothing rather than repeating the message.
-    expect(columnNames(whereArgs[0])).toContain('narrated_at');
+    const { sql, params } = executed[0];
+    expect(sql).toMatch(/WHERE \(SELECT count\(\*\) FROM claimed\) = \$\d+/);
+    // Both the claim and the message are conditional on the full set.
+    expect(sql).toMatch(/AND \(SELECT count\(\*\) FROM free\) = \$\d+/);
+    expect(params).toContain(2);
+  });
+
+  it('scopes every clause to the athlete, and never interpolates a value', async () => {
+    // ADR 0006: the athlete id is in the WHERE, not applied afterwards in JS.
+    // And raw SQL is where interpolation creeps in, so this asserts the ids
+    // travel as parameters rather than as text in the statement.
+    await claimAndNarrate({
+      athleteId: 'a1',
+      eventIds: ['ev_1'],
+      conversationId: 'conv_1',
+      content: "it's a note with a quote",
+    });
+
+    const { sql, params } = executed[0];
+    expect(sql).toMatch(/"events"\."athlete_id" = \$\d+::uuid/);
+    expect(sql).toMatch(/"events"\."narrated_at" IS NULL/);
+    expect(params).toContain('a1');
+    expect(params).toContain('ev_1');
+    expect(params).toContain("it's a note with a quote");
+    expect(sql).not.toContain('a1');
+    expect(sql).not.toContain("it's a note");
+  });
+
+  it('stores the narration as the Coach speaking, not the Head Coach', async () => {
+    // The attribution lives in the words, per CONTEXT.md: the Coach narrates
+    // the Head Coach's action. Stored as `coach_ai` so it also replays as an
+    // assistant turn in later chat history rather than as something the athlete
+    // or a third party said.
+    await claimAndNarrate({
+      athleteId: 'a1',
+      eventIds: ['ev_1'],
+      conversationId: 'conv_1',
+      content: 'Your Head Coach added a session Thursday.',
+    });
+
+    const { sql } = executed[0];
+    expect(sql).toMatch(/INSERT INTO "messages" \(\s*"conversation_id",\s*"role",\s*"content",\s*"seq"\s*\)/);
+    expect(sql).toContain("'coach_ai'");
   });
 
   it('writes nothing at all when there is nothing to claim', async () => {
@@ -212,5 +254,6 @@ describe('claimAndNarrate', () => {
     });
 
     expect(batch).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
   });
 });

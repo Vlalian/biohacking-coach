@@ -25,7 +25,31 @@ import { EmptyCoachReplyError } from '@/features/coach/coach-client';
  * forwarding messages verbatim is exactly how an email would end up in a log
  * line. What survives is the taxonomy, which is what a debugger actually needs;
  * the transcript is in the database if someone needs to read it.
+ *
+ * That reasoning applies to `error.name` too, which is why {@link errorType}
+ * exists rather than reading the property. `Error.name` is writable — nothing
+ * stops `err.name = someone@example.com` — so forwarding it would reopen the
+ * channel dropping the message was meant to close (CodeRabbit, PR #39). The
+ * classification is drawn from a closed list of constructors this code knows,
+ * and everything else collapses to a literal.
  */
+
+/**
+ * The error's class as a **fixed literal**, never a value read off the error.
+ *
+ * A closed set, matched by `instanceof` against constructors this module
+ * imports. Anything unrecognised is `other` — deliberately uninformative rather
+ * than deliberately detailed, because the alternative is echoing an attacker-
+ * or athlete-controlled string into a log line.
+ */
+function errorType(error: unknown): string {
+  if (error instanceof EmptyCoachReplyError) return 'empty_coach_reply';
+  if (error instanceof TypeError) return 'type_error';
+  if (error instanceof SyntaxError) return 'syntax_error';
+  if (error instanceof RangeError) return 'range_error';
+  if (error instanceof Error) return 'error';
+  return typeof error === 'object' && error === null ? 'null' : typeof error;
+}
 
 /** Which Coach surface the failed call came from. */
 export type CoachSurface = 'coach_chat' | 'weekly_session' | 'coach_briefing';
@@ -62,9 +86,8 @@ export function logCoachFailure(failure: CoachFailure): void {
         ...(error instanceof EmptyCoachReplyError && error.stopReason
           ? { stopReason: error.stopReason }
           : {}),
-        // The error's *class*, not its message: enough to tell an SDK failure
-        // from a refusal, with none of the free text a message can carry.
-        errorType: error instanceof Error ? error.name : typeof error,
+        // A fixed classification, not `error.name`: see errorType.
+        errorType: errorType(error),
       }),
     );
   } catch {
@@ -90,7 +113,7 @@ export function logNarrationFailure(athleteId: string, error: unknown): void {
       JSON.stringify({
         event: 'narration_failed',
         athleteId,
-        errorType: error instanceof Error ? error.name : typeof error,
+        errorType: errorType(error),
       }),
     );
   } catch {
