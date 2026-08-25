@@ -245,6 +245,45 @@ describe('claimAndNarrate', () => {
     expect(sql).toContain("'coach_ai'");
   });
 
+  it('retries a seq collision, so a message racing narration does not defer it', async () => {
+    // CodeRabbit, PR #39. `seq` is read-then-write, so a concurrent
+    // `appendInOrder` for the same conversation — the athlete typing while
+    // narration fires on app-open — can pick the same number. The unique index
+    // rejects one. The whole statement is atomic, so the loser stamped nothing
+    // and can simply go again.
+    execute.mockRejectedValueOnce(
+      Object.assign(new Error('duplicate key value'), { code: '23505' }),
+    );
+
+    await expect(
+      claimAndNarrate({
+        athleteId: 'a1',
+        eventIds: ['ev_1'],
+        conversationId: 'conv_1',
+        content: 'x',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces any other failure instead of retrying it away', async () => {
+    // A narrow predicate is the point: a dead connection must not be tried
+    // three times and swallowed as if it were contention.
+    execute.mockRejectedValue(new Error('connection terminated'));
+
+    await expect(
+      claimAndNarrate({
+        athleteId: 'a1',
+        eventIds: ['ev_1'],
+        conversationId: 'conv_1',
+        content: 'x',
+      }),
+    ).rejects.toThrow('connection terminated');
+
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('writes nothing at all when there is nothing to claim', async () => {
     await claimAndNarrate({
       athleteId: 'a1',

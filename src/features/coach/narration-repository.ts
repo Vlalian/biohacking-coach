@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
+import { SEQ_RETRIES, isSeqConflict } from './seq-conflict';
 import { events, messages } from '@/db/schema';
 import type { NarratableEvent } from './narration';
 
@@ -95,6 +96,19 @@ export async function getPendingNarrationEvents(
  * claim does not stamp either. `seq` stays a subquery: one statement, so there
  * is no read-then-write window to lose.
  *
+ * **`seq` is still read-then-write, so it retries.** The subquery picks
+ * `MAX(seq) + 1` from this statement's snapshot, and a concurrent
+ * `appendInOrder` for the same conversation — the athlete sending a message at
+ * the moment narration fires on app-open — can pick the same number. The unique
+ * index turns that into a failed write rather than a corrupted transcript, and
+ * the whole statement is atomic, so a loser stamps nothing and simply tries
+ * again. Bounded, and sharing {@link SEQ_RETRIES} with the append path rather
+ * than keeping a second copy of the same rule (CodeRabbit, PR #39).
+ *
+ * Without the retry the narration was not lost, only deferred: the events stay
+ * pending and narrate on the next app-open. The retry means the athlete does
+ * not have to navigate twice to hear about it.
+ *
  * **Not yet exercised against a real database.** The repository tests here mock
  * the driver, so they pin the shape of this statement and not its behaviour
  * under two live connections.
@@ -117,7 +131,7 @@ export async function claimAndNarrate(params: {
   // `coach_ai` because this is the Coach narrating the Head Coach's action, not
   // the Head Coach speaking — the attribution lives in the words (CONTEXT.md) —
   // and so it replays as an assistant turn in later chat history.
-  await db.execute(sql`
+  const statement = sql`
     WITH free AS (
       SELECT ${events.id} FROM ${events}
       WHERE ${events.athleteId} = ${athleteId}::uuid
@@ -145,5 +159,17 @@ export async function claimAndNarrate(params: {
       (SELECT COALESCE(MAX(${messages.seq}) + 1, 0) FROM ${messages}
         WHERE ${messages.conversationId} = ${conversationId}::uuid)
     WHERE (SELECT count(*) FROM claimed) = ${eventIds.length}
-  `);
+  `;
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await db.execute(statement);
+      return;
+    } catch (error) {
+      // Only a seq collision is worth repeating. Anything else — a dead
+      // connection, a constraint this code got wrong — must surface rather than
+      // be tried three times and swallowed.
+      if (attempt >= SEQ_RETRIES || !isSeqConflict(error)) throw error;
+    }
+  }
 }
