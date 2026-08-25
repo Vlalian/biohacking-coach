@@ -1,4 +1,5 @@
 import { refusalReason } from '@/lib/identifiers';
+import { logCoachFailure } from '@/lib/coach-log';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
@@ -183,10 +184,18 @@ export async function sendCoachChatMessage(
     // Told apart deliberately: "the Coach could not be reached" invites a retry,
     // and retrying refused content just fails again. The athlete needs to know
     // which one happened.
-    return {
-      ok: false,
-      reason: refusalReason(error),
-    };
+    const reason = refusalReason(error);
+    // The athlete sees a sentence; without this line the server saw nothing at
+    // all, and a tester who churned after a failure looked exactly like a
+    // tester who simply stopped caring (`showable-version/05`, item 2).
+    logCoachFailure({
+      surface: 'coach_chat',
+      athleteId: athlete.id,
+      conversationId,
+      error,
+      reason,
+    });
+    return { ok: false, reason };
   }
 
   // Lazily created: the resting conversation costs nothing until it is used,

@@ -498,5 +498,18 @@
     "title": "That didn't load",
     "body": "Something went wrong on our side. Your training data is safe — try again, and if it keeps happening, come back in a moment.",
     "retry": "Try again"
+  },
+  "Narration": {
+    "single": "{clause}.",
+    "item": "• {clause}",
+    "multiLead": "A few things changed in your plan while you were away:",
+    "prescribed": "{coach} added a {type} session on {day}",
+    "prescribedNoType": "{coach} added a session on {day}",
+    "edited": "{coach} changed your {type} session on {day}",
+    "editedNoType": "{coach} changed a session on {day}",
+    "deleted": "{coach} took the {type} session off {day}",
+    "deletedNoType": "{coach} took a session off {day}",
+    "yourHeadCoach": "Your Head Coach",
+    "recently": "recently"
   }
 }

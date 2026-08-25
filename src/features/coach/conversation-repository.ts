@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
+import { SEQ_RETRIES, isSeqConflict } from './seq-conflict';
 import {
   coachOwnedOrNull,
   nextSeq,
@@ -267,8 +268,6 @@ async function appendInOrder(
   }
 }
 
-const SEQ_RETRIES = 3;
-
 // ── Coach Briefing (slice 13) ─────────────────────────────────────────────────
 //
 // A Coach Briefing is the one conversation kind owned by a *coach*, not an
@@ -362,13 +361,4 @@ export async function appendBriefingMessages(
   return appendInOrder(conversationId, entries);
 }
 
-/** True for a unique violation on the (conversation_id, seq) index. */
-function isSeqConflict(error: unknown): boolean {
-  const code = (error as { code?: string })?.code;
-  if (code === '23505') return true;
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes('messages_conversation_seq_idx') ||
-    message.includes('duplicate key value')
-  );
-}
+

@@ -83,10 +83,21 @@ describe('message catalogues', () => {
       // "Session Type" is the domain term (CONTEXT.md) — the calendar legend
       // names it verbatim in both languages, like Information's "Type" already does.
       path === 'Calendar.legend';
+    // Simple ICU placeholders are not words — "• {clause}" is structure, and is
+    // identical in every language by definition. Deliberately narrow twice
+    // over. First in shape: `\w+` inside the braces, so plural forms like
+    // "{count, plural, one {# session} other {# sessions}}" keep their real
+    // words and stay under the guard. Second in *scope*: exempting them
+    // catalogue-wide would wave through any message whose only non-placeholder
+    // content is punctuation, so this is scoped by path like the cognates
+    // above, and only Narration's wrappers need it.
+    const placeholders = /\{\s*\w+\s*\}/g;
+    const placeholderScope = (path: string) => path.startsWith('Narration.');
     // Strip punctuation left behind by removed terms ("Peak Power (W)" → "()"),
     // so a message that was nothing but terms compares as empty.
     const translatable = (message: string, path: string) =>
       message
+        .replace(placeholderScope(path) ? placeholders : /$^/g, '')
         .replace(technicalTerms, '')
         .replace(cognateScope(path) ? cognates : /$^/g, '')
         .replace(/[^\p{L}]+/gu, ' ')
