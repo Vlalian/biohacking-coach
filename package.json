@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
+    "metrics": "tsx scripts/metrics.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "coach:say": "tsx --conditions=react-server scripts/coach-say.ts",
