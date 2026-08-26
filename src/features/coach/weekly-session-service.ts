@@ -1,4 +1,5 @@
 import { refusalReason } from '@/lib/identifiers';
+import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
@@ -162,9 +163,19 @@ export async function startWeeklySession(
       maxTokens: WEEKLY_MAX_TOKENS,
     });
   } catch (error) {
+    const reason = refusalReason(error);
+    logCoachFailure({
+      surface: 'weekly_session',
+      athleteId: athlete.id,
+      // No conversation exists yet: it is minted only after the Coach has
+      // actually spoken, so a failed opening turn has nothing to point at.
+      conversationId: null,
+      error,
+      reason,
+    });
     return {
       ok: false,
-      reason: refusalReason(error),
+      reason,
     };
   }
 
@@ -252,9 +263,17 @@ export async function continueWeeklySession(
     // Refused content and an unreachable Coach are different problems and get
     // different answers, the same split Coach Chat makes: "try again" is useless
     // advice for text that will be refused identically every time.
+    const reason = refusalReason(error);
+    logCoachFailure({
+      surface: 'weekly_session',
+      athleteId: athlete.id,
+      conversationId,
+      error,
+      reason,
+    });
     return {
       ok: false,
-      reason: refusalReason(error),
+      reason,
     };
   }
 

@@ -123,7 +123,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
   // Local drafts for the in-progress step.
   const [race, setRace] = useState('');
   const [sportBackground, setSportBackground] = useState<string[]>([]);
-  const [weeklyHours, setWeeklyHours] = useState('');
+  const [availableHours, setAvailableHours] = useState('');
   const [motivation, setMotivation] = useState('');
   const [bestTime, setBestTime] = useState('');
   const [weakestDiscipline, setWeakestDiscipline] = useState<string[]>([]);
@@ -284,6 +284,21 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
             <div className="space-y-8">
               <StepHeading title={t('qAdaptive')} />
 
+              {/*
+                Outside every branch on purpose: how much time the athlete has
+                is a ceiling the plan has to respect at any experience level,
+                and it was previously asked of beginners only — leaving the
+                Coach with no volume budget for the athletes most likely to
+                have a demanding one.
+              */}
+              <FieldGroup label={t('availableHours')} note={t('optional')}>
+                {ONBOARDING_OPTIONS.availableHours.map((o) =>
+                  opt(o, availableHours === o, () =>
+                    setAvailableHours(availableHours === o ? '' : o),
+                  ),
+                )}
+              </FieldGroup>
+
               {state.answers.experienceLevel === 'beginner' && (
                 <>
                   <FieldGroup label={t('sportBg')} note={t('optionalMulti')}>
@@ -291,11 +306,6 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                       opt(o, sportBackground.includes(o), () =>
                         setSportBackground((a) => toggleMulti(a, o, 'None')),
                       ),
-                    )}
-                  </FieldGroup>
-                  <FieldGroup label={t('weeklyHours')} note={t('optional')}>
-                    {ONBOARDING_OPTIONS.weeklyHours.map((o) =>
-                      opt(o, weeklyHours === o, () => setWeeklyHours(weeklyHours === o ? '' : o)),
                     )}
                   </FieldGroup>
                   <FieldGroup label={t('motivation')} note={t('optional')}>
@@ -374,7 +384,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                   submit({
                     step: 'adaptive',
                     sportBackground: sportBackground.length > 0 ? sportBackground : undefined,
-                    weeklyHours: weeklyHours || undefined,
+                    availableHours: availableHours || undefined,
                     motivation: motivation || undefined,
                     bestTime: bestTime || undefined,
                     weakestDiscipline: weakestDiscipline.length > 0 ? weakestDiscipline : undefined,

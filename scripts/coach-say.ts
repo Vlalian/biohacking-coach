@@ -6,6 +6,7 @@ import { callCoach } from '../src/features/coach/coach-client';
 import { toApiMessages } from '../src/features/coach/conversation';
 import type { Message } from '../src/features/coach/conversation';
 import type { CheckIn } from '../src/features/coach/check-in';
+import type { WeekSession } from '../src/features/coach/week';
 
 /**
  * What does the Coach actually say?
@@ -76,7 +77,7 @@ const FIXTURE: CheckIn = {
   ],
   onboarding: {
     sportBackground: 'running',
-    weeklyHours: '10-12',
+    availableHours: '13–16h',
     motivation: 'finish under 11 hours',
     weakestDiscipline: 'swim',
     hasHumanCoach: 'no',
@@ -94,6 +95,26 @@ const WEEK_FEEDBACK = [
 
 const SKIPPED = [{ date: '2026-08-16', sessionType: 'Endurance' }];
 const TODAY = '2026-08-17';
+
+// The current week, as Coach Chat now sees it.
+//
+// Added 2026-08-21 because the tool had a blind spot exactly where it was most
+// needed: `buildChatPrompt` was called without a week, so the THIS WEEK block
+// never rendered and the feature could not be read here at all — in the one
+// tool whose entire job is letting a human read a prompt change.
+//
+// Mixed authorship on purpose. The Head Coach session carries a note, and that
+// note must NOT appear in the rendered prompt (Mads, 2026-08-21): a Head
+// Coach's note is a third party's prose about the athlete, and a name in it is
+// invisible to `assertNoDirectIdentifier`. Reading this prompt is how you
+// confirm that with your own eyes rather than trusting a unit test.
+const THIS_WEEK: WeekSession[] = [
+  { date: '2026-08-17', sessionType: 'Recovery', status: 'planned', origin: 'coach', title: null, durationMinutes: 45, zone: '1', note: 'spin the legs out after the weekend' },
+  { date: '2026-08-18', sessionType: 'Intensity', status: 'planned', origin: 'head_coach', title: null, durationMinutes: 75, zone: '4', note: "threshold set — ride it with Bjorn if he's free" },
+  { date: '2026-08-19', sessionType: 'Endurance', status: 'planned', origin: 'coach', title: null, durationMinutes: 120, zone: '2', note: null },
+  { date: '2026-08-20', sessionType: 'Other', status: 'planned', origin: 'athlete', title: 'masters squad', durationMinutes: 60, zone: null, note: 'club swim, technique focus' },
+  { date: '2026-08-22', sessionType: 'Tempo', status: 'planned', origin: 'coach', title: null, durationMinutes: 90, zone: '3', note: 'race-pace blocks' },
+];
 
 // ── The scenarios ─────────────────────────────────────────────────────────────
 
@@ -132,6 +153,19 @@ const SCENARIOS: { name: string; system: () => string; firstTurn: string }[] = [
     // the Knowledge Oracle is meant to ground. Read this reply now, and read it
     // again after retrieval lands — the difference is the whole point of the RAG.
     firstTurn: 'How long should my taper be before Copenhagen, and what should I actually do in it?',
+  },
+  {
+    // The week-aware half. Kept separate from the taper question above rather
+    // than replacing it: that one is the Knowledge Oracle's before/after
+    // baseline, and overwriting it would cost a comparison point that has
+    // already been paid for.
+    name: 'coach-chat-this-week',
+    system: () => buildChatPrompt(FIXTURE, TODAY, null, THIS_WEEK),
+    // Deliberately vague about *which* session. A Coach that cannot see the
+    // week has to ask which one; a Coach that can should name Tuesday's
+    // threshold set itself — and should attribute it to the Head Coach without
+    // quoting the note.
+    firstTurn: "I'm not sure I can face the hard one this week. What do you think?",
   },
 ];
 

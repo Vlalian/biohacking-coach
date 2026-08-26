@@ -3,11 +3,13 @@ import {
   buildWeeklyContext,
   renderWeeklyPrompt,
   buildChatPrompt,
+  formatWeekSessions,
   formatSkippedSessions,
   formatWeekActivity,
   formatWeekFeedback,
 } from './prompts';
 import type { CheckIn, Onboarding } from './check-in';
+import type { WeekSession } from './week';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 const BASE: CheckIn = {
@@ -173,7 +175,7 @@ describe('renderWeeklyPrompt — Week 1 raceTarget', () => {
 
 const ONBOARDING: Onboarding = {
   sportBackground: ['Runner', 'Gym'],
-  weeklyHours: '3–6h',
+  availableHours: '3–6h',
   motivation: 'Completion',
   bestTime: null,
   weakestDiscipline: null,
@@ -195,7 +197,12 @@ describe('onboarding answers reach every Coach prompt', () => {
     expect(prompt).toContain('ONBOARDING PROFILE');
     expect(prompt).toContain('NEVER ask for this information again');
     expect(prompt).toContain('Sport background: Runner, Gym');
-    expect(prompt).toContain('Current weekly training hours: 3–6h');
+    // The ceiling framing is the point of this field, so the assertion pins it
+    // rather than just the number: a bare "Training time available: 3–6h" read
+    // as current volume when `coach:say` was run against it (2026-08-21).
+    expect(prompt).toContain(
+      'Time available to train: 3–6h per week (a ceiling to plan within — not what they currently do)',
+    );
     expect(prompt).toContain('Motivation: Completion');
   });
 
@@ -479,5 +486,159 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
       // means absent data rather than a whole line quietly dropping out.
       expect(prompt, `${name} prompt`).toContain('xp=intermediate');
     }
+  });
+});
+
+// ── Coach Chat sees the week ─────────────────────────────────────────────────
+
+const planned = (over: Partial<WeekSession> = {}): WeekSession => ({
+  date: '2026-08-18',
+  sessionType: 'Intensity',
+  status: 'planned',
+  origin: 'coach',
+  title: null,
+  durationMinutes: 60,
+  zone: '4',
+  note: null,
+  ...over,
+});
+
+describe('formatWeekSessions', () => {
+  it("never sends a Head Coach's note, and keeps every other origin's", () => {
+    // Mads, 2026-08-21. A Head Coach's note is a third party's prose *about*
+    // the athlete, written by someone who never agreed to have it processed —
+    // and a name in it ("I want you sharp for Lars's ride") is invisible to
+    // `assertNoDirectIdentifier`, which recognises email and phone shapes only.
+    // So it is not sent, rather than filtered.
+    //
+    // The other origins are deliberately unaffected: a `coach` note is the
+    // Coach's own words coming back to it, and an `athlete` note is the
+    // athlete's own free text, which the consent disclosure covers. Dropping
+    // those too would cost the Coach real context for no privacy gain.
+    const fromHeadCoach = formatWeekSessions([
+      planned({ origin: 'head_coach', note: "ride with Bjorn, he'll hold your pace" }),
+    ]);
+    expect(fromHeadCoach).not.toContain('Bjorn');
+    expect(fromHeadCoach).not.toContain('hold your pace');
+    // The session itself still appears, attributed — only the prose is gone.
+    expect(fromHeadCoach).toContain('Head Coach');
+
+    for (const origin of ['coach', 'athlete', 'garmin'] as const) {
+      expect(
+        formatWeekSessions([planned({ origin, note: 'easy spin, keep it social' })]),
+        `a ${origin} note should still reach the Coach`,
+      ).toContain('easy spin, keep it social');
+    }
+  });
+
+  it('renders day, date, type, status and authorship', () => {
+    const line = formatWeekSessions([planned()]);
+    expect(line).toContain('2026-08-18');
+    expect(line).toContain('Intensity');
+    expect(line).toContain('planned');
+    expect(line).toContain('you planned this');
+  });
+
+  it('names the Head Coach as the author of a Prescribed Session', () => {
+    expect(formatWeekSessions([planned({ origin: 'head_coach' })])).toContain('Head Coach');
+  });
+
+  // An Athlete Session typed `Other` carries its meaning in the label alone.
+  it("renders the athlete's own label beside the type", () => {
+    const line = formatWeekSessions([planned({ sessionType: 'Other', title: 'Yoga' })]);
+    expect(line).toContain('Other "Yoga"');
+  });
+
+  it('renders no empty quotes when the session has no label', () => {
+    expect(formatWeekSessions([planned()])).not.toContain('""');
+  });
+
+  it('is null for an empty week — a heading with nothing under it says nothing', () => {
+    expect(formatWeekSessions([])).toBeNull();
+    expect(formatWeekSessions(undefined)).toBeNull();
+  });
+
+  // CONTEXT.md, Week Activity: the qualifier exists only for same-type Doubles.
+  it('qualifies a same-type Double by position', () => {
+    const lines = formatWeekSessions([
+      planned({ sessionType: 'Endurance', position: 1 }),
+      planned({ sessionType: 'Endurance', position: 2 }),
+    ]);
+    expect(lines).toContain('1st Endurance');
+    expect(lines).toContain('2nd Endurance');
+  });
+
+  it('renders the tapped session short, deferring its detail to the Reference', () => {
+    const lines = formatWeekSessions([
+      planned({ isReference: true, note: 'threshold set, hold 4x8', durationMinutes: 75 }),
+    ]);
+    expect(lines).toContain('detail below');
+    expect(lines).not.toContain('threshold set');
+    expect(lines).not.toContain('75 min');
+    // Status and authorship still ride along — the week stays complete.
+    expect(lines).toContain('planned');
+  });
+});
+
+describe('the week block inside the Coach Chat prompt', () => {
+  it('renders the week with its heading', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned()]);
+    expect(prompt).toContain('THIS WEEK');
+    expect(prompt).toContain('Intensity');
+  });
+
+  it('renders no week block at all for an athlete with no sessions this week', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, []);
+    expect(prompt).not.toContain('THIS WEEK');
+  });
+
+  // ADR 0003 / CONTEXT.md, Prescribed Session: the AI explains and holds on a
+  // Head-Coach-authored session. Without this the Coach offers changes it is
+  // forbidden to make and the athlete meets a refusal instead of coaching.
+  it('carries the authority rule when the week holds a Prescribed Session', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [
+      planned({ origin: 'head_coach' }),
+    ]);
+    expect(prompt).toContain('AUTHORITY');
+    expect(prompt).toMatch(/never offer to change/i);
+  });
+
+  it('spends no prompt on the authority rule when no session is the Head Coach’s', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned({ origin: 'coach' })]);
+    expect(prompt).not.toContain('AUTHORITY');
+  });
+
+  // The tapped session is described once: the week lists it, the SESSION
+  // DISCUSSION block carries its parameters and note.
+  it('does not render a tapped Reference twice', () => {
+    const reference = {
+      type: 'Intensity',
+      dayLabel: '2026-08-18',
+      duration: '60 min',
+      zone: '4',
+      note: 'threshold set, hold 4x8',
+      status: 'planned',
+    };
+    const prompt = buildChatPrompt(BASE, '2026-08-17', reference, [
+      planned({ isReference: true, note: 'threshold set, hold 4x8' }),
+    ]);
+    expect(prompt.match(/threshold set/g)).toHaveLength(1);
+  });
+
+  it('carries no entity id', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned()]);
+    expect(prompt).not.toMatch(/sess_/);
+  });
+
+  // The week arrives as its own argument, so it bypasses the check-in
+  // assertion — the same hole the Reference had. Note: this catches a *shaped*
+  // identifier (email, phone). A bare name in a note is NOT caught here, by
+  // design — see `assertNoDirectIdentifier`.
+  it('refuses a week whose session note carries an email', () => {
+    expect(() =>
+      buildChatPrompt(BASE, '2026-08-17', null, [
+        planned({ note: 'ride with me, reach me at jane.realname@example.com' }),
+      ]),
+    ).toThrow(/identifier/i);
   });
 });

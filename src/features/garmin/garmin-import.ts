@@ -1,11 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { getDb } from '@/db';
 import { sessions, sessionStreams, events } from '@/db/schema';
-import { parseFit, parseGpx } from './garmin';
+import { parseFit, parseGpx, type FitParseFailure, type ParsedSession } from './garmin';
+
+/**
+ * Why an upload did not land, in cases the athlete can act on differently.
+ *
+ * One message for wrong-format, corrupt and empty is what turns a recoverable
+ * mistake into a dead end for a tester who cannot ask (showable-version/06):
+ * "try a .fit" is useless advice to someone who already uploaded one that was
+ * truncated. `no-sessions` is the file that decoded fine and simply held no
+ * activity.
+ */
+export type ImportFailure = FitParseFailure | 'no-sessions';
 
 export type ImportResult =
   | { ok: true; count: number }
-  | { ok: false; reason: 'unreadable' };
+  | { ok: false; reason: ImportFailure };
 
 /**
  * Turns an uploaded Garmin file into persisted sessions.
@@ -32,11 +43,27 @@ export async function importGarminSessions(params: {
 }): Promise<ImportResult> {
   const { athleteId, filename, buffer } = params;
 
-  const parsed = filename.toLowerCase().endsWith('.fit')
-    ? await parseFit(buffer)
-    : parseGpx(buffer);
+  const isFit = filename.toLowerCase().endsWith('.fit');
 
-  if (parsed.length === 0) return { ok: false, reason: 'unreadable' };
+  let parsed: ParsedSession[];
+  if (isFit) {
+    const result = await parseFit(buffer);
+    // A FIT file reports which way it failed; that reason is carried through to
+    // the athlete rather than flattened into one generic message.
+    if (!result.ok) return { ok: false, reason: result.reason };
+    parsed = result.sessions;
+  } else {
+    parsed = parseGpx(buffer);
+  }
+
+  if (parsed.length === 0) {
+    // For FIT this genuinely means "read fine, held no activity": the header and
+    // checksum were verified before decoding, so the file is sound and simply
+    // carries no session. `parseGpx` returns the same empty list for malformed
+    // XML as for a valid track-less file and cannot tell them apart, so GPX
+    // stays on the honest generic reason rather than claiming the file was fine.
+    return { ok: false, reason: isFit ? 'no-sessions' : 'unreadable' };
+  }
 
   const db = getDb();
   const writes = parsed.flatMap((p) => {

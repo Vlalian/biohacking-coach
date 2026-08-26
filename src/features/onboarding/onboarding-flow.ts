@@ -46,9 +46,22 @@ export interface OnboardingAnswers {
   language?: string;
   experienceLevel?: ExperienceLevel;
   raceTarget?: string;
+  /**
+   * Adaptive — asked of every level: how many hours a week the athlete *can*
+   * train. A ceiling the plan plans within, not a description of what they do
+   * today — which is why it is not in a branch. Target Athlete is defined by
+   * this number ("8–15 hours/week alongside a full life", CONTEXT.md), and
+   * Fixed Constraint only covers which *days* are blocked, never the volume.
+   *
+   * The buckets get finer at the top on purpose (Mads, 2026-08-21). A single
+   * `10h+` was fine while this field was a *fitness proxy*, but as a planning
+   * ceiling it was blind across the top half of the Target Athlete's own band —
+   * the difference between 10 and 15 hours is roughly a whole session a week,
+   * which is exactly the thing the Week Plan has to budget.
+   */
+  availableHours?: string;
   // Adaptive — beginner
   sportBackground?: string[];
-  weeklyHours?: string;
   motivation?: string;
   // Adaptive — intermediate
   bestTime?: string;
@@ -67,7 +80,7 @@ export const ONBOARDING_OPTIONS = {
   language: ['en', 'da'],
   experienceLevel: ['beginner', 'intermediate', 'veteran'],
   sportBackground: ['Runner', 'Cyclist', 'Swimmer', 'Gym', 'None'],
-  weeklyHours: ['Under 3h', '3–6h', '6–10h', '10h+'],
+  availableHours: ['Under 3h', '3–6h', '6–10h', '10–13h', '13–16h', '16h+'],
   motivation: ['Completion', 'Personal challenge', 'Community', 'Performance'],
   weakestDiscipline: ['Swim', 'Bike', 'Run', 'Equal'],
   hasHumanCoach: ['Yes', 'No'],
@@ -102,8 +115,8 @@ export type StepAnswer =
   | { step: 'race'; raceTarget: string }
   | {
       step: 'adaptive';
+      availableHours?: string;
       sportBackground?: string[];
-      weeklyHours?: string;
       motivation?: string;
       bestTime?: string;
       weakestDiscipline?: string[];
@@ -177,14 +190,26 @@ export function applyAnswer(
     case 'adaptive': {
       if (!allInSet(payload.sportBackground, ONBOARDING_OPTIONS.sportBackground))
         return null;
-      if (payload.weeklyHours && !inSet(payload.weeklyHours, ONBOARDING_OPTIONS.weeklyHours))
+      // `!== undefined`, not a truthy check: undefined means the optional
+      // question was left unanswered, but `null`, `''`, `0` and `false` are all
+      // *present* values a forged payload can send, and a truthy guard would
+      // wave them past `inSet` into the stored profile — exactly what the note
+      // above says this file must not do. `allInSet` and `optionalText` already
+      // draw the line here; these three were the outliers.
+      if (
+        payload.availableHours !== undefined &&
+        !inSet(payload.availableHours, ONBOARDING_OPTIONS.availableHours)
+      )
         return null;
-      if (payload.motivation && !inSet(payload.motivation, ONBOARDING_OPTIONS.motivation))
+      if (
+        payload.motivation !== undefined &&
+        !inSet(payload.motivation, ONBOARDING_OPTIONS.motivation)
+      )
         return null;
       if (!allInSet(payload.weakestDiscipline, ONBOARDING_OPTIONS.weakestDiscipline))
         return null;
       if (
-        payload.hasHumanCoach &&
+        payload.hasHumanCoach !== undefined &&
         !inSet(payload.hasHumanCoach, ONBOARDING_OPTIONS.hasHumanCoach)
       )
         return null;
@@ -196,8 +221,8 @@ export function applyAnswer(
       return {
         answers: {
           ...answers,
+          availableHours: payload.availableHours,
           sportBackground: payload.sportBackground,
-          weeklyHours: payload.weeklyHours,
           motivation: payload.motivation,
           bestTime: bestTime || undefined,
           weakestDiscipline: payload.weakestDiscipline,
@@ -211,7 +236,7 @@ export function applyAnswer(
     case 'constraints': {
       if (!allInSet(payload.fixedConstraints, ONBOARDING_OPTIONS.days)) return null;
       if (
-        payload.weeklySessionDay &&
+        payload.weeklySessionDay !== undefined &&
         !inSet(payload.weeklySessionDay, ONBOARDING_OPTIONS.weeklySessionDay)
       )
         return null;
@@ -324,7 +349,7 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
   const arr = (v: string[] | undefined) => (v && v.length > 0 ? v : null);
   return {
     sportBackground: arr(answers.sportBackground),
-    weeklyHours: answers.weeklyHours || null,
+    availableHours: answers.availableHours || null,
     motivation: answers.motivation || null,
     bestTime: answers.bestTime || null,
     weakestDiscipline: arr(answers.weakestDiscipline),

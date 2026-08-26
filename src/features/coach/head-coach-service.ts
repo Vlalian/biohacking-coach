@@ -22,11 +22,18 @@ import { canHeadCoachEditContent, HEAD_COACH_ORIGIN } from './head-coach-authori
  *      ({@link canHeadCoachEditContent}).
  *
  * Each action writes the session change and a `head_coach`-attributed event in
- * one transaction: both land or neither does. Narration stays benched (ticket
- * 05, ballot 3, amending ticket 02): the event records with `actor_type:
- * head_coach` and the actor's id, `narrated_at` stays null, and nothing is
- * announced to the athlete. This is the audit half; the announcement half waits
- * for the coach interview.
+ * one transaction: both land or neither does. The event records with
+ * `actor_type: head_coach` and the actor's id, and `narrated_at` starts null —
+ * which now means *not yet announced* rather than *never announced*:
+ * `narration-service` un-benched the announcement half (`coached-mode/03`), so
+ * the athlete is told on their next app-open. This module still writes only the
+ * audit half; it does not narrate, and nothing here changed when narration
+ * landed.
+ *
+ * (Until 2026-08-21 this comment said narration "stays benched … nothing is
+ * announced to the athlete", which stopped being true when `coached-mode/03`
+ * shipped. Corrected rather than deleted, per `AGENTS.md`: this is the comment
+ * a reader of the write path trusts.)
  *
  * Head-Coach-authored content is never silently modified by the Coach or its
  * automation, because the only write path to a `head_coach` session is this

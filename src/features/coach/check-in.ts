@@ -31,8 +31,9 @@ export interface Readiness {
 
 /** The answers an athlete gave during MCQ onboarding (slice 09 writes these). */
 export interface Onboarding {
+  /** Hours a week the athlete can train — a ceiling to plan within. */
+  availableHours?: string | null;
   sportBackground?: string | string[] | null;
-  weeklyHours?: string | null;
   motivation?: string | null;
   bestTime?: string | null;
   weakestDiscipline?: string | string[] | null;

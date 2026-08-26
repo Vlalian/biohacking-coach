@@ -329,7 +329,12 @@
     "upload": "Upload Garmin file",
     "uploading": "Uploading…",
     "imported": "{count, plural, one {# session imported} other {# sessions imported}}",
-    "error": "Couldn't read that file. Try a .fit or .gpx export."
+    "error": "Couldn't read that file. Try a .fit or .gpx export.",
+    "errorNotAFitFile": "That doesn't look like a .fit file. In Garmin Connect, open the activity and choose Export Original — a renamed file won't work.",
+    "errorCorrupt": "That .fit file is damaged or incomplete. Download it from Garmin Connect again and re-upload.",
+    "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
+    "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
+    "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"
@@ -367,7 +372,7 @@
     "racePlaceholder": "e.g. Ironman Copenhagen, June 2026",
     "qAdaptive": "A bit more about you",
     "sportBg": "Sport background",
-    "weeklyHours": "Weekly training hours",
+    "availableHours": "How many hours a week can you train?",
     "motivation": "Main motivation",
     "bestTime": "Best Ironman finish time",
     "bestTimePlaceholder": "e.g. 11:30",
@@ -493,5 +498,18 @@
     "title": "That didn't load",
     "body": "Something went wrong on our side. Your training data is safe — try again, and if it keeps happening, come back in a moment.",
     "retry": "Try again"
+  },
+  "Narration": {
+    "single": "{clause}.",
+    "item": "• {clause}",
+    "multiLead": "A few things changed in your plan while you were away:",
+    "prescribed": "{coach} added a {type} session on {day}",
+    "prescribedNoType": "{coach} added a session on {day}",
+    "edited": "{coach} changed your {type} session on {day}",
+    "editedNoType": "{coach} changed a session on {day}",
+    "deleted": "{coach} took the {type} session off {day}",
+    "deletedNoType": "{coach} took a session off {day}",
+    "yourHeadCoach": "Your Head Coach",
+    "recently": "recently"
   }
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildWeeklyContext, renderWeeklyPrompt, buildChatPrompt } from './prompts';
 import type { CheckIn, SessionContext } from './check-in';
+import type { WeekSession } from './week';
 
 /**
  * Golden prompts — the regression net for prompt *assembly*, not prompt content.
@@ -80,7 +81,7 @@ describe('golden — the Weekly Session prompt, per arc', () => {
         ],
         onboarding: {
           sportBackground: ['running', 'swimming'],
-          weeklyHours: '10-12',
+          availableHours: '6–10h',
           motivation: 'finish under 11 hours',
           weakestDiscipline: 'swim',
         },
@@ -186,12 +187,106 @@ describe('golden — the Coach Chat prompt', () => {
           equipment: [
             { id: 'e1', category: 'shoes', name: 'Vaporfly 3', details: null, addedDate: '2026-03-02' },
           ],
-          onboarding: { weeklyHours: '8-10', motivation: 'first Ironman' },
+          onboarding: { availableHours: '13–16h', motivation: 'first Ironman' },
         },
         TODAY,
         reference,
       ),
     ).toMatchSnapshot();
+  });
+
+  // The week block is the surface an athlete actually asks "should I do
+  // tomorrow's intervals?" against, so its copy is pinned like the rest: mixed
+  // authorship (which decides whether the Coach may reshape a session at all),
+  // mixed status, a same-type Double, and the tapped session rendered short
+  // because the Reference block below carries its detail.
+  it('renders identically with the current week rendered', () => {
+    const week: WeekSession[] = [
+      {
+        date: '2026-08-17',
+        sessionType: 'Endurance',
+        status: 'completed',
+        origin: 'coach',
+        title: null,
+        durationMinutes: 90,
+        zone: '2',
+        note: 'steady, hold the low end',
+        position: 1,
+      },
+      {
+        date: '2026-08-17',
+        sessionType: 'Endurance',
+        status: 'planned',
+        origin: 'athlete',
+        title: 'masters squad',
+        durationMinutes: 40,
+        zone: null,
+        note: 'club swim',
+        position: 2,
+      },
+      {
+        date: '2026-08-19',
+        sessionType: 'Intensity',
+        status: 'planned',
+        origin: 'head_coach',
+        title: null,
+        durationMinutes: 75,
+        zone: '4',
+        note: 'threshold set — race sharpness',
+        isReference: true,
+      },
+      {
+        // A Head Coach session the athlete did *not* tap, carrying a note: the
+        // one path where a note would have been rendered. It must not be.
+        date: '2026-08-20',
+        sessionType: 'Endurance',
+        status: 'planned',
+        origin: 'head_coach',
+        title: null,
+        durationMinutes: 120,
+        zone: '2',
+        note: 'steady — ride it with Bjorn if you can',
+      },
+      {
+        date: '2026-08-21',
+        sessionType: 'Recovery',
+        status: 'skipped',
+        origin: 'coach',
+        title: null,
+        durationMinutes: 45,
+        zone: '1',
+        note: null,
+      },
+    ];
+    const reference: SessionContext = {
+      type: 'Intensity',
+      dayLabel: '2026-08-19',
+      duration: '75 min',
+      zone: 'Z4',
+      note: 'threshold set — race sharpness',
+      status: 'planned',
+    };
+    expect(buildChatPrompt(BASE, TODAY, reference, week)).toMatchSnapshot();
+  });
+
+  // The counterpart: a week with no Head-Coach session spends no prompt on a
+  // rule that cannot apply.
+  it('renders identically for a week the Coach planned alone', () => {
+    const week: WeekSession[] = [
+      {
+        date: '2026-08-18',
+        sessionType: 'Tempo',
+        status: 'planned',
+        origin: 'coach',
+        title: null,
+        durationMinutes: 60,
+        zone: '3',
+        note: null,
+      },
+    ];
+    const prompt = buildChatPrompt(BASE, TODAY, null, week);
+    expect(prompt).not.toContain('AUTHORITY');
+    expect(prompt).toMatchSnapshot();
   });
 });
 
@@ -236,7 +331,11 @@ describe('golden — no Check-in has ever been given', () => {
     ],
     onboarding: {
       sportBackground: ['running'],
-      weeklyHours: '10-12',
+      // `10–13h` is a real bucket from `ONBOARDING_OPTIONS.availableHours`. The
+      // field was `weeklyHours: '10-12'` when this branch was written; main
+      // renamed it and split the buckets, and a fixture that invents a value the
+      // onboarding cannot produce pins a prompt no athlete will ever see.
+      availableHours: '10–13h',
       motivation: 'finish under 11 hours',
     },
   };

@@ -8,6 +8,7 @@ const {
   getMessages,
   getPendingProposal,
   hasHeldWeeklySessionInWeek,
+  narratePendingEvents,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -23,10 +24,15 @@ const {
   getMessages: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getPendingProposal: vi.fn(() => Promise.resolve(null)),
   hasHeldWeeklySessionInWeek: vi.fn(() => Promise.resolve(false)),
+  // Narration has its own tests; here the layout's job is only to run it, with
+  // the athlete's id, before the transcript is read.
+  narratePendingEvents:
+    vi.fn<(athleteId: string, ...rest: unknown[]) => Promise<void>>(),
 }));
 
 vi.mock('next-intl/server', () => ({
   setRequestLocale: vi.fn(),
+  getTranslations: async () => (key: string) => key,
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
@@ -38,6 +44,7 @@ vi.mock('@/features/coach/conversation-repository', () => ({
   hasHeldWeeklySessionInWeek,
 }));
 vi.mock('@/features/coach/plan-proposal-repository', () => ({ getPendingProposal }));
+vi.mock('@/features/coach/narration-service', () => ({ narratePendingEvents }));
 // Client components pulling in browser deps; the layout's own wiring is under
 // test here, not their rendering.
 vi.mock('@/components/shell/shell-chrome', () => ({ ShellChrome: () => null }));
@@ -62,6 +69,8 @@ describe('AppShellLayout', () => {
     getMessages.mockReset();
     getMessages.mockResolvedValue([]);
     hasHeldWeeklySessionInWeek.mockClear();
+    narratePendingEvents.mockReset();
+    narratePendingEvents.mockResolvedValue(undefined);
   });
 
   it('redirects a signed-out visitor to sign-in instead of rendering the shell', async () => {
@@ -137,5 +146,37 @@ describe('AppShellLayout', () => {
       weeklySessionDay: 'Monday',
       hasHeldWeeklySessionThisWeek: false,
     });
+  });
+
+  it('narrates pending Head Coach actions before it reads the transcript', async () => {
+    // Order is the point, not merely that it runs: narration appends into the
+    // Coach Chat, so reading the transcript first would show the athlete a
+    // thread missing the message that was just written for them, until they
+    // navigated again (ADR 0003, `coached-mode/03`).
+    const callOrder: string[] = [];
+    narratePendingEvents.mockImplementation(async () => {
+      callOrder.push('narrate');
+    });
+    getOpenConversations.mockImplementation(async () => {
+      callOrder.push('read');
+      return [];
+    });
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
+
+    await render('en');
+
+    expect(narratePendingEvents).toHaveBeenCalledTimes(1);
+    expect(narratePendingEvents.mock.calls[0][0]).toBe('athlete_1');
+    expect(callOrder).toEqual(['narrate', 'read']);
+  });
+
+  it('does not narrate for a user with no athlete row', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue(null);
+
+    await render('en');
+
+    expect(narratePendingEvents).not.toHaveBeenCalled();
   });
 });

@@ -1,9 +1,12 @@
 import { refusalReason } from '@/lib/identifiers';
+import { logCoachFailure } from '@/lib/coach-log';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
-import { getOwnedSession } from '@/features/session/session-repository';
+import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
+import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
+import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
 import { callCoach } from './coach-client';
 import {
@@ -60,6 +63,12 @@ function toSessionContext(session: Session): SessionContext {
  * No name or email is assembled into the check-in (GDPR decision 1 lives in
  * {@link buildWeeklyCheckIn}, which this reuses precisely so the guarantee is
  * enforced once rather than re-implemented).
+ *
+ * The athlete's current week is fetched the same way — athlete-scoped, from the
+ * Monday of `today` — because Coach Chat is where "should I do tomorrow's
+ * intervals?" gets asked, and a Coach that cannot see the week answers it
+ * confidently anyway. The Weekly Session's prompt has always read the week; this
+ * one did not until now.
  */
 async function renderSystem(
   athlete: Athlete,
@@ -67,8 +76,9 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<string> {
-  const [equipmentItems, reference] = await Promise.all([
+  const [equipmentItems, weekSessions, reference] = await Promise.all([
     getEquipmentItems(athlete.id),
+    getSessionsForWeek(athlete.id, weekStartOf(today)),
     referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
   ]);
 
@@ -78,7 +88,14 @@ async function renderSystem(
   // week with.
   const checkIn = buildWeeklyCheckIn(athlete, NO_CHECK_IN, 1, language, equipmentItems);
 
-  return buildChatPrompt(checkIn, today, reference ? toSessionContext(reference) : null);
+  // The Reference is matched against the week by id here, where ids still
+  // exist; downstream of this call nothing knows what a session id is.
+  return buildChatPrompt(
+    checkIn,
+    today,
+    reference ? toSessionContext(reference) : null,
+    weekFrom(weekSessions, reference?.id),
+  );
 }
 
 export interface CoachChatState {
@@ -162,10 +179,18 @@ export async function sendCoachChatMessage(
     // Told apart deliberately: "the Coach could not be reached" invites a retry,
     // and retrying refused content just fails again. The athlete needs to know
     // which one happened.
-    return {
-      ok: false,
-      reason: refusalReason(error),
-    };
+    const reason = refusalReason(error);
+    // The athlete sees a sentence; without this line the server saw nothing at
+    // all, and a tester who churned after a failure looked exactly like a
+    // tester who simply stopped caring (`showable-version/05`, item 2).
+    logCoachFailure({
+      surface: 'coach_chat',
+      athleteId: athlete.id,
+      conversationId,
+      error,
+      reason,
+    });
+    return { ok: false, reason };
   }
 
   // Lazily created: the resting conversation costs nothing until it is used,
