@@ -39,11 +39,18 @@ export async function editPrescribedSessionAction(
   athleteId: string,
   sessionId: string,
   input: PrescriptionInput,
+  expectedVersion: number,
 ): Promise<PrescribeActionResult> {
   const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
-  const result = await editPrescribedSession({ headCoachId, athleteId, sessionId, input });
+  const result = await editPrescribedSession({
+    headCoachId,
+    athleteId,
+    sessionId,
+    input,
+    expectedVersion,
+  });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
   return result;
 }
@@ -51,11 +58,17 @@ export async function editPrescribedSessionAction(
 export async function deletePrescribedSessionAction(
   athleteId: string,
   sessionId: string,
+  expectedVersion: number,
 ): Promise<PrescribeActionResult> {
   const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
-  const result = await deletePrescribedSession({ headCoachId, athleteId, sessionId });
+  const result = await deletePrescribedSession({
+    headCoachId,
+    athleteId,
+    sessionId,
+    expectedVersion,
+  });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
   return result;
 }

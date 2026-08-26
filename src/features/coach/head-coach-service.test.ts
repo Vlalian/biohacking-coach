@@ -8,10 +8,14 @@ const limit = vi.fn();
 const batch = vi.fn().mockResolvedValue(undefined);
 // The value args are typed so `.mock.calls[n][0]` is a record, not `never`.
 const insertValues = vi.fn((values?: Record<string, unknown>) => ({ values }));
+// `.returning()` reports whether the compare-and-set matched — an empty array
+// is Postgres saying the athlete had already written this row.
+const updateReturning = vi.fn().mockResolvedValue([{ version: 2 }]);
 const updateSet = vi.fn((values?: Record<string, unknown>) => ({
-  where: vi.fn(() => ({ values })),
+  where: vi.fn(() => ({ values, returning: updateReturning })),
 }));
-const deleteWhere = vi.fn(() => ({}));
+const deleteReturning = vi.fn().mockResolvedValue([{ id: 'sess_1' }]);
+const deleteWhere = vi.fn(() => ({ returning: deleteReturning }));
 
 vi.mock('@/db', () => ({
   getDb: () => ({
@@ -114,6 +118,7 @@ describe('editPrescribedSession — the content tier holds', () => {
       athleteId: ATHLETE,
       sessionId: 's1',
       input: { ...VALID, title: 'Revised threshold set' },
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: true, sessionId: 's1' });
@@ -130,7 +135,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     limit.mockResolvedValue([sessionRow({ origin: 'head_coach' })]);
 
     expect(
-      (await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID })).ok,
+      (await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 })).ok,
     ).toBe(true);
   });
 
@@ -138,7 +143,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ origin: 'athlete' })]);
 
-    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID });
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 });
 
     expect(result).toEqual({ ok: false, reason: 'forbidden-origin' });
     expect(batch).not.toHaveBeenCalled();
@@ -149,7 +154,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     limit.mockResolvedValue([sessionRow({ origin: 'garmin' })]);
 
     expect(
-      reasonOf(await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID })),
+      reasonOf(await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 })),
     ).toBe('forbidden-origin');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -157,11 +162,43 @@ describe('editPrescribedSession — the content tier holds', () => {
   it('refuses with no active link before reading the session', async () => {
     getActiveLink.mockResolvedValue(undefined);
 
-    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID });
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 });
 
     expect(result).toEqual({ ok: false, reason: 'not-linked' });
     expect(limit).not.toHaveBeenCalled();
     expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('refuses an edit the athlete already overwrote, and logs nothing', async () => {
+    // The interleaving FR-5 exists for: the coach opened the editor at version
+    // 1, the athlete moved the session in the meantime, and the coach's save
+    // arrives second. It must lose visibly rather than silently win.
+    getActiveLink.mockResolvedValue(LINK);
+    limit
+      .mockResolvedValueOnce([sessionRow({ origin: 'head_coach' })])
+      .mockResolvedValueOnce([
+        { ...sessionRow({ origin: 'head_coach' }), date: '2026-07-20', version: 2 },
+      ]);
+    updateReturning.mockResolvedValueOnce([]);
+
+    const result = await editPrescribedSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 's1',
+      input: VALID,
+      expectedVersion: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected a conflict');
+    expect(result.reason).toBe('conflict');
+    if (result.reason !== 'conflict') throw new Error('expected a conflict');
+    expect(result.conflict.divergences).toContainEqual({
+      field: 'date',
+      current: '2026-07-20',
+      attempted: VALID.date,
+    });
+    expect(insertValues).not.toHaveBeenCalled();
   });
 
   it('refuses to reach across to a session that is not the linked athlete’s', async () => {
@@ -169,7 +206,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ athleteId: 'another_athlete' })]);
 
-    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID });
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 });
 
     expect(result).toEqual({ ok: false, reason: 'wrong-athlete' });
     expect(batch).not.toHaveBeenCalled();
@@ -177,15 +214,14 @@ describe('editPrescribedSession — the content tier holds', () => {
 });
 
 describe('deletePrescribedSession — same content tier', () => {
-  it('deletes a plan session and records a head_coach event in one batch', async () => {
+  it('deletes a plan session and records a head_coach event', async () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ origin: 'head_coach' })]);
 
-    const result = await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1' });
+    const result = await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', expectedVersion: 1 });
 
     expect(result).toEqual({ ok: true, sessionId: 's1' });
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toHaveLength(2);
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({ actorType: 'head_coach', actorId: COACH, type: 'session_deleted' }),
     );
@@ -196,7 +232,7 @@ describe('deletePrescribedSession — same content tier', () => {
     limit.mockResolvedValue([sessionRow({ origin: 'athlete' })]);
 
     expect(
-      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1' })),
+      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', expectedVersion: 1 })),
     ).toBe('forbidden-origin');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -205,7 +241,7 @@ describe('deletePrescribedSession — same content tier', () => {
     getActiveLink.mockResolvedValue(undefined);
 
     expect(
-      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: 'a_stranger', sessionId: 's1' })),
+      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: 'a_stranger', sessionId: 's1', expectedVersion: 1 })),
     ).toBe('not-linked');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -215,7 +251,7 @@ describe('deletePrescribedSession — same content tier', () => {
     limit.mockResolvedValue([]);
 
     expect(
-      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 'missing' })),
+      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 'missing', expectedVersion: 1 })),
     ).toBe('not-found');
     expect(batch).not.toHaveBeenCalled();
   });

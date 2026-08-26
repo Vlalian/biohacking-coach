@@ -133,6 +133,20 @@ export const sessions = pgTable(
     feedbackMind: integer('feedback_mind'),
     feedbackComment: text('feedback_comment'),
     ratedAt: timestamp('rated_at'),
+    // Optimistic concurrency. Two people write this row — the athlete and their
+    // Head Coach — and until this column existed the second write silently
+    // overwrote the first: both paths read, then wrote unconditionally.
+    //
+    // Content (type/duration/zone/title/note) and placement (`date`) are the
+    // contested columns — the Head Coach's edit sets both, and a Session Move
+    // sets the date — so every write to them carries the version it read and
+    // lands only if the row still holds it. A stale version is refused and
+    // reported, never applied (`versioned-write.ts`).
+    //
+    // Status toggles and Session Reflections deliberately do *not* participate:
+    // they are the athlete's alone, and they touch columns no one else writes,
+    // so versioning them would manufacture conflicts that cannot happen.
+    version: integer('version').notNull().default(1),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },

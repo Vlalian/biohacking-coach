@@ -54,6 +54,10 @@ export type Session = {
   /** Whether it counts as training load (Athlete Session's Other-as-training
    *  toggle) — governs Double/Rest-day placement rules on the calendar. */
   isTraining: boolean;
+  /** The row version this view was read at. A write sends it back so a change
+   *  that landed in between is refused rather than overwritten
+   *  (`versioned-write.ts`). Rendered by nothing; carried by every editor. */
+  version: number;
 };
 
 /** The one place a stored session row becomes a domain object. */
@@ -76,5 +80,6 @@ export function toSession(row: SessionRow): Session {
     // hold a value outside SESSION_ORIGINS.
     origin: toSessionOrigin(row.origin),
     isTraining: row.isTraining,
+    version: row.version,
   };
 }

@@ -4,6 +4,8 @@ import { events, sessions } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import { getActiveLink } from './coach-repository';
 import { canHeadCoachEditContent, HEAD_COACH_ORIGIN } from './head-coach-authority';
+import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
+import type { SessionConflict } from '@/features/session/conflict';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -39,7 +41,10 @@ export type HeadCoachActionResult =
   | {
       ok: false;
       reason: 'not-linked' | 'invalid' | 'not-found' | 'wrong-athlete' | 'forbidden-origin';
-    };
+    }
+  // The athlete writes these rows too, so an edit can lose a race. The refusal
+  // carries what won, because the Head Coach has no other way to find out.
+  | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 
 /** The mutable fields of a session the Head Coach may set. */
 export type PrescriptionInput = {
@@ -72,11 +77,16 @@ async function loadEditableSession(
   athleteId: string,
   sessionId: string,
 ): Promise<
-  | { ok: true; origin: string; date: string }
+  | { ok: true; origin: string; date: string; version: number }
   | { ok: false; reason: 'not-found' | 'wrong-athlete' | 'forbidden-origin' }
 > {
   const [row] = await getDb()
-    .select({ athleteId: sessions.athleteId, origin: sessions.origin, date: sessions.date })
+    .select({
+      athleteId: sessions.athleteId,
+      origin: sessions.origin,
+      date: sessions.date,
+      version: sessions.version,
+    })
     .from(sessions)
     .where(eq(sessions.id, sessionId))
     .limit(1);
@@ -87,7 +97,7 @@ async function loadEditableSession(
   if (row.athleteId !== athleteId) return { ok: false, reason: 'wrong-athlete' };
   if (!canHeadCoachEditContent(row.origin)) return { ok: false, reason: 'forbidden-origin' };
 
-  return { ok: true, origin: row.origin, date: row.date };
+  return { ok: true, origin: row.origin, date: row.date, version: row.version };
 }
 
 /** Normalises the optional fields into the column set, shared by add and edit. */
@@ -149,8 +159,15 @@ export async function editPrescribedSession(params: {
   athleteId: string;
   sessionId: string;
   input: PrescriptionInput;
+  /**
+   * The version the coach's editor was showing — not a version read here.
+   * Reading it fresh would make the check pass by construction and restore the
+   * last-write-wins behaviour this exists to remove; the guard is only worth
+   * anything if the number comes from what the writer actually saw.
+   */
+  expectedVersion: number;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, sessionId, input } = params;
+  const { headCoachId, athleteId, sessionId, input, expectedVersion } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
@@ -159,22 +176,29 @@ export async function editPrescribedSession(params: {
   const target = await loadEditableSession(athleteId, sessionId);
   if (!target.ok) return target;
 
-  const db = getDb();
-  await db.batch([
-    db
-      .update(sessions)
-      .set({ ...contentColumns(input), updatedAt: new Date() })
-      .where(eq(sessions.id, sessionId)),
-    db.insert(events).values({
-      athleteId,
+  const columns = contentColumns(input);
+  const written = await casUpdateSession({
+    athleteId,
+    sessionId,
+    expectedVersion,
+    set: columns,
+    attempted: {
+      date: columns.date,
+      type: columns.type,
+      duration: columns.duration === null ? null : String(columns.duration),
+      zone: columns.zone,
+      title: columns.title,
+      note: columns.note,
+    },
+    event: {
       actorType: 'head_coach',
       actorId: headCoachId,
       type: 'session_edited',
-      payload: { sessionId, from: { date: target.date }, to: contentColumns(input) },
-    }),
-  ]);
+      payload: { sessionId, from: { date: target.date }, to: columns },
+    },
+  });
 
-  return { ok: true, sessionId };
+  return written.ok ? { ok: true, sessionId } : written;
 }
 
 /**
@@ -185,8 +209,11 @@ export async function deletePrescribedSession(params: {
   headCoachId: string;
   athleteId: string;
   sessionId: string;
+  /** As for {@link editPrescribedSession}: the version the coach was shown, so
+   *  a delete cannot discard an edit that landed while they were deciding. */
+  expectedVersion: number;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, sessionId } = params;
+  const { headCoachId, athleteId, sessionId, expectedVersion } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
@@ -194,17 +221,17 @@ export async function deletePrescribedSession(params: {
   const target = await loadEditableSession(athleteId, sessionId);
   if (!target.ok) return target;
 
-  const db = getDb();
-  await db.batch([
-    db.delete(sessions).where(eq(sessions.id, sessionId)),
-    db.insert(events).values({
-      athleteId,
+  const written = await casDeleteSession({
+    athleteId,
+    sessionId,
+    expectedVersion,
+    event: {
       actorType: 'head_coach',
       actorId: headCoachId,
       type: 'session_deleted',
       payload: { sessionId, date: target.date, origin: target.origin },
-    }),
-  ]);
+    },
+  });
 
-  return { ok: true, sessionId };
+  return written.ok ? { ok: true, sessionId } : written;
 }

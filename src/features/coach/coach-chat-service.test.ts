@@ -274,6 +274,7 @@ describe('Coach Chat sees the week', () => {
     status: 'planned',
     parked: false,
     dayOrder: 0,
+    version: 1,
     title: null,
     duration: 60,
     zone: '4',

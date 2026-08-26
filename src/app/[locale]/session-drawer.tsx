@@ -176,7 +176,7 @@ export function SessionDrawer({
                 note: session.note ?? '',
               }}
               onSubmit={(input) =>
-                run(() => updateAthleteSessionAction(session.id, input), onClose)
+                run(() => updateAthleteSessionAction(session.id, input, session.version), onClose)
               }
             />
           ) : session ? (
@@ -202,7 +202,7 @@ export function SessionDrawer({
               }}
               onRate={() => onRate(session)}
               onEdit={() => onEditRequest(session)}
-              onDelete={() => run(() => deleteAthleteSessionAction(session.id), onClose)}
+              onDelete={() => run(() => deleteAthleteSessionAction(session.id, session.version), onClose)}
             />
           ) : null}
         </div>

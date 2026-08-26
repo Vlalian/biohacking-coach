@@ -2,10 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SessionRow } from '@/db/schema';
 
 // The DB is mocked so the authority logic can be tested without Postgres: the
-// select returns a fixed row, and batch records whether a write happened.
+// select returns a fixed row, and the update's `.returning()` decides whether
+// the compare-and-set matched — an empty array is how Postgres reports that the
+// row had already moved on, which is what a write conflict looks like here.
 const limit = vi.fn();
 const batch = vi.fn().mockResolvedValue(undefined);
-const updateWhere = vi.fn(() => ({}));
+const updateReturning = vi.fn().mockResolvedValue([{ version: 2 }]);
+const updateWhere = vi.fn(() => ({ returning: updateReturning }));
 const updateSet = vi.fn(() => ({ where: updateWhere }));
 const insertValues = vi.fn(() => ({}));
 
@@ -34,6 +37,7 @@ function sessionRow(overrides: Partial<SessionRow> = {}): SessionRow {
     status: 'planned',
     parked: false,
     isTraining: true,
+    version: 1,
     duration: 60,
     zone: 'Zone 2',
     note: null,
@@ -58,9 +62,10 @@ describe('moveSession — server authority', () => {
     batch.mockClear();
     insertValues.mockClear();
     updateSet.mockClear();
+    updateReturning.mockReset().mockResolvedValue([{ version: 2 }]);
   });
 
-  it('applies a legal within-week move and records the event in one batch', async () => {
+  it('applies a legal within-week move, bumping the version, and records the event', async () => {
     limit.mockResolvedValue([sessionRow()]);
 
     const result = await moveSession({
@@ -68,14 +73,14 @@ describe('moveSession — server authority', () => {
       sessionId: 'sess_1',
       targetDate: '2026-07-18', // Saturday, same week, future
       today: TODAY,
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: true });
-    // One atomic batch carries both the update and the event write.
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toHaveLength(2);
+    // The version is bumped in the same statement that sets the date, so the
+    // next writer holding version 1 is caught.
     expect(updateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ date: '2026-07-18' }),
+      expect.objectContaining({ date: '2026-07-18', version: 2 }),
     );
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -85,6 +90,37 @@ describe('moveSession — server authority', () => {
         type: 'session_moved',
       }),
     );
+  });
+
+  it('refuses a move against a stale version and logs nothing', async () => {
+    // The row passes every authority check — it is the athlete's own, in-week,
+    // and not frozen — but someone else wrote it since this client read it.
+    // Postgres reports that as an UPDATE matching no rows.
+    limit
+      .mockResolvedValueOnce([sessionRow()])
+      // versioned-write re-reads the winning row to report what beat them.
+      .mockResolvedValueOnce([sessionRow({ date: '2026-07-17', version: 2 })]);
+    updateReturning.mockResolvedValue([]);
+
+    const result = await moveSession({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected a conflict');
+    expect(result.reason).toBe('conflict');
+    if (result.reason !== 'conflict') throw new Error('expected a conflict');
+    expect(result.conflict.baseVersion).toBe(1);
+    expect(result.conflict.current?.date).toBe('2026-07-17');
+    expect(result.conflict.divergences).toEqual([
+      { field: 'date', current: '2026-07-17', attempted: '2026-07-18' },
+    ]);
+    // The losing write must not leave a trace in the event log.
+    expect(insertValues).not.toHaveBeenCalled();
   });
 
   it('refuses a client-forged illegal move — nothing is written', async () => {
@@ -97,6 +133,7 @@ describe('moveSession — server authority', () => {
       sessionId: 'sess_1',
       targetDate: '2026-07-20', // next Monday — cross-week
       today: TODAY,
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: false, reason: 'bounce' });
@@ -113,6 +150,7 @@ describe('moveSession — server authority', () => {
       sessionId: 'sess_1',
       targetDate: '2026-07-18',
       today: TODAY,
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-owner' });
@@ -127,6 +165,7 @@ describe('moveSession — server authority', () => {
       sessionId: 'sess_1',
       targetDate: '2026-07-18',
       today: TODAY,
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: false, reason: 'frozen' });
@@ -141,6 +180,7 @@ describe('moveSession — server authority', () => {
       sessionId: 'missing',
       targetDate: '2026-07-18',
       today: TODAY,
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-found' });

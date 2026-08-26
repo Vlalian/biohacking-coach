@@ -13,7 +13,10 @@ import { markUnavailableDateAction, clearUnavailableDateAction } from './availab
 import { RatingModal } from './rating-modal';
 import { SessionDrawer, type DrawerState } from './session-drawer';
 
-type BounceReason = 'past-day' | 'other-week' | 'frozen';
+// 'conflict' is the only reason the client cannot predict: it means someone
+// else — the Head Coach — changed this session while it was on screen, so the
+// move was refused rather than allowed to overwrite them (versioned-write.ts).
+type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict';
 
 type Day = {
   date: string;
@@ -173,9 +176,16 @@ export function Calendar({
       setBounce({ date: day.date, reason });
       window.setTimeout(() => setBounce(null), 2600);
     } else if (dragging.session.date !== day.date) {
-      const id = dragging.session.id;
+      const { id, version } = dragging.session;
       startTransition(async () => {
-        await moveSessionAction(id, day.date);
+        const result = await moveSessionAction(id, day.date, version);
+        // A refused move used to look identical to a successful one, because
+        // the result was discarded and the refresh put the session back where
+        // it started. Say so instead.
+        if (!result.ok && result.reason === 'conflict') {
+          setBounce({ date: day.date, reason: 'conflict' });
+          window.setTimeout(() => setBounce(null), 4000);
+        }
         router.refresh();
       });
     }
@@ -496,6 +506,7 @@ function WeekRow({
           {bounce.reason === 'past-day' && t('bouncePastDay')}
           {bounce.reason === 'other-week' && t('bounceOtherWeek')}
           {bounce.reason === 'frozen' && t('bounceFrozen')}
+          {bounce.reason === 'conflict' && t('bounceConflict')}
         </p>
       )}
     </div>
