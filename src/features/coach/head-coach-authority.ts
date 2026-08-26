@@ -23,12 +23,15 @@
  * placement right they had, including moving a session the coach just moved;
  * what the coach gains is a say in when the training they authored happens.
  *
- * So this module owns two guards now, and they are deliberately separate
- * functions over the same origins: {@link canHeadCoachEditContent} for what the
- * coach may rewrite, {@link canHeadCoachMove} for what they may re-place. They
- * happen to agree today. Keeping them apart is what lets one change without
- * silently changing the other — an Athlete Session becoming coach-movable, say,
- * without becoming coach-editable.
+ * So this module owns two guards now: {@link canHeadCoachEditContent} for what
+ * the coach may rewrite, {@link canHeadCoachMove} for what they may re-place.
+ * They admit the same origins today, and they are kept apart so that one can
+ * change without silently changing the other — an Athlete Session becoming
+ * coach-movable, say, without becoming coach-editable.
+ *
+ * Which means each reads its *own* list. Two functions over one shared constant
+ * would have been the appearance of that separation without the substance: the
+ * only way to move one is to edit the constant, which moves both.
  */
 
 /** The origin a Head Coach's newly prescribed session carries. */
@@ -40,6 +43,18 @@ export const HEAD_COACH_ORIGIN = 'head_coach';
  * editor-in-chief of.
  */
 export const HEAD_COACH_EDITABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN] as const;
+
+/**
+ * The origins the Head Coach may *re-place* (ADR 0003, 2026-08-21 amendment).
+ *
+ * Spelled out rather than aliased to {@link HEAD_COACH_EDITABLE_ORIGINS}. The
+ * two lists agree today by coincidence of the current rules, not by definition:
+ * "may rewrite this session" and "may decide which day it lands on" are
+ * different permissions, and the first question likely to be asked of this
+ * module — may a coach move an Athlete Session they may not edit? — is answered
+ * by editing this line and nothing else.
+ */
+export const HEAD_COACH_MOVABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN] as const;
 
 /**
  * True when a session of this origin is within the Head Coach's content
@@ -66,5 +81,5 @@ export function canHeadCoachEditContent(origin: string): boolean {
  * both actors.
  */
 export function canHeadCoachMove(origin: string): boolean {
-  return (HEAD_COACH_EDITABLE_ORIGINS as readonly string[]).includes(origin);
+  return (HEAD_COACH_MOVABLE_ORIGINS as readonly string[]).includes(origin);
 }

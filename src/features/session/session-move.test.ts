@@ -155,6 +155,9 @@ describe('applyMove — the Head Coach as actor', () => {
   // coach cannot make either. Only the recorded actor differs.
   const COACH = 'head_coach_1';
   const asCoach = { type: 'head_coach', headCoachId: COACH } as const;
+  // What `canHeadCoachMove` admits, stated locally so this suite tests the
+  // session rules rather than the coach feature's constant.
+  const coachOrigins = (origin: string) => origin !== 'athlete';
 
   beforeEach(() => {
     limit.mockReset();
@@ -172,6 +175,7 @@ describe('applyMove — the Head Coach as actor', () => {
       targetDate: '2026-07-18',
       today: TODAY,
       actor: asCoach,
+      permittedOrigin: coachOrigins,
     });
 
     expect(result).toEqual({ ok: true });
@@ -198,6 +202,7 @@ describe('applyMove — the Head Coach as actor', () => {
       targetDate: '2026-07-18',
       today: TODAY,
       actor: asCoach,
+      permittedOrigin: coachOrigins,
     });
 
     expect(result).toEqual({ ok: false, reason: 'frozen' });
@@ -213,6 +218,7 @@ describe('applyMove — the Head Coach as actor', () => {
       targetDate: '2026-07-18',
       today: TODAY,
       actor: asCoach,
+      permittedOrigin: coachOrigins,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-owner' });

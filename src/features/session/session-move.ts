@@ -40,8 +40,13 @@ export type MoveActor =
  * the *server's* today, and only on a clean `move` writes anything.
  *
  * The session update and the `session_moved` event land in one transaction:
- * both or neither. Narration is benched (ticket 02, amended) — the event is
- * recorded with its actor and `narrated_at` stays null; nothing is announced.
+ * both or neither.
+ *
+ * The event is written with its actor and `narrated_at` null, and nothing is
+ * announced — but not because narration is off. Narration runs on every
+ * app-open; `session_moved` is simply absent from `NARRATABLE_TYPES`, so this
+ * event is never collected. For a coach's move that is a known breach of
+ * ADR 0003's "no silent mutation" rule, recorded in its 2026-08-21 amendment.
  */
 export async function applyMove(params: {
   athleteId: string;
@@ -50,11 +55,17 @@ export async function applyMove(params: {
   today: string;
   actor: MoveActor;
   /**
-   * An extra gate the caller may impose on the session's `origin`, before the
-   * Move rules run. The athlete has none — they may move anything movable. The
-   * Head Coach does: Athlete Sessions stay the athlete's territory.
+   * The gate on the session's `origin`, applied before the Move rules run. The
+   * Head Coach's refuses an Athlete Session — that stays the athlete's
+   * territory; the athlete's own admits everything, since placement remains
+   * theirs in full.
+   *
+   * Required, with no default, on purpose. A gate that may be omitted defaults
+   * to *open*, so the day a third caller appears the safe-looking omission is
+   * the one that silently widens authority over someone else's training. Saying
+   * `allOrigins` out loud costs one line and cannot be forgotten.
    */
-  permittedOrigin?: (origin: string) => boolean;
+  permittedOrigin: (origin: string) => boolean;
 }): Promise<MoveResult> {
   const { athleteId, sessionId, targetDate, today, actor, permittedOrigin } = params;
   const db = getDb();
@@ -69,7 +80,7 @@ export async function applyMove(params: {
   if (row.athleteId !== athleteId) return { ok: false, reason: 'not-owner' };
   // Refused as 'not-owner' rather than a new reason: from the caller's side it
   // is the same answer — this session is not yours to place.
-  if (permittedOrigin && !permittedOrigin(row.origin)) {
+  if (!permittedOrigin(row.origin)) {
     return { ok: false, reason: 'not-owner' };
   }
 
@@ -94,6 +105,12 @@ export async function applyMove(params: {
 }
 
 /**
+ * Every origin, admitted. The athlete's placement gate, named rather than
+ * implied so that {@link applyMove} can require one of every caller.
+ */
+const allOrigins = () => true;
+
+/**
  * The athlete moving their own session — the original and still the common
  * path. Placement remains theirs in full: no origin is off limits, including a
  * Prescribed Session the Head Coach authored (ADR 0002/0003).
@@ -107,5 +124,6 @@ export async function moveSession(params: {
   return applyMove({
     ...params,
     actor: { type: 'athlete', athleteId: params.athleteId },
+    permittedOrigin: allOrigins,
   });
 }
