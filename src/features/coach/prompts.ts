@@ -253,11 +253,30 @@ function todayBlock(
   return lines.join('\n');
 }
 
-/** The readiness scores as prompt text, or '' when the athlete never gave any. */
-function readinessFragment(readiness?: Readiness): string {
+/** The readiness scores as prompt tokens, or '' when the athlete never gave any. */
+function readinessTokens(readiness?: Readiness): string {
   if (!readiness) return '';
   const { body, mental, energy, sleep, pulse } = readiness;
-  return ` body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm`;
+  return `body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm`;
+}
+
+/** The same, space-prefixed for the templates that append it mid-line. */
+function readinessFragment(readiness?: Readiness): string {
+  const tokens = readinessTokens(readiness);
+  return tokens ? ` ${tokens}` : '';
+}
+
+/**
+ * `name=value`, or nothing at all when there is no value.
+ *
+ * The whole point of this file is that the Coach is not told things that are not
+ * true, and `sessions=undefined` is a thing that is not true — it is a template
+ * hole rendered as a word, and the model has no way to read it as absence. An
+ * omitted token is absence the model can actually act on, and it is what every
+ * other optional part of these prompts already does.
+ */
+function tag(name: string, value: string | number | undefined): string | null {
+  return value === undefined || value === '' ? null : `${name}=${value}`;
 }
 
 /**
@@ -278,7 +297,14 @@ function stateBlock(s: {
   experienceLevel?: string;
   readiness?: Readiness;
 }): string {
-  return `STATE: phase=${s.phase} sessions=${s.sessionCount}${readinessFragment(s.readiness)} xp=${s.experienceLevel || 'intermediate'}`;
+  const parts = [
+    tag('phase', s.phase),
+    tag('sessions', s.sessionCount),
+    readinessTokens(s.readiness) || null,
+    `xp=${s.experienceLevel || 'intermediate'}`,
+  ].filter((part): part is string => part !== null);
+
+  return `STATE: ${parts.join(' ')}`;
 }
 
 /**
@@ -481,7 +507,13 @@ export function buildChatPrompt(
     `TODAY: ${today}`,
 
     `CONTEXT (use silently — never cite scores/numbers):
-phase=${phase} xp=${experienceLevel || 'intermediate'} sessions=${sessionCount}${readinessFragment(readiness)}${race}${noTrain}`,
+${[
+  tag('phase', phase),
+  `xp=${experienceLevel || 'intermediate'}`,
+  tag('sessions', sessionCount),
+]
+  .filter((part): part is string => part !== null)
+  .join(' ')}${readinessFragment(readiness)}${race}${noTrain}`,
 
     readiness ? null : NO_CHECK_IN,
 

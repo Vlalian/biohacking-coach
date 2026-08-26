@@ -450,4 +450,34 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
     expect(prompt).toContain('body=4/10 mental=5/10 energy=3/10 sleep=5.5h pulse=68bpm');
     expect(prompt).not.toContain('NO CHECK-IN DATA');
   });
+
+  // The same rule as the readiness itself, one field over. A missing optional
+  // renders as an absent token, never as the word "undefined" — the Coach cannot
+  // read a template hole as absence, and not telling it things that are not so
+  // is this whole file's subject.
+  it('omits a token it has no value for, rather than writing undefined', () => {
+    const bare: CheckIn = {
+      phase: undefined,
+      sessionCount: undefined,
+      experienceLevel: undefined,
+      language: 'English',
+      commStyle: '',
+    };
+
+    const prompts = {
+      chat: buildChatPrompt(bare, '2026-08-18'),
+      weekly: renderWeeklyPrompt(
+        buildWeeklyContext({ ...bare, weeklySessionNumber: 1 }, [], [], [], [], null, '2026-08-18'),
+      ),
+    };
+
+    for (const [name, prompt] of Object.entries(prompts)) {
+      expect(prompt, `${name} prompt`).not.toContain('undefined');
+      expect(prompt, `${name} prompt`).not.toContain('sessions=');
+      expect(prompt, `${name} prompt`).not.toContain('phase=');
+      // The field with a documented default still renders, so an absent token
+      // means absent data rather than a whole line quietly dropping out.
+      expect(prompt, `${name} prompt`).toContain('xp=intermediate');
+    }
+  });
 });

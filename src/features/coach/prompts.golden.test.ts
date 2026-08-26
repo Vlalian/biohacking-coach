@@ -271,6 +271,10 @@ describe('golden — no Check-in has ever been given', () => {
   });
 
   it('Coach Chat renders without readiness', () => {
-    expect(buildChatPrompt(NO_READINESS, TODAY)).toMatchSnapshot();
+    // `sessionCount: 0` because that is what `coach-chat-service` passes for an
+    // athlete the Coach has not yet planned a week with. Left off, this golden
+    // pinned `sessions=undefined` — a template hole rendered as a word, in the
+    // one file a human reads to check what the Coach is actually told.
+    expect(buildChatPrompt({ ...NO_READINESS, sessionCount: 0 }, TODAY)).toMatchSnapshot();
   });
 });
