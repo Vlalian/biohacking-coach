@@ -12,6 +12,23 @@ import { DirectIdentifierError, shapedIdentifierIn } from '@/lib/identifiers';
  * from a user record.
  */
 
+/**
+ * The bodily state an athlete reports at a Check-in: the numbers behind
+ * CONTEXT.md's "perceived energy, physical condition, sleep quality".
+ *
+ * One object, because the five are one report — an athlete gives all of them or
+ * gives none. Modelling them as five separate optional fields let a check-in
+ * exist with two of them, which no Check-in produces and which the prompts could
+ * only mis-render.
+ */
+export interface Readiness {
+  body: number;
+  mental: number;
+  energy: number;
+  sleep: number;
+  pulse: number;
+}
+
 /** The answers an athlete gave during MCQ onboarding (slice 09 writes these). */
 export interface Onboarding {
   /** Hours a week the athlete can train — a ceiling to plan within. */
@@ -81,16 +98,21 @@ export interface WeekActivity {
 }
 
 /**
- * Everything a check-in carries into a prompt. The numeric readiness scores are
- * required; the rest describe the athlete's phase, profile and preferences and
- * are optional because a brand-new athlete has few of them.
+ * Everything a check-in carries into a prompt.
+ *
+ * `readiness` is optional because until a Check-in feature exists the athlete has
+ * never reported one. Absent means the prompts render the STATE line without
+ * scores and tell the Coach to ask, rather than inventing a number
+ * (code-health/07). It is one nested object rather than five optional fields
+ * precisely so "half a readiness" cannot be constructed: a partial one would
+ * render as no readiness at all *and* have the prompt tell the model there is
+ * none — a false claim in the opposite direction.
+ *
+ * The rest describe the athlete's phase, profile and preferences and are
+ * optional because a brand-new athlete has few of them.
  */
 export interface CheckIn {
-  body: number;
-  mental: number;
-  energy: number;
-  sleep: number;
-  pulse: number;
+  readiness?: Readiness;
   phase?: string;
   personaName?: string;
   sessionCount?: number;
