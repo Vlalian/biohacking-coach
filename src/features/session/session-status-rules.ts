@@ -8,8 +8,11 @@
  *
  * The freeze rule is deliberately NOT duplicated here — `isFrozen` in
  * `move-rules.ts` is already the one pure statement of it (ADR 0002), and a
- * second copy is exactly the drift this separation exists to avoid.
+ * second copy is exactly the drift this separation exists to avoid. It is
+ * imported instead, for the same reason.
  */
+
+import { isFrozen, type MoveCandidate } from './move-rules';
 
 export type SessionStatusTransition = {
   /** The status to write. */
@@ -61,4 +64,39 @@ export function completeTransition(): SessionStatusTransition {
 /** Nothing in the future is "done" yet. */
 export function isFutureDated(date: string, today: string): boolean {
   return date > today;
+}
+
+/** Which status actions the Session Drawer may offer on a session. */
+export type OfferedStatusActions = {
+  complete: boolean;
+  skip: boolean;
+  unavailable: boolean;
+};
+
+/**
+ * The three status actions a session offers, decided once and in one place.
+ *
+ * The drawer used to reason about this inline, and got Mark complete wrong: it
+ * gated only on `status !== 'completed'`, so a future-dated session — which is
+ * every session the Weekly Session writes — showed a primary action that
+ * `completeSession` was always going to refuse. The athlete pressed it and
+ * nothing happened.
+ *
+ * The server stays the authority (ADR 0006): this decides what to *offer*,
+ * never what to permit, and it deliberately mirrors the refusals in
+ * `session-status.ts` rather than inventing its own. A frozen session offers
+ * nothing; a future one can still be skipped or marked unavailable, because
+ * "hasn't happened yet" is not "untouchable".
+ */
+export function offeredStatusActions(
+  session: MoveCandidate,
+  today: string,
+): OfferedStatusActions {
+  const frozen = isFrozen(session, today);
+
+  return {
+    complete: !frozen && !isFutureDated(session.date, today),
+    skip: !frozen,
+    unavailable: !frozen,
+  };
 }
