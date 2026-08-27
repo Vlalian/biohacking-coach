@@ -57,8 +57,6 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
     });
   }
 
-  const minutes = activity.duration === null ? null : Math.round(activity.duration / 60);
-
   return (
     <article className="flex flex-col gap-4 border border-signal/40 bg-panel p-4">
       <div>
@@ -67,7 +65,10 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
         </p>
         <h3 className="mt-1 font-display text-xl tracking-[0.04em] text-foreground">
           {activity.sport ?? activity.type}
-          {minutes !== null && ` · ${minutes} ${t('minutes')}`}
+          {/* `duration` is already minutes — `garmin.ts` divides the file's
+              elapsed seconds by 60 at parse time, as `sessions.duration` is
+              minutes everywhere else in the app. */}
+          {activity.duration !== null && ` · ${activity.duration} ${t('minutes')}`}
         </h3>
         <p className="mt-0.5 font-body text-sm text-muted-foreground">
           {formatFullDate(activity.date, locale)}

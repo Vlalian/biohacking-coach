@@ -12,12 +12,15 @@ vi.mock('@/features/session/session-repository', () => ({ getSessionsOnDates }))
 
 const { proposeDetectedActivities } = await import('./garmin-import');
 
+// 90 minutes long on purpose: a fixture measured in seconds cannot tell a
+// duration in minutes from one in seconds, and that is the mistake this file
+// is guarding (a 90-minute ride rendered as "2 min" on the proposal card).
 const GPX = `<?xml version="1.0"?>
 <gpx xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
   <trk><name>Run</name><type>running</type><trkseg>
     <trkpt lat="55.0000" lon="12.0000"><ele>10</ele><time>2026-07-10T08:00:00Z</time>
       <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>120</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
-    <trkpt lat="55.0001" lon="12.0000"><ele>11</ele><time>2026-07-10T08:00:10Z</time>
+    <trkpt lat="55.0001" lon="12.0000"><ele>11</ele><time>2026-07-10T09:30:00Z</time>
       <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>124</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
   </trkseg></trk>
 </gpx>`;
@@ -71,7 +74,11 @@ describe('proposeDetectedActivities', () => {
       type: 'Endurance',
       matchedSessionId: null,
     });
-    expect((proposal.samples as { t: number[] }).t).toEqual([0, 10]);
+    expect((proposal.samples as { t: number[] }).t).toEqual([0, 5400]);
+    // Minutes, not seconds — the parser already divides the file's elapsed
+    // seconds by 60, and `sessions.duration` is minutes everywhere else. A
+    // second divide in the UI turned this 90-minute ride into "2 min".
+    expect(proposal.duration).toBe(90);
   });
 
   it('carries the matched Planned Session onto the proposal', async () => {
