@@ -42,3 +42,19 @@ export function weekStartOf(key: string): string {
   const day = new Date(`${key}T00:00:00`).getDay(); // 0 = Sunday
   return addDays(key, -(day === 0 ? 6 : day - 1));
 }
+
+/**
+ * A date key as a full, localised date — "Wednesday 15 July".
+ *
+ * Parsed and formatted in UTC deliberately: a date key is a calendar day, not
+ * an instant, and letting the runtime apply a local offset shifts it by one
+ * day for anyone west of Greenwich.
+ */
+export function formatFullDate(key: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  }).format(new Date(`${key}T00:00:00Z`));
+}

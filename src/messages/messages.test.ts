@@ -74,6 +74,8 @@ describe('message catalogues', () => {
       path.startsWith('Information.') ||
       path.startsWith('SessionDrawer.') ||
       path === 'Calendar.minutes' ||
+      // Same "min" as Calendar.minutes, on the Detected Activity card.
+      path === 'Detected.minutes' ||
       path === 'AthletePage.informationLink' ||
       path === 'Shell.viewInformation' ||
       // The theme-cycle's "System" option (follow the OS) — genuinely spelled

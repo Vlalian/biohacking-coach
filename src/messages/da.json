@@ -336,6 +336,18 @@
     "errorEmpty": "Den fil er tom. Vælg den .fit- eller .gpx-fil, du eksporterede fra Garmin Connect.",
     "errorNotAuthenticated": "Du er blevet logget ud. Log ind, og upload igen — intet gik tabt."
   },
+  "Detected": {
+    "label": "Registreret aktivitet",
+    "willComplete": "Det ligner den session, du havde planlagt. Accepterer du, markeres den som gennemført.",
+    "willAdd": "Der var ikke planlagt noget denne dag. Accepterer du, føjes den til din uge.",
+    "body": "Krop",
+    "mind": "Sind",
+    "comment": "Noget værd at notere?",
+    "minutes": "min",
+    "accept": "Bedøm og accepter",
+    "discard": "Kassér",
+    "error": "Det virkede ikke. Prøv igen."
+  },
   "ThemeToggle": {
     "switch": "Skift tema: lyst, mørkt eller system"
   },

@@ -226,6 +226,60 @@ export type SessionStreamRow = typeof sessionStreams.$inferSelect;
 export type NewSessionStreamRow = typeof sessionStreams.$inferInsert;
 
 /**
+ * A Detected Activity waiting for the athlete — an uploaded activity that has
+ * been parsed and reconciled against the Week Plan, and has not yet been
+ * accepted.
+ *
+ * This table exists so that detection can propose without asserting
+ * (`CONTEXT.md`, Detected Activity). The import used to insert a completed
+ * session per activity, which broke that rule three ways at once: it wrote
+ * `completed` with no athlete in between, it never matched the Week Plan so a
+ * planned ride and its upload became two entries for one ride, and it froze
+ * the result where the athlete could not delete it (showable-version/14).
+ *
+ * Holding the proposal *outside* `sessions` is the point. A declined proposal
+ * leaves nothing behind because nothing was ever written, rather than because
+ * a cleanup path remembered to delete it — and no query that reads the
+ * training record has to learn to filter proposals out. The activity's own
+ * data lives here until it is accepted, at which point it moves into the
+ * matched session (or a new Athlete Session) and this row is gone.
+ *
+ * `matchedSessionId` is the Planned Session this proposes to complete, decided
+ * at import by `matchActivities`. It is re-checked on accept: the athlete may
+ * have moved, skipped or completed that session in between, and a stale match
+ * degrades to the retro-log offer rather than writing to the wrong session. On
+ * delete it goes null for the same reason.
+ */
+export const detectedActivities = pgTable(
+  'detected_activities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    type: text('type').notNull(),
+    sport: text('sport'),
+    duration: integer('duration'),
+    note: text('note'),
+    startTime: timestamp('start_time'),
+    summary: jsonb('summary'),
+    samples: jsonb('samples').notNull(),
+    matchedSessionId: uuid('matched_session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // Always read as "everything pending for this athlete", newest day first.
+    index('detected_activities_athlete_date_idx').on(table.athleteId, table.date),
+  ],
+);
+
+export type DetectedActivityRow = typeof detectedActivities.$inferSelect;
+export type NewDetectedActivityRow = typeof detectedActivities.$inferInsert;
+
+/**
  * A coach — a role you *have*, not a kind of person (route ticket 05, ballot 1).
  *
  * The row points at a better-auth user and nothing more: a coach always has a

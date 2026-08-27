@@ -336,6 +336,18 @@
     "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
     "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
   },
+  "Detected": {
+    "label": "Detected activity",
+    "willComplete": "This looks like the session you had planned. Accepting completes it.",
+    "willAdd": "Nothing was planned for this day. Accepting adds it to your week.",
+    "body": "Body",
+    "mind": "Mind",
+    "comment": "Anything worth noting?",
+    "minutes": "min",
+    "accept": "Rate and accept",
+    "discard": "Discard",
+    "error": "That didn't work. Try again."
+  },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"
   },

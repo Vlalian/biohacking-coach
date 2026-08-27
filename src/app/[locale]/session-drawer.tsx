@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { useDialogFocus } from '@/lib/use-dialog-focus';
+import { formatFullDate } from '@/lib/date';
 import {
   CalendarX2,
   CheckCircle2,
@@ -41,16 +42,6 @@ const TYPE_LABEL_KEY: Record<string, string> = {
   Strength: 'typeStrength',
   Other: 'typeOther',
 };
-
-function formatFullDate(iso: string, locale: string) {
-  const d = new Date(`${iso}T00:00:00Z`);
-  return new Intl.DateTimeFormat(locale, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'UTC',
-  }).format(d);
-}
 
 type DrawerState =
   | { open: false }

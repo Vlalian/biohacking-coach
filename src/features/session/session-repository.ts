@@ -1,8 +1,9 @@
-import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, type NewSessionRow } from '@/db/schema';
 import { addDays } from '@/lib/date';
 import { toSession, toSessionOrigin, type Session, type SessionOrigin } from './session';
+import type { MatchCandidate } from '@/features/garmin/match-activities';
 
 // These two row shapes deliberately mirror the Coach Briefing's own input types
 // (`BriefingPlanEntry` and `toBriefingReflection`'s argument in
@@ -51,6 +52,36 @@ export async function getSessionsForAthlete(
     .orderBy(asc(sessions.date), asc(sessions.dayOrder));
 
   return rows.map(toSession);
+}
+
+/**
+ * The Planned Sessions a Detected Activity could be proposing to complete, on
+ * the days an upload actually covered.
+ *
+ * Scoped to the athlete and to the uploaded dates, and deliberately unfiltered
+ * on status and `parked`: `matchActivities` owns which of them are eligible
+ * (`CONTEXT.md`, Detected Activity), and a query that pre-filtered would put
+ * half that rule here and half there. Only the columns matching reads are
+ * selected.
+ */
+export async function getSessionsOnDates(
+  athleteId: string,
+  dates: string[],
+): Promise<MatchCandidate[]> {
+  if (dates.length === 0) return [];
+
+  return getDb()
+    .select({
+      id: sessions.id,
+      date: sessions.date,
+      type: sessions.type,
+      status: sessions.status,
+      parked: sessions.parked,
+      dayOrder: sessions.dayOrder,
+    })
+    .from(sessions)
+    .where(and(eq(sessions.athleteId, athleteId), inArray(sessions.date, dates)))
+    .orderBy(asc(sessions.date), asc(sessions.dayOrder));
 }
 
 /**

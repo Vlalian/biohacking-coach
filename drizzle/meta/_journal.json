@@ -85,6 +85,13 @@
       "when": 1786484394804,
       "tag": "0011_narrow_conversation_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787815551020,
+      "tag": "0012_detected_activities",
+      "breakpoints": true
     }
   ]
 }
