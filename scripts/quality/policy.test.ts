@@ -1,0 +1,221 @@
+import { describe, it, expect } from 'vitest';
+import { judge, CRAP_CEILING, type CrapScore, type MutantReport } from './policy';
+
+/**
+ * Mode A's gates, which are absolute rather than a ratchet.
+ *
+ * The reasoning is in `.scratch/onkel/PLAN.md`: you are grading code you just
+ * wrote against a standard you knew before writing it. There is no legacy to
+ * be fair to, and "not worse than yesterday" means nothing for a function that
+ * did not exist yesterday.
+ *
+ * The verdict is computed from recorded numbers and the agent obeys it. An
+ * agent that judges its own convergence has a cheap way to declare victory.
+ */
+
+function crap(over: Partial<CrapScore> = {}): CrapScore {
+  return { name: 'f', file: 'a.ts', startLine: 1, endLine: 5, crap: 3, ...over };
+}
+
+function mutant(over: Partial<MutantReport> = {}): MutantReport {
+  return { file: 'a.ts', line: 3, mutator: 'ConditionalExpression', status: 'Killed', ...over };
+}
+
+describe('judge — CRAP', () => {
+  it('passes a function at the ceiling', () => {
+    expect(judge({ crap: [crap({ crap: CRAP_CEILING })], mutants: [] }).verdict).toBe('pass');
+  });
+
+  it('fails a function one over the ceiling, and says by how much', () => {
+    // The message is the whole output of this tool to a human — an agent that
+    // reads "escalate" and no number has to go and re-derive it.
+    const result = judge({
+      crap: [crap({ name: 'tooMuch', file: 'b.ts', startLine: 9, crap: CRAP_CEILING + 1 })],
+      mutants: [],
+    });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.failures[0]).toEqual({
+      kind: 'crap',
+      name: 'tooMuch',
+      file: 'b.ts',
+      line: 9,
+      detail: 'CRAP 7.0 exceeds the ceiling of 6',
+    });
+  });
+
+  it('reports every function over the ceiling, not just the first', () => {
+    const result = judge({
+      crap: [crap({ name: 'a', crap: 9 }), crap({ name: 'b', crap: 3 }), crap({ name: 'c', crap: 7 })],
+      mutants: [],
+    });
+
+    expect(result.failures.map((f) => f.name)).toEqual(['a', 'c']);
+  });
+});
+
+describe('judge — mutation', () => {
+  it('passes when every mutant died', () => {
+    expect(judge({ crap: [], mutants: [mutant(), mutant()] }).verdict).toBe('pass');
+  });
+
+  it('fails on a survivor, and names where it lived', () => {
+    const result = judge({
+      crap: [],
+      mutants: [mutant(), mutant({ status: 'Survived', line: 42, mutator: 'BooleanLiteral' })],
+    });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.failures[0]).toEqual({
+      kind: 'mutant',
+      name: 'BooleanLiteral',
+      file: 'a.ts',
+      line: 42,
+      mutator: 'BooleanLiteral',
+      detail: 'survived',
+    });
+  });
+
+  it('fails on a mutant no test even reached', () => {
+    // NoCoverage is a survivor that did not have to try. Treating it as
+    // anything softer would make untested code the cheapest way past the gate.
+    const result = judge({ crap: [], mutants: [mutant({ status: 'NoCoverage' })] });
+
+    expect(result.verdict).toBe('escalate');
+    // Said differently from a survivor on purpose: one was tested and got
+    // away, the other was never tested at all, and they need different fixes.
+    expect(result.failures[0]).toMatchObject({
+      kind: 'mutant',
+      detail: 'no test reaches this',
+    });
+  });
+
+  it.each(['Timeout', 'CompileError'] as const)(
+    'does not call a %s a survivor',
+    (status) => {
+      // Neither is a mutant the tests killed, but neither is one they missed —
+      // reporting them as survivors would send an agent hunting for a test to
+      // write that would not have helped.
+      expect(judge({ crap: [], mutants: [mutant({ status })] }).verdict).toBe('pass');
+    },
+  );
+
+  it('accepts a mutant suppressed with a reason', () => {
+    // Equivalent mutants are real even in new code.
+    const result = judge({
+      crap: [],
+      mutants: [mutant({ status: 'Ignored', ignoreReason: 'equivalent: both branches return 0' })],
+    });
+
+    expect(result.verdict).toBe('pass');
+  });
+
+  it('fails a mutant suppressed without a reason', () => {
+    const result = judge({ crap: [], mutants: [mutant({ status: 'Ignored' })] });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.failures[0]).toMatchObject({
+      kind: 'unexplained-suppression',
+      detail: 'suppressed with no reason given',
+    });
+  });
+
+  it('treats a blank reason as no reason', () => {
+    // Otherwise a space is the whole cost of suppressing a mutant.
+    const result = judge({ crap: [], mutants: [mutant({ status: 'Ignored', ignoreReason: '   ' })] });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.suppressed).toBe(0);
+  });
+
+  it('counts suppressions so they cannot quietly become the way to pass', () => {
+    const result = judge({
+      crap: [],
+      mutants: [
+        mutant(),
+        mutant({ status: 'Ignored', ignoreReason: 'equivalent' }),
+        mutant({ status: 'Ignored', ignoreReason: 'equivalent' }),
+      ],
+    });
+
+    expect(result.verdict).toBe('pass');
+    expect(result.suppressed).toBe(2);
+  });
+
+  it('refuses to pass a run that produced no mutants at all', () => {
+    // Nothing to kill means the run did not cover what the ticket touched —
+    // an empty result reads identical to a perfect one, and it is not one.
+    const result = judge({ crap: [crap()], mutants: [], ranMutation: true });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.failures[0]).toMatchObject({
+      kind: 'no-mutants',
+      detail: 'the mutation run produced no mutants — it did not cover the ticket',
+    });
+  });
+
+  it('does not report an empty run when the run was not empty', () => {
+    // The other half of the no-mutants rule: a run that produced mutants and
+    // killed them all is a pass, not "no mutants".
+    const result = judge({ crap: [], mutants: [mutant()], ranMutation: true });
+
+    expect(result.verdict).toBe('pass');
+    expect(result.failures).toEqual([]);
+  });
+
+  it('does not invent that failure when the run was explicitly skipped', () => {
+    // `ranMutation: false` is a caller saying "I did not run it", which is not
+    // the same claim as "I ran it and found nothing".
+    expect(judge({ crap: [], mutants: [], ranMutation: false }).verdict).toBe('pass');
+  });
+
+  it('still reports an empty run as a failure when there was code to grade', () => {
+    expect(judge({ crap: [crap()], mutants: [], ranMutation: true }).failures).toHaveLength(1);
+  });
+
+  it('does not invent that failure when no mutation run happened', () => {
+    // `npm run quality` on a ticket with no gradable source files is a pass,
+    // not an escalation.
+    expect(judge({ crap: [], mutants: [] }).verdict).toBe('pass');
+  });
+});
+
+describe('judge — the verdict is a whole', () => {
+  it('reports both kinds of failure together rather than stopping at the first', () => {
+    const result = judge({
+      crap: [crap({ name: 'big', crap: 12 })],
+      mutants: [mutant({ status: 'Survived' })],
+    });
+
+    expect(result.failures.map((f) => f.kind)).toEqual(['crap', 'mutant']);
+  });
+
+  it('never returns anything but pass or escalate', () => {
+    // Mode A has no ratchet and no "close enough": the flow either satisfies
+    // the bar or stops and asks. It must never lower its own bar.
+    for (const input of [
+      { crap: [], mutants: [] },
+      { crap: [crap({ crap: 99 })], mutants: [] },
+    ]) {
+      expect(['pass', 'escalate']).toContain(judge(input).verdict);
+    }
+  });
+});
+
+describe('judge — suppression counting is not fooled by a stray reason', () => {
+  it('does not count a killed mutant as suppressed just because it carries a reason', () => {
+    const result = judge({
+      crap: [],
+      mutants: [mutant({ status: 'Killed', ignoreReason: 'left over from an edit' })],
+    });
+
+    expect(result.verdict).toBe('pass');
+    expect(result.suppressed).toBe(0);
+  });
+
+  it('names the no-mutants failure so a reader can tell it from a real survivor', () => {
+    const [failure] = judge({ crap: [], mutants: [], ranMutation: true }).failures;
+
+    expect(failure).toMatchObject({ name: '(none)', file: '(all)', line: 0 });
+  });
+});
