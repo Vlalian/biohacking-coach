@@ -200,7 +200,23 @@
     "severConfirmBody": "Dette fjerner al adgang, inklusive historik, med det samme. {name} skal have en ny invitation for at genoprette forbindelsen.",
     "severConfirmButton": "Ja, bryd den",
     "severCancel": "Annuller",
-    "severed": "Forbindelsen er brudt — du træner nu solo igen."
+    "severed": "Forbindelsen er brudt — du træner nu solo igen.",
+    "sectionYourData": "Dine data",
+    "exportLabel": "Hent mine data",
+    "exportNote": "En kopi af alt, appen har om dig — din plan, dine sessioner, dine samtaler med din Coach, dine uploads og din profil.",
+    "exportButton": "Hent",
+    "deleteLabel": "Slet min konto",
+    "deleteNote": "Sletter din konto og fjerner alt, der er indsamlet fra den. Det sker med det samme og kan ikke fortrydes.",
+    "deleteButton": "Slet min konto",
+    "deleteConfirmTitle": "Vil du slette din konto?",
+    "deleteConfirmBody": "Det sletter din træningsplan, alle sessioner og uploads, dine samtaler med din Coach, dine refleksioner, dit udstyr og din profil — og logger dig ud for altid.",
+    "deleteConfirmIrreversible": "Det sker med det samme. Der er ingen fortrydelse og ingen sikkerhedskopi at gendanne fra.",
+    "deleteConfirmDownloadFirst": "Hent en kopi først",
+    "deleteConfirmTypePrompt": "Skriv {email} nedenfor for at bekræfte.",
+    "deleteConfirmPlaceholder": "din e-mailadresse",
+    "deleteConfirmButton": "Slet det hele",
+    "deleteCancel": "Behold min konto",
+    "deleteError": "Det virkede ikke. Intet blev slettet."
   },
   "Roster": {
     "title": "Atletliste",
@@ -511,5 +527,10 @@
     "deletedNoType": "{coach} har taget en session af {day}",
     "yourHeadCoach": "Din Head Coach",
     "recently": "for nylig"
+  },
+  "Privacy": {
+    "dataRightsTitle": "Dine data",
+    "dataRightsBody": "Du kan hente en kopi af alt, appen har om dig, eller slette din konto og fjerne det hele. Begge dele finder du under Indstillinger.",
+    "dataRightsLink": "Gå til Indstillinger"
   }
 }

@@ -326,7 +326,15 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * checked against it, never trusted (ADR 0006).
  *
  * `coachId` is the Briefing owner — a coach, not an athlete. The foreign key
- * landed with slice 11's coach roster, as this comment always promised.
+ * landed with slice 11's coach roster, as this comment always promised. It
+ * cascades since 2026-08-27 (`showable-version/10`), and that is load-bearing
+ * rather than tidy: without it a Head Coach account could not be deleted at all.
+ * A Briefing carries `coachId` = the coach and `athleteId` = *the athlete it is
+ * about*, so a coach's briefings about other athletes are keyed to those
+ * athletes' ids and survive the coach's own erasure — leaving the coach row
+ * referenced and the DELETE throwing. Erasing a coach now takes their briefings
+ * with them, which is right: a briefing is that coach's account of their own
+ * coaching.
  *
  * `weeklySessionNumber` is the 1-based ordinal that selects the Weekly Session's
  * conversational arc (Session 1 welcomes, Session 4+ reviews); null for kinds
@@ -343,7 +351,7 @@ export const conversations = pgTable(
       .notNull()
       .references(() => athlete.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
-    coachId: uuid('coach_id').references(() => coach.id),
+    coachId: uuid('coach_id').references(() => coach.id, { onDelete: 'cascade' }),
     weeklySessionNumber: integer('weekly_session_number'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     endedAt: timestamp('ended_at'),
@@ -524,3 +532,49 @@ export const equipmentItems = pgTable(
 
 export type EquipmentItemRow = typeof equipmentItems.$inferSelect;
 export type NewEquipmentItemRow = typeof equipmentItems.$inferInsert;
+
+/**
+ * What survives an erasure — and the one table here that is **deliberately not
+ * keyed to anybody** (`showable-version/10`, decided 2026-08-27).
+ *
+ * **Do not add an `athlete_id`, a `user_id`, or any foreign key to this table.**
+ * Every other table in this schema hangs off `athlete.id`, so the instinct on
+ * reading this one is that a key was forgotten. It was not. The whole purpose is
+ * to record *that* an account consented to a set of purposes and was then erased,
+ * while carrying nothing that could say whose account it was. A key here would
+ * undo the erasure it exists to document. `erasure.test.ts` asserts the entry's
+ * keys, so the rule is enforced rather than merely written down.
+ *
+ * Why it exists at all: Article 7(1) asks a controller to be able to demonstrate
+ * that consent was given. Erasing the consent rows destroys that proof; retaining
+ * them keeps a record about someone who asked to be forgotten. This is the third
+ * option — the demonstrable fact without the person attached. It also makes the
+ * erasure *itself* auditable, which letting the cascade take the consent rows in
+ * silence does not.
+ *
+ * That this works rests on ADR 0006: `consent` was already keyed on the opaque
+ * athlete id and carried no name or email, so once the `athlete` and `user` rows
+ * are gone the re-identification key has been destroyed by the erasure itself.
+ *
+ * Append-only. Nothing in the app reads it — it is read by a human, from the
+ * database, when someone has a reason to ask. Recorded in `gdpr-decisions.md`
+ * for the privacy review; a design decision written down for a lawyer to check,
+ * not legal advice.
+ */
+export const erasureLog = pgTable('erasure_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /**
+   * Each purpose that was active at erasure, with the disclosure version it was
+   * granted under. Each keeps its own version rather than being collapsed to
+   * one: `grantConsent` supersedes only the purpose being granted, so an
+   * optional purpose granted under an older disclosure stays active at that
+   * older version while the required ones move forward.
+   */
+  consentedPurposes: jsonb('consented_purposes').notNull(),
+  /** The disclosure version in force at the moment of erasure — what dates the record. */
+  disclosureVersion: text('disclosure_version').notNull(),
+  erasedAt: timestamp('erased_at').notNull().defaultNow(),
+});
+
+export type ErasureLogRow = typeof erasureLog.$inferSelect;
+export type NewErasureLogRow = typeof erasureLog.$inferInsert;
