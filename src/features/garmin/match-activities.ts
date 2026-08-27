@@ -37,13 +37,32 @@ export type ActivityMatch<A extends MatchableActivity> = {
 };
 
 /**
+ * Whether a session can take an activity's completion.
+ *
+ * On the same day, still `planned`, and not parked — a parked session is one
+ * the athlete has declared can't happen as placed (CONTEXT.md, Unavailable),
+ * so completing it from a file would contradict them.
+ *
+ * Three callers share this and must: matching at import, the re-check when the
+ * athlete accepts (the session can change in between), and the proposal card,
+ * which promises "this completes your planned session" and would be lying if
+ * it used a looser rule than the accept path.
+ */
+export function isEligibleMatch(
+  candidate: Pick<MatchCandidate, 'date' | 'status' | 'parked'>,
+  activityDate: string,
+): boolean {
+  return (
+    candidate.date === activityDate && candidate.status === 'planned' && !candidate.parked
+  );
+}
+
+/**
  * Pairs each activity with at most one Planned Session.
  *
- * A candidate must be on the same day, still `planned`, and not parked — a
- * parked session is one the athlete has declared can't happen as placed
- * (CONTEXT.md, Unavailable), so completing it from a file would contradict
- * them. Among the candidates, the same Session Type wins; otherwise the
- * earliest `dayOrder` does, which is the day's own order of intent.
+ * Eligibility is {@link isEligibleMatch}. Among the sessions that pass it, the
+ * same Session Type wins; otherwise the earliest `dayOrder` does, which is the
+ * day's own order of intent.
  *
  * Claimed sessions are removed from the pool as it goes, so two uploads on a
  * Double day take the two planned sessions and a third matches nothing rather
@@ -54,11 +73,11 @@ export function matchActivities<A extends MatchableActivity>(
   activities: A[],
   candidates: MatchCandidate[],
 ): ActivityMatch<A>[] {
-  const unclaimed = candidates.filter((c) => c.status === 'planned' && !c.parked);
+  const unclaimed = [...candidates];
 
   return activities.map((activity) => {
     const onDay = unclaimed
-      .filter((c) => c.date === activity.date)
+      .filter((c) => isEligibleMatch(c, activity.date))
       .sort((a, b) => a.dayOrder - b.dayOrder);
 
     const match = onDay.find((c) => c.type === activity.sessionType) ?? onDay[0];

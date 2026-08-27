@@ -306,6 +306,7 @@
     "discuss": "Discuss with Coach",
     "edit": "Edit session",
     "delete": "Delete session",
+    "undoImport": "Undo this import",
     "readOnlyNote": "Content is set by your Coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",
@@ -338,7 +339,7 @@
   },
   "Detected": {
     "label": "Detected activity",
-    "willComplete": "This looks like the session you had planned. Accepting completes it.",
+    "willComplete": "This completes your planned session:",
     "willAdd": "Nothing was planned for this day. Accepting adds it to your week.",
     "body": "Body",
     "mind": "Mind",

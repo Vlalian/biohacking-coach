@@ -19,6 +19,7 @@ import type { Session } from '@/features/session/session';
 import { isFrozen } from '@/features/session/move-rules';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
+import { undoDetectedImportAction } from './garmin-actions';
 import {
   markCompleteAction,
   toggleSkipAction,
@@ -61,6 +62,7 @@ type DrawerState =
 export function SessionDrawer({
   state,
   sessions,
+  importedSessionIds,
   locale,
   todayKey,
   onClose,
@@ -72,6 +74,9 @@ export function SessionDrawer({
    *  status action + router.refresh(), the drawer must show the new status,
    *  not what it looked like when it was opened. */
   sessions: Session[];
+  /** Sessions completed by accepting a Detected Activity — the only ones that
+   *  offer an undo, so this is not a general un-complete control. */
+  importedSessionIds: string[];
   locale: string;
   todayKey: string;
   onClose: () => void;
@@ -173,6 +178,7 @@ export function SessionDrawer({
           ) : session ? (
             <ViewBody
               session={session}
+              fromImport={importedSessionIds.includes(session.id)}
               todayKey={todayKey}
               locale={locale}
               pending={pending}
@@ -180,6 +186,7 @@ export function SessionDrawer({
               onMarkComplete={() => run(() => markCompleteAction(session.id))}
               onSkip={() => run(() => toggleSkipAction(session.id))}
               onMarkUnavailable={() => run(() => toggleUnavailableAction(session.id))}
+              onUndoImport={() => run(() => undoDetectedImportAction(session.id))}
               onDiscussWithCoach={() => {
                 // Carry the session into the thread as a Reference (CONTEXT.md,
                 // Coach Overlay) — the id is a claim the server re-checks against
@@ -202,8 +209,14 @@ export function SessionDrawer({
   );
 }
 
-function ViewBody({
+/**
+ * The read-only body of the drawer, exported so its actions can be tested. It
+ * takes `t` as a prop and holds no hooks of its own, so a test can call it and
+ * walk the element tree — this repo has no DOM renderer.
+ */
+export function ViewBody({
   session,
+  fromImport,
   todayKey,
   locale,
   pending,
@@ -211,12 +224,15 @@ function ViewBody({
   onMarkComplete,
   onSkip,
   onMarkUnavailable,
+  onUndoImport,
   onDiscussWithCoach,
   onRate,
   onEdit,
   onDelete,
 }: {
   session: Session;
+  /** Completed by accepting a Detected Activity, so the accept is reversible. */
+  fromImport: boolean;
   todayKey: string;
   locale: string;
   pending: boolean;
@@ -224,6 +240,7 @@ function ViewBody({
   onMarkComplete: () => void;
   onSkip: () => void;
   onMarkUnavailable: () => void;
+  onUndoImport: () => void;
   onDiscussWithCoach: () => void;
   onRate: () => void;
   onEdit: () => void;
@@ -326,6 +343,17 @@ function ViewBody({
             onClick={onSkip}
           >
             {session.status === 'skipped' ? t('undoSkip') : t('skip')}
+          </Action>
+        )}
+        {/* The only way back from an accepted Detected Activity. Completing is
+            one-directional and Skip, Session Move and delete all refuse a
+            completed Coach-planned session, so without this a wrong file was
+            permanent (showable-version/14). Offered only where the event log
+            says the completion came from an import, so it is not a general
+            un-complete control. */}
+        {fromImport && (
+          <Action icon={Undo2} disabled={pending} onClick={onUndoImport}>
+            {t('undoImport')}
           </Action>
         )}
         {!frozen && (

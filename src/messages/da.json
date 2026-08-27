@@ -306,6 +306,7 @@
     "discuss": "Diskutér med Coach",
     "edit": "Rediger session",
     "delete": "Slet session",
+    "undoImport": "Fortryd denne import",
     "readOnlyNote": "Indholdet er sat af din Coach — du kan flytte eller springe det over.",
     "createLabel": "Ny session",
     "createType": "Type",
@@ -338,7 +339,7 @@
   },
   "Detected": {
     "label": "Registreret aktivitet",
-    "willComplete": "Det ligner den session, du havde planlagt. Accepterer du, markeres den som gennemført.",
+    "willComplete": "Dette gennemfører din planlagte session:",
     "willAdd": "Der var ikke planlagt noget denne dag. Accepterer du, føjes den til din uge.",
     "body": "Krop",
     "mind": "Sind",

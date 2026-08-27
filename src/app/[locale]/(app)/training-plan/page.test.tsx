@@ -7,6 +7,7 @@ const {
   getSessionsForAthlete,
   getUnavailableDates,
   listPendingActivities,
+  listImportedSessionIds,
 } = vi.hoisted(() => ({
     getSession: vi.fn(),
     redirect: vi.fn(() => {
@@ -18,6 +19,7 @@ const {
     getSessionsForAthlete: vi.fn(() => Promise.resolve([])),
     getUnavailableDates: vi.fn(() => Promise.resolve([])),
     listPendingActivities: vi.fn(() => Promise.resolve([])),
+    listImportedSessionIds: vi.fn(() => Promise.resolve([])),
   }));
 
 vi.mock('next-intl/server', () => ({
@@ -29,7 +31,10 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
-vi.mock('@/features/garmin/detected-activity', () => ({ listPendingActivities }));
+vi.mock('@/features/garmin/detected-activity', () => ({
+  listPendingActivities,
+  listImportedSessionIds,
+}));
 // The client calendar pulls in browser deps; the page's own wiring is under
 // test here, not its rendering.
 vi.mock('../../calendar', () => ({ Calendar: () => null }));
@@ -50,6 +55,7 @@ describe('TrainingPlanPage', () => {
     getSessionsForAthlete.mockClear();
     getUnavailableDates.mockClear();
     listPendingActivities.mockClear();
+    listImportedSessionIds.mockClear();
   });
 
   it('redirects a signed-out visitor to sign-in instead of rendering', async () => {
@@ -71,6 +77,7 @@ describe('TrainingPlanPage', () => {
     // Pending Detected Activities are scoped the same way — a proposal is as
     // much the athlete's own data as a session (ADR 0006).
     expect(listPendingActivities).toHaveBeenCalledWith('athlete_1');
+    expect(listImportedSessionIds).toHaveBeenCalledWith('athlete_1');
   });
 
   it('a signed-in user without an athlete row gets empty state, not a crash', async () => {
@@ -82,5 +89,6 @@ describe('TrainingPlanPage', () => {
     expect(getSessionsForAthlete).not.toHaveBeenCalled();
     expect(getUnavailableDates).not.toHaveBeenCalled();
     expect(listPendingActivities).not.toHaveBeenCalled();
+    expect(listImportedSessionIds).not.toHaveBeenCalled();
   });
 });

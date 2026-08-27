@@ -12,7 +12,10 @@ import { dateKey } from '@/lib/date';
 import { Calendar } from '../../calendar';
 import { GarminUpload } from '../../garmin-upload';
 import { DetectedActivities } from '../../detected-activities';
-import { listPendingActivities } from '@/features/garmin/detected-activity';
+import {
+  listPendingActivities,
+  listImportedSessionIds,
+} from '@/features/garmin/detected-activity';
 
 // Read per-request: the page depends on who is signed in, so it can never be
 // prerendered. Signed out, it is not a page at all — it redirects to sign-in.
@@ -55,11 +58,16 @@ export default async function TrainingPlanPage({
   // until the athlete's Reflection commits it (CONTEXT.md, Detected Activity).
   const pendingActivities = athlete ? await listPendingActivities(athlete.id) : [];
 
+  // Which sessions were completed by accepting one. Only these offer an undo —
+  // completing is otherwise one-directional (session-status-rules.ts).
+  const importedSessionIds = athlete ? await listImportedSessionIds(athlete.id) : [];
+
   return (
     <div className="flex flex-col items-center gap-6 p-8">
       <Calendar
         sessions={trainingSessions}
         unavailableDates={unavailableDates}
+        importedSessionIds={importedSessionIds}
         todayKey={dateKey(new Date())}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />

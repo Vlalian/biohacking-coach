@@ -73,11 +73,27 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
         <p className="mt-0.5 font-body text-sm text-muted-foreground">
           {formatFullDate(activity.date, locale)}
         </p>
-        {/* What accepting would do, said plainly — the two cases differ enough
-            that one generic "add this?" would mislead on a Double day. */}
-        <p className="mt-2 font-body text-sm text-foreground">
-          {activity.matchedSessionId ? t('willComplete') : t('willAdd')}
-        </p>
+        {/* What accepting would do, and on which session. A generic "completes
+            your planned session" is unverifiable on a Double day, and an
+            in-place completion is not something the athlete can walk back with
+            any of the ordinary controls. */}
+        {activity.matched ? (
+          <p className="mt-2 font-body text-sm text-foreground">
+            {t('willComplete')}{' '}
+            <span className="font-medium">
+              {[
+                activity.matched.type,
+                activity.matched.duration !== null &&
+                  `${activity.matched.duration} ${t('minutes')}`,
+                activity.matched.zone,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          </p>
+        ) : (
+          <p className="mt-2 font-body text-sm text-foreground">{t('willAdd')}</p>
+        )}
       </div>
 
       <ScoreRow label={t('body')} value={body} onPick={setBody} />

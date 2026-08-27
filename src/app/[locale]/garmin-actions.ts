@@ -10,8 +10,10 @@ import {
 import {
   acceptDetectedActivity,
   declineDetectedActivity,
+  undoDetectedImport,
   type AcceptResult,
   type DeclineResult,
+  type UndoResult,
 } from '@/features/garmin/detected-activity';
 
 /** The two failures this action decides itself, before the importer is reached. */
@@ -82,6 +84,21 @@ export async function declineDetectedActivityAction(
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const result = await declineDetectedActivity({ athleteId, activityId });
+  if (result.ok) revalidatePath('/', 'layout');
+  return result;
+}
+
+/**
+ * Take back a completion made by accepting a Detected Activity — the way out
+ * of a wrong file, since none of the ordinary session controls offers one.
+ */
+export async function undoDetectedImportAction(
+  sessionId: string,
+): Promise<UndoResult | { ok: false; reason: 'not-authenticated' }> {
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+
+  const result = await undoDetectedImport({ athleteId, sessionId });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
