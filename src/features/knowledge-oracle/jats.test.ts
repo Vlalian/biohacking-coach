@@ -90,8 +90,27 @@ describe('extractArticleText', () => {
   });
 
   it('returns an empty string for XML that is not a JATS article', () => {
-    expect(extractArticleText('<html><body><p>nope</p></body></html>')).toBe('nope');
+    // This case used to assert `'nope'` — under a test named for the opposite.
+    // `body` is not a JATS-only tag, so an HTML page satisfied the old search
+    // and its prose came back as article text. PMC serves HTML for a withdrawn
+    // or mistyped id, so the failure was reachable from a typo in the register,
+    // and the fetch path would have cached the result as a good fetch.
+    expect(extractArticleText('<html><body><p>nope</p></body></html>')).toBe('');
     expect(extractArticleText('<gpx><trk/></gpx>')).toBe('');
     expect(extractArticleText('not xml at all <<<')).toBe('');
+  });
+
+  it('reads only the article, ignoring a body outside it', () => {
+    // Belt to the braces above: a wrapper document carrying both must yield the
+    // article's text and nothing else, rather than concatenating whatever `body`
+    // it happened to reach first.
+    const xml =
+      '<wrapper><body><p>not the paper</p></body>' +
+      '<article><body><p>the paper</p></body></article></wrapper>';
+
+    const text = extractArticleText(xml);
+
+    expect(text).toContain('the paper');
+    expect(text).not.toContain('not the paper');
   });
 });

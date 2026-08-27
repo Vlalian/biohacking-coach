@@ -127,8 +127,18 @@ function hardSplit(text: string, maxChars: number): string[] {
     const window = rest.slice(0, maxChars);
     const cut = window.lastIndexOf(' ');
     // No whitespace at all in a whole window: an unbroken token (a URL, a long
-    // identifier). Cut it at the cap rather than looping forever.
-    const at = cut > maxChars / 2 ? cut : maxChars;
+    // identifier). Cut it at the cap instead.
+    const wanted = cut > maxChars / 2 ? cut : maxChars;
+
+    // **The loop's termination lives on this line.** It advances only by what
+    // `at` consumes, and every `wanted` above is derived from `maxChars`, so a
+    // `maxChars` of 0 made `at` 0: `rest` was reassigned to itself and this ran
+    // until the process died on memory rather than raising anything. Validation
+    // in `chunkText` now rejects that, and this is the second lock — a cut of at
+    // least one character cannot fail to shorten `rest`, whatever a future
+    // caller or a future `wanted` does.
+    const at = Math.max(1, Math.min(wanted, rest.length));
+
     pieces.push(rest.slice(0, at).trim());
     rest = rest.slice(at).trim();
   }
@@ -152,6 +162,33 @@ function toChunk(text: string, ordinal: number): Chunk {
 export function chunkText(text: string, options: ChunkOptions = {}): Chunk[] {
   const maxChars = options.maxChars ?? DEFAULTS.maxChars;
   const overlapChars = options.overlapChars ?? DEFAULTS.overlapChars;
+
+  // Rejected here rather than survived downstream. These two numbers set how far
+  // every loop below advances, so a nonsensical one does not produce a bad chunk
+  // — it produces no chunk, forever. A `maxChars` of 0 used to run until the
+  // process died on memory, reporting nothing, on a script whose whole job is to
+  // run unattended over 31 sources.
+  if (!Number.isInteger(maxChars) || maxChars < 1) {
+    throw new Error(
+      `chunkText: maxChars must be a whole number of at least 1, got ${maxChars}. ` +
+        'It is the cap every chunk is measured against and the distance the ' +
+        'splitter advances by; below 1 there is no chunk to emit.',
+    );
+  }
+
+  if (!Number.isInteger(overlapChars) || overlapChars < 0) {
+    throw new Error(
+      `chunkText: overlapChars must be a whole number of 0 or more, got ${overlapChars}.`,
+    );
+  }
+
+  if (overlapChars >= maxChars) {
+    throw new Error(
+      `chunkText: overlapChars (${overlapChars}) must be smaller than maxChars ` +
+        `(${maxChars}) — an overlap that fills a chunk leaves no room for new ` +
+        'material, so the same text would repeat without the loop advancing.',
+    );
+  }
 
   const trimmed = text.trim();
   if (!trimmed) return [];
@@ -190,7 +227,22 @@ export function chunkText(text: string, options: ChunkOptions = {}): Chunk[] {
 
     if (current.length && wouldBe > maxChars) {
       chunks.push(toChunk(current.join(' '), chunks.length));
-      current = overlapFrom(current);
+
+      // Carrying the tail forward is a nicety; the cap is a guarantee. When the
+      // restored overlap plus the sentence that triggered this emit would not
+      // fit, the overlap goes — it used to be kept and the sentence appended
+      // anyway, which produced chunks over the cap (a 140-char tail before a
+      // 950-char sentence made 1,091 against a 1,000 cap).
+      //
+      // Dropped whole rather than trimmed: every sentence here is already at
+      // most `maxChars` (long ones went through `hardSplit`), so a chunk that
+      // starts empty always fits, while a partial overlap would need the same
+      // arithmetic done a second way to prove it.
+      const overlap = overlapFrom(current);
+      const withOverlap =
+        overlap.join(' ').length + (overlap.length ? 1 : 0) + sentence.length;
+
+      current = withOverlap > maxChars ? [] : overlap;
       currentLength = current.join(' ').length;
     }
 

@@ -182,8 +182,18 @@ export function extractArticleText(xml: string): string {
     return '';
   }
 
-  const abstract = find(document, 'abstract');
-  const body = find(document, 'body');
+  // The search starts at the `article` node, not at the whole document, because
+  // `body` is not a JATS-only tag name. An HTML page has one too — and an HTML
+  // page is exactly what PMC returns for a withdrawn or mistyped id. Searching
+  // the document meant that page's prose came back as article text, the fetch
+  // path cached it as a successful fetch, and the words of an error page would
+  // be chunked, embedded, and eventually cited to an athlete as published
+  // science under a real paper's attribution.
+  const article = find(document, 'article');
+  if (article === undefined) return '';
+
+  const abstract = find(article, 'abstract');
+  const body = find(article, 'body');
 
   const text = [
     abstract === undefined ? '' : collect(abstract),

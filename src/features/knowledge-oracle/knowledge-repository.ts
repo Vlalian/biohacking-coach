@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { knowledgeChunks, knowledgeSources } from '@/db/schema';
@@ -34,82 +35,87 @@ export function knowledgeRepository(): KnowledgeRepository {
     ): Promise<void> {
       const db = getDb();
 
-      // The digest is written last, and never in the same statement as the
-      // metadata. It is this row's claim that its chunks match the text it was
-      // built from, so it must not become true before the chunks it describes
-      // exist. A crash anywhere below leaves the *previous* digest standing,
-      // which cannot match the new text, so the next run re-ingests rather than
-      // reporting a chunkless source as `unchanged` forever.
+      // **Everything this function writes goes in one `batch`.** The neon-http
+      // driver has no interactive transactions (`db.transaction` throws) but
+      // sends a batch as a single one, so metadata, chunks and the digest that
+      // vouches for them land together or not at all.
       //
-      // A source seen for the first time gets the empty string, which no
-      // SHA-256 can equal — the same "not current yet" claim, spelled for a
-      // NOT NULL column.
-      const [row] = await db
-        .insert(knowledgeSources)
-        .values({
-          slug: source.slug,
-          title: source.title,
-          authors: source.authors,
-          year: source.year,
-          doi: source.doi || null,
-          pmcid: source.pmcid,
-          licence: source.licence,
-          licenceUrl: source.licenceUrl,
-          attribution: source.attribution,
-          textDigest: '',
-        })
-        .onConflictDoUpdate({
-          target: knowledgeSources.slug,
-          set: {
-            title: source.title,
-            authors: source.authors,
-            year: source.year,
-            doi: source.doi || null,
-            pmcid: source.pmcid,
-            // The licence is refreshed on every ingest on purpose: the register
-            // goes stale, and a re-ingest is the moment its current reading
-            // should land in the database rather than the one from last time.
-            licence: source.licence,
-            licenceUrl: source.licenceUrl,
-            attribution: source.attribution,
-          },
-        })
-        .returning({ id: knowledgeSources.id });
+      // That ruled out the obvious shape. An upsert would have to be awaited to
+      // learn the row id the chunks reference, and an awaited upsert is a commit
+      // outside the batch: if the batch then failed, the row kept this run's
+      // licence and attribution while its chunks and digest stayed from the run
+      // before — one version's metadata vouching for another version's text, in
+      // a table whose whole purpose is to say where a cited passage came from.
+      //
+      // So the id is settled first with a read, and the write is one statement
+      // either way.
+      const [existing] = await db
+        .select({ id: knowledgeSources.id })
+        .from(knowledgeSources)
+        .where(eq(knowledgeSources.slug, source.slug))
+        .limit(1);
+
+      // A brand-new source gets its id here rather than from the database, which
+      // is what lets its chunks be written in the same statement that creates it.
+      const id = existing?.id ?? randomUUID();
+
+      const metadata = {
+        title: source.title,
+        authors: source.authors,
+        year: source.year,
+        doi: source.doi || null,
+        pmcid: source.pmcid,
+        // The licence is refreshed on every ingest on purpose: the register goes
+        // stale, and a re-ingest is the moment its current reading should land in
+        // the database rather than the one from last time.
+        licence: source.licence,
+        licenceUrl: source.licenceUrl,
+        attribution: source.attribution,
+      };
 
       // Delete-then-insert rather than diffing: chunk boundaries move when the
       // text changes, so ordinal 3 of the new text is not a version of ordinal 3
       // of the old one and matching them up would be fiction.
-      //
-      // One `batch` rather than three awaits: the neon-http driver has no
-      // interactive transactions (`db.transaction` throws), but it sends a batch
-      // as a single transaction — so the old chunks, the new chunks and the
-      // digest that vouches for them land together or not at all.
-      const clearOldChunks = db
-        .delete(knowledgeChunks)
-        .where(eq(knowledgeChunks.sourceId, row.id));
+      const writeChunks = chunks.length
+        ? [
+            db.insert(knowledgeChunks).values(
+              chunks.map((chunk) => ({
+                sourceId: id,
+                ordinal: chunk.ordinal,
+                text: chunk.text,
+                tokenEstimate: chunk.tokenEstimate,
+                embedding: chunk.embedding,
+              })),
+            ),
+          ]
+        : [];
 
-      const markCurrent = db
-        .update(knowledgeSources)
-        .set({ textDigest, ingestedAt: new Date() })
-        .where(eq(knowledgeSources.id, row.id));
-
-      if (chunks.length === 0) {
-        await db.batch([clearOldChunks, markCurrent]);
+      if (!existing) {
+        // No chunks to clear, and the row does not exist to be updated. The
+        // insert precedes the chunks in the same transaction, so their foreign
+        // key is satisfied by a row that is not yet visible to anyone else.
+        //
+        // Two ingests racing on one new slug would both miss it here and mint
+        // different ids; the loser's chunks would reference a row its insert did
+        // not create, and the whole batch would fail on the foreign key. Loud and
+        // atomic, which is the acceptable end of that trade — and `corpus:ingest`
+        // is a single sequential script, not something run concurrently.
+        await db.batch([
+          db
+            .insert(knowledgeSources)
+            .values({ id, slug: source.slug, ...metadata, textDigest }),
+          ...writeChunks,
+        ]);
         return;
       }
 
       await db.batch([
-        clearOldChunks,
-        db.insert(knowledgeChunks).values(
-          chunks.map((chunk) => ({
-            sourceId: row.id,
-            ordinal: chunk.ordinal,
-            text: chunk.text,
-            tokenEstimate: chunk.tokenEstimate,
-            embedding: chunk.embedding,
-          })),
-        ),
-        markCurrent,
+        db.delete(knowledgeChunks).where(eq(knowledgeChunks.sourceId, id)),
+        ...writeChunks,
+        db
+          .update(knowledgeSources)
+          .set({ ...metadata, textDigest, ingestedAt: new Date() })
+          .where(eq(knowledgeSources.id, id)),
       ]);
     },
   };

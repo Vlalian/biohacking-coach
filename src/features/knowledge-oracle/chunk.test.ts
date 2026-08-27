@@ -128,4 +128,60 @@ describe('chunkText', () => {
       expect(chunk.text.length).toBeLessThanOrEqual(100);
     }
   });
+
+  it('keeps the cap when restored overlap leaves no room for the next sentence', () => {
+    // The overlap used to be carried forward and the triggering sentence
+    // appended regardless, so a short tail before a long sentence produced a
+    // chunk over the cap — 1,082 characters against a 1,000 cap, here. The cap
+    // is the guarantee; the overlap is the nicety, so the overlap gives way.
+    const sentence = (length: number, ch: string) => 'A' + ch.repeat(length - 2) + '.';
+    const text = [sentence(60, 'a'), sentence(70, 'b'), sentence(950, 'c')].join(' ');
+
+    const chunks = chunkText(text, { maxChars: 1000, overlapChars: 140 });
+
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.text.length, chunk.text.slice(0, 40)).toBeLessThanOrEqual(1000);
+    }
+  });
+
+  describe('rejects options that cannot produce a chunk', () => {
+    // Each of these used to be accepted. `maxChars: 0` was the bad one: it is
+    // the distance the splitter advances by, so the loop stopped advancing and
+    // ran until the process died on memory — silently, on a script whose whole
+    // job is to run unattended over 31 sources. Failing at the door is the
+    // difference between a typo and a hung ingest.
+    it.each([
+      ['maxChars of 0', { maxChars: 0 }],
+      ['a negative maxChars', { maxChars: -100 }],
+      ['a fractional maxChars', { maxChars: 10.5 }],
+      ['a non-finite maxChars', { maxChars: Number.POSITIVE_INFINITY }],
+      ['NaN', { maxChars: Number.NaN }],
+      ['a negative overlap', { maxChars: 100, overlapChars: -1 }],
+      ['an overlap that fills the chunk', { maxChars: 100, overlapChars: 100 }],
+    ])('%s', (_label, options) => {
+      expect(() => chunkText('Alpha beta. Gamma delta.', options)).toThrow(/chunkText/);
+    });
+  });
+
+  it('never returns a chunk over the cap, across a range of settings', () => {
+    // The invariant the cap exists for, checked rather than assumed: chunk size
+    // is what the embedding request and the token estimate are sized against.
+    const text = Array.from(
+      { length: 40 },
+      (_, i) => `Sentence ${i} ${'word '.repeat((i % 17) + 1)}`.trim() + '.',
+    ).join(' ');
+
+    for (const maxChars of [40, 97, 250, 1000]) {
+      for (const overlapChars of [0, 1, 39]) {
+        const chunks = chunkText(text, { maxChars, overlapChars });
+        for (const chunk of chunks) {
+          expect(
+            chunk.text.length,
+            `maxChars=${maxChars} overlap=${overlapChars}`,
+          ).toBeLessThanOrEqual(maxChars);
+        }
+      }
+    }
+  });
 });

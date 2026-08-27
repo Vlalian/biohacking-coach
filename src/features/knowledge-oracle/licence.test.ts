@@ -26,6 +26,23 @@ describe('isAdmissible', () => {
     }
   });
 
+  it('rejects a version Creative Commons never published', () => {
+    // `\d+(\.\d+)?` reads as a tighter rule than "any version" and is not one.
+    // CC BY exists at 1.0, 2.0, 2.5, 3.0 and 4.0; CC0 only at 1.0. A licence
+    // string naming any other version is either a typo or something invented,
+    // and both are exactly what a fail-closed whitelist is for.
+    for (const licence of [
+      'CC0 2.0',
+      'CC0 4.0',
+      'CC BY 99.0',
+      'CC BY 7.3',
+      'CC BY 5.0',
+      'CC BY 0.1',
+    ]) {
+      expect(isAdmissible(licence), licence).toBe(false);
+    }
+  });
+
   it('rejects a recognised grant carrying an unrecognised qualification', () => {
     // A licence that starts well and then takes something back. Both spellings
     // of the bare grant must fail this the same way: for a while CC0 did not,

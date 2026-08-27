@@ -19,13 +19,20 @@
 /**
  * A licence string admitted by the rule above, with the version optional.
  *
- * Anchored at both ends, and one alternation rather than two: an unanchored
- * branch is how a whitelist quietly becomes a prefix match, which is the one
- * failure direction the whitelist exists to prevent. `CC0` and `CC BY` differ
- * only in how the bare grant is spelled, so they share the optional-version
- * tail rather than each carrying — and each having to anchor — its own.
+ * Anchored at both ends: an unanchored branch is how a whitelist quietly
+ * becomes a prefix match, which is the one failure direction it exists to
+ * prevent. `"CC0 except figures"` was admitted that way.
+ *
+ * **The versions are enumerated, not matched as a number.** Creative Commons
+ * published CC BY at 1.0, 2.0, 2.5, 3.0 and 4.0, and CC0 only at 1.0; there is
+ * no other. `\d+(\.\d+)?` reads as a tighter rule than "any version" and is not
+ * one — it admitted `CC0 2.0` and `CC BY 99.0`, neither of which exists, which
+ * is precisely the "a licence invented next year" case the whitelist is here to
+ * reject. A version CC publishes after this is written *should* fail here: the
+ * right response to a new licence is a person reading it, not a regex that
+ * already said yes.
  */
-const ADMISSIBLE = /^cc(?:0|\s+by)(?:\s+\d+(?:\.\d+)?)?$/;
+const ADMISSIBLE = /^cc(?:0(?:\s+1\.0)?|\s+by(?:\s+(?:1\.0|2\.0|2\.5|3\.0|4\.0))?)$/;
 
 /**
  * Is this licence one the corpus may ingest?
