@@ -339,8 +339,12 @@
   },
   "Detected": {
     "label": "Registreret aktivitet",
-    "willComplete": "Dette gennemfører din planlagte session:",
-    "willAdd": "Der var ikke planlagt noget denne dag. Accepterer du, føjes den til din uge.",
+    "whichSession": "Hvilken session var dette?",
+    "addAsNew": "Ingen af disse — føj den til min uge",
+    "status": {
+      "skipped": "sprunget over",
+      "unavailable": "utilgængelig"
+    },
     "body": "Krop",
     "mind": "Sind",
     "comment": "Noget værd at notere?",

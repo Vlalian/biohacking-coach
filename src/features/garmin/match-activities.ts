@@ -58,6 +58,28 @@ export function isEligibleMatch(
 }
 
 /**
+ * Whether a session is one the *athlete* may point an activity at.
+ *
+ * Deliberately wider than {@link isEligibleMatch}, and the gap between them is
+ * the propose/assert split itself. The machine may only claim a session that
+ * is still planned and unparked — anything else would be detection asserting
+ * over a decision the athlete already made. The athlete is under no such
+ * limit: they are allowed to say "I skipped that in the app but I did it", or
+ * "it was displaced by a Rest day and I did it anyway", and the file is their
+ * evidence.
+ *
+ * The one thing neither may touch is a session already completed. That is the
+ * record, and a second activity on the same day is a Double — a new session,
+ * not an overwrite of an old one.
+ */
+export function isChoosableTarget(
+  candidate: Pick<MatchCandidate, 'date' | 'status'>,
+  activityDate: string,
+): boolean {
+  return candidate.date === activityDate && candidate.status !== 'completed';
+}
+
+/**
  * Pairs each activity with at most one Planned Session.
  *
  * Eligibility is {@link isEligibleMatch}. Among the sessions that pass it, the

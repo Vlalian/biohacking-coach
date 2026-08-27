@@ -339,8 +339,12 @@
   },
   "Detected": {
     "label": "Detected activity",
-    "willComplete": "This completes your planned session:",
-    "willAdd": "Nothing was planned for this day. Accepting adds it to your week.",
+    "whichSession": "Which session was this?",
+    "addAsNew": "None of these — add it to my week",
+    "status": {
+      "skipped": "skipped",
+      "unavailable": "unavailable"
+    },
     "body": "Body",
     "mind": "Mind",
     "comment": "Anything worth noting?",

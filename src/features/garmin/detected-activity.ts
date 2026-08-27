@@ -3,7 +3,8 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { detectedActivities, sessions, sessionStreams, events } from '@/db/schema';
 import { isValidScore } from '@/features/session/rate-session';
-import { isEligibleMatch } from './match-activities';
+import { isChoosableTarget, isEligibleMatch } from './match-activities';
+import { getSessionsOnDates } from '@/features/session/session-repository';
 
 /**
  * What the athlete does with a Detected Activity once it has been proposed.
@@ -16,6 +17,15 @@ import { isEligibleMatch } from './match-activities';
  * training record does not read.
  */
 
+/** A session on the activity's day that the athlete may point it at. */
+export type TargetOption = {
+  id: string;
+  type: string;
+  status: string;
+  duration: number | null;
+  zone: string | null;
+};
+
 /** A proposal waiting for the athlete, as the UI needs it. */
 export type PendingActivity = {
   id: string;
@@ -25,39 +35,44 @@ export type PendingActivity = {
   duration: number | null;
   note: string | null;
   /**
-   * The Planned Session this would complete, named rather than just pointed at.
+   * Every session on that day the athlete may say this activity was, in the
+   * day's own order.
    *
-   * The card has to say *which* session it is about to complete: on a Double
-   * day the athlete has two planned sessions and no way to tell which one a
-   * generic "completes your planned session" means — and an in-place
-   * completion is not undoable by any of the ordinary controls.
+   * The card offers a choice rather than a verdict because the matcher cannot
+   * always tell: `SPORT_MAP` sends running, cycling, swimming and rowing all
+   * to `Endurance`, so on a morning-swim/evening-ride day — what `CONTEXT.md`
+   * calls standard Ironman practice — both Planned Sessions look identical to
+   * it and it picks the earlier one by `dayOrder`. Upload the ride and it
+   * would complete the swim.
    *
-   * Null when there is no longer an eligible match, so the card says "adds
-   * this to your week" — which is what accepting would actually do.
+   * Wider than what the matcher may claim on its own: a skipped or displaced
+   * session is offered here, because the athlete is allowed to say they did it
+   * after all (see `isChoosableTarget`).
    */
-  matched: {
-    id: string;
-    type: string;
-    duration: number | null;
-    zone: string | null;
-  } | null;
+  options: TargetOption[];
+  /**
+   * The matcher's suggestion, pre-selected on the card. Null when it has no
+   * eligible match and the activity would be added as a new session.
+   */
+  suggestedSessionId: string | null;
 };
 
 export type AcceptResult =
   | { ok: true; sessionId: string }
-  | { ok: false; reason: 'not-found' | 'not-owner' | 'invalid' };
+  | { ok: false; reason: 'not-found' | 'not-owner' | 'invalid' | 'bad-target' };
 
 export type DeclineResult =
   | { ok: true }
   | { ok: false; reason: 'not-found' | 'not-owner' };
 
 /**
- * Everything this athlete has uploaded and not yet resolved, oldest day first.
+ * Everything this athlete has uploaded and not yet resolved, oldest day first,
+ * each with the day's sessions it could be.
  *
- * The matched session is joined and then re-checked with the same eligibility
- * the accept path uses. A match chosen at import can go stale — the athlete
- * moves, skips or completes that session — and a card still promising to
- * complete it would be describing something that will not happen.
+ * The stored match is re-checked with the same eligibility the accept path
+ * uses before it is offered as the suggestion: a match chosen at import can go
+ * stale — the athlete moves, skips or completes that session — and a card
+ * still pre-selecting it would be pointing at something that will not happen.
  */
 export async function listPendingActivities(athleteId: string): Promise<PendingActivity[]> {
   const rows = await getDb()
@@ -68,26 +83,33 @@ export async function listPendingActivities(athleteId: string): Promise<PendingA
       sport: detectedActivities.sport,
       duration: detectedActivities.duration,
       note: detectedActivities.note,
-      matchedId: sessions.id,
-      matchedType: sessions.type,
-      matchedDuration: sessions.duration,
-      matchedZone: sessions.zone,
-      matchedDate: sessions.date,
-      matchedStatus: sessions.status,
-      matchedParked: sessions.parked,
+      matchedSessionId: detectedActivities.matchedSessionId,
     })
     .from(detectedActivities)
-    .leftJoin(sessions, eq(detectedActivities.matchedSessionId, sessions.id))
     .where(eq(detectedActivities.athleteId, athleteId))
     .orderBy(asc(detectedActivities.date), asc(detectedActivities.createdAt));
 
+  if (rows.length === 0) return [];
+
+  const onDates = await getSessionsOnDates(athleteId, [...new Set(rows.map((r) => r.date))]);
+
   return rows.map((row) => {
-    const live =
-      row.matchedId !== null &&
-      isEligibleMatch(
-        { date: row.matchedDate!, status: row.matchedStatus!, parked: row.matchedParked! },
-        row.date,
-      );
+    const onDay = onDates.filter((session) => isChoosableTarget(session, row.date));
+    const options = onDay.map(({ id, type, status, duration, zone }) => ({
+      id,
+      type,
+      status,
+      duration,
+      zone,
+    }));
+
+    // Choosable and *suggested* are different bars. If the athlete has skipped
+    // or parked the matched session since uploading, they may still say they
+    // did it — but the machine no longer gets to propose it, so it stops being
+    // the pre-selected answer.
+    const suggested = onDay.find(
+      (session) => session.id === row.matchedSessionId && isEligibleMatch(session, row.date),
+    );
 
     return {
       id: row.id,
@@ -96,14 +118,8 @@ export async function listPendingActivities(athleteId: string): Promise<PendingA
       sport: row.sport,
       duration: row.duration,
       note: row.note,
-      matched: live
-        ? {
-            id: row.matchedId!,
-            type: row.matchedType!,
-            duration: row.matchedDuration,
-            zone: row.matchedZone,
-          }
-        : null,
+      options,
+      suggestedSessionId: suggested?.id ?? null,
     };
   });
 }
@@ -123,13 +139,15 @@ async function loadOwned(activityId: string, athleteId: string) {
 }
 
 /**
- * The matched session's id if it can still take the completion, else null.
+ * The session the athlete chose, if they are allowed to choose it, else null.
  *
- * The same eligibility `matchActivities` applies at import — owned, same day,
- * still `planned`, not parked — because the athlete has had the whole interval
- * since the upload to change any of them.
+ * The id arrives from the browser, so none of it is trusted: ownership, the
+ * day, and the status are all re-read here. `isChoosableTarget` is the
+ * athlete's rule rather than the matcher's — they may complete a session they
+ * had skipped or that a Rest day displaced, because the file is evidence they
+ * did it. A completed session is the one thing they cannot overwrite.
  */
-async function stillMatchable(
+async function resolveChosenTarget(
   sessionId: string,
   athleteId: string,
   date: string,
@@ -148,7 +166,7 @@ async function stillMatchable(
 
   if (!row) return null;
   if (row.athleteId !== athleteId) return null;
-  if (!isEligibleMatch(row, date)) return null;
+  if (!isChoosableTarget(row, date)) return null;
   return { id: sessionId, duration: row.duration };
 }
 
@@ -177,11 +195,13 @@ async function stillMatchable(
 export async function acceptDetectedActivity(params: {
   athleteId: string;
   activityId: string;
+  /** The session the athlete chose, or null to add this as a new one. */
+  targetSessionId: string | null;
   body: number;
   mind: number;
   comment: string | null;
 }): Promise<AcceptResult> {
-  const { athleteId, activityId, body, mind, comment } = params;
+  const { athleteId, activityId, targetSessionId, body, mind, comment } = params;
 
   if (!isValidScore(body) || !isValidScore(mind)) return { ok: false, reason: 'invalid' };
 
@@ -209,9 +229,15 @@ export async function acceptDetectedActivity(params: {
     duration: activity.duration,
   };
 
-  const target = activity.matchedSessionId
-    ? await stillMatchable(activity.matchedSessionId, athleteId, activity.date)
+  // The athlete's choice, not the matcher's — the matcher's suggestion only
+  // ever pre-selected a radio on the card. A chosen id that does not survive
+  // re-checking is refused rather than quietly downgraded to "add a new one":
+  // they picked a session, and silently doing something else to their calendar
+  // is the class of behaviour this whole ticket is about.
+  const target = targetSessionId
+    ? await resolveChosenTarget(targetSessionId, athleteId, activity.date)
     : null;
+  if (targetSessionId && !target) return { ok: false, reason: 'bad-target' };
 
   const sessionId = target?.id ?? randomUUID();
   const write = target
@@ -259,16 +285,19 @@ export async function acceptDetectedActivity(params: {
       actorType: 'athlete',
       actorId: athleteId,
       type: 'garmin_imported',
-      // `previousDuration` is what undo puts back. The device's actual duration
-      // overwrites the planned one (retired garmin-sync/03), so without this
-      // the planned figure is simply gone — and the event log is already the
-      // record of what happened, so it is the honest place to keep it rather
-      // than a column that exists only to be read once.
+      // What undo needs to put things back, kept where the record of what
+      // happened already lives rather than in columns that exist to be read
+      // once. `previousDuration` is the planned figure the device's actual
+      // duration overwrites (retired garmin-sync/03); `activityType` and
+      // `activityNote` are the proposal's own, which an in-place completion
+      // does not write onto the session and which would otherwise be lost.
       payload: {
         sessionId,
         date: activity.date,
         matched: target !== null,
         previousDuration: target?.duration ?? null,
+        activityType: activity.type,
+        activityNote: activity.note,
       },
     }),
     db.delete(detectedActivities).where(eq(detectedActivities.id, activityId)),
@@ -322,6 +351,9 @@ export async function listImportedSessionIds(athleteId: string): Promise<string[
  * Only a session the event log says came from an import can be undone, so this
  * cannot become a general un-complete button — that decision belongs to
  * `session-status.ts` and is still one-directional.
+ *
+ * The activity is not discarded: it goes back to the pending list, so undo
+ * means "let me decide this again" rather than "throw away what I uploaded".
  */
 export async function undoDetectedImport(params: {
   athleteId: string;
@@ -335,6 +367,11 @@ export async function undoDetectedImport(params: {
       athleteId: sessions.athleteId,
       status: sessions.status,
       origin: sessions.origin,
+      date: sessions.date,
+      duration: sessions.duration,
+      startTime: sessions.startTime,
+      sport: sessions.sport,
+      summary: sessions.summary,
     })
     .from(sessions)
     .where(eq(sessions.id, sessionId))
@@ -367,8 +404,23 @@ export async function undoDetectedImport(params: {
     .limit(1);
 
   if (!record) return { ok: false, reason: 'not-imported' };
-  const previousDuration =
-    (record.payload as { previousDuration?: number | null } | null)?.previousDuration ?? null;
+  const payload = record.payload as {
+    previousDuration?: number | null;
+    activityType?: string;
+    activityNote?: string | null;
+  } | null;
+
+  // The activity itself is still whole at this point — the session holds the
+  // device's provenance and the stream row holds its samples — so undo puts it
+  // back in the pending list rather than throwing it away. Undo then means
+  // "let me decide this again", which is what an athlete who picked the wrong
+  // session actually wants; discarding would make them find the file and
+  // upload it a second time.
+  const [stream] = await db
+    .select({ samples: sessionStreams.samples })
+    .from(sessionStreams)
+    .where(eq(sessionStreams.sessionId, sessionId))
+    .limit(1);
 
   await db.batch([
     db
@@ -378,7 +430,7 @@ export async function undoDetectedImport(params: {
         parked: false,
         // Back to a Planned Session: the device data goes, and so does the
         // Reflection, because the Reflection *was* the acceptance.
-        duration: previousDuration,
+        duration: payload?.previousDuration ?? null,
         startTime: null,
         sport: null,
         summary: null,
@@ -390,6 +442,22 @@ export async function undoDetectedImport(params: {
       })
       .where(and(eq(sessions.id, sessionId), eq(sessions.athleteId, athleteId))),
     db.delete(sessionStreams).where(eq(sessionStreams.sessionId, sessionId)),
+    db.insert(detectedActivities).values({
+      athleteId,
+      date: row.date,
+      // The activity's own type and note, which an in-place completion never
+      // wrote onto the session; the rest is read back off the session.
+      type: payload?.activityType ?? row.sport ?? 'Other',
+      note: payload?.activityNote ?? null,
+      sport: row.sport,
+      duration: row.duration,
+      startTime: row.startTime,
+      summary: row.summary,
+      samples: stream?.samples ?? {},
+      // Suggest the session it just came off — the athlete may well have meant
+      // a different one, which is why they are here, but this is where it was.
+      matchedSessionId: sessionId,
+    }),
     db.insert(events).values({
       athleteId,
       actorType: 'athlete',

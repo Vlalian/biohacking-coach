@@ -66,12 +66,20 @@ export async function uploadGarminAction(
  */
 export async function acceptDetectedActivityAction(
   activityId: string,
+  /** The session the athlete chose, or null to add the activity as a new one.
+   *  Re-checked server-side against their own sessions — the id is a claim. */
+  targetSessionId: string | null,
   rating: { body: number; mind: number; comment: string | null },
 ): Promise<AcceptResult | { ok: false; reason: 'not-authenticated' }> {
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  const result = await acceptDetectedActivity({ athleteId, activityId, ...rating });
+  const result = await acceptDetectedActivity({
+    athleteId,
+    activityId,
+    targetSessionId,
+    ...rating,
+  });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }

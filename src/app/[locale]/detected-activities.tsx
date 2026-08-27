@@ -47,6 +47,8 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
   const [mind, setMind] = useState(0);
   const [comment, setComment] = useState('');
   const [failed, setFailed] = useState(false);
+  // Pre-selected with the matcher's suggestion — a suggestion, not a verdict.
+  const [target, setTarget] = useState<string | null>(activity.suggestedSessionId);
 
   function run(action: () => Promise<{ ok: boolean }>) {
     setFailed(false);
@@ -73,28 +75,44 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
         <p className="mt-0.5 font-body text-sm text-muted-foreground">
           {formatFullDate(activity.date, locale)}
         </p>
-        {/* What accepting would do, and on which session. A generic "completes
-            your planned session" is unverifiable on a Double day, and an
-            in-place completion is not something the athlete can walk back with
-            any of the ordinary controls. */}
-        {activity.matched ? (
-          <p className="mt-2 font-body text-sm text-foreground">
-            {t('willComplete')}{' '}
-            <span className="font-medium">
-              {[
-                activity.matched.type,
-                activity.matched.duration !== null &&
-                  `${activity.matched.duration} ${t('minutes')}`,
-                activity.matched.zone,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          </p>
-        ) : (
-          <p className="mt-2 font-body text-sm text-foreground">{t('willAdd')}</p>
-        )}
       </div>
+
+      {/* Which session this was, chosen by the athlete rather than decided for
+          them. The matcher cannot tell a morning swim from an evening ride —
+          `SPORT_MAP` types both as Endurance — and an in-place completion is
+          not something the ordinary controls can walk back. Skipped and
+          displaced sessions are offered too: the athlete is allowed to say
+          they did it after all, and the file is their evidence. */}
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {t('whichSession')}
+        </legend>
+        {activity.options.map((option) => (
+          <TargetChoice
+            key={option.id}
+            name={`target-${activity.id}`}
+            checked={target === option.id}
+            onPick={() => setTarget(option.id)}
+            /* No time of day to name it by: a Planned Session carries a date
+               and an order, never a clock time. */
+            label={[
+              option.type,
+              option.duration !== null && `${option.duration} ${t('minutes')}`,
+              option.zone,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            note={option.status !== 'planned' ? t(`status.${option.status}`) : null}
+          />
+        ))}
+        <TargetChoice
+          name={`target-${activity.id}`}
+          checked={target === null}
+          onPick={() => setTarget(null)}
+          label={t('addAsNew')}
+          note={null}
+        />
+      </fieldset>
 
       <ScoreRow label={t('body')} value={body} onPick={setBody} />
       <ScoreRow label={t('mind')} value={mind} onPick={setMind} />
@@ -124,7 +142,7 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
           disabled={pending || body < 1 || mind < 1}
           onClick={() =>
             run(() =>
-              acceptDetectedActivityAction(activity.id, {
+              acceptDetectedActivityAction(activity.id, target, {
                 body,
                 mind,
                 comment: comment || null,
@@ -145,5 +163,32 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
         </button>
       </div>
     </article>
+  );
+}
+
+/** One row of the "which session was this?" choice. */
+function TargetChoice({
+  name,
+  checked,
+  onPick,
+  label,
+  note,
+}: {
+  name: string;
+  checked: boolean;
+  onPick: () => void;
+  label: string;
+  note: string | null;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 border border-border p-2 font-body text-sm text-foreground has-[:checked]:border-signal">
+      <input type="radio" name={name} checked={checked} onChange={onPick} className="accent-signal" />
+      <span>{label}</span>
+      {note && (
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          {note}
+        </span>
+      )}
+    </label>
   );
 }

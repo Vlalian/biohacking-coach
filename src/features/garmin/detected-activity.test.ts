@@ -11,18 +11,19 @@ const onConflictDoUpdate = vi.fn(() => ({}));
 const insertValues = vi.fn((row: Record<string, unknown>) => ({ onConflictDoUpdate, row }));
 const deleteWhere = vi.fn(() => ({}));
 const eventLimit = vi.fn();
-const eventOrderBy = vi.fn(() => ({ limit: eventLimit }));
-// The pending list ends at `.orderBy()` with no limit, so it awaits directly.
-const listOrderBy = vi.fn(async () => [] as Record<string, unknown>[]);
+// Two queries share the `.where().orderBy()` chain and end differently: the
+// pending list awaits it, the event lookup calls `.limit()` on it. So orderBy
+// returns a thenable that also carries `limit`.
+const listRows: { current: Record<string, unknown>[] } = { current: [] };
+const orderBy = vi.fn(() =>
+  Object.assign(Promise.resolve(listRows.current), { limit: eventLimit }),
+);
+const getSessionsOnDates = vi.fn(async () => [] as Record<string, unknown>[]);
 
+vi.mock('@/features/session/session-repository', () => ({ getSessionsOnDates }));
 vi.mock('@/db', () => ({
   getDb: () => ({
-    select: () => ({
-      from: () => ({
-        where: () => ({ limit, orderBy: eventOrderBy }),
-        leftJoin: () => ({ where: () => ({ orderBy: listOrderBy }) }),
-      }),
-    }),
+    select: () => ({ from: () => ({ where: () => ({ limit, orderBy }) }) }),
     update: () => ({ set: updateSet }),
     insert: () => ({ values: insertValues }),
     delete: () => ({ where: deleteWhere }),
@@ -58,6 +59,10 @@ function plannedSession(over: Record<string, unknown> = {}) {
 }
 
 const RATING = { body: 3, mind: 4, comment: '  felt fine  ' };
+/** Accepting with no chosen session — "add it to my week". */
+const AS_NEW = { targetSessionId: null, ...RATING };
+/** Accepting onto the session the athlete picked. */
+const ONTO_PLANNED = { targetSessionId: 'planned_1', ...RATING };
 
 /** Everything handed to `.values()` during the call. */
 function written(): Record<string, unknown>[] {
@@ -76,8 +81,12 @@ beforeEach(() => {
   insertValues.mockClear();
   deleteWhere.mockClear();
   eventLimit.mockReset();
-  eventOrderBy.mockClear();
-  listOrderBy.mockReset().mockResolvedValue([]);
+  orderBy.mockClear();
+  listRows.current = [];
+  getSessionsOnDates.mockReset().mockResolvedValue([]);
+  // Unqueued reads answer "nothing there" rather than undefined, so a test
+  // only has to say what it actually cares about.
+  limit.mockResolvedValue([]);
 });
 
 describe('acceptDetectedActivity — the rating is the commit', () => {
@@ -89,7 +98,7 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     const result = await acceptDetectedActivity({
       athleteId: OWNER,
       activityId: 'a1',
-      ...RATING,
+      ...ONTO_PLANNED,
     });
 
     expect(result).toEqual({ ok: true, sessionId: 'planned_1' });
@@ -118,7 +127,7 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     const result = await acceptDetectedActivity({
       athleteId: OWNER,
       activityId: 'a1',
-      ...RATING,
+      ...AS_NEW,
     });
 
     expect(result.ok).toBe(true);
@@ -136,66 +145,109 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     });
   });
 
-  it('falls back to retro-logging when the match went stale', async () => {
-    // The athlete skipped that session between uploading and accepting.
+  it('completes a session the athlete had skipped, because they say they did it', async () => {
+    // Wider than what the matcher may claim on its own: the machine never
+    // proposes a skipped session, but the athlete may point an activity at one
+    // — "I skipped it in the app and then did it" — and the file is evidence.
     limit
-      .mockResolvedValueOnce([proposal({ matchedSessionId: 'planned_1' })])
+      .mockResolvedValueOnce([proposal()])
       .mockResolvedValueOnce([plannedSession({ status: 'skipped' })]);
 
-    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...RATING });
+    const result = await acceptDetectedActivity({
+      athleteId: OWNER,
+      activityId: 'a1',
+      ...ONTO_PLANNED,
+    });
 
-    expect(updateSet).not.toHaveBeenCalled();
-    expect(written().find((w) => w.origin)).toMatchObject({ origin: 'athlete' });
+    expect(result).toEqual({ ok: true, sessionId: 'planned_1' });
+    expect(updated()).toMatchObject({ status: 'completed' });
   });
 
-  it('will not complete a session that has since been parked', async () => {
+  it('completes a session a Rest day had displaced, and unparks it', async () => {
     limit
-      .mockResolvedValueOnce([proposal({ matchedSessionId: 'planned_1' })])
-      .mockResolvedValueOnce([plannedSession({ parked: true })]);
+      .mockResolvedValueOnce([proposal()])
+      .mockResolvedValueOnce([plannedSession({ status: 'unavailable', parked: true })]);
 
-    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...RATING });
+    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...ONTO_PLANNED });
 
-    expect(updateSet).not.toHaveBeenCalled();
+    expect(updated()).toMatchObject({ status: 'completed', parked: false });
   });
 
-  it('will not complete a session that has since been moved to another day', async () => {
+  it('refuses a chosen session that is already completed', async () => {
+    // The one thing neither the matcher nor the athlete may overwrite: a
+    // second activity on the same day is a Double, not an edit of the record.
     limit
-      .mockResolvedValueOnce([proposal({ matchedSessionId: 'planned_1' })])
+      .mockResolvedValueOnce([proposal()])
+      .mockResolvedValueOnce([plannedSession({ status: 'completed' })]);
+
+    const result = await acceptDetectedActivity({
+      athleteId: OWNER,
+      activityId: 'a1',
+      ...ONTO_PLANNED,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'bad-target' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a chosen session rather than quietly adding a new one', async () => {
+    // Silently doing something else to the athlete's calendar is the class of
+    // behaviour this whole ticket is about.
+    limit
+      .mockResolvedValueOnce([proposal()])
       .mockResolvedValueOnce([plannedSession({ date: '2026-07-16' })]);
 
-    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...RATING });
+    const result = await acceptDetectedActivity({
+      athleteId: OWNER,
+      activityId: 'a1',
+      ...ONTO_PLANNED,
+    });
 
-    expect(updateSet).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'bad-target' });
+    expect(insertValues).not.toHaveBeenCalled();
   });
 
   it("will not complete another athlete's session", async () => {
+    // The chosen id arrives from the browser, so it is a claim, not a fact.
     limit
-      .mockResolvedValueOnce([proposal({ matchedSessionId: 'planned_1' })])
+      .mockResolvedValueOnce([proposal()])
       .mockResolvedValueOnce([plannedSession({ athleteId: 'someone_else' })]);
 
-    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...RATING });
+    const result = await acceptDetectedActivity({
+      athleteId: OWNER,
+      activityId: 'a1',
+      ...ONTO_PLANNED,
+    });
 
+    expect(result).toEqual({ ok: false, reason: 'bad-target' });
     expect(updateSet).not.toHaveBeenCalled();
   });
 
-  it('records the duration it overwrote, so the undo has something to restore', async () => {
-    // The device's actual duration replaces the planned one, and nothing else
-    // remembers the planned figure.
+  it('records everything the undo will need to put things back', async () => {
+    // Three things an in-place completion destroys and nothing else remembers:
+    // the planned duration (the device's actual one replaces it), and the
+    // activity's own type and note, which are never written onto the session.
+    // Without them undo can revert the session but cannot rebuild the
+    // proposal, and the athlete has to upload the file again.
     limit
-      .mockResolvedValueOnce([proposal({ matchedSessionId: 'planned_1' })])
+      .mockResolvedValueOnce([
+        proposal({ matchedSessionId: 'planned_1', type: 'Endurance', note: 'Imported from Garmin' }),
+      ])
       .mockResolvedValueOnce([plannedSession({ duration: 75 })]);
 
-    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...RATING });
+    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...ONTO_PLANNED });
 
     expect(written().find((w) => w.type === 'garmin_imported')?.payload).toMatchObject({
       previousDuration: 75,
+      activityType: 'Endurance',
+      activityNote: 'Imported from Garmin',
     });
   });
 
   it('removes the proposal and records the event in the same batch as the write', async () => {
     limit.mockResolvedValueOnce([proposal()]);
 
-    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...RATING });
+    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...AS_NEW });
 
     // One atomic batch: session, streams, event, proposal removal.
     expect(batch).toHaveBeenCalledTimes(1);
@@ -211,6 +263,7 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     const result = await acceptDetectedActivity({
       athleteId: OWNER,
       activityId: 'a1',
+      targetSessionId: null,
       body: 9,
       mind: 3,
       comment: null,
@@ -228,7 +281,7 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     const result = await acceptDetectedActivity({
       athleteId: OWNER,
       activityId: 'a1',
-      ...RATING,
+      ...AS_NEW,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-owner' });
@@ -241,7 +294,7 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     const result = await acceptDetectedActivity({
       athleteId: OWNER,
       activityId: 'a1',
-      ...RATING,
+      ...AS_NEW,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-found' });
@@ -303,6 +356,47 @@ describe('undoDetectedImport — the way back from a wrong file', () => {
     expect(written().find((w) => w.type === 'garmin_import_undone')).toBeDefined();
   });
 
+  it('puts the activity back in the pending list instead of discarding it', async () => {
+    // Undo means "let me decide this again". Throwing the activity away would
+    // make the athlete find the file and upload it a second time.
+    limit.mockResolvedValueOnce([
+      completedSession({
+        date: DAY,
+        duration: 90,
+        sport: 'running',
+        summary: { distanceM: 21000 },
+        startTime: new Date('2026-07-15T06:00:00Z'),
+      }),
+    ]);
+    eventLimit.mockResolvedValueOnce([
+      {
+        payload: {
+          sessionId: 's1',
+          previousDuration: 75,
+          activityType: 'Endurance',
+          activityNote: 'Imported from Garmin',
+        },
+      },
+    ]);
+    limit.mockResolvedValueOnce([{ samples: { t: [0, 5400] } }]);
+
+    await undoDetectedImport({ athleteId: OWNER, sessionId: 's1' });
+
+    const restored = written().find((w) => 'samples' in w)!;
+    expect(restored).toMatchObject({
+      athleteId: OWNER,
+      date: DAY,
+      // The activity's own type and note, which an in-place completion never
+      // wrote onto the session and which only the event log remembers.
+      type: 'Endurance',
+      note: 'Imported from Garmin',
+      sport: 'running',
+      duration: 90,
+      matchedSessionId: 's1',
+    });
+    expect((restored.samples as { t: number[] }).t).toEqual([0, 5400]);
+  });
+
   it('refuses a session the event log does not call an import', async () => {
     // Otherwise this would be a general un-complete button, which the domain
     // model deliberately does not have.
@@ -345,64 +439,92 @@ describe('undoDetectedImport — the way back from a wrong file', () => {
   });
 });
 
-describe('listPendingActivities — the card must describe what will happen', () => {
-  function joined(over: Record<string, unknown> = {}) {
+describe('listPendingActivities — a choice, not a verdict', () => {
+  function pending(over: Record<string, unknown> = {}) {
+    return { id: 'a1', date: DAY, type: 'Endurance', sport: 'running', duration: 90, note: null, matchedSessionId: 'planned_1', ...over };
+  }
+  function onDay(over: Record<string, unknown> = {}) {
     return {
-      id: 'a1',
+      id: 'planned_1',
       date: DAY,
       type: 'Endurance',
-      sport: 'running',
-      duration: 90,
-      note: 'Morning run',
-      matchedId: 'planned_1',
-      matchedType: 'Endurance',
-      matchedDuration: 75,
-      matchedZone: 'Z2',
-      matchedDate: DAY,
-      matchedStatus: 'planned',
-      matchedParked: false,
+      status: 'planned',
+      parked: false,
+      dayOrder: 0,
+      duration: 75,
+      zone: 'Z2',
       ...over,
     };
   }
 
-  it('names the session it will complete, so a Double day is verifiable', async () => {
-    listOrderBy.mockResolvedValue([joined()]);
-
-    const [pending] = await listPendingActivities(OWNER);
-
-    expect(pending.matched).toEqual({
-      id: 'planned_1',
-      type: 'Endurance',
-      duration: 75,
-      zone: 'Z2',
-    });
-  });
-
-  it('drops a match that went stale, because accepting would not complete it', async () => {
-    // Same eligibility the accept path applies. A card still promising to
-    // complete a skipped, parked or moved session describes something that
-    // will not happen, and the athlete cannot tell until it is too late.
-    for (const stale of [
-      { matchedStatus: 'skipped' },
-      { matchedStatus: 'completed' },
-      { matchedParked: true },
-      { matchedDate: '2026-07-16' },
-    ]) {
-      listOrderBy.mockResolvedValue([joined(stale)]);
-
-      const [pending] = await listPendingActivities(OWNER);
-
-      expect(pending.matched, JSON.stringify(stale)).toBeNull();
-    }
-  });
-
-  it('reports no match when the session was deleted out from under it', async () => {
-    listOrderBy.mockResolvedValue([
-      joined({ matchedId: null, matchedType: null, matchedDate: null, matchedStatus: null }),
+  it('offers every session on the day, named without a time it does not have', async () => {
+    // A morning swim and an evening ride are both Endurance to the matcher —
+    // SPORT_MAP types them the same — so the card has to let the athlete say
+    // which. A Planned Session carries a date and an order, never a clock
+    // time, so the label is type, duration and zone.
+    listRows.current = [pending()];
+    getSessionsOnDates.mockResolvedValue([
+      onDay(),
+      onDay({ id: 'planned_2', dayOrder: 1, duration: 120, zone: null }),
     ]);
 
-    const [pending] = await listPendingActivities(OWNER);
+    const [activity] = await listPendingActivities(OWNER);
 
-    expect(pending.matched).toBeNull();
+    expect(activity.options).toEqual([
+      { id: 'planned_1', type: 'Endurance', status: 'planned', duration: 75, zone: 'Z2' },
+      { id: 'planned_2', type: 'Endurance', status: 'planned', duration: 120, zone: null },
+    ]);
+    expect(activity.suggestedSessionId).toBe('planned_1');
+  });
+
+  it('offers a skipped or displaced session too — the athlete may claim it', async () => {
+    listRows.current = [pending({ matchedSessionId: null })];
+    getSessionsOnDates.mockResolvedValue([
+      onDay({ id: 'skipped_1', status: 'skipped' }),
+      onDay({ id: 'parked_1', status: 'unavailable', parked: true }),
+    ]);
+
+    const [activity] = await listPendingActivities(OWNER);
+
+    expect(activity.options.map((o) => o.id)).toEqual(['skipped_1', 'parked_1']);
+  });
+
+  it('never offers a completed session — that is the record, not a target', async () => {
+    listRows.current = [pending({ matchedSessionId: null })];
+    getSessionsOnDates.mockResolvedValue([onDay({ status: 'completed' })]);
+
+    const [activity] = await listPendingActivities(OWNER);
+
+    expect(activity.options).toEqual([]);
+  });
+
+  it('never offers a session on another day', async () => {
+    listRows.current = [pending({ matchedSessionId: null })];
+    getSessionsOnDates.mockResolvedValue([onDay({ date: '2026-07-16' })]);
+
+    const [activity] = await listPendingActivities(OWNER);
+
+    expect(activity.options).toEqual([]);
+  });
+
+  it('stops suggesting a match the matcher may no longer claim, but still offers it', async () => {
+    // Choosable and suggested are different bars. Once the athlete has skipped
+    // it, the machine does not get to propose it — but they may still say they
+    // did it, so it stays in the list, just not pre-selected.
+    listRows.current = [pending()];
+    getSessionsOnDates.mockResolvedValue([onDay({ status: 'skipped' })]);
+
+    const [activity] = await listPendingActivities(OWNER);
+
+    expect(activity.suggestedSessionId).toBeNull();
+    expect(activity.options.map((o) => o.id)).toEqual(['planned_1']);
+  });
+
+  it('reads the plan only for days something was actually uploaded on', async () => {
+    listRows.current = [pending(), pending({ id: 'a2', date: '2026-07-16' })];
+
+    await listPendingActivities(OWNER);
+
+    expect(getSessionsOnDates).toHaveBeenCalledWith(OWNER, [DAY, '2026-07-16']);
   });
 });

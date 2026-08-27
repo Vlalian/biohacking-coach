@@ -59,15 +59,20 @@ export async function getSessionsForAthlete(
  * the days an upload actually covered.
  *
  * Scoped to the athlete and to the uploaded dates, and deliberately unfiltered
- * on status and `parked`: `matchActivities` owns which of them are eligible
- * (`CONTEXT.md`, Detected Activity), and a query that pre-filtered would put
- * half that rule here and half there. Only the columns matching reads are
- * selected.
+ * on status and `parked`. Two different rules read this list — what the
+ * matcher may claim (`isEligibleMatch`) and what the athlete may choose
+ * (`isChoosableTarget`) — so a query that pre-filtered would have to pick one
+ * of them and would put half of it here and half there.
  */
+export type SessionOnDate = MatchCandidate & {
+  duration: number | null;
+  zone: string | null;
+};
+
 export async function getSessionsOnDates(
   athleteId: string,
   dates: string[],
-): Promise<MatchCandidate[]> {
+): Promise<SessionOnDate[]> {
   if (dates.length === 0) return [];
 
   return getDb()
@@ -78,6 +83,13 @@ export async function getSessionsOnDates(
       status: sessions.status,
       parked: sessions.parked,
       dayOrder: sessions.dayOrder,
+      // Not read by matching, which is why `MatchCandidate` stays narrow — but
+      // the proposal card names its options by what the athlete can recognise,
+      // and a Planned Session has no time of day to name it by: `date` is a
+      // date, `dayOrder` is only ordering, and `start_time` is Garmin
+      // provenance that is null until an import writes it.
+      duration: sessions.duration,
+      zone: sessions.zone,
     })
     .from(sessions)
     .where(and(eq(sessions.athleteId, athleteId), inArray(sessions.date, dates)))
