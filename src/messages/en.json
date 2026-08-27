@@ -514,6 +514,8 @@
     "editedNoType": "{coach} changed a session on {day}",
     "deleted": "{coach} took the {type} session off {day}",
     "deletedNoType": "{coach} took a session off {day}",
+    "moved": "{coach} moved your session from {fromDay} to {day}",
+    "movedNoFrom": "{coach} moved a session to {day}",
     "yourHeadCoach": "Your Head Coach",
     "recently": "recently"
   }

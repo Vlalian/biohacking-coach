@@ -20,7 +20,11 @@ export interface NarratableEvent {
   id: string;
   /** The acting Head Coach's opaque coach id — null only for malformed history. */
   actorId: string | null;
-  type: 'session_prescribed' | 'session_edited' | 'session_deleted';
+  type:
+    | 'session_prescribed'
+    | 'session_edited'
+    | 'session_deleted'
+    | 'session_moved';
   /** `jsonb`, so genuinely unknown until narrowed. */
   payload: unknown;
   createdAt: Date;
@@ -55,14 +59,25 @@ function field(payload: unknown, ...path: string[]): string | undefined {
 /**
  * The day and session type a narration clause needs, per event kind.
  *
- * The three payloads are not the same shape, and the difference is not
- * cosmetic: an edit records `to` (the new content) beside `from` (where it
- * was), and **a delete records no session type at all** — `head-coach-service`
- * writes `{ sessionId, date, origin }`. So a deleted session is narrated
- * without naming its kind, because the event does not know it. Inventing one
- * would be exactly the fabrication this module exists to avoid.
+ * The payloads are not the same shape, and the difference is not cosmetic: an
+ * edit records `to` (the new content) beside `from` (where it was), and **a
+ * delete records no session type at all** — `head-coach-service` writes
+ * `{ sessionId, date, origin }`. So a deleted session is narrated without
+ * naming its kind, because the event does not know it. Inventing one would be
+ * exactly the fabrication this module exists to avoid.
+ *
+ * A move is the odd one. `session-move` writes `{ sessionId, from, to }` with
+ * both days as bare date strings rather than nested objects — so `from` here is
+ * a *day*, where an edit's `from` is a whole session. And like a delete it
+ * carries no type, so a move is narrated without naming the session's kind.
+ * What a move needs instead is the second day: "moved" is the one action whose
+ * meaning is the pair, not the destination.
  */
-function subject(event: NarratableEvent): { day?: string; type?: string } {
+function subject(event: NarratableEvent): {
+  day?: string;
+  type?: string;
+  fromDay?: string;
+} {
   switch (event.type) {
     case 'session_prescribed':
       return { day: field(event.payload, 'date'), type: field(event.payload, 'type') };
@@ -73,6 +88,11 @@ function subject(event: NarratableEvent): { day?: string; type?: string } {
       };
     case 'session_deleted':
       return { day: field(event.payload, 'date') };
+    case 'session_moved':
+      return {
+        day: field(event.payload, 'to'),
+        fromDay: field(event.payload, 'from'),
+      };
   }
 }
 
@@ -80,6 +100,7 @@ const CLAUSE_KEY = {
   session_prescribed: 'prescribed',
   session_edited: 'edited',
   session_deleted: 'deleted',
+  session_moved: 'moved',
 } as const;
 
 /** One event as one sentence, attributed to the coach who actually acted. */
@@ -89,7 +110,7 @@ function clause(
   t: Translate,
   weekdayOf: WeekdayOf,
 ): string {
-  const { day, type } = subject(event);
+  const { day, type, fromDay } = subject(event);
   // The name comes from the event's own `actorId`, never from the athlete's
   // *current* link: an athlete who severed and re-linked must not see the new
   // coach's name on the old coach's change.
@@ -100,10 +121,21 @@ function clause(
     coach,
     day: day ? weekdayOf(day) : t('recently'),
     ...(type ? { type } : {}),
+    ...(fromDay ? { fromDay: weekdayOf(fromDay) } : {}),
   };
   // A delete never carries a type, and any payload can be malformed — so there
   // is a typeless phrasing for every kind rather than a placeholder word.
-  const key = `${CLAUSE_KEY[event.type]}${type ? '' : 'NoType'}`;
+  //
+  // A move varies on the other axis. It never carries a type either, so the
+  // `NoType` suffix would be its only spelling and says nothing; what it can
+  // lose is the day it came *from*, and a move missing that is a different
+  // sentence rather than a vaguer one.
+  const key =
+    event.type === 'session_moved'
+      ? fromDay
+        ? 'moved'
+        : 'movedNoFrom'
+      : `${CLAUSE_KEY[event.type]}${type ? '' : 'NoType'}`;
   // **The Head Coach's note is deliberately not read** (Mads, 2026-08-21). It
   // is the one honest source of a *reason* — "he wants you race-sharp" — and
   // dropping it costs real warmth. But it is human free text, and this sentence

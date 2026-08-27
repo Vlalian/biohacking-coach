@@ -514,6 +514,8 @@
     "editedNoType": "{coach} har ændret en session {day}",
     "deleted": "{coach} har taget {type}-sessionen af {day}",
     "deletedNoType": "{coach} har taget en session af {day}",
+    "moved": "{coach} har flyttet din session fra {fromDay} til {day}",
+    "movedNoFrom": "{coach} har flyttet en session til {day}",
     "yourHeadCoach": "Din Head Coach",
     "recently": "for nylig"
   }

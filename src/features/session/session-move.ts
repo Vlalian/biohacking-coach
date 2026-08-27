@@ -42,11 +42,14 @@ export type MoveActor =
  * The session update and the `session_moved` event land in one transaction:
  * both or neither.
  *
- * The event is written with its actor and `narrated_at` null, and nothing is
- * announced — but not because narration is off. Narration runs on every
- * app-open; `session_moved` is simply absent from `NARRATABLE_TYPES`, so this
- * event is never collected. For a coach's move that is a known breach of
- * ADR 0003's "no silent mutation" rule, recorded in its 2026-08-21 amendment.
+ * The event is written with its actor and `narrated_at` null, and narration
+ * collects it on the athlete's next app-open — but only when the actor was the
+ * Head Coach. An athlete moving their own session is filtered out by
+ * `actor_type` and stays silent, as CONTEXT.md requires: nobody needs telling
+ * what they just did themselves.
+ *
+ * `from` and `to` are both in the payload because the narrated sentence names
+ * both days. A move means the pair, not the destination.
  */
 export async function applyMove(params: {
   athleteId: string;
