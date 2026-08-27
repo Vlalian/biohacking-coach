@@ -17,14 +17,21 @@ import { isAdmissible } from './licence';
  *    yet", and only the first is a decision.
  * 2. **`licence` records what was actually read**, never what the publisher is
  *    assumed to do. `concurrent-training-sequence-2023` is CC BY with no version
- *    because neither the article page nor the journal policy states one;
- *    `block-periodization-2019` carries no licence at all because the page 403'd.
- *    Both are recorded as found.
+ *    because neither the article page nor the journal policy states one. Recorded
+ *    as found, not as tidied.
  *
- * The register goes stale — licences change, articles move publisher. It was true
- * on 2026-08-19. Re-read `corpus.md` before any new ingestion run and treat every
- * row here as a hypothesis with a URL attached, exactly as `AGENTS.md` says to
- * treat a document's claim about the code.
+ *    On 2026-08-27 the two rows that had defeated automated fetching were read by
+ *    hand, and they are the argument for this rule in both directions:
+ *    `block-periodization-2019` is CC BY-NC 3.0, exactly the guess the note here
+ *    refused to record, while `openstax-anatomy-physiology-2e` is CC BY-NC-SA,
+ *    where the guess had been plain CC BY. One assumption right, one wrong, and
+ *    no way to tell which without looking. Both now fail the rule and are closed.
+ *
+ * The register goes stale — licences change, articles move publisher. The IN rows
+ * were true on 2026-08-19; the two OUT rows above were re-read 2026-08-27. Re-read
+ * `corpus.md` before any new ingestion run and treat every row here as a
+ * hypothesis with a URL attached, exactly as `AGENTS.md` says to treat a
+ * document's claim about the code.
  */
 
 /** Why a source is out. Recorded so a refusal can say something useful. */
@@ -674,14 +681,14 @@ export const CORPUS: readonly CorpusSource[] = [
     year: 2019,
     doi: '10.2147/OAJSM.S180408',
     pmcid: null,
-    licence: '',
-    licenceUrl: '',
+    licence: 'CC BY-NC 3.0',
+    licenceUrl: 'https://www.dovepress.com/terms.php',
     attribution: '',
     territory: 'block vs traditional periodization; mesocycle structure',
     verdict: 'out',
-    outReason: 'licence-unestablished',
+    outReason: 'licence-restrictive',
     reason:
-      'The largest single gap in the corpus, and out only because dovepress.com and tandfonline.com both returned 403. Dove Press is widely understood to use CC BY-NC 3.0, which would fail anyway — but that is the assumption this register exists to refuse. Needs five minutes in a browser.',
+      'CC BY-NC 3.0 unported, read off the article page by Mads (2026-08-27) after dovepress.com returned 403 to every automated attempt. "Non-commercial uses of the work are permitted without further permission... For permission for commercial use of this work, please see paragraphs 4.2 and 5 of our Terms." NonCommercial fails the rule, since this product will charge athletes. **Closed — do not re-check**, and note that commercial permission is purchasable from Dove Medical Press if this paper is ever wanted badly enough. The guess recorded here was right, where the OpenStax one was wrong; that is the argument for reading rather than for guessing better.',
   },
   {
     slug: 'openstax-anatomy-physiology-2e',
@@ -690,14 +697,14 @@ export const CORPUS: readonly CorpusSource[] = [
     year: 2022,
     doi: '',
     pmcid: null,
-    licence: '',
-    licenceUrl: '',
+    licence: 'CC BY-NC-SA 4.0',
+    licenceUrl: 'https://openstax.org/details/books/anatomy-and-physiology-2e',
     attribution: '',
     territory: 'plain-language physiology fundamentals',
     verdict: 'out',
-    outReason: 'licence-unestablished',
+    outReason: 'licence-restrictive',
     reason:
-      'openstax.org returned no readable licence text to the fetcher. OpenStax states CC BY on its books generally; not read, so not claimed. Needs five minutes in a browser.',
+      'CC BY-NC-SA, read off the licence badge on the book page by Mads (2026-08-27). Fails the admission rule twice: NonCommercial, because this product will charge athletes, and ShareAlike, which is out pending a deliberate decision about the Coach’s own output. **Closed — do not re-check.** The note here previously said "OpenStax states CC BY on its books generally", and that guess was wrong: the second time in this register that a "widely understood to be CC BY" assumption failed once somebody actually read the page, after the JSSM half-Ironman paper. Independently, it carries no PMC id, and the ingest fetches JATS from PMC by id — so it could not have been ingested even had the licence passed.',
   },
   {
     slug: 'friel-triathletes-training-bible',
