@@ -15,24 +15,64 @@ exactly, don't drift to synonyms) and `OVERVIEW.md` says where truth lives.
 - **Other agents** (Copilot, Cursor, Codex) do not `@`-import — open and read the
   two files explicitly at session start.
 - **A freshly-created worktree will not have these files** (they are gitignored,
-  so they are never checked out from `main`). Restore them before working: copy
-  them in from another working copy, or `git restore --source <pre-PR#24-commit> --
-  CONTEXT.md OVERVIEW.md`. A missing file makes the `@`-import silently no-op, so an
-  agent can lose the domain language with no error — confirm they are present.
+  so they are never checked out from `main`). A missing file makes the `@`-import
+  silently no-op, so an agent can lose the domain language with no error — confirm
+  they are present.
+
+### Junction the tracker. Never copy it.
+
+`.scratch/` and `docs/agents/` live in **one** place — the private docs repo at
+`C:\Users\madsk\bc-docs` — and every clone and worktree reaches them through a
+**junction**. They are the same directory, not a copy.
+
+**Never restore them by copying.** A copy is a fork the moment either side is
+written to, and the fork is silent: both sides look right, and the one that dies
+is the one inside a worktree.
+
+Before writing to a ticket, the map, or anything under `.scratch/`, confirm you
+are writing to the real thing:
+
+    (Get-Item .scratch -Force).LinkType     # must print: Junction
+
+If it prints nothing, `.scratch` is a private copy. **Stop and say so** — do not
+write to it, and do not delete it either; it may hold state that exists nowhere
+else. Use `New-Session.ps1`, which junctions and then verifies, and refuses to
+hand over a worktree whose links did not land.
+
+**What earned this rule.** On 2026-08-26 the tracker was found forked into
+**four** divergent copies: two clones with their own `.scratch` (219 and 154
+files, both edited the same evening) and two worktrees with their own again.
+`knowledge-oracle/02` read `planned` in one and `done — ingested live, 31
+sources / 1,583 chunks` in another. The finished work was real; the record of it
+lived only inside a worktree, and `git worktree remove` would have deleted it
+without a word. Two divergent copies of `showable-version/MAP.md` existed, each
+holding findings the other lacked.
+
+The instruction that caused it used to sit in this very section — *"restore them
+before working: copy them in from another working copy"*. It is recorded rather
+than quietly deleted, because it was a reasonable instruction that solved the
+wrong half of the problem: it restored the **content** and destroyed the
+**identity**.
+
+Tear down only with `Remove-Session.ps1`. It unlinks junctions before removing
+anything, and refuses outright to delete a worktree whose `.scratch` is a real
+directory.
 
 ## Working rules
 
-### Review code before committing it
+### Only Mads starts a code review
 
-Run the `/code-review` skill on product code before committing it, and before opening a pull request. Mads's standing instruction, 2026-07-16.
+`/code-review` is his to start. Do not run it on your own initiative, and do not treat it as a step on the way to a commit.
 
-This applies to **code** — `src/`, `scripts/`, config that affects the build. It does not apply to tracker files, ADRs, PRDs, or issue markdown; reviewing prose with a code-review skill wastes a session and teaches you to ignore the rule.
+The reason is cadence, not distrust. The old rule put a review on every commit, which meant a review per task, and each one costs a session's worth of tokens — they were being started far too often to be worth what they cost. He wants several finished implementations gathered up first, then **one** review across the batch. That is what `/plan-afk` and `/build-afk` accumulate on the `afk/batch` branch.
 
-Fix what the review finds, or say plainly why you are not fixing it. A review whose findings you skip silently is theatre.
+So: finish the work, run the four checks below, commit, and **say plainly that it is built and unreviewed.** If you think a review is genuinely warranted on this particular change, say so in one sentence and leave the call to him.
 
-This is an instruction, not an enforced hook: no hook can verify a skill ran, only that a command was typed. `.claude/hooks/block-dangerous-git.sh` is the enforced layer and it guards different things (force pushes, hard resets, bulk discards). Do not confuse the two — this one holds only because agents follow it.
+*Changed 2026-08-19.* This section previously read "Run the `/code-review` skill on product code before committing it, and before opening a pull request" — Mads's standing instruction of 2026-07-16 — and is recorded rather than quietly deleted, because the old rule was the right instinct and only its frequency was wrong. There is no hook behind this one: it is an instruction, and it holds because agents follow it.
 
-CodeRabbit reviews every PR on GitHub as well. That is the second pair of eyes, not the first: it runs after the code is pushed, and the point of this rule is to not push work you already know is wrong.
+When he does run one: it applies to **code** — `src/`, `scripts/`, config that affects the build. Not tracker files, ADRs, PRDs, or issue markdown; reviewing prose with a code-review skill wastes a session and teaches everyone to ignore the rule. Fix what it finds, or say plainly why you are not fixing it. A review whose findings you skip silently is theatre.
+
+CodeRabbit is the second pair of eyes, and also his call. It does **not** review automatically on this repo — under 10 stars it must be triggered with `@coderabbitai review`, so a green "CodeRabbit" check does not mean it looked.
 
 ### One worktree per implementation session
 
@@ -88,7 +128,8 @@ Product code (`src/`, `scripts/`, build config) is not done until all four pass:
     npm test              # vitest green
     npm run build         # next build succeeds (for changes that affect the build)
 
-Run them yourself and iterate against them before you call the work done — "looks done" is not a signal, a passing check is. Then run `/code-review` (the standing rule above) before committing or opening a PR. If a check fails and you are leaving it failing, say so plainly and why; a silently skipped check is the same failure mode as a silently skipped review.
+Run them yourself and iterate against them before you call the work done — "looks done" is not a signal, a passing check is. Do **not** run `/code-review` afterwards — that is his to spend (the standing rule above); commit and say plainly that the work is unreviewed. If a check fails and you are leaving it failing, say so plainly and why; a silently skipped check is the same failure mode as a silently skipped review.
+
 ### Check a document's claim about the code against the code
 
 When a tracker file, ADR, or decision log states something factual about the code — "X never happens", "**Where enforced:** `some/file.js`", "this table carries no name column" — **read the code before you repeat it.** Mads's standing instruction, 2026-07-17.
