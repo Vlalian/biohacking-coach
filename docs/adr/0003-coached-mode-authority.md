@@ -1,5 +1,7 @@
 # Coached Mode adds a human authority above the AI without repositioning the product
 
+Status: accepted (2026-07-08) · amended 2026-07-13, 2026-08-11, 2026-08-21
+
 The product's identity is the accessible alternative to a human coach, yet Coached Mode makes human coaches first-class users. We resolved this athlete-first: a Head Coach is an optional enhancement, linked per-athlete by invite code (no discovery, no marketplace, no credential verification — trust is out-of-band), never a requirement. Authority is three-tiered: the Head Coach outranks the Coach on plan content and is never silently overridden by automation (Week Rebalancing may only *suggest* changes to Prescribed Sessions); the athlete keeps placement (drag) and reality (completion records) regardless of who authored a session; Athlete Sessions remain the athlete's territory — view-only even to the Head Coach. Privacy follows the doctor-patient model: athlete-controlled Link Visibility with training data shared by default and AI-conversation transcripts opt-in — the app supplies boundaries and choice; the humans own the confidentiality.
 
 ## Consequences
@@ -31,3 +33,21 @@ These three are the real pre-launch checklist, tracked in `.scratch/coached-mode
 **The round-3 Head Coach interview is dropped as a pre-launch gate.** Every provisional coach-facing design this ADR and `.scratch/coached-mode/prototype-outline.md` describe — the four Coach Assistance tiers, Coaching Directive, Coaching Channel tone and AI participation scope — was written from Mads's own product intent, explicitly marked pending outside validation. That validation now happens live, against the first real Head Coach's actual use, instead of a scripted interview beforehand. This is a real trade-off, not a formality removed: the design ships unvalidated by an outside coach, and the tiers, the Directive's phrasing, and the Channel's tone may all turn out wrong in ways an interview could have caught first. Accepted knowingly in exchange for reaching a real user sooner.
 
 **Unchanged by this amendment:** the three-tier authority model, Prescribed Session rules, Link Visibility as the privacy mechanism, and the Coaching Channel's private/shared separation. This amendment changes *when* Coached Mode ships and *how* its remaining design gets validated — not what it does.
+
+## Amendment 2026-08-21 — The Head Coach may move sessions; placement stops being the athlete's alone
+
+**The original decision.** This ADR's three-tier model states that *"the athlete keeps placement (drag) and reality (completion records) regardless of who authored a session"*. Placement was deliberately excluded from the Head Coach's authority: `head-coach-authority.ts` said so in a comment, CONTEXT.md summarised it as *"placement belongs to the athlete, content belongs to the author"*, and Session Move was defined as *"an athlete-initiated relocation"*. The coach's calendar was rendered read-only on purpose.
+
+**Decision (Mads, 2026-08-21):** the Head Coach may move sessions on a linked athlete's calendar. Found the first time a Head Coach account was actually used — the smoke run of [showable-version/01](../../.scratch/showable-version/issues/01-live-smoke-run.md) — where the inability to drag read as a missing feature rather than a principle.
+
+**What the original reasoning got right, and what it missed.** The rule protected something real: an athlete's week is shaped by a life the coach cannot see, and a coach who rearranges it from outside can produce a plan that is correct on paper and impossible in practice. That risk is unchanged. What the rule missed is that placement *is* coaching — spacing hard days, putting the long ride where recovery follows it — and a Head Coach who may author a session but not decide which day it lands on has been given a pen and no calendar. Editor-in-chief of the plan, with no say in when it happens.
+
+**Placement becomes shared, not transferred.** The athlete keeps every placement right they had: they may move any session, including one the Head Coach just moved, and they need no permission and give no explanation (US-3). This is deliberately not a lock or a first-writer-wins race — last move stands, and disagreement about *when* is a coaching conversation, not a scheduling conflict the app should adjudicate.
+
+**Unchanged by this amendment:**
+
+- **Reality.** Completion records stay the athlete's, and a completed or past session stays frozen for everyone — the Move rules are re-run server-side against the server's clock for the coach exactly as for the athlete.
+- **Athlete Sessions.** Still the athlete's territory, still view-only to the Head Coach — a coach may not move one. This amendment reverses the placement rule for the *plan*; it does not touch the separate rule that the athlete's own entries are theirs. That is the obvious next question if it grates in use, and it should be asked on its own rather than folded in here.
+- **Content authority**, the AI's suggest-not-apply constraint, and Link Visibility.
+
+**A consequence this ADR already names as non-negotiable.** Coached Mode requires that *"the plan never mutates silently by an invisible hand"* — Head Coach actions are narrated to the athlete with attribution. Narration is currently benched (2026-08-11 amendment, item 3), and a coach silently moving an athlete's training is precisely the case the requirement exists for. The move records a `session_moved` event with `actor_type = 'head_coach'`, so the material for narration is captured from day one — but until [coached-mode/03](../../.scratch/coached-mode/issues/03-unbench-narration.md) lands, the athlete finds a moved session without being told who moved it. That is acceptable only while the single real athlete is Mads, and it is the same trigger the 2026-08-11 amendment already set for a third party joining.
