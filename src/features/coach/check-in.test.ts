@@ -14,11 +14,7 @@ import { assertNoDirectIdentifier, assertNoIdentity, type CheckIn } from './chec
  */
 
 const BASE: CheckIn = {
-  body: 7,
-  mental: 7,
-  energy: 7,
-  sleep: 7,
-  pulse: 50,
+  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
 };
 
 describe('assertNoDirectIdentifier — what it catches', () => {

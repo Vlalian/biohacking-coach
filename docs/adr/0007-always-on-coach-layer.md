@@ -1,6 +1,6 @@
 # The Coach is an always-on layer over the athlete's existing stack, not a ritual-based replacement
 
-Status: accepted (2026-08-03)
+Status: accepted (2026-08-03) · amended 2026-08-25
 
 ## Context
 
@@ -24,3 +24,16 @@ An athlete adopts a new system that *replaces* something painful, not one that *
 - Adds a dependency on a third-party sync source (Strava/aggregator) and its terms; the manual "Mark complete" button survives only as the fallback for sessions sync can't see (pool swims, strength, mobility).
 - Coach Engagement Rate becomes a *truer* signal (chosen engagement, not marched-through compliance) but the product must now actively drive discoverability of the optional conversation rather than relying on a mandatory gate.
 - Supersedes the interaction-model portions of the earlier ritual-centric design; does not change the authority model (ADR 0002/0003) or the server-authoritative architecture (ADR 0006).
+
+## Amendment 2026-08-25 — Coached Mode is MVP, not V1; and the overlay gained the ability to act
+
+Two corrections, neither of which touches this ADR's decision.
+
+**The "(Coached Mode, V1)" label in decision 2 is stale.** [ADR 0003's 2026-08-11 amendment](0003-coached-mode-authority.md) moved Coached Mode from V1 to **MVP** — the V1 deferral rested on Coached Mode being a privacy exception, and ADR 0006 made the whole app server-authoritative, so the exception stopped existing. Read decision 2 as: the surviving divide is the private thread vs the Head-Coach-shared **Coaching Channel**, which ships in MVP. The Channel itself remains **designed but unbuilt** — the private half of the overlay is what exists today.
+
+**"One conversation, not six surfaces" now has two deliberate exceptions, and both prove the rule rather than break it.**
+
+- **Coach Actions** ([ADR 0008](0008-coach-actions-and-the-durability-rule.md), 2026-08-13) let the Coach operate app surfaces from inside the one thread, which is what makes collapsing the six surfaces pay off — talking replaces navigating instead of merely replacing five other chat boxes.
+- **The Feedback Interview** (decided 2026-08-19; `CONTEXT.md`, [showable-version/07](../../.scratch/showable-version/issues/07-feedback-interview.md)) is a *separate* conversation kind, run by an AI that is explicitly **not** the Coach, and it is the one surface deliberately kept out of the single thread. Three reasons, all specific to this ADR's logic: Peer Authority is a posture that holds its position and does not apologise for its conclusions, which is exactly wrong for taking a complaint; the Coach is the subject under test, so it cannot run its own exit interview; and the thread resends its whole transcript every turn, so feedback typed into it becomes permanent coaching context. Unbuilt as of this amendment.
+
+**Unchanged:** the always-on layer, detection proposing rather than asserting, and the Weekly Session being offered rather than forced.
