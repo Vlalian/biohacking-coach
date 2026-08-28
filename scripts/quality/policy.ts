@@ -30,12 +30,34 @@ export type CrapScore = {
   crap: number;
 };
 
+/**
+ * Statuses that mean the mutant was conclusively dealt with.
+ *
+ * `Timeout` counts as a kill — the mutant hung and the tests noticed.
+ * `CompileError` is a mutant TypeScript rejected, so it never ran and says
+ * nothing about the tests; Stryker excludes it from the score for the same
+ * reason.
+ */
+const CONCLUSIVE_KILLS = new Set(['Killed', 'Timeout', 'CompileError']);
+
 /** The part of Stryker's report this needs, per mutant. */
 export type MutantReport = {
   file: string;
   line: number;
   mutator: string;
-  status: 'Killed' | 'Survived' | 'NoCoverage' | 'Ignored' | 'Timeout' | 'CompileError';
+  /**
+   * Stryker's status, deliberately typed as `string` rather than a union.
+   *
+   * This is data from another tool. The schema's enum today is Killed,
+   * Survived, NoCoverage, CompileError, RuntimeError, Timeout, Ignored and
+   * Pending — but a value this build has never seen has to arrive at the
+   * policy *as itself* so it can be refused, not be cast into something it is
+   * not. It was a union until CodeRabbit pointed out that `quality.ts` was
+   * force-casting into it: an interrupted run emits `Pending`, which fell
+   * through every branch and reported PASS. That is the same shape as the
+   * `no-mutants` hole — absence of evidence reading as evidence.
+   */
+  status: string;
   /** Required when `status` is `Ignored`. */
   ignoreReason?: string;
 };
@@ -51,7 +73,15 @@ export type Failure =
       mutator: string;
       detail: string;
     }
-  | { kind: 'no-mutants'; name: string; file: string; line: number; detail: string };
+  | { kind: 'no-mutants'; name: string; file: string; line: number; detail: string }
+  | {
+      kind: 'inconclusive';
+      name: string;
+      file: string;
+      line: number;
+      mutator: string;
+      detail: string;
+    };
 
 export type Verdict = {
   verdict: 'pass' | 'escalate';
@@ -100,7 +130,17 @@ function mutantFailure(m: MutantReport): Failure | null {
   if (m.status === 'Survived') {
     return { kind: 'mutant', ...where, detail: 'survived' };
   }
-  return null;
+  if (CONCLUSIVE_KILLS.has(m.status)) return null;
+
+  // Everything else — `RuntimeError`, `Pending` from an interrupted run, or a
+  // status a later Stryker introduces — is a mutant nobody can say was caught.
+  // Fail closed: the whole value of this gate is that it does not pass on the
+  // absence of evidence.
+  return {
+    kind: 'inconclusive',
+    ...where,
+    detail: `status "${m.status}" is neither a kill nor a survival — the run did not settle this mutant`,
+  };
 }
 
 export function judge(input: {

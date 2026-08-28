@@ -118,7 +118,7 @@ function collectMutants(files: string[]): MutantReport[] {
         file: key(file),
         line: m.location.start.line,
         mutator: m.mutatorName,
-        status: m.status as MutantReport['status'],
+        status: m.status,
         ignoreReason: m.statusReason,
       })),
     );

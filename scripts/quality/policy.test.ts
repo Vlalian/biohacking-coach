@@ -90,15 +90,36 @@ describe('judge — mutation', () => {
     });
   });
 
-  it.each(['Timeout', 'CompileError'] as const)(
-    'does not call a %s a survivor',
-    (status) => {
-      // Neither is a mutant the tests killed, but neither is one they missed —
-      // reporting them as survivors would send an agent hunting for a test to
-      // write that would not have helped.
-      expect(judge({ crap: [], mutants: [mutant({ status })] }).verdict).toBe('pass');
-    },
-  );
+  it.each(['Timeout', 'CompileError'])('does not call a %s a survivor', (status) => {
+    // A Timeout is a kill — the mutant hung and the tests noticed. A
+    // CompileError never ran and says nothing about the tests, which is why
+    // Stryker leaves it out of the score too. Reporting either as a survivor
+    // would send an agent hunting for a test that would not have helped.
+    expect(judge({ crap: [], mutants: [mutant({ status })] }).verdict).toBe('pass');
+  });
+
+  it.each(['RuntimeError', 'Pending'])('refuses to pass an unsettled %s mutant', (status) => {
+    // Stryker's schema has eight statuses, and these two mean nobody can say
+    // whether the tests caught the mutant: `RuntimeError` broke the runner,
+    // and `Pending` is what an interrupted run leaves behind. Passing on them
+    // is passing on the absence of evidence, which is the one thing this gate
+    // exists to refuse. (Found by CodeRabbit on PR #44; the status was a
+    // closed union and the CLI force-cast into it, so both fell through
+    // silently.)
+    const result = judge({ crap: [], mutants: [mutant({ status })] });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.failures[0]).toMatchObject({ kind: 'inconclusive' });
+  });
+
+  it('refuses a status it has never heard of', () => {
+    // The general form of the same rule: a later Stryker adding a status must
+    // stop this gate, not slip through it.
+    const result = judge({ crap: [], mutants: [mutant({ status: 'SomethingNew' })] });
+
+    expect(result.verdict).toBe('escalate');
+    expect(result.failures[0].detail).toContain('SomethingNew');
+  });
 
   it('accepts a mutant suppressed with a reason', () => {
     // Equivalent mutants are real even in new code.
