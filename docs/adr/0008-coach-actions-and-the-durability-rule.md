@@ -1,5 +1,7 @@
 # The Coach may operate the app on the athlete's behalf, and asks permission only for what persists
 
+Status: accepted (2026-08-13) — largely unbuilt; see the note at the foot
+
 The Coach Overlay is always available and knows what the athlete is looking at, so the natural next
 step is letting talking replace navigating: "compare my last three long rides" opens the Comparison,
 "I got new tyres" adds the Equipment. These are **Coach Actions** — the Coach operating an app surface
@@ -57,3 +59,27 @@ Consent fatigue is the failure mode this ADR is designed against.
   the only capability that would put unreviewed athlete data into a prompt, and criteria-based
   selection covers the realistic cases without that exposure. Revisit when a concrete question arrives
   that criteria cannot express; structured filters first, never free text over athlete comments.
+
+## Build state, 2026-08-25
+
+Recorded because this ADR reads as describing the product and mostly describes an intention. Checked
+against `src/`, not against the tracker.
+
+**What exists.** One Action Proposal: the Weekly Session's whole-week plan proposal with confirm and
+cancel ([`src/features/coach/plan-proposal.ts`](../../src/features/coach/plan-proposal.ts)), which
+predates this ADR and is the pattern it generalises from. Coach Chat can see the Week Plan
+(`coach-actions/01`, PR #36), which is the read half of the context this ADR assumes.
+
+**What does not.** The closed action set, the view-tier actions (opening a Panel, a Comparison, a
+View), and single-session changes from the thread are all unbuilt —
+[`coach-actions/02–06`](../../.scratch/coach-actions/PRD.md), deliberately deferred by
+[`.scratch/showable-version/MAP.md`](../../.scratch/showable-version/MAP.md). Adjusting the plan by
+talking is covered for now by the Weekly Session's whole-week proposal.
+
+**One consequence of that is worth naming.** The durability rule's cheap half — the actions the Coach
+performs *without* asking — is the half that does not exist yet. So today every Coach-initiated change
+goes through a confirm, which is the *rejected* alternative in this ADR, arrived at by having built
+nothing rather than by deciding. That is harmless while there is one action: consent fatigue is a
+function of how many confirms an athlete meets, and the count is one. It stops being harmless the
+moment the view-tier actions land, so the order they land in is a real choice — view-tier first
+restores the rule, single-session-change first deepens the exception.
