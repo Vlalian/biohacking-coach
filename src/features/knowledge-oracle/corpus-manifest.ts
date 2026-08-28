@@ -27,11 +27,31 @@ import { isAdmissible } from './licence';
  *    where the guess had been plain CC BY. One assumption right, one wrong, and
  *    no way to tell which without looking. Both now fail the rule and are closed.
  *
+ * ## The 2026-08-28 licence audit
+ *
+ * Every admitted row was checked twice more, because 32 of them had been cleared
+ * from a PMC page alone — the evidence the JSSM row proved unreliable.
+ *
+ * 1. **Crossref metadata**, via OpenAlex, keyed on DOI. Publisher-deposited, so
+ *    it can genuinely disagree with PMC. Thirty-three agreed; one did not, and
+ *    `low-energy-availability-bone-2025` carries that story.
+ * 2. **The publishers' own JATS deposits** — the cached XML each source was
+ *    ingested from. Its `<permissions>` block is the licence the publisher
+ *    wrote, not a third party's summary of it: a machine-readable
+ *    `creativecommons.org/licenses/by/4.0/` plus the article's own Open Access
+ *    paragraph. **All 34 carry one. None is NC, ND or SA. None is missing.**
+ *
+ * That second check is the strongest evidence available without reading 34
+ * publisher pages by hand, and it is worth preferring over aggregators: a
+ * missing `<permissions>` block is exactly what the JSSM article looked like,
+ * so the check fails loudly in the case that actually bit us. It is also free
+ * and local — re-run it against `.corpus-cache/` whenever the corpus grows.
+ *
  * The register goes stale — licences change, articles move publisher. The IN rows
- * were true on 2026-08-19; the two OUT rows above were re-read 2026-08-27. Re-read
- * `corpus.md` before any new ingestion run and treat every row here as a
- * hypothesis with a URL attached, exactly as `AGENTS.md` says to treat a
- * document's claim about the code.
+ * were true on 2026-08-19 and re-verified 2026-08-28; the two OUT rows above were
+ * re-read 2026-08-27. Re-read `corpus.md` before any new ingestion run and treat
+ * every row here as a hypothesis with a URL attached, exactly as `AGENTS.md` says
+ * to treat a document's claim about the code.
  */
 
 /** Why a source is out. Recorded so a refusal can say something useful. */
