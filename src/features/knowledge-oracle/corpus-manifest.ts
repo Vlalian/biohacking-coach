@@ -489,7 +489,21 @@ export const CORPUS: readonly CorpusSource[] = [
     doi: '10.33549/physiolres.935749',
     pmcid: 'PMC12849792',
     licence: 'CC BY 4.0',
-    licenceUrl: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12849792/',
+    // **The one row where the sources disagreed — read this before trusting a
+    // licence audit that says "all clear".** A Crossref/OpenAlex sweep on
+    // 2026-08-28 reported this article as `cc-by-nc` from the publisher's own
+    // deposited metadata, while PMC and Europe PMC both report `cc-by`. That is
+    // the exact shape of the JSSM failure this register was built to catch, so
+    // it was resolved at the journal rather than by preferring whichever source
+    // was convenient: biomed.cas.cz states "Physiological Research is an Open
+    // Access journal under the Creative Commons license (CC BY) since July 1,
+    // 2023", and this article is 2025. The `cc-by-nc` is a stale deposit
+    // template predating that policy change, not a restriction.
+    //
+    // Recorded rather than quietly corrected, because the next licence sweep
+    // will raise the same alarm on the same row and should not have to
+    // re-derive the answer.
+    licenceUrl: 'https://www.biomed.cas.cz/physiolres/',
     attribution:
       'KONVIČKA, KÁŇOVÁ, BORZENKO, et al. (2025). Low Energy Availability and Its Impact on Bone Health and Metabolism in Athletes: A Narrative Review. Physiological Research. Licensed CC BY 4.0.',
     territory: 'low energy availability, bone health and bone-injury risk',
