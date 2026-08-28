@@ -14,10 +14,12 @@ describe('the corpus register', () => {
     const admitted = admittedSources();
 
     // 8 from issue 01, +10 by citation chaining, +13 by a gap-targeted PMC
-    // search (all 2026-08-25). Pinned so
-    // that growing the corpus is a deliberate edit to this test rather than a
-    // silent widening — every added row is a licence someone signed off on.
-    expect(admitted).toHaveLength(31);
+    // search (all 2026-08-25), +3 on 2026-08-28 to cover territories that OUT
+    // rows had left empty: block periodization, long-course age-group load, and
+    // the mechanism layer. Pinned so that growing the corpus is a deliberate
+    // edit to this test rather than a silent widening — every added row is a
+    // licence someone signed off on.
+    expect(admitted).toHaveLength(34);
 
     for (const source of admitted) {
       expect(isAdmissible(source.licence), `${source.slug} licence`).toBe(true);

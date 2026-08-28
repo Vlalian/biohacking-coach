@@ -651,6 +651,75 @@ export const CORPUS: readonly CorpusSource[] = [
       'The practical end of the sleep gap: an athlete training around a full life often cannot extend night sleep, and napping is the lever that remains.',
   },
 
+  // ── Added 2026-08-27/28, to cover territories the OUT rows below left empty ─
+  {
+    slug: 'block-vs-traditional-cyclists-2022',
+    title:
+      'No Differences Between 12 Weeks of Block- vs. Traditional-Periodized Training in Performance Adaptations in Trained Cyclists',
+    authors:
+      'Almquist NW, Eriksen HB, Wilhelmsen M, Hamarsland H, Ing S, Ellefsen S, Sandbakk Ø, Rønnestad BR, Skovereng K',
+    year: 2022,
+    doi: '10.3389/fphys.2022.837634',
+    pmcid: 'PMC8921659',
+    licence: 'CC BY 4.0',
+    // Article page and the publisher's own policy, per the rule. Frontiers:
+    // "All Frontiers articles are published with open access under the CC-BY
+    // Creative Commons attribution license."
+    licenceUrl: 'https://www.frontiersin.org/about/policies-and-publication-ethics',
+    attribution:
+      'Almquist NW, Eriksen HB, Wilhelmsen M, Hamarsland H, Ing S, Ellefsen S, Sandbakk Ø, Rønnestad BR, Skovereng K (2022). No Differences Between 12 Weeks of Block- vs. Traditional-Periodized Training in Performance Adaptations in Trained Cyclists. Frontiers in Physiology 13:837634. Licensed CC BY 4.0.',
+    territory: 'block vs traditional periodization; mesocycle structure',
+    verdict: 'in',
+    reason:
+      'Covers the territory `block-periodization-2019` was wanted for, which is out on CC BY-NC. Deliberately the load-matched null result rather than a meta-analysis reporting a small effect: a Coach holding only the favourable finding will overclaim, and "no difference once load is matched" is the more useful thing to be able to say.',
+  },
+  {
+    slug: 'age-group-triathlon-training-load-2026',
+    title:
+      'Training load and intensity in triathlon: objective differences between sex, age, race distance preference and training phase across a cohort of 95 age-group triathletes over six months',
+    authors: 'Wells LA, Hoffmann SM, Bruce L, Kremer P, Dwyer DB',
+    year: 2026,
+    doi: '10.3389/fspor.2026.1798702',
+    pmcid: 'PMC13171522',
+    licence: 'CC BY',
+    // Frontiers again: version unstated on the article, as with row 8, so the
+    // version is not claimed. Publisher policy read.
+    licenceUrl: 'https://www.frontiersin.org/about/policies-and-publication-ethics',
+    attribution:
+      'Wells LA, Hoffmann SM, Bruce L, Kremer P, Dwyer DB (2026). Training load and intensity in triathlon: objective differences between sex, age, race distance preference and training phase across a cohort of 95 age-group triathletes over six months. Frontiers in Sports and Active Living 8:1798702. Licensed CC BY.',
+    territory:
+      'what age-group long-course triathletes actually train — weekly volume, load and how it moves by phase',
+    verdict: 'in',
+    reason:
+      'Replaces `half-ironman-intensity-distribution-2019`, which is out on NC-ND, and is a better source for this product than the paper it replaces: 95 age-group triathletes over 34,731 sessions and six months, split by race-distance preference and training phase. Long-course specialists at 615 min and 574 TSS a week against short-course at 507 and 452 — the only row in the register describing what this product’s actual athlete does, rather than what a trained cohort did in a lab.',
+  },
+  {
+    slug: 'mitochondrial-capillary-growth-2024',
+    title:
+      'Effects of Exercise Training on Mitochondrial and Capillary Growth in Human Skeletal Muscle: A Systematic Review and Meta-Regression',
+    authors: 'Mølmen KS, Almquist NW, Skattebo Ø',
+    year: 2024,
+    doi: '10.1007/s40279-024-02120-2',
+    pmcid: 'PMC11787188',
+    licence: 'CC BY 4.0',
+    // **Weaker provenance than the two rows above, recorded rather than
+    // smoothed over.** Sports Medicine is a hybrid journal, and Springer's own
+    // article page redirects to an authorization endpoint, so the publisher
+    // policy could not be read. Two independent sources agree instead: PMC
+    // carries the full CC BY 4.0 International text with author-retained
+    // copyright — not the bare journal copyright that made the JSSM row
+    // dangerous — and OpenAlex reports `cc-by` from Crossref metadata. Re-read
+    // at the publisher if institutional access ever makes that possible.
+    licenceUrl: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC11787188/',
+    attribution:
+      'Mølmen KS, Almquist NW, Skattebo Ø (2024). Effects of Exercise Training on Mitochondrial and Capillary Growth in Human Skeletal Muscle: A Systematic Review and Meta-Regression. Sports Medicine 55(1):115–144. Licensed CC BY 4.0.',
+    territory:
+      'why endurance training works — mitochondrial and capillary adaptation, and what determines how much of it an athlete gets',
+    verdict: 'in',
+    reason:
+      'The mechanism layer the corpus otherwise lacks, and the role `openstax-anatomy-physiology-2e` was wanted for before it turned out to be CC BY-NC-SA. Coaching-relevant rather than merely explanatory: adaptation scales with training load, and its size is largely set by where the athlete started — which is the evidence behind telling a fit athlete and a beginner different things about the same week.',
+  },
+
   // ── OUT — retained by design, so each is refused by name ──────────────────
   {
     slug: 'half-ironman-intensity-distribution-2019',
