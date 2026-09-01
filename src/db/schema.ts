@@ -11,6 +11,7 @@ import {
   index,
   primaryKey,
   uniqueIndex,
+  vector,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
@@ -578,3 +579,107 @@ export const erasureLog = pgTable('erasure_log', {
 
 export type ErasureLogRow = typeof erasureLog.$inferSelect;
 export type NewErasureLogRow = typeof erasureLog.$inferInsert;
+
+/**
+ * ── The Knowledge Oracle corpus ──────────────────────────────────────────────
+ *
+ * Two tables that touch **nothing** in the training schema above. No athlete id,
+ * no foreign key into an athlete row, no column that could carry one. That is
+ * structural, not stylistic: the corpus is published training science, not
+ * athlete data, and ADR 0006's promise ("a leak of the training data alone names
+ * nobody") is not weakened by adding a table that names Mujika. The reverse rule
+ * matters more — an athlete's query must never be persisted alongside a chunk,
+ * so there is nowhere here for it to go.
+ *
+ * Deferred deliberately in route ticket 05 ("separate project; pgvector ready in
+ * Neon"); that deferral ended when the Knowledge Oracle PRD put the RAG on the
+ * critical path (Decision 3, 2026-08-16).
+ */
+
+/**
+ * One admitted source, and the licence that admits it.
+ *
+ * The licence lives here rather than only in `corpus.md` because `corpus.md` is
+ * gitignored prose: a retrieved passage has to be able to answer "what am I
+ * allowed to do with you?" without a human opening a document that may not exist
+ * on the machine asking. `attribution` is the CC BY credit line, stored ready to
+ * display — a citation should never have to be assembled at read time from
+ * fields that might be null.
+ *
+ * `textDigest` is what makes re-ingestion cheap and safe: unchanged source text
+ * means the same digest, which means the chunks already in the database are
+ * still correct and no embedding call needs to be paid for.
+ */
+export const knowledgeSources = pgTable(
+  'knowledge_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // The manifest's key. Unique so ingest can upsert on it rather than
+    // guessing whether a source is already present.
+    slug: text('slug').notNull().unique(),
+    title: text('title').notNull(),
+    authors: text('authors').notNull(),
+    year: integer('year').notNull(),
+    doi: text('doi'),
+    pmcid: text('pmcid'),
+    licence: text('licence').notNull(),
+    licenceUrl: text('licence_url').notNull(),
+    attribution: text('attribution').notNull(),
+    /** SHA-256 of the source text this row's chunks were built from. */
+    textDigest: text('text_digest').notNull(),
+    ingestedAt: timestamp('ingested_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // A source with no licence recorded is exactly what the register exists to
+    // prevent, so the database refuses it too. Belt to the manifest's braces:
+    // `admit()` can be bypassed by a direct insert; this cannot.
+    check('knowledge_sources_licence_present', sql`length(${table.licence}) > 0`),
+  ],
+);
+
+export type KnowledgeSourceRow = typeof knowledgeSources.$inferSelect;
+export type NewKnowledgeSourceRow = typeof knowledgeSources.$inferInsert;
+
+/**
+ * One retrievable passage.
+ *
+ * `embedding` is `vector(1536)`, the dimensionality of OpenAI's
+ * `text-embedding-3-small` (decided 2026-08-21). The number is baked into the
+ * migration, so changing embedding model later is a migration and a re-ingest,
+ * not a config edit — stated here so nobody discovers it at the wrong moment.
+ *
+ * `ordinal` keeps a chunk resolvable back to its place in the article, which is
+ * what lets a citation say *where* in a paper a claim came from rather than only
+ * which paper.
+ */
+export const knowledgeChunks = pgTable(
+  'knowledge_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: uuid('source_id')
+      .notNull()
+      .references(() => knowledgeSources.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    text: text('text').notNull(),
+    tokenEstimate: integer('token_estimate').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+  },
+  (table) => [
+    // Retrieval (issue 03) searches by cosine distance. HNSW over IVFFlat
+    // because IVFFlat's recall depends on a list count tuned to a row count the
+    // corpus does not have yet — eight sources is far too few to tune against,
+    // and HNSW needs no such parameter to behave.
+    index('knowledge_chunks_embedding_idx').using(
+      'hnsw',
+      table.embedding.op('vector_cosine_ops'),
+    ),
+    // Re-ingest deletes a source's chunks and rewrites them; this is the read.
+    uniqueIndex('knowledge_chunks_source_ordinal_idx').on(
+      table.sourceId,
+      table.ordinal,
+    ),
+  ],
+);
+
+export type KnowledgeChunkRow = typeof knowledgeChunks.$inferSelect;
+export type NewKnowledgeChunkRow = typeof knowledgeChunks.$inferInsert;

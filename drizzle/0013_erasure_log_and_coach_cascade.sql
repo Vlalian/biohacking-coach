@@ -1,11 +1,15 @@
 -- Erasure: the append-only log, and the cascade that makes a Head Coach
 -- account deletable at all (`showable-version/10`, decided 2026-08-27).
 --
--- NUMBERING. Three other unmerged branches already carry a migration numbered
--- 0012 (the knowledge-oracle ingestion branch, the Clapet worktree, and
--- `fix/detected-activity-proposes`). That is known and is not resolved here —
--- whichever lands second gets renumbered at merge time rather than having its
--- conflict resolved. Do not renumber this file speculatively.
+-- NUMBERING. This was written as 0012 and regenerated as 0013 on 2026-09-01.
+-- Four branches had independently claimed 0012; `main` took
+-- `0012_knowledge_oracle_corpus.sql` when PR #42 merged, so this one was
+-- renumbered at merge time exactly as its earlier note said it would be. It was
+-- REGENERATED rather than renamed: the journal and the snapshot have to agree
+-- with the filename, so a text-level rename would have left drizzle's
+-- bookkeeping describing a migration that does not exist. Two branches still
+-- claim 0012 (`claude/clapet-system-design-convert-65316a`,
+-- `fix/detected-activity-proposes`); whichever merges next does this again.
 --
 -- 1. `erasure_log` — deliberately keyed to NOBODY.
 --
@@ -53,7 +57,9 @@
 --
 -- IF EXISTS on the drop, matching 0011 — the constraint is expected to be
 -- there, and a migration that fails on a database where it is not is a worse
--- outcome than one that proceeds.
+-- outcome than one that proceeds. drizzle-kit generates a bare DROP CONSTRAINT;
+-- this line is deliberately hand-edited, and safe to edit because the migration
+-- has not been applied anywhere yet.
 CREATE TABLE "erasure_log" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"consented_purposes" jsonb NOT NULL,

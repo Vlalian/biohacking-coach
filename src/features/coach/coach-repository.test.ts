@@ -44,6 +44,7 @@ const {
   getLinkForAthlete,
   updateLinkVisibility,
   severLinkForAthlete,
+  holdsActiveCoachingLinks,
 } = await import('./coach-repository');
 
 /** A stored coaching_link row, as the repository selects it. */
@@ -259,5 +260,28 @@ describe('getSharedTranscripts — gated on the link', () => {
       visibility: { shareAthleteReports: true, shareAiTranscripts: true },
     };
     expect(await getSharedTranscripts(severed)).toBeNull();
+  });
+});
+
+describe('holdsActiveCoachingLinks', () => {
+  // The Navigation Drawer's Roster entry hangs off this boolean. It shipped
+  // missing entirely (2026-08-21): the coach's pages existed and worked, and no
+  // link to them was ever rendered, so a Head Coach could not reach their own
+  // Roster.
+  beforeEach(() => {
+    nextRows = [];
+  });
+
+  it('is true when the user holds at least one active link', async () => {
+    nextRows = [{ id: 'link_1' }];
+    expect(await holdsActiveCoachingLinks('user_1')).toBe(true);
+  });
+
+  it('is false when the query finds nothing', async () => {
+    // Covers all three ways of holding no roster — no coach row, a coach row
+    // with no links, and a coach row whose links are all severed. The status
+    // filter is in the query, so each one comes back as zero rows.
+    nextRows = [];
+    expect(await holdsActiveCoachingLinks('user_1')).toBe(false);
   });
 });

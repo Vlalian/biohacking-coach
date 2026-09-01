@@ -15,6 +15,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // `scripts/` holds the /onkel quality tooling, whose pure modules are
+    // specified by their tests — they belong in the same suite as everything
+    // else, not behind a separate runner nobody remembers to run.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
   },
 });
