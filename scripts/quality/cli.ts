@@ -94,6 +94,26 @@ function collectCoverage(): Record<string, FileCoverage> {
  */
 export const MUTATION_EXEMPT = ['scripts/quality/cli.ts'];
 
+/**
+ * Paths Stryker must not copy into its sandbox.
+ *
+ * The first five are Windows **junctions**. `New-Session.ps1` creates them so
+ * every worktree shares the one canonical tracker instead of forking it — the
+ * failure that cost four divergent copies of `.scratch`. Stryker builds its
+ * sandbox with `copyfile`, and `copyfile` on a junction fails `EPERM`, so the
+ * run dies before a single mutant is tested. Not a slow gate: no gate at all,
+ * in every worktree that script creates.
+ *
+ * This did not surface when the gate was built because that session ran in a
+ * `.claude/worktrees/` checkout — the one shape on this machine that has no
+ * `.scratch` to trip over. The gate had therefore never run against the
+ * documented topology.
+ *
+ * `.next` is not a junction, just build output the four checks leave behind.
+ * Nothing here is ever mutated, so copying it is pure cost.
+ */
+export const SANDBOX_IGNORE = ['.scratch', '.agents', '.claude', 'poc', 'docs/agents', '.next'];
+
 /** One Stryker run scoped to exactly the ticket's files. */
 function collectMutants(files: string[]): MutantReport[] {
   const dir = mkdtempSync(join(tmpdir(), 'onkel-mut-'));
@@ -114,6 +134,7 @@ function collectMutants(files: string[]): MutantReport[] {
       jsonReporter: { fileName: reportPath },
       tempDirName: join(dir, 'stryker-tmp'),
       coverageAnalysis: 'perTest',
+      ignorePatterns: SANDBOX_IGNORE,
     }),
     'utf8',
   );

@@ -157,6 +157,20 @@ describe('main — the Stryker run', () => {
     expect(config.mutate).toEqual(['src/a.ts']);
   });
 
+  it('keeps the shared junctions out of the sandbox', () => {
+    // Stryker copies the project into a sandbox, and copyfile on a Windows
+    // junction fails EPERM — so without this the gate does not run at all in
+    // any worktree New-Session.ps1 creates.
+    givenRun({ mutants: ['Killed'] });
+
+    main(['src/a.ts']);
+
+    const config = JSON.parse(String(writeFileSync.mock.calls[0][1]));
+    expect(config.ignorePatterns).toEqual(
+      expect.arrayContaining(['.scratch', '.agents', '.claude', 'poc', 'docs/agents']),
+    );
+  });
+
   it('treats a missing report as a broken run, not an empty one', () => {
     // Stryker exits non-zero when mutants survive, so a thrown command is not
     // by itself a failure — but no report at all means the run never happened,
