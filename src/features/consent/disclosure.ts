@@ -12,6 +12,31 @@
  * This module is pure data — no `server-only`, no I/O — so the client screen and
  * the server both import it. Nothing here reaches the Anthropic API; the Coach
  * never sees a consent disclosure.
+ *
+ * ## 2026-09-01 — OpenAI named as a second processor
+ *
+ * The disclosure named **one** processor, Anthropic. The Knowledge Oracle adds a
+ * second: embedding turns a query into a vector, and `embedder.ts` sends that
+ * query text to OpenAI. Its own doc comment flagged exactly this and deferred it
+ * to whoever built retrieval — *"that is athlete-derived text reaching a vendor
+ * the consent artifact does not name."*
+ *
+ * At corpus-ingest time it was harmless: the text embedded is published papers,
+ * not athlete data. It stops being harmless when a query built from an athlete's
+ * **training state** is embedded, which is `knowledge-oracle/03` (built) wired in
+ * by `knowledge-oracle/04` (not built).
+ *
+ * **So this describes processing that is not live yet, deliberately.** Consent
+ * has to precede processing, not trail it, and the version bump is nearly free
+ * *today* — no tester has been invited, so the grants it invalidates are the
+ * builders' own. After the first invite the same bump would re-gate real people
+ * mid-test. Cheap now, expensive later, and the cost only goes one way.
+ *
+ * What is claimed is deliberately narrow, and is a *structural* guarantee rather
+ * than a filtered one (ADR 0006): the query is assembled from training state —
+ * phase, experience level, question — and there is no name or email field on the
+ * query type to interpolate. Athlete free text in the question is covered the
+ * same way it already is for the Coach.
  */
 
 /**
@@ -48,8 +73,11 @@ export const REQUIRED_CONSENT_PURPOSES: readonly ConsentPurpose[] = [
  * the wording here is the product's honest description of processing, not
  * lawyer-drafted final text. Revising it after that review is exactly the
  * version bump this mechanism exists for.
+ *
+ * `2026-08-07` → `2026-09-01`: OpenAI named as a second processor. See the
+ * amendment at the top of this file for why it lands before the processing does.
  */
-export const DISCLOSURE_VERSION = '2026-08-07';
+export const DISCLOSURE_VERSION = '2026-09-01';
 
 /** Narrows an arbitrary string to a known purpose — untrusted input guard. */
 export function isConsentPurpose(value: string): value is ConsentPurpose {
@@ -95,7 +123,7 @@ const EN: DisclosureCopy = {
   intro:
     'To coach you, this app processes what you tell it and share with it. Please choose what you agree to below. You can change any of these later in Privacy & consent.',
   controller:
-    'Your coaching data is processed by the app operator as data controller, and by Anthropic (Claude AI) as a processor. AI processing runs on servers in the United States under the safeguards in our data processing agreement. Your name and email are never sent to the AI.',
+    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which does the coaching itself, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. Your name and email are never sent to either.',
   requiredLabel: 'Required to use the Coach',
   optionalLabel: 'Optional',
   agree: 'Agree and continue',
@@ -114,7 +142,7 @@ const EN: DisclosureCopy = {
   purposes: {
     ai_coaching: {
       title: 'AI coaching',
-      body: 'Let the AI Coach (Claude, by Anthropic) process your training data — your plan, sessions, ratings, and the messages you send it — to coach you. Without this the Coach cannot work.',
+      body: 'Let the AI Coach (Claude, by Anthropic) process your training data — your plan, sessions, ratings, and the messages you send it — to coach you. When the Coach looks something up in its training-science library, a short pseudonymous query — your training phase, your experience level, and your question — goes to OpenAI to be turned into a search key; the search itself runs on our own database. Without this the Coach cannot work.',
     },
     health_data: {
       title: 'Health-related signals',
@@ -132,7 +160,7 @@ const DA: DisclosureCopy = {
   intro:
     'For at kunne coache dig behandler appen det, du fortæller og deler med den. Vælg nedenfor, hvad du giver samtykke til. Du kan altid ændre det senere under Privatliv & samtykke.',
   controller:
-    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af Anthropic (Claude AI) som databehandler. AI-behandlingen kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftale. Dit navn og din e-mail sendes aldrig til AI’en.',
+    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som står for selve coachingen, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Dit navn og din e-mail sendes aldrig til nogen af dem.',
   requiredLabel: 'Krævet for at bruge Coachen',
   optionalLabel: 'Valgfrit',
   agree: 'Accepter og fortsæt',
@@ -151,7 +179,7 @@ const DA: DisclosureCopy = {
   purposes: {
     ai_coaching: {
       title: 'AI-coaching',
-      body: 'Lad AI-Coachen (Claude fra Anthropic) behandle dine træningsdata — din plan, dine sessioner, dine vurderinger og de beskeder, du sender — for at coache dig. Uden dette kan Coachen ikke fungere.',
+      body: 'Lad AI-Coachen (Claude fra Anthropic) behandle dine træningsdata — din plan, dine sessioner, dine vurderinger og de beskeder, du sender — for at coache dig. Når Coachen slår noget op i sit træningsfaglige bibliotek, sendes en kort pseudonym forespørgsel — din træningsfase, dit erfaringsniveau og dit spørgsmål — til OpenAI for at blive omdannet til en søgenøgle; selve søgningen kører på vores egen database. Uden dette kan Coachen ikke fungere.',
     },
     health_data: {
       title: 'Helbredsrelaterede signaler',
