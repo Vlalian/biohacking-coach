@@ -158,6 +158,64 @@ async function loadOwned(activityId: string, athleteId: string) {
  * had skipped or that a Rest day displaced, because the file is evidence they
  * did it. A completed session is the one thing they cannot overwrite.
  */
+/**
+ * The WHERE that decides whether an acceptance may land on the session the
+ * athlete chose.
+ *
+ * Extracted and exported for one reason: **mutation testing could not see it
+ * inline.** The status clause is the line this ticket turns on — it used to
+ * read `status = 'planned'` while the card offered anything not completed, so
+ * accepting onto a skipped session updated nothing and the activity was
+ * destroyed silently. Written inline, a mutant flipping `ne` to `eq` killed no
+ * test, because the repository mocks discard the predicate they are handed.
+ * Rendered through `PgDialect` in the test, the clause is readable and the
+ * mutation is caught.
+ *
+ * It mirrors {@link isChoosableTarget} deliberately: `completed` is the one
+ * status neither the machine nor the athlete may overwrite, and everything the
+ * athlete was offered must be writable or the offer was a lie. The two are
+ * separate expressions of one rule — one in TypeScript over a row already read,
+ * one in SQL over the row as it is at write time — and a test holds each.
+ */
+export function writableTargetWhere(sessionId: string, athleteId: string) {
+  return and(
+    eq(sessions.id, sessionId),
+    eq(sessions.athleteId, athleteId),
+    ne(sessions.status, 'completed'),
+  );
+}
+
+/** The two events that between them say whether an import is currently in force. */
+export const IMPORT_STATE_EVENTS = ['garmin_imported', 'garmin_import_undone'] as const;
+
+/**
+ * Both kinds of import event for one session, newest first — see
+ * {@link isActiveImport} for why both.
+ *
+ * Exported for the same reason as {@link writableTargetWhere}: inline, a mutant
+ * emptying the event-type list survived every test.
+ */
+export function importStateWhere(athleteId: string, sessionId: string) {
+  return and(
+    eq(events.athleteId, athleteId),
+    inArray(events.type, [...IMPORT_STATE_EVENTS]),
+    sql`${events.payload}->>'sessionId' = ${sessionId}`,
+  );
+}
+
+/**
+ * Whether the newest import event leaves an import in force.
+ *
+ * The log is read as a state machine rather than searched: whatever happened
+ * last is what is true now. Asking instead for "the newest `garmin_imported`"
+ * finds a stale one after import → undo → an ordinary manual completion, and
+ * undoing *that* would reset a completion the athlete made themselves and put
+ * back a proposal for a file already dealt with.
+ */
+export function isActiveImport(latest: { type: string } | undefined): boolean {
+  return latest?.type === 'garmin_imported';
+}
+
 async function resolveChosenTarget(
   sessionId: string,
   athleteId: string,
@@ -286,13 +344,7 @@ export async function acceptDetectedActivity(params: {
     const updated = await db
       .update(sessions)
       .set({ status: 'completed', parked: false, ...provenance, ...reflection })
-      .where(
-        and(
-          eq(sessions.id, target.id),
-          eq(sessions.athleteId, athleteId),
-          ne(sessions.status, 'completed'),
-        ),
-      )
+      .where(writableTargetWhere(target.id, athleteId))
       .returning({ id: sessions.id });
 
     // Nothing else has run yet, so the proposal is still pending and the
@@ -456,19 +508,11 @@ export async function undoDetectedImport(params: {
   const [record] = await db
     .select({ type: events.type, payload: events.payload })
     .from(events)
-    .where(
-      and(
-        eq(events.athleteId, athleteId),
-        inArray(events.type, ['garmin_imported', 'garmin_import_undone']),
-        sql`${events.payload}->>'sessionId' = ${sessionId}`,
-      ),
-    )
+    .where(importStateWhere(athleteId, sessionId))
     .orderBy(desc(events.createdAt))
     .limit(1);
 
-  if (!record || record.type !== 'garmin_imported') {
-    return { ok: false, reason: 'not-imported' };
-  }
+  if (!isActiveImport(record)) return { ok: false, reason: 'not-imported' };
   const payload = record.payload as {
     previousDuration?: number | null;
     activityType?: string;
