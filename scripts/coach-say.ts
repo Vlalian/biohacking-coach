@@ -55,12 +55,13 @@ import type { WeekSession } from '../src/features/coach/week';
 // Shaped to exercise the interesting branches: mid-relationship (session 4+, so
 // the full Reflective Prompt arc), a race target, real equipment, a Fixed
 // Constraint, and a communication style that should be visible in the tone.
+//
+// It carries NO `readiness`, and that is the point: no Check-in feature exists,
+// so every real athlete's prompt takes the no-readiness path. A fixture that
+// supplied scores would have this tool — the one thing a human reads before and
+// after a prompt change — exercising the one branch nobody is on
+// (code-health/07).
 const FIXTURE: CheckIn = {
-  body: 6,
-  mental: 5,
-  energy: 6,
-  sleep: 6.5,
-  pulse: 58,
   phase: 'Build',
   sessionCount: 8,
   commStyle: 'direct, technical, no reassurance',

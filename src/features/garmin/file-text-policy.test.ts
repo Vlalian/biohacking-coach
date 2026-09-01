@@ -108,7 +108,7 @@ describe('the prompt seams carry no file-derived text', () => {
     // note, this test fails.
     const [session] = parseGpx(Buffer.from(hostileGpx));
     const prompt = buildChatPrompt(
-      { body: 6, mental: 6, energy: 6, sleep: 7, pulse: 55 },
+      { readiness: { body: 6, mental: 6, energy: 6, sleep: 7, pulse: 55 } },
       '2026-08-12',
       { type: 'Endurance', dayLabel: 'Mon', duration: '30 min', zone: 'Z2', note: session.note },
     );

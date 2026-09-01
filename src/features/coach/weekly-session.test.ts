@@ -63,11 +63,7 @@ describe('buildWeeklyCheckIn', () => {
   it('maps the opaque profile and readiness, with no identity', () => {
     const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 3, 'da');
     expect(checkIn).toMatchObject({
-      body: 7,
-      mental: 6,
-      energy: 8,
-      sleep: 7.5,
-      pulse: 52,
+      readiness: READINESS,
       phase: 'Base Building',
       experienceLevel: 'intermediate',
       commStyle: 'direct',
@@ -295,5 +291,38 @@ describe('proposedToNewSessionRows', () => {
         dayOrder: 1,
       },
     ]);
+  });
+});
+
+// code-health/07 — a check-in built with no readiness must carry none. The
+// alternative the app shipped was a hardcoded 7/7/7/7.5/55, which made every
+// athlete read as equally, mildly fine and contradicted anyone who said
+// otherwise in words.
+describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
+  it('carries no readiness at all when there is no Check-in', () => {
+    const checkIn = buildWeeklyCheckIn(athlete(), null, 1);
+
+    expect(checkIn.readiness).toBeUndefined();
+    // Absent, not present-and-undefined: an explicit `readiness: undefined`
+    // would still be a key something could reach into and render.
+    expect('readiness' in checkIn).toBe(false);
+  });
+
+  it('keeps the facts that are real', () => {
+    const checkIn = buildWeeklyCheckIn(athlete(), null, 3);
+
+    expect(checkIn.phase).toBe('Base Building');
+    expect(checkIn.experienceLevel).toBe('intermediate');
+    expect(checkIn.sessionCount).toBe(2);
+  });
+
+  it('carries the whole report when a real Check-in supplied one', () => {
+    // All five together, because a Check-in is one report. There is deliberately
+    // no test for a partial readiness: `Readiness` requires all five, so a
+    // half-filled one does not compile — which is the point of nesting it rather
+    // than hanging five optional fields off CheckIn.
+    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 1);
+
+    expect(checkIn.readiness).toEqual(READINESS);
   });
 });

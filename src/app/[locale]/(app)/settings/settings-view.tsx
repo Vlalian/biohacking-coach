@@ -4,11 +4,12 @@ import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useSave, useSaveStatus } from './use-save';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
-import { Check, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-react';
+import { Check, Download, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-react';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import type { SettingsActionResult } from './settings-actions';
+import type { DeleteAccountResult } from './erasure-actions';
 
 /** The profile fields Settings reads and edits — a narrower shape than the
  *  stored {@link import('@/features/athlete/athlete').Athlete}, resolved by
@@ -46,6 +47,8 @@ export interface SettingsViewProps {
     on: boolean,
   ) => Promise<SettingsActionResult>;
   onSeverCoachingLink: () => Promise<SettingsActionResult>;
+  /** Erases the account. Takes the email the athlete typed, re-checked server-side. */
+  onDeleteAccount: (confirmation: string) => Promise<DeleteAccountResult>;
 }
 
 const DAYS = ONBOARDING_OPTIONS.days;
@@ -84,6 +87,7 @@ export function SettingsView({
   onUpdateLanguage,
   onSetLinkVisibility,
   onSeverCoachingLink,
+  onDeleteAccount,
 }: SettingsViewProps) {
   const t = useTranslations('Settings');
 
@@ -125,6 +129,8 @@ export function SettingsView({
             onSeverCoachingLink={onSeverCoachingLink}
           />
         )}
+
+        <YourDataSection email={profile.email} onDeleteAccount={onDeleteAccount} />
       </div>
     </div>
   );
@@ -691,6 +697,179 @@ function SeverControl({
           className="border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
         >
           {t('severCancel')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Your data                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Export and erasure (`showable-version/10`; `docs/nfr.md` PRIV-3).
+ *
+ * Last section on the page, and unconditional — unlike Sharing, this is not
+ * something only some athletes have. Settings is the conventional home for
+ * account actions and the Privacy view links here rather than holding the
+ * controls itself: that view explains the rights, this one exercises them.
+ */
+function YourDataSection({
+  email,
+  onDeleteAccount,
+}: {
+  email: string;
+  onDeleteAccount: (confirmation: string) => Promise<DeleteAccountResult>;
+}) {
+  const t = useTranslations('Settings');
+
+  return (
+    <Section label={t('sectionYourData')}>
+      <div>
+        <p className="font-body text-sm text-foreground">{t('exportLabel')}</p>
+        <p className="mt-1 font-body text-xs text-muted-foreground">{t('exportNote')}</p>
+        {/*
+          A plain anchor, not the i18n Link: the route lives outside the
+          `[locale]` segment and must not be locale-prefixed. `download` asks the
+          browser to save rather than navigate; the Content-Disposition header on
+          the route is what actually names the file.
+        */}
+        <a
+          href="/api/export"
+          download
+          className="mt-3 inline-flex items-center gap-2 border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-foreground transition-colors hover:border-signal hover:text-signal"
+        >
+          <Download className="h-3 w-3" />
+          {t('exportButton')}
+        </a>
+      </div>
+
+      <div className="border-t border-rule pt-5">
+        <p className="font-body text-sm text-foreground">{t('deleteLabel')}</p>
+        <p className="mt-1 font-body text-xs text-muted-foreground">{t('deleteNote')}</p>
+        <DeleteAccountControl email={email} onDeleteAccount={onDeleteAccount} />
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * The confirmation gate on an irreversible delete.
+ *
+ * Type-to-confirm rather than a plain two-button "are you sure" (decided
+ * 2026-08-27). The deletion is immediate and hard — there is no window, no undo
+ * and no backup — so this dialog is the only thing between a misclick and the
+ * loss of an athlete's entire record. Every other destructive-looking action in
+ * this app is recoverable by doing it again; this one is not, and two clicks in
+ * the same corner of the screen is not a proportionate gate for it.
+ *
+ * The disabled button is a hint, not the control: `deleteMyAccountAction`
+ * re-checks the typed value against the session's own email server-side.
+ *
+ * The export is offered here as a **link**, not a checkbox on the delete. A
+ * checkbox would chain the download to the deletion, and if the browser blocked
+ * it or it failed, the data would be gone and the copy would never have arrived.
+ * A link means the file is in hand before anything destructive runs.
+ */
+function DeleteAccountControl({
+  email,
+  onDeleteAccount,
+}: {
+  email: string;
+  onDeleteAccount: (confirmation: string) => Promise<DeleteAccountResult>;
+}) {
+  const t = useTranslations('Settings');
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [typed, setTyped] = useState('');
+  const { pending, error, run } = useSave();
+
+  const matches = typed.trim().toLowerCase() === email.trim().toLowerCase();
+
+  async function confirmDelete() {
+    if (!matches) return;
+    if (await run(() => onDeleteAccount(typed))) {
+      // The session rows went with the user row, so there is nobody to be any
+      // more. Leave immediately rather than sitting on a page whose data no
+      // longer exists.
+      router.replace('/sign-in');
+      router.refresh();
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="font-mono text-[10px] uppercase tracking-[0.16em] text-destructive transition-opacity hover:opacity-80"
+        >
+          {t('deleteButton')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border border-destructive/40 bg-destructive/5 p-4">
+      <p className="font-body text-sm text-foreground">{t('deleteConfirmTitle')}</p>
+      <p className="mt-1 font-body text-xs text-muted-foreground">
+        {t('deleteConfirmBody')}
+      </p>
+      <p className="mt-2 font-body text-xs text-destructive">
+        {t('deleteConfirmIrreversible')}
+      </p>
+
+      <a
+        href="/api/export"
+        download
+        className="mt-3 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-foreground underline transition-colors hover:text-signal"
+      >
+        <Download className="h-3 w-3" />
+        {t('deleteConfirmDownloadFirst')}
+      </a>
+
+      <label
+        htmlFor="delete-confirm"
+        className="mt-4 block font-body text-xs text-muted-foreground"
+      >
+        {t('deleteConfirmTypePrompt', { email })}
+      </label>
+      <input
+        id="delete-confirm"
+        type="text"
+        value={typed}
+        onChange={(e) => setTyped(e.target.value)}
+        disabled={pending}
+        autoComplete="off"
+        placeholder={t('deleteConfirmPlaceholder')}
+        className="mt-1 w-full max-w-sm border border-border bg-panel px-3 py-2 font-body text-sm text-foreground outline-none focus:border-destructive"
+      />
+
+      {error && <FieldError message={t('deleteError')} />}
+
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={confirmDelete}
+          disabled={pending || !matches}
+          className="inline-flex items-center gap-2 border border-destructive px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-40"
+        >
+          {pending && <Loader2 className="h-3 w-3 animate-spin" />}
+          {t('deleteConfirmButton')}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setConfirming(false);
+            setTyped('');
+          }}
+          disabled={pending}
+          className="border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {t('deleteCancel')}
         </button>
       </div>
     </div>
