@@ -11,6 +11,7 @@
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
     "metrics": "tsx scripts/metrics.ts",
+    "export": "tsx scripts/export.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

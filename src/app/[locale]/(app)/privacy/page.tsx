@@ -1,5 +1,6 @@
-import { setRequestLocale } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
@@ -44,9 +45,33 @@ export default async function PrivacyPage({
     ? currentlyConsentedPurposes(await getActiveConsents(athlete.id))
     : [];
 
+  const t = await getTranslations('Privacy');
+
   return (
     <div className="flex flex-col items-center gap-6 p-8">
       <ConsentScreen granted={granted} mode="manage" />
+
+      {/*
+        Export and erasure are *explained* here and *exercised* in Settings
+        (`showable-version/10`). The ticket named both views as candidates and
+        said to pick one and link from the other: the controls sit next to the
+        other account actions, and this view — which is where an athlete comes to
+        read about their rights — points at them.
+      */}
+      <section className="w-full max-w-xl border border-border bg-panel p-5">
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+          {t('dataRightsTitle')}
+        </h2>
+        <p className="mt-2 font-body text-sm text-muted-foreground">
+          {t('dataRightsBody')}
+        </p>
+        <Link
+          href="/settings"
+          className="mt-3 inline-block font-mono text-[10px] uppercase tracking-[0.16em] text-signal underline transition-opacity hover:opacity-80"
+        >
+          {t('dataRightsLink')}
+        </Link>
+      </section>
     </div>
   );
 }
