@@ -1,4 +1,3 @@
-import { DISCLOSURE_VERSION } from '@/features/consent/disclosure';
 import type { ActiveConsent } from '@/features/consent/consent';
 
 /**
@@ -83,16 +82,22 @@ export interface ErasureLogEntry {
  * version across all of them would misstate what was agreed to.
  *
  * `disclosureVersion` is a separate fact from those: the wording in force when
- * the erasure happened, which is what dates the record.
+ * the erasure happened, which is what dates the record. It is **passed in**
+ * rather than read from `@/features/consent/disclosure`, so this module keeps
+ * the one-way dependency rule in `AGENTS.md` — a pure decision module imports
+ * nothing from a feature. The adapter at the edge supplies it
+ * (`erasure-repository.ts`), which is also what makes the "records the version
+ * it is given" behaviour testable without a stub.
  */
 export function toErasureLogEntry(
   active: readonly ActiveConsent[],
+  disclosureVersion: string,
 ): ErasureLogEntry {
   return {
     consentedPurposes: active.map((c) => ({
       purpose: c.purpose,
       disclosureVersion: c.disclosureVersion,
     })),
-    disclosureVersion: DISCLOSURE_VERSION,
+    disclosureVersion,
   };
 }

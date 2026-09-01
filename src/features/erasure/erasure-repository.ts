@@ -3,6 +3,7 @@ import { getDb } from '@/db';
 import { athlete, coach, erasureLog } from '@/db/schema';
 import { user } from '@/db/auth-schema';
 import { getActiveConsents } from '@/features/consent/consent-repository';
+import { DISCLOSURE_VERSION } from '@/features/consent/disclosure';
 import { erasurePlan, toErasureLogEntry } from './erasure';
 
 /**
@@ -52,7 +53,11 @@ export interface ErasureSubject {
 export async function eraseAccount(subject: ErasureSubject): Promise<void> {
   const db = getDb();
 
-  await db.insert(erasureLog).values(toErasureLogEntry(await getActiveConsents(subject.athleteId)));
+  // The disclosure version is supplied here, at the edge, rather than reached
+  // for inside the pure module — see `toErasureLogEntry`.
+  await db.insert(erasureLog).values(
+    toErasureLogEntry(await getActiveConsents(subject.athleteId), DISCLOSURE_VERSION),
+  );
 
   for (const step of erasurePlan(subject)) {
     switch (step) {
