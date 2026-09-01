@@ -39,12 +39,52 @@
   refuses anyway if .claude\worktrees turns out to be reachable, because by
   then something has gone wrong that no amount of ordering will fix. Repair
   the worktree's links first; do not -Force past this one.
+
+  --------------------------------------------------------------------------
+  -CheckBranch: it answers the question, it does not do the deleting (2026-09-01)
+
+  Tearing down a worktree deliberately leaves its branch alone. A worktree and
+  a branch have different lifetimes, and the branch is often the only copy of
+  work whose PR is still open. That separation stays.
+
+  What was missing is not the deleting - it is knowing whether deleting is
+  safe. GitHub SQUASH-merges here, which rewrites the commits, so a fully
+  merged branch is NOT an ancestor of main and the safe delete refuses it with
+  "error: not fully merged". The advertised way out is the force form, which
+  checks nothing at all and is blocked by this repo's guardrail hook for good
+  reason. So the two available answers were a refusal and a blunt instrument,
+  and the actual question - is this branch's work in main? - went unanswered.
+
+  -CheckBranch answers it by CONTENT: take the files the branch touched since
+  its merge-base, and compare only those against main. All identical -> the
+  work is in main whatever the commit graph says.
+
+  It is deliberately strict in one direction. If main has moved further on a
+  file the branch touched, it reports NOT VERIFIED even though the branch may
+  be perfectly merged - which is exactly what happened to three squash-merged
+  branches on 2026-09-01 once a later PR touched package.json and schema.ts.
+  A false "keep this" costs one manual command; a false "safe to delete" is
+  unrecoverable. When the two disagree, a merged PR on GitHub is the better
+  authority, and the output says so.
+
+  WHY IT DOES NOT DELETE. An earlier draft did, gated behind this same check.
+  Mads's call, and the right one: this script deleting a branch would do it
+  WITHOUT the guarded command appearing in anything an agent typed, so the
+  guardrail hook would never see it. The hole would not be in the verification
+  - that is stronger than what the force form gives you - but in the control.
+  A safety hook that a helper script quietly routes around stops being a
+  control at all. So the script answers, and a human runs the command.
   --------------------------------------------------------------------------
 #>
 param(
   [Parameter(Mandatory)] [string]$Name,
   # Tear down anyway, after you have reconciled a real .scratch by hand.
-  [switch]$Force
+  [switch]$Force,
+  # Also report whether the branch is safe to delete. Reports only - see the
+  # header note on why this does not delete it for you.
+  [switch]$CheckBranch,
+  # What -CheckBranch compares the branch against.
+  [string]$Base = "origin/main"
 )
 $ErrorActionPreference = "Stop"
 
@@ -52,6 +92,18 @@ $Main     = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Worktree = Join-Path (Split-Path -Parent $Main) "bc-$Name"
 
 if (-not (Test-Path $Worktree)) { throw "No such worktree: $Worktree" }
+
+# Read the branch BEFORE the worktree goes - afterwards there is nothing to ask.
+$Branch = $null
+if ($CheckBranch) {
+  $Branch = (git -C $Worktree rev-parse --abbrev-ref HEAD 2>$null)
+  if ($LASTEXITCODE -ne 0 -or -not $Branch -or $Branch -eq 'HEAD') {
+    Write-Host "-CheckBranch: cannot determine the branch (detached HEAD?) - skipping the check." -ForegroundColor Yellow
+    $Branch = $null
+  } else {
+    $Branch = $Branch.Trim()
+  }
+}
 
 # 0. Refuse to destroy tracker state that exists nowhere else.
 $scratch = Join-Path $Worktree ".scratch"
@@ -149,5 +201,43 @@ git -C $Main worktree remove $Worktree --force
 
 Write-Host ""
 Write-Host "Removed session worktree: $Worktree" -ForegroundColor Green
-Write-Host "The branch still exists. Once its PR is merged, delete it with:"
-Write-Host "    git -C `"$Main`" branch -D <branch>"
+
+if (-not $CheckBranch -or -not $Branch) {
+  Write-Host "The branch still exists. To find out whether it is safe to delete:"
+  Write-Host "    .\Remove-Session.ps1 -Name <name> -CheckBranch"
+  return
+}
+
+# Is every change this branch made already in $Base? Compare ONLY the files the
+# branch touched, so a branch that is merely BEHIND $Base still reads as merged.
+# Plain ancestry cannot answer this: GitHub squash-merges, which rewrites the
+# commits, so a fully merged branch is not an ancestor and 'git branch -d'
+# refuses it. See the header note.
+git -C $Main fetch origin --quiet
+$mergeBase = (git -C $Main merge-base $Base $Branch).Trim()
+$touched   = @(git -C $Main diff --name-only $mergeBase $Branch)
+$differing = if ($touched.Count -eq 0) { @() } else {
+  @(git -C $Main diff --name-only $Branch $Base -- $touched)
+}
+
+Write-Host ""
+if ($differing.Count -eq 0) {
+  Write-Host "MERGED - '$Branch' is safe to delete." -ForegroundColor Green
+  Write-Host "$Base matches it on all $($touched.Count) file(s) it touched."
+} else {
+  Write-Host "NOT VERIFIED - keep '$Branch' for now." -ForegroundColor Yellow
+  Write-Host "$Base differs on $($differing.Count) of the $($touched.Count) file(s) it touched:"
+  $differing | Select-Object -First 10 | ForEach-Object { Write-Host "    $_" }
+  if ($differing.Count -gt 10) { Write-Host "    ... and $($differing.Count - 10) more" }
+  Write-Host ""
+  Write-Host "This means EITHER the work is not merged, OR it merged and $Base has moved"
+  Write-Host "on since - and this check cannot tell those apart. If the PR shows as merged"
+  Write-Host "on GitHub, that is the better authority; trust it over this line."
+}
+
+Write-Host ""
+Write-Host "Deleting it is yours to run - deliberately not done here:"
+Write-Host "    git -C `"$Main`" branch -D $Branch"
+if (git -C $Main ls-remote --heads origin $Branch) {
+  Write-Host "    git -C `"$Main`" push origin --delete $Branch"
+}
