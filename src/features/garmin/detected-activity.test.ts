@@ -153,6 +153,10 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
       origin: 'athlete',
       status: 'completed',
       feedbackBody: 3,
+      // A retro-logged activity is training and has to count as such — it is
+      // the reason the athlete uploaded the file. Asserted because nothing else
+      // here looked at it: a mutant flipping it to false survived the suite.
+      isTraining: true,
     });
   });
 
