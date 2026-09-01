@@ -112,32 +112,16 @@ $Links = [ordered]@{
 # .claude is deliberately absent from the plan above. It is linked child by
 # child, so that .claude\worktrees - which holds every live session - is never
 # reachable from inside a worktree. See the header note.
-$ClaudeSrc = Join-Path $Main ".claude"
+#
+# The policy itself lives in SessionLinks.ps1, so this script, the repair
+# script and the TEARDOWN script cannot drift apart. Do not restate it here.
+. "$PSScriptRoot\SessionLinks.ps1"
 
-# Never link these, whatever else appears in .claude later. worktrees\ is the
-# whole point; the rest is per-session state that must not be shared.
-$ClaudeNeverLink = @("worktrees", "projects", "todos", "shell-snapshots", "statsig")
+$ClaudePlan = Get-ClaudeLinkPlan -ClaudeSrc (Join-Path $Main ".claude")
 
-# Files Claude Code rewrites itself. A hard link would be snapped by the
-# rewrite and fork silently, so these are copied instead.
-$ClaudeCopyNotLink = @("settings.local.json")
-
-$FileLinks = [ordered]@{}   # hard links: <relative path> = <absolute target>
-$FileCopies = [ordered]@{}  # plain copies, for the files above
-
-if (Test-Path $ClaudeSrc) {
-  foreach ($child in Get-ChildItem $ClaudeSrc -Force -Directory) {
-    if ($ClaudeNeverLink -contains $child.Name) { continue }
-    $Links[".claude\$($child.Name)"] = $child.FullName
-  }
-  foreach ($child in Get-ChildItem $ClaudeSrc -Force -File) {
-    if ($ClaudeCopyNotLink -contains $child.Name) {
-      $FileCopies[".claude\$($child.Name)"] = $child.FullName
-    } else {
-      $FileLinks[".claude\$($child.Name)"] = $child.FullName
-    }
-  }
-}
+foreach ($rel in $ClaudePlan.Junction.Keys) { $Links[$rel] = $ClaudePlan.Junction[$rel] }
+$FileLinks  = $ClaudePlan.HardLink   # hard links: <relative path> = <absolute target>
+$FileCopies = $ClaudePlan.Copy       # plain copies - files Claude Code rewrites
 
 # 1. Fresh copy of main.
 git -C $Main fetch origin --quiet

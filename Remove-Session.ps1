@@ -77,17 +77,36 @@ Then re-run with -Force.
 # 1. Unlink the junctions - and ONLY the junctions. Delete(path, $false) removes
 #    the reparse point without recursing into the target; guarding on LinkType
 #    means a real directory (docs/, or an un-junctioned copy) is never touched.
-$targets = @(".scratch", "docs\agents", "docs", "poc", ".agents", ".claude")
+$targets = @(".scratch", "docs\agents", "docs", "poc", ".agents")
 
-# .claude's children are linked individually now, so they have to be unlinked
-# individually. Enumerate whatever is actually there rather than a fixed list -
-# a child added to .claude later must not be silently left linked.
+# .claude, in the two shapes it can have. Order matters, and so does NOT
+# enumerating through a junction.
+#
+#   Legacy: .claude is itself a wholesale junction to the canonical .claude.
+#           Enumerating its children would read the CANONICAL folder and add
+#           .claude\worktrees to the unlink list - a path that does not exist
+#           in this worktree and must never be walked. So it is unlinked whole
+#           and nothing is enumerated.
+#
+#   Current: .claude is a real directory holding per-child links. Enumerate it,
+#           because a child added to .claude later must not be left linked -
+#           the deny-list in SessionLinks.ps1 governs what New-Session puts
+#           there, and this side deliberately removes whatever it FINDS rather
+#           than what it expects, so the two cannot drift into a missed link.
 $claudeDir = Join-Path $Worktree ".claude"
 if (Test-Path $claudeDir) {
-  foreach ($child in Get-ChildItem $claudeDir -Force -Directory -ErrorAction SilentlyContinue) {
-    $targets += ".claude\$($child.Name)"
+  if ((Get-Item $claudeDir -Force).LinkType -eq 'Junction') {
+    $targets += ".claude"
+  } else {
+    foreach ($child in Get-ChildItem $claudeDir -Force -Directory -ErrorAction SilentlyContinue) {
+      $targets += ".claude\$($child.Name)"
+    }
   }
 }
+
+# Hard-linked files inside .claude (settings.json, launch.json) are left alone
+# on purpose. Deleting a hard link removes that directory entry only; the file
+# survives in the canonical folder. There is nothing to sever.
 
 foreach ($rel in $targets) {
   $p = Join-Path $Worktree $rel

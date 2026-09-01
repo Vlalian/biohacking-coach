@@ -36,9 +36,10 @@ $Main   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Parent = Split-Path -Parent $Main
 $ClaudeSrc = Join-Path $Main ".claude"
 
-# Must match New-Session.ps1. worktrees\ is the whole reason this script exists.
-$NeverLink   = @("worktrees", "projects", "todos", "shell-snapshots", "statsig")
-$CopyNotLink = @("settings.local.json")
+# The link policy is defined once, in SessionLinks.ps1, so this script cannot
+# drift from New-Session.ps1 - which is how it would silently start producing a
+# layout the teardown script does not know how to undo.
+. "$PSScriptRoot\SessionLinks.ps1"
 
 if (-not (Test-Path $ClaudeSrc)) { throw "No canonical .claude at $ClaudeSrc - run this from the main folder." }
 
@@ -76,25 +77,26 @@ foreach ($wt in $worktrees) {
   [System.IO.Directory]::Delete($claude, $false)
   New-Item -ItemType Directory $claude -Force | Out-Null
 
-  foreach ($child in Get-ChildItem $ClaudeSrc -Force -Directory) {
-    if ($NeverLink -contains $child.Name) { continue }
-    $link = Join-Path $claude $child.Name
-    cmd /c mklink /J "$link" "$($child.FullName)" | Out-Null
+  $plan = Get-ClaudeLinkPlan -ClaudeSrc $ClaudeSrc
+
+  foreach ($rel in $plan.Junction.Keys) {
+    $link = Join-Path $wt $rel
+    cmd /c mklink /J "$link" "$($plan.Junction[$rel])" | Out-Null
     $made = Get-Item $link -Force -EA SilentlyContinue
-    if (-not $made -or $made.LinkType -ne 'Junction') { throw "Junction FAILED for $leaf\.claude\$($child.Name)." }
-    Write-Host "         linked .claude\$($child.Name)" -ForegroundColor DarkGray
+    if (-not $made -or $made.LinkType -ne 'Junction') { throw "Junction FAILED for $leaf\$rel." }
+    Write-Host "         linked $rel" -ForegroundColor DarkGray
   }
 
-  foreach ($child in Get-ChildItem $ClaudeSrc -Force -File) {
-    $link = Join-Path $claude $child.Name
-    if ($CopyNotLink -contains $child.Name) {
-      Copy-Item $child.FullName $link -Force
-      Write-Host "         copied .claude\$($child.Name)  (per-session by design)" -ForegroundColor DarkGray
-    } else {
-      cmd /c mklink /H "$link" "$($child.FullName)" | Out-Null
-      if ($LASTEXITCODE -ne 0) { throw "mklink /H failed for $leaf\.claude\$($child.Name)." }
-      Write-Host "         hardlink .claude\$($child.Name)" -ForegroundColor DarkGray
-    }
+  foreach ($rel in $plan.HardLink.Keys) {
+    $link = Join-Path $wt $rel
+    cmd /c mklink /H "$link" "$($plan.HardLink[$rel])" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "mklink /H failed for $leaf\$rel." }
+    Write-Host "         hardlink $rel" -ForegroundColor DarkGray
+  }
+
+  foreach ($rel in $plan.Copy.Keys) {
+    Copy-Item $plan.Copy[$rel] (Join-Path $wt $rel) -Force
+    Write-Host "         copied $rel  (per-session by design)" -ForegroundColor DarkGray
   }
 
   if (Test-Path (Join-Path $claude "worktrees")) {
