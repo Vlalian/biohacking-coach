@@ -23,6 +23,22 @@
      the signature of a session created without junctions - and that directory
      may be the only copy of tracker state that exists anywhere. Deleting it is
      how a finished piece of work becomes invisible. Reconcile it first.
+
+  --------------------------------------------------------------------------
+  2026-09-01: .claude is now linked child by child, and a wholesale one is
+  refused outright.
+
+  New-Session.ps1 used to junction .claude as a single link to the canonical
+  .claude - which contains worktrees\, holding every live session on the
+  machine. A recursive delete through it reached all of them, including the
+  session running the delete. New worktrees link .claude's children
+  individually and never worktrees\, so the path does not exist any more.
+
+  Worktrees created BEFORE that change still carry the wholesale junction.
+  Unlinking it first is safe and this script does it - but the check below
+  refuses anyway if .claude\worktrees turns out to be reachable, because by
+  then something has gone wrong that no amount of ordering will fix. Repair
+  the worktree's links first; do not -Force past this one.
   --------------------------------------------------------------------------
 #>
 param(
@@ -61,7 +77,19 @@ Then re-run with -Force.
 # 1. Unlink the junctions - and ONLY the junctions. Delete(path, $false) removes
 #    the reparse point without recursing into the target; guarding on LinkType
 #    means a real directory (docs/, or an un-junctioned copy) is never touched.
-foreach ($rel in ".scratch", "docs\agents", "docs", "poc", ".agents", ".claude") {
+$targets = @(".scratch", "docs\agents", "docs", "poc", ".agents", ".claude")
+
+# .claude's children are linked individually now, so they have to be unlinked
+# individually. Enumerate whatever is actually there rather than a fixed list -
+# a child added to .claude later must not be silently left linked.
+$claudeDir = Join-Path $Worktree ".claude"
+if (Test-Path $claudeDir) {
+  foreach ($child in Get-ChildItem $claudeDir -Force -Directory -ErrorAction SilentlyContinue) {
+    $targets += ".claude\$($child.Name)"
+  }
+}
+
+foreach ($rel in $targets) {
   $p = Join-Path $Worktree $rel
   if (-not (Test-Path $p)) { continue }
   $item = Get-Item $p -Force
@@ -69,6 +97,32 @@ foreach ($rel in ".scratch", "docs\agents", "docs", "poc", ".agents", ".claude")
     [System.IO.Directory]::Delete($p, $false)
     Write-Host "  unlinked $rel" -ForegroundColor DarkGray
   }
+}
+
+# Last line of defence, checked AFTER unlinking. If a live session is still
+# reachable from inside this worktree, the recursive delete below would take
+# it - so stop, and do not offer -Force as a way past it.
+$reachable = Join-Path $Worktree ".claude\worktrees"
+if (Test-Path $reachable) {
+  $live = (Get-ChildItem $reachable -Force -Directory -ErrorAction SilentlyContinue).Count
+  throw @"
+REFUSING to remove $Worktree.
+
+$reachable is still reachable, and holds $live session worktree(s). Removing
+this folder would recursively delete every one of them - including, most
+likely, the session you are running this from.
+
+This means a link inside .claude did not get severed above. Repair it by hand
+before retrying:
+
+    Get-Item "$reachable" -Force | Select-Object LinkType, Target
+
+If it is a Junction, remove the LINK only - never with Remove-Item -Recurse:
+
+    [System.IO.Directory]::Delete("$reachable", `$false)
+
+-Force does NOT bypass this check, on purpose.
+"@
 }
 
 # 2. The worktree now holds no junctions - safe for git's recursive delete.
