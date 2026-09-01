@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ONBOARDING_OPTIONS,
+  OPTION_MESSAGE_KEY,
   applyAnswer,
   buildCommStyle,
   coachGreeting,
@@ -8,6 +10,8 @@ import {
   nextStep,
   toCoachOnboarding,
 } from './onboarding-flow';
+import en from '@/messages/en.json';
+import da from '@/messages/da.json';
 
 // ── coachGreeting — the POC's completion contract, carried across ─────────────
 
@@ -309,5 +313,58 @@ describe('completeProfile', () => {
   it('returns null while required answers are missing', () => {
     expect(completeProfile({ language: 'da' }, TODAY)).toBeNull();
     expect(completeProfile({ experienceLevel: 'beginner' }, TODAY)).toBeNull();
+  });
+});
+
+// ── Option labels — every tile the athlete sees has real words on it ──────────
+
+describe('OPTION_MESSAGE_KEY', () => {
+  // Exhaustiveness over the option *values* is a type error, not a test: the
+  // map is keyed by a union derived from ONBOARDING_OPTIONS. What a type cannot
+  // check is the other end — that the key it points at exists in every locale
+  // catalogue. Without that, the athlete is shown "Onboarding.10-13h", which is
+  // exactly what shipped to the deployment on 2026-08-21.
+  //
+  // The existing messages.test.ts cannot catch this: it compares en to da, and
+  // a key missing from *both* leaves them in perfect agreement with each other
+  // and with nothing else.
+  const catalogues = { en, da } as const;
+  const keys = Object.values(OPTION_MESSAGE_KEY);
+
+  it('gives every rendered option a message key', () => {
+    const labelled = [
+      ...ONBOARDING_OPTIONS.sportBackground,
+      ...ONBOARDING_OPTIONS.availableHours,
+      ...ONBOARDING_OPTIONS.motivation,
+      ...ONBOARDING_OPTIONS.weakestDiscipline,
+      ...ONBOARDING_OPTIONS.hasHumanCoach,
+      ...ONBOARDING_OPTIONS.trackedMetrics,
+      ...ONBOARDING_OPTIONS.days,
+      ...ONBOARDING_OPTIONS.weeklySessionDay,
+    ];
+    for (const value of labelled) {
+      expect(OPTION_MESSAGE_KEY[value], `no message key for option "${value}"`).toBeTruthy();
+    }
+  });
+
+  it('points every key at a real message, in every locale', () => {
+    for (const [locale, catalogue] of Object.entries(catalogues)) {
+      for (const key of keys) {
+        expect(
+          (catalogue.Onboarding as Record<string, string>)[key],
+          `locale "${locale}" has no Onboarding.${key}`,
+        ).toBeTruthy();
+      }
+    }
+  });
+
+  it('has dropped the label whose bucket no longer exists', () => {
+    // `opt10plus` outlived its bucket when the top of the range was split into
+    // 10-13 / 13-16 / 16+. A dead label is harmless on screen and misleading in
+    // the catalogue, so it goes. Named rather than swept for: a heuristic over
+    // "keys starting with opt" also matches `optional`, which is not an option.
+    for (const catalogue of Object.values(catalogues)) {
+      expect((catalogue.Onboarding as Record<string, string>).opt10plus).toBeUndefined();
+    }
   });
 });

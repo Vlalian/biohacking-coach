@@ -139,6 +139,51 @@ describe('composeNarration — the other two verbs', () => {
   });
 });
 
+describe('composeNarration — a move', () => {
+  // ADR 0003's 2026-08-21 amendment gave the Head Coach placement authority, and
+  // it shipped unnarrated: the event was written and collected by nothing. A
+  // coach rearranging someone's week without telling them is the exact case the
+  // "no silent mutation" rule exists for.
+  const moved = (over: Record<string, unknown> = {}): NarratableEvent => ({
+    id: 'ev_4',
+    actorId: 'coach_1',
+    type: 'session_moved',
+    // Verified against `session-move.applyMove`: `{ sessionId, from, to }`, both
+    // days as bare date strings — NOT the nested objects an edit writes.
+    payload: { sessionId: 's1', from: '2026-08-20', to: '2026-08-22' },
+    createdAt: new Date('2026-08-19T11:00:00Z'),
+    ...over,
+  });
+
+  it('names both days — a move means the pair, not the destination', () => {
+    const message = composeNarration([moved()], NAMES, t, weekday);
+
+    expect(message).toBe(
+      'single(clause=moved(coach=Lars,day=day:2026-08-22,fromDay=day:2026-08-20))',
+    );
+  });
+
+  it('names no session type, because the event does not record one', () => {
+    // Same honesty rule as a delete: the payload has no type, so the copy must
+    // not claim one rather than invent a plausible word.
+    expect(composeNarration([moved()], NAMES, t, weekday)).not.toContain('type=');
+  });
+
+  it('falls back to a destination-only sentence when the origin day is missing', () => {
+    // A move that lost its `from` is a different sentence, not a vaguer one —
+    // "moved a session to Saturday" still says something true.
+    const message = composeNarration([moved({ payload: { to: '2026-08-22' } })], NAMES, t, weekday);
+
+    expect(message).toBe('single(clause=movedNoFrom(coach=Lars,day=day:2026-08-22))');
+  });
+
+  it('does not throw on a malformed payload', () => {
+    expect(() =>
+      composeNarration([moved({ payload: null })], NAMES, t, weekday),
+    ).not.toThrow();
+  });
+});
+
 describe('composeNarration — a batch', () => {
   it('renders several pending events as ONE message, a lead plus a list', () => {
     // The criterion is "not as N separate interruptions": a coach who plans an

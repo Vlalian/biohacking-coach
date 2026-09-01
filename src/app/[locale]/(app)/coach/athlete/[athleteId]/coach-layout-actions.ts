@@ -1,6 +1,6 @@
 'use server';
 
-import { resolveHeadCoachId } from '../../../current-actor';
+import { resolveHeadCoachId } from '../../../../current-actor';
 import { saveCoachLayout } from '@/features/coach/save-coach-layout';
 import type { SaveLayoutResult } from '@/features/information-view/save-layout';
 

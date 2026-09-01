@@ -99,19 +99,39 @@ export function Calendar({
   unavailableDates,
   todayKey,
   readOnly = false,
+  onMove,
 }: {
   sessions: Session[];
   unavailableDates: string[];
   todayKey: string;
-  /** A read-only calendar (Head Coach's Roster View) shows the plan, affords
-   *  no changes — no drag, no rate, no drawer actions. */
+  /** A read-only calendar (Head Coach's athlete view) shows the plan and
+   *  affords none of the athlete's own actions — no rate, no drawer, no adding
+   *  or marking days unavailable. Dragging is decided separately by `onMove`. */
   readOnly?: boolean;
+  /**
+   * Who performs a Session Move, and whether one is offered at all.
+   *
+   * The athlete's own calendar leaves this unset and moves through
+   * {@link moveSessionAction}. The Head Coach's passes their own action, which
+   * is what makes a read-only calendar draggable for them — placement became
+   * shared on 2026-08-21 (ADR 0003 amendment) while everything else on that
+   * surface stayed read-only, so the two had to stop being one flag.
+   *
+   * Either way the rules are the server's: this only decides which door the
+   * request goes through, never whether the move is allowed.
+   */
+  onMove?: (sessionId: string, targetDate: string) => Promise<{ ok: boolean }>;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
   const locale = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // Dragging is offered when the caller supplied a move action, or when this is
+  // the athlete's own editable calendar. Deliberately not `!readOnly`: the Head
+  // Coach's view is read-only in every other respect and still draggable.
+  const canDrag = Boolean(onMove) || !readOnly;
 
   const [viewedMonth, setViewedMonth] = useState(() => {
     const [y, m] = todayKey.split('-').map(Number);
@@ -175,7 +195,7 @@ export function Calendar({
     } else if (dragging.session.date !== day.date) {
       const id = dragging.session.id;
       startTransition(async () => {
-        await moveSessionAction(id, day.date);
+        await (onMove ?? moveSessionAction)(id, day.date);
         router.refresh();
       });
     }
@@ -253,6 +273,7 @@ export function Calendar({
             week={week}
             expanded={expanded.includes(week.isoWeekStart)}
             readOnly={readOnly}
+            canDrag={canDrag}
             todayKey={todayKey}
             locale={locale}
             dragging={dragging}
@@ -304,6 +325,7 @@ function WeekRow({
   week,
   expanded,
   readOnly,
+  canDrag,
   todayKey,
   locale,
   dragging,
@@ -324,6 +346,8 @@ function WeekRow({
   week: Week;
   expanded: boolean;
   readOnly: boolean;
+  /** Whether session blocks may be dragged — not implied by `readOnly`. */
+  canDrag: boolean;
   todayKey: string;
   locale: string;
   dragging: { session: Session; week: string } | null;
@@ -454,9 +478,9 @@ function WeekRow({
                       key={s.id}
                       session={s}
                       t={t}
-                      readOnly={readOnly}
+                      canDrag={canDrag}
                       frozen={isFrozen({ date: s.date, status: s.status }, todayKey)}
-                      onOpen={() => onOpenSession(s)}
+                      onOpen={readOnly ? undefined : () => onOpenSession(s)}
                       onDragStart={() => onDragStart(s)}
                       onDragEnd={onDragEnd}
                     />
@@ -469,21 +493,41 @@ function WeekRow({
                 </div>
               ) : (
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {day.sessions.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => onOpenSession(s)}
-                      title={s.title ?? s.type}
-                      aria-label={`${s.type} · ${s.status}`}
-                      className="-m-1.5 inline-flex cursor-pointer items-center justify-center p-1.5"
-                    >
+                  {day.sessions.map((s) =>
+                    // Same rule as the expanded block: with no drawer to open,
+                    // the marker is an image of a session rather than a control.
+                    // It keeps its label so a screen reader still announces the
+                    // session — what it loses is the focus stop and the pointer
+                    // that promise something to click.
+                    readOnly ? (
                       <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${s.feedbackBody != null ? 'ring-1 ring-foreground/60 ring-offset-1' : ''}`}
-                        style={dotStyle(s)}
-                      />
-                    </button>
-                  ))}
+                        key={s.id}
+                        title={s.title ?? s.type}
+                        role="img"
+                        aria-label={`${s.type} · ${s.status}`}
+                        className="-m-1.5 inline-flex items-center justify-center p-1.5"
+                      >
+                        <span
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${s.feedbackBody != null ? 'ring-1 ring-foreground/60 ring-offset-1' : ''}`}
+                          style={dotStyle(s)}
+                        />
+                      </span>
+                    ) : (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => onOpenSession(s)}
+                        title={s.title ?? s.type}
+                        aria-label={`${s.type} · ${s.status}`}
+                        className="-m-1.5 inline-flex cursor-pointer items-center justify-center p-1.5"
+                      >
+                        <span
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${s.feedbackBody != null ? 'ring-1 ring-foreground/60 ring-offset-1' : ''}`}
+                          style={dotStyle(s)}
+                        />
+                      </button>
+                    ),
+                  )}
                 </div>
               )}
             </div>
@@ -505,7 +549,7 @@ function WeekRow({
 function SessionBlock({
   session,
   t,
-  readOnly,
+  canDrag,
   frozen,
   onOpen,
   onDragStart,
@@ -513,15 +557,59 @@ function SessionBlock({
 }: {
   session: Session;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
-  readOnly: boolean;
+  canDrag: boolean;
   frozen: boolean;
-  onOpen: () => void;
+  /**
+   * Omitted where there is nothing to open — the Head Coach's read-only
+   * calendar, which renders no `SessionDrawer`. Without it this renders plain
+   * content rather than a button, because a focusable control that does nothing
+   * when clicked is worse than no control: it offers the coach a detail view
+   * that is not there, and hands a keyboard user a dead stop.
+   */
+  onOpen?: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
   const color = typeColor(session.type);
   const muted = session.status === 'skipped' || session.status === 'unavailable';
-  const draggable = !readOnly && !frozen && !session.parked;
+  const draggable = canDrag && !frozen && !session.parked;
+
+  // Drag is deliberately independent of opening: the Head Coach may re-place a
+  // session (ADR 0003, 2026-08-21 amendment) on a calendar they cannot open.
+  const className = [
+    'block w-full border-l-2 px-1.5 py-1 text-left transition-colors',
+    draggable ? 'cursor-grab active:cursor-grabbing' : '',
+    onOpen ? 'cursor-pointer hover:bg-foreground/[0.06]' : '',
+    session.status === 'completed' ? 'bg-foreground/[0.05]' : '',
+    muted ? 'opacity-50 line-through' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const content = (
+    <>
+      <span className="block truncate font-body text-[11px] font-medium leading-tight text-foreground">
+        {session.title ?? session.type}
+      </span>
+      <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+        {session.duration ? `${session.duration}${t('minutes')}` : session.type}
+      </span>
+    </>
+  );
+
+  if (!onOpen) {
+    return (
+      <div
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        className={className}
+        style={{ borderColor: color }}
+      >
+        {content}
+      </div>
+    );
+  }
 
   return (
     <button
@@ -530,20 +618,10 @@ function SessionBlock({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
-      className={[
-        'block w-full cursor-grab border-l-2 px-1.5 py-1 text-left transition-colors active:cursor-grabbing',
-        session.status === 'completed' ? 'bg-foreground/[0.05]' : '',
-        muted ? 'opacity-50 line-through' : '',
-        'hover:bg-foreground/[0.06]',
-      ].join(' ')}
+      className={className}
       style={{ borderColor: color }}
     >
-      <span className="block truncate font-body text-[11px] font-medium leading-tight text-foreground">
-        {session.title ?? session.type}
-      </span>
-      <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-        {session.duration ? `${session.duration}${t('minutes')}` : session.type}
-      </span>
+      {content}
     </button>
   );
 }

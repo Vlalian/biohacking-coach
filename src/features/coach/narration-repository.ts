@@ -17,11 +17,24 @@ import type { NarratableEvent } from './narration';
  * no rows rather than reaching someone else's plan history.
  */
 
-/** The three Head Coach actions that are worth telling the athlete about. */
+/**
+ * The Head Coach actions that are worth telling the athlete about.
+ *
+ * `session_moved` is here because ADR 0003's 2026-08-21 amendment gave the Head
+ * Coach placement authority, and a coach silently rearranging someone's
+ * training week is precisely the case "the plan never mutates silently by an
+ * invisible hand" exists for. It shipped absent from this list, so the event was
+ * recorded, matched by nothing, and told to no one.
+ *
+ * Adding it cannot narrate an athlete's own moves: the query below filters on
+ * `actor_type = 'head_coach'`, and an athlete moving their own session stays
+ * silent by design (CONTEXT.md).
+ */
 const NARRATABLE_TYPES = [
   'session_prescribed',
   'session_edited',
   'session_deleted',
+  'session_moved',
 ] as const;
 
 /**

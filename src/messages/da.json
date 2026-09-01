@@ -21,7 +21,7 @@
     "viewMessaging": "Beskeder",
     "viewSettings": "Indstillinger",
     "viewPrivacy": "Privatliv & vilkår",
-    "viewRoster": "Atletliste"
+    "viewRoster": "Atleter"
   },
   "AthletePage": {
     "greeting": "Velkommen tilbage, {name}",
@@ -203,11 +203,14 @@
     "severed": "Forbindelsen er brudt — du træner nu solo igen."
   },
   "Roster": {
-    "title": "Atletliste",
+    "title": "Atleter",
     "subtitle": "De atleter, du coacher.",
     "empty": "Ingen atleter tilknyttet endnu.",
     "notACoach": "Du har ingen coach-konto.",
-    "backToRoster": "Tilbage til atletlisten",
+    "tabPlan": "Plan",
+    "tabData": "Data",
+    "tabBriefing": "Briefing",
+    "backToRoster": "Tilbage til atleter",
     "reportsWithheld": "Rapporter private",
     "transcriptsWithheld": "Udskrifter private"
   },
@@ -398,7 +401,9 @@
     "optUnder3": "Under 3t",
     "opt36": "3–6t",
     "opt610": "6–10t",
-    "opt10plus": "10t+",
+    "opt1013": "10–13t",
+    "opt1316": "13–16t",
+    "opt16plus": "16t+",
     "optCompletion": "Gennemførelse",
     "optChallenge": "Personlig udfordring",
     "optCommunity": "Fællesskab",
@@ -509,6 +514,8 @@
     "editedNoType": "{coach} har ændret en session {day}",
     "deleted": "{coach} har taget {type}-sessionen af {day}",
     "deletedNoType": "{coach} har taget en session af {day}",
+    "moved": "{coach} har flyttet din session fra {fromDay} til {day}",
+    "movedNoFrom": "{coach} har flyttet en session til {day}",
     "yourHeadCoach": "Din Head Coach",
     "recently": "for nylig"
   }
