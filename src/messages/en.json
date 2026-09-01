@@ -351,7 +351,8 @@
     "minutes": "min",
     "accept": "Rate and accept",
     "discard": "Discard",
-    "error": "That didn't work. Try again."
+    "error": "That didn't work. Try again.",
+    "ordinal": "Session {n}"
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"

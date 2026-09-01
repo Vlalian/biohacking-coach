@@ -5,7 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // queues them in call order.
 const limit = vi.fn();
 const batch = vi.fn().mockResolvedValue(undefined);
-const updateWhere = vi.fn(() => ({}));
+// The guarded update ends in `.returning()`, and what it returns is the whole
+// point: an empty array means the WHERE matched nothing. Before that existed,
+// `updateWhere` swallowed its predicate and returned `{}`, so every test here
+// passed whether or not production's WHERE excluded the row it was aiming at —
+// which is exactly how a `status = 'planned'` guard survived under tests that
+// claimed to cover skipped and displaced sessions.
+const updateReturning = vi.fn(async () => [{ id: 'planned_1' }] as { id: string }[]);
+const updateWhere = vi.fn(() => ({ returning: updateReturning }));
 const updateSet = vi.fn((set: Record<string, unknown>) => ({ where: updateWhere, set }));
 const onConflictDoUpdate = vi.fn(() => ({}));
 const insertValues = vi.fn((row: Record<string, unknown>) => ({ onConflictDoUpdate, row }));
@@ -78,6 +85,10 @@ beforeEach(() => {
   limit.mockReset();
   batch.mockClear();
   updateSet.mockClear();
+  updateWhere.mockClear();
+  // Default: the guarded update found its row. A test that cares about the
+  // no-op says so explicitly.
+  updateReturning.mockReset().mockResolvedValue([{ id: 'planned_1' }]);
   insertValues.mockClear();
   deleteWhere.mockClear();
   eventLimit.mockReset();
@@ -171,6 +182,43 @@ describe('acceptDetectedActivity — the rating is the commit', () => {
     await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...ONTO_PLANNED });
 
     expect(updated()).toMatchObject({ status: 'completed', parked: false });
+  });
+
+  // The two tests above assert what the update SET. Neither could fail while
+  // the update matched no row, because nothing observed the row count — so a
+  // WHERE that excluded every skipped and displaced session passed them both.
+  // These two watch the outcome instead of the payload.
+  it('abandons everything when the guarded update matches no row', async () => {
+    limit
+      .mockResolvedValueOnce([proposal()])
+      .mockResolvedValueOnce([plannedSession({ status: 'skipped' })]);
+    // The target moved between the read and the write — someone completed it.
+    updateReturning.mockResolvedValue([]);
+
+    const result = await acceptDetectedActivity({
+      athleteId: OWNER,
+      activityId: 'a1',
+      ...ONTO_PLANNED,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'target-changed' });
+  });
+
+  it('leaves the proposal in place when the update matches no row, so it can be decided again', async () => {
+    limit
+      .mockResolvedValueOnce([proposal()])
+      .mockResolvedValueOnce([plannedSession({ status: 'skipped' })]);
+    updateReturning.mockResolvedValue([]);
+
+    await acceptDetectedActivity({ athleteId: OWNER, activityId: 'a1', ...ONTO_PLANNED });
+
+    // The heart of showable-version/14: reporting success while the activity
+    // disappears is the harm. Nothing dependent may run — no streams, no import
+    // event, and above all no delete of the proposal the athlete would need to
+    // try again.
+    expect(batch).not.toHaveBeenCalled();
+    expect(deleteWhere).not.toHaveBeenCalled();
+    expect(written()).toEqual([]);
   });
 
   it('refuses a chosen session that is already completed', async () => {
@@ -334,7 +382,9 @@ describe('undoDetectedImport — the way back from a wrong file', () => {
 
   it('reverts the session to planned and restores the duration it overwrote', async () => {
     limit.mockResolvedValueOnce([completedSession()]);
-    eventLimit.mockResolvedValueOnce([{ payload: { sessionId: 's1', previousDuration: 75 } }]);
+    eventLimit.mockResolvedValueOnce([
+      { type: 'garmin_imported', payload: { sessionId: 's1', previousDuration: 75 } },
+    ]);
 
     const result = await undoDetectedImport({ athleteId: OWNER, sessionId: 's1' });
 
@@ -370,6 +420,7 @@ describe('undoDetectedImport — the way back from a wrong file', () => {
     ]);
     eventLimit.mockResolvedValueOnce([
       {
+        type: 'garmin_imported',
         payload: {
           sessionId: 's1',
           previousDuration: 75,
@@ -437,6 +488,38 @@ describe('undoDetectedImport — the way back from a wrong file', () => {
     expect(result).toEqual({ ok: false, reason: 'not-owner' });
     expect(batch).not.toHaveBeenCalled();
   });
+
+  it('refuses when the last thing that happened to the session was an undo', async () => {
+    // The sequence that made this necessary: import, undo, and then the athlete
+    // completes that same Coach-planned session by hand. The guards above all
+    // pass — it is `completed`, and a Coach-planned session's origin is not
+    // `athlete` — so a lookup that asks only for the newest `garmin_imported`
+    // still finds the old one and would reset an ordinary completion, putting a
+    // stale proposal back from a payload describing a file already dealt with.
+    limit.mockResolvedValueOnce([completedSession()]);
+    eventLimit.mockResolvedValueOnce([
+      { type: 'garmin_import_undone', payload: { sessionId: 's1' } },
+    ]);
+
+    const result = await undoDetectedImport({ athleteId: OWNER, sessionId: 's1' });
+
+    expect(result).toEqual({ ok: false, reason: 'not-imported' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('allows undo again after a re-import, because the import is once more the latest', async () => {
+    // The mirror of the test above, so the fix is a state machine rather than a
+    // one-way latch: import, undo, re-accept, undo. What happened last decides.
+    limit.mockResolvedValueOnce([completedSession()]);
+    eventLimit.mockResolvedValueOnce([
+      { type: 'garmin_imported', payload: { sessionId: 's1', previousDuration: 60 } },
+    ]);
+
+    const result = await undoDetectedImport({ athleteId: OWNER, sessionId: 's1' });
+
+    expect(result).toEqual({ ok: true });
+    expect(updated()).toMatchObject({ status: 'planned', duration: 60 });
+  });
 });
 
 describe('listPendingActivities — a choice, not a verdict', () => {
@@ -471,8 +554,10 @@ describe('listPendingActivities — a choice, not a verdict', () => {
     const [activity] = await listPendingActivities(OWNER);
 
     expect(activity.options).toEqual([
-      { id: 'planned_1', type: 'Endurance', status: 'planned', duration: 75, zone: 'Z2' },
-      { id: 'planned_2', type: 'Endurance', status: 'planned', duration: 120, zone: null },
+      // dayOrder rides along so the card can tell two otherwise identical
+      // sessions apart — a Planned Session has no clock time to do it with.
+      { id: 'planned_1', type: 'Endurance', status: 'planned', duration: 75, zone: 'Z2', dayOrder: 0 },
+      { id: 'planned_2', type: 'Endurance', status: 'planned', duration: 120, zone: null, dayOrder: 1 },
     ]);
     expect(activity.suggestedSessionId).toBe('planned_1');
   });

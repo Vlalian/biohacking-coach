@@ -33,13 +33,13 @@ export function DetectedActivities({
   return (
     <section className="flex flex-col gap-3">
       {activities.map((activity) => (
-        <ActivityCard key={activity.id} activity={activity} locale={locale} />
+        <DetectedActivityCard key={activity.id} activity={activity} locale={locale} />
       ))}
     </section>
   );
 }
 
-function ActivityCard({ activity, locale }: { activity: PendingActivity; locale: string }) {
+function DetectedActivityCard({ activity, locale }: { activity: PendingActivity; locale: string }) {
   const t = useTranslations('Detected');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -49,6 +49,29 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
   const [failed, setFailed] = useState(false);
   // Pre-selected with the matcher's suggestion — a suggestion, not a verdict.
   const [target, setTarget] = useState<string | null>(activity.suggestedSessionId);
+
+  // What the athlete reads on each choice. A Planned Session has no clock time
+  // to name it by, so on a Double day two of them can be word-for-word
+  // identical — same type, same duration, same zone — and picking between two
+  // identical labels is the coin flip this card exists to remove.
+  //
+  // So an ordinal is added, but ONLY to the ones that actually collide. Putting
+  // "Session 1" on every choice would label the ordinary single-session day
+  // with a number that distinguishes nothing.
+  const labelFor = (option: PendingActivity['options'][number]) =>
+    [option.type, option.duration !== null && `${option.duration} ${t('minutes')}`, option.zone]
+      .filter(Boolean)
+      .join(' · ');
+
+  const labels = activity.options.map(labelFor);
+  const ambiguous = new Set(labels.filter((label, i) => labels.indexOf(label) !== i));
+
+  // Rank by dayOrder rather than using it directly: it orders the day but is
+  // not promised to be 1-based or contiguous, and the number shown to the
+  // athlete should read as "the first one" rather than as a database value.
+  const rank = [...activity.options]
+    .sort((a, b) => a.dayOrder - b.dayOrder)
+    .map((option) => option.id);
 
   function run(action: () => Promise<{ ok: boolean }>) {
     setFailed(false);
@@ -95,13 +118,11 @@ function ActivityCard({ activity, locale }: { activity: PendingActivity; locale:
             onPick={() => setTarget(option.id)}
             /* No time of day to name it by: a Planned Session carries a date
                and an order, never a clock time. */
-            label={[
-              option.type,
-              option.duration !== null && `${option.duration} ${t('minutes')}`,
-              option.zone,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+            label={
+              ambiguous.has(labelFor(option))
+                ? `${t('ordinal', { n: rank.indexOf(option.id) + 1 })} · ${labelFor(option)}`
+                : labelFor(option)
+            }
             note={option.status !== 'planned' ? t(`status.${option.status}`) : null}
           />
         ))}

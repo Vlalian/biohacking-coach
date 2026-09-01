@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { detectedActivities, sessions, sessionStreams, events } from '@/db/schema';
 import { isValidScore } from '@/features/session/rate-session';
@@ -24,6 +24,16 @@ export type TargetOption = {
   status: string;
   duration: number | null;
   zone: string | null;
+  /**
+   * Which session of the day this is. Carried so two sessions with the same
+   * type, duration and zone are still tellable apart on the card — on a Double
+   * day they are otherwise rendered identically, and picking between two
+   * identical labels is a coin flip, which is the problem this whole card was
+   * built to remove. A Planned Session has no time of day to name it by:
+   * `date` is a date and `startTime` is Garmin provenance that stays null until
+   * an import writes it, so ordering is the only honest discriminator.
+   */
+  dayOrder: number;
 };
 
 /** A proposal waiting for the athlete, as the UI needs it. */
@@ -59,7 +69,7 @@ export type PendingActivity = {
 
 export type AcceptResult =
   | { ok: true; sessionId: string }
-  | { ok: false; reason: 'not-found' | 'not-owner' | 'invalid' | 'bad-target' };
+  | { ok: false; reason: 'not-found' | 'not-owner' | 'invalid' | 'bad-target' | 'target-changed' };
 
 export type DeclineResult =
   | { ok: true }
@@ -95,12 +105,13 @@ export async function listPendingActivities(athleteId: string): Promise<PendingA
 
   return rows.map((row) => {
     const onDay = onDates.filter((session) => isChoosableTarget(session, row.date));
-    const options = onDay.map(({ id, type, status, duration, zone }) => ({
+    const options = onDay.map(({ id, type, status, duration, zone, dayOrder }) => ({
       id,
       type,
       status,
       duration,
       zone,
+      dayOrder,
     }));
 
     // Choosable and *suggested* are different bars. If the athlete has skipped
@@ -188,9 +199,21 @@ async function resolveChosenTarget(
  *   edit/delete guard keys off, so a wrong file the athlete accepted is theirs
  *   to delete afterwards.
  *
- * All of it — the session write, the streams, the event, and the removal of
- * the proposal — goes in one `db.batch`, so a half-accepted activity cannot
- * survive a failure.
+ * For an UNMATCHED activity all of it — the new session, the streams, the event
+ * and the removal of the proposal — goes in one `db.batch`, so a half-accepted
+ * activity cannot survive a failure.
+ *
+ * A MATCHED activity cannot have that, and the trade is deliberate. Its session
+ * write is a guarded compare-and-set that has to be *checked* before the rest is
+ * allowed to happen: if the target moved under us the proposal must survive, and
+ * a batch would already have deleted it. So the update goes first, alone.
+ *
+ * What that costs: a failure between the two steps leaves the session completed
+ * with no stream row and no import event, and the proposal still pending. That
+ * state is visible and recoverable — the athlete can decline the proposal, or
+ * add it as a new session — and it is a far better failure than the one this
+ * replaces, which reported success and destroyed the activity silently.
+ * `session-status.ts` already accepts the same exposure for the same reason.
  */
 export async function acceptDetectedActivity(params: {
   athleteId: string;
@@ -240,37 +263,62 @@ export async function acceptDetectedActivity(params: {
   if (targetSessionId && !target) return { ok: false, reason: 'bad-target' };
 
   const sessionId = target?.id ?? randomUUID();
-  const write = target
-    ? db
-        .update(sessions)
-        .set({ status: 'completed', parked: false, ...provenance, ...reflection })
-        // The status rides in the WHERE as well as the SET: the session was read
-        // in a separate statement, so a skip or a completion landing in between
-        // must lose the write rather than be silently overwritten.
-        .where(
-          and(
-            eq(sessions.id, target.id),
-            eq(sessions.athleteId, athleteId),
-            eq(sessions.status, 'planned'),
-          ),
-        )
-    : db.insert(sessions).values({
-        id: sessionId,
-        athleteId,
-        date: activity.date,
-        type: activity.type,
-        // A retro-logged Athlete Session — the athlete's own, so deletable.
-        origin: 'athlete',
-        status: 'completed',
-        isTraining: true,
-        note: activity.note,
-        dayOrder: 0,
-        ...provenance,
-        ...reflection,
-      });
 
-  await db.batch([
-    write,
+  // A matched target is written FIRST and on its own, and the rest only happens
+  // if it actually landed. Two things force that shape:
+  //
+  // 1. The predicate has to be the same one the athlete was offered. It used to
+  //    be `status = 'planned'` while `isChoosableTarget` offers anything not
+  //    completed — so picking a *skipped* session, which the card explicitly
+  //    invites ("I skipped that in the app but I did it"), updated ZERO rows
+  //    while the batch below still wrote the streams and the event and deleted
+  //    the proposal. Success was reported, the session stayed skipped, and the
+  //    activity was gone with no way back. The exact class of harm this ticket
+  //    exists to remove, reintroduced in a narrower case.
+  // 2. Even with the predicate fixed, the row is read in an earlier statement,
+  //    so a completion landing in between must still lose. `ne(completed)`
+  //    keeps that guard: a completed session is the one thing neither the
+  //    machine nor the athlete may overwrite.
+  //
+  // Guarded compare-and-set, then check, then dependent writes — the same shape
+  // `session-status.ts` uses for exactly this question.
+  if (target) {
+    const updated = await db
+      .update(sessions)
+      .set({ status: 'completed', parked: false, ...provenance, ...reflection })
+      .where(
+        and(
+          eq(sessions.id, target.id),
+          eq(sessions.athleteId, athleteId),
+          ne(sessions.status, 'completed'),
+        ),
+      )
+      .returning({ id: sessions.id });
+
+    // Nothing else has run yet, so the proposal is still pending and the
+    // athlete can decide again. Refusing loudly is the whole point.
+    if (updated.length === 0) return { ok: false, reason: 'target-changed' };
+  }
+
+  const writes = [
+    ...(target
+      ? []
+      : [
+          db.insert(sessions).values({
+            id: sessionId,
+            athleteId,
+            date: activity.date,
+            type: activity.type,
+            // A retro-logged Athlete Session — the athlete's own, so deletable.
+            origin: 'athlete',
+            status: 'completed',
+            isTraining: true,
+            note: activity.note,
+            dayOrder: 0,
+            ...provenance,
+            ...reflection,
+          }),
+        ]),
     db
       .insert(sessionStreams)
       .values({ sessionId, samples: activity.samples })
@@ -301,7 +349,9 @@ export async function acceptDetectedActivity(params: {
       },
     }),
     db.delete(detectedActivities).where(eq(detectedActivities.id, activityId)),
-  ]);
+  ];
+
+  await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 
   return { ok: true, sessionId };
 }
@@ -390,20 +440,35 @@ export async function undoDetectedImport(params: {
   // The event log is the authority on whether this completion came from an
   // import. Scoped to the athlete as well as the session id, so the lookup
   // cannot be steered by a forged id belonging to someone else.
+  //
+  // It asks for the LATEST event of either kind and requires it to be the
+  // import, rather than asking for the latest import and hoping. Those differ
+  // for a real sequence: import, undo, then the athlete completes that same
+  // Coach-planned session by hand. The old import event is still the newest
+  // `garmin_imported` for the session, and the guards above do not exclude it —
+  // a Coach-planned session is `completed` and its origin is not `athlete`. So
+  // undo would fire on an ordinary completion, reset it, and recreate a stale
+  // proposal out of the old payload.
+  //
+  // Reading the two kinds together makes the log a state machine instead of a
+  // search: whatever happened last is what is true now, and repeated
+  // import/undo cycles need no extra rule.
   const [record] = await db
-    .select({ payload: events.payload })
+    .select({ type: events.type, payload: events.payload })
     .from(events)
     .where(
       and(
         eq(events.athleteId, athleteId),
-        eq(events.type, 'garmin_imported'),
+        inArray(events.type, ['garmin_imported', 'garmin_import_undone']),
         sql`${events.payload}->>'sessionId' = ${sessionId}`,
       ),
     )
     .orderBy(desc(events.createdAt))
     .limit(1);
 
-  if (!record) return { ok: false, reason: 'not-imported' };
+  if (!record || record.type !== 'garmin_imported') {
+    return { ok: false, reason: 'not-imported' };
+  }
   const payload = record.payload as {
     previousDuration?: number | null;
     activityType?: string;

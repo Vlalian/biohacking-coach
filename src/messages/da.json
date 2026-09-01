@@ -351,7 +351,8 @@
     "minutes": "min",
     "accept": "Bedøm og accepter",
     "discard": "Kassér",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "ordinal": "{n}. session"
   },
   "ThemeToggle": {
     "switch": "Skift tema: lyst, mørkt eller system"
