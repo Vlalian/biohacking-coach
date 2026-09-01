@@ -53,3 +53,14 @@ coverage/
 # Coach reply captures from `npm run coach:say` — local reading material,
 # real API output, never committed.
 .coach-say/
+
+# Cached article XML for the Knowledge Oracle ingest. Fetched from PMC on
+# demand and re-fetchable, so it is a build artifact rather than source. Whether
+# CC BY article text should live in a public repo is a deliberate decision, not
+# something a cache directory should make by accident.
+.corpus-cache/
+
+# Citation-chaining working data: reference lists mined from the cached corpus,
+# and candidate article XML fetched while licence-checking them. Regenerable,
+# and the same "is this text ours to commit?" question as .corpus-cache/.
+.corpus-scout/
