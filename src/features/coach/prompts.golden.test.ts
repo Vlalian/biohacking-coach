@@ -33,11 +33,7 @@ import type { WeekSession } from './week';
  */
 
 const BASE: CheckIn = {
-  body: 7,
-  mental: 7,
-  energy: 7,
-  sleep: 7,
-  pulse: 50,
+  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
   phase: 'Base Building',
   commStyle: '',
   experienceLevel: 'intermediate',
@@ -291,5 +287,93 @@ describe('golden — the Coach Chat prompt', () => {
     const prompt = buildChatPrompt(BASE, TODAY, null, week);
     expect(prompt).not.toContain('AUTHORITY');
     expect(prompt).toMatchSnapshot();
+  });
+});
+
+/**
+ * The shape every real athlete's prompt actually has today (code-health/07).
+ *
+ * `BASE` above carries readiness because it was written when the app always sent
+ * some — an invented 7/7/7/7.5/55. No Check-in feature exists, so what the live
+ * app renders is this: a STATE line of real facts only, and the Coach told to
+ * ask. These two snapshots are therefore the ones to read when reviewing a prompt
+ * change; the `BASE` ones pin the path that comes alive when a Check-in lands.
+ */
+describe('golden — no Check-in has ever been given', () => {
+  /**
+   * The shape every real athlete's prompt actually has today (code-health/07).
+   *
+   * `BASE` above carries a readiness because it was written when the app always
+   * sent one — an invented 7/7/7/7.5/55. No Check-in feature exists, so what the
+   * live app renders is this. These snapshots are therefore the ones to read when
+   * reviewing a prompt change; the `BASE` ones pin the path that comes alive when
+   * a Check-in lands.
+   *
+   * Everything else is populated, deliberately: the interesting thing to pin is
+   * not a bare prompt, it is where the NO CHECK-IN DATA block sits among the
+   * blocks a real athlete has — between STATE and their onboarding answers.
+   */
+  // BASE carries a readiness; this is BASE without one. Spelled as an explicit
+  // object rather than a destructure-and-discard so the fixture reads as what it
+  // is — a check-in that never had scores — instead of one with them removed.
+  const NO_READINESS: CheckIn = {
+    phase: BASE.phase,
+    experienceLevel: BASE.experienceLevel,
+    language: BASE.language,
+    weeklySessionDay: BASE.weeklySessionDay,
+    fixedConstraints: BASE.fixedConstraints,
+    // `sessionCount` is coaching-relationship depth. BASE says 5, which cannot
+    // be true of a session-1 athlete, so the two cases below set their own.
+    raceTarget: 'Ironman Copenhagen 2027',
+    commStyle: 'terse, technical, no reassurance',
+    equipment: [
+      { id: 'e1', category: 'bike' as const, name: 'Canyon Speedmax', details: 'CF SLX', addedDate: '2026-01-04' },
+    ],
+    onboarding: {
+      sportBackground: ['running'],
+      // `10–13h` is a real bucket from `ONBOARDING_OPTIONS.availableHours`. The
+      // field was `weeklyHours: '10-12'` when this branch was written; main
+      // renamed it and split the buckets, and a fixture that invents a value the
+      // onboarding cannot produce pins a prompt no athlete will ever see.
+      availableHours: '10–13h',
+      motivation: 'finish under 11 hours',
+    },
+  };
+
+  // Session 1 is when this matters most: a first meeting, where the Coach has
+  // nothing but onboarding and must not imply it can see how the athlete slept.
+  it('the Weekly Session renders without readiness at session 1', () => {
+    const ctx = buildWeeklyContext(
+      { ...NO_READINESS, weeklySessionNumber: 1, sessionCount: 0 },
+      [],
+      [],
+      [],
+      [],
+      null,
+      TODAY,
+    );
+    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+  });
+
+  // And at 4+, where the arc expects a Reflective Prompt and a review.
+  it('the Weekly Session renders without readiness at session 4+', () => {
+    const ctx = buildWeeklyContext(
+      { ...NO_READINESS, weeklySessionNumber: 4, sessionCount: 3 },
+      [],
+      [],
+      [],
+      [],
+      null,
+      TODAY,
+    );
+    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+  });
+
+  it('Coach Chat renders without readiness', () => {
+    // `sessionCount: 0` because that is what `coach-chat-service` passes for an
+    // athlete the Coach has not yet planned a week with. Left off, this golden
+    // pinned `sessions=undefined` — a template hole rendered as a word, in the
+    // one file a human reads to check what the Coach is actually told.
+    expect(buildChatPrompt({ ...NO_READINESS, sessionCount: 0 }, TODAY)).toMatchSnapshot();
   });
 });

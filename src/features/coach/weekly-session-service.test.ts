@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 /**
  * The Weekly Session orchestration — the half that talks to Postgres and the
@@ -218,5 +219,28 @@ describe('continueWeeklySession', () => {
     expect(result).toEqual({ ok: false, reason: 'not-owner' });
     expect(callCoach).not.toHaveBeenCalled();
     expect(appendMessages).not.toHaveBeenCalled();
+  });
+});
+
+// code-health/07 — the service is where the invented readiness was injected, so
+// this is the seam that proves it is gone from the string that actually reaches
+// Anthropic. The renderer tests prove the prompt *can* omit it; this proves the
+// service *does*.
+describe('the system prompt carries no invented readiness', () => {
+
+  it('sends no readiness scores when the athlete has never given a Check-in', async () => {
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
+    expect(system).toContain('NO CHECK-IN DATA');
+  });
+
+  it('still sends the facts that are real', async () => {
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('phase=Base Building');
+    expect(system).toContain('xp=intermediate');
   });
 });
