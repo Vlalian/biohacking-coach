@@ -1,8 +1,10 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, events } from '@/db/schema';
 import { getSessionAuthority } from './session-repository';
 import { createdStatusFor, validateAthleteSessionDraft } from './athlete-session-rules';
+import { casDeleteSession, casUpdateSession } from './versioned-write';
+import type { SessionConflict } from './conflict';
 
 /**
  * The Athlete Session adapter: reads, writes, and nothing else.
@@ -80,7 +82,8 @@ export async function createAthleteSession(params: {
 
 export type AthleteSessionWriteResult =
   | { ok: true }
-  | { ok: false; reason: 'not-found' | 'not-owner' | 'not-athlete-authored' | 'invalid' };
+  | { ok: false; reason: 'not-found' | 'not-owner' | 'not-athlete-authored' | 'invalid' }
+  | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 
 async function loadOwnedAthleteSession(sessionId: string, athleteId: string) {
   const row = await getSessionAuthority(sessionId);
@@ -103,8 +106,9 @@ export async function updateAthleteSession(params: {
   durationMin: number | null;
   isTraining: boolean;
   note: string | null;
+  expectedVersion: number;
 }): Promise<AthleteSessionWriteResult> {
-  const { athleteId, sessionId, type, durationMin, isTraining, note } = params;
+  const { athleteId, sessionId, type, durationMin, isTraining, note, expectedVersion } = params;
 
   const found = await loadOwnedAthleteSession(sessionId, athleteId);
   if (!found.ok) return found;
@@ -113,42 +117,51 @@ export async function updateAthleteSession(params: {
   if (!validated.ok) return validated;
   const { draft } = validated;
 
-  await getDb()
-    .update(sessions)
-    .set({
+  // Ownership and version both travel with the write, not just the read above:
+  // the read and the write are separate statements, so a guard left behind in
+  // the read guards nothing.
+  return casUpdateSession({
+    athleteId,
+    sessionId,
+    expectedVersion,
+    set: {
       type: draft.type,
       duration: draft.durationMin,
       isTraining: draft.isTraining,
       note: draft.note,
-      updatedAt: new Date(),
-    })
-    // Ownership is re-asserted in the WHERE, not just checked above: the read
-    // and the write are separate statements, so the guard travels with the write.
-    .where(and(eq(sessions.id, sessionId), eq(sessions.athleteId, athleteId)));
-
-  return { ok: true };
+    },
+    attempted: {
+      type: draft.type,
+      duration: draft.durationMin === null ? null : String(draft.durationMin),
+      note: draft.note,
+      // Set above, so it has to be comparable here too: an edit that toggles
+      // only this reported no divergence, which reads as "already done".
+      isTraining: String(draft.isTraining),
+    },
+    // No event: an Athlete Session edit has never logged one, and adding a new
+    // event type here would put a row in the activity feed that nothing reads.
+  });
 }
 
 export async function deleteAthleteSession(params: {
   athleteId: string;
   sessionId: string;
+  expectedVersion: number;
 }): Promise<AthleteSessionWriteResult> {
-  const { athleteId, sessionId } = params;
+  const { athleteId, sessionId, expectedVersion } = params;
 
   const found = await loadOwnedAthleteSession(sessionId, athleteId);
   if (!found.ok) return found;
 
-  const db = getDb();
-  await db.batch([
-    db.delete(sessions).where(eq(sessions.id, sessionId)),
-    db.insert(events).values({
-      athleteId,
+  return casDeleteSession({
+    athleteId,
+    sessionId,
+    expectedVersion,
+    event: {
       actorType: 'athlete',
       actorId: athleteId,
       type: 'athlete_session_deleted',
       payload: { sessionId },
-    }),
-  ]);
-
-  return { ok: true };
+    },
+  });
 }

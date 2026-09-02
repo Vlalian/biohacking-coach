@@ -162,8 +162,8 @@ describe('updateAthleteSessionAction and deleteAthleteSessionAction', () => {
     updateAthleteSession.mockResolvedValue({ ok: true });
     deleteAthleteSession.mockResolvedValue({ ok: true });
 
-    await updateAthleteSessionAction('sess_1', edit);
-    await deleteAthleteSessionAction('sess_1');
+    await updateAthleteSessionAction('sess_1', edit, 1);
+    await deleteAthleteSessionAction('sess_1', 1);
 
     // The id in the request is a claim; pairing it with the resolved athlete is
     // what lets the service refuse someone else's session (ADR 0006).
@@ -173,17 +173,18 @@ describe('updateAthleteSessionAction and deleteAthleteSessionAction', () => {
     expect(deleteAthleteSession).toHaveBeenCalledWith({
       athleteId: ATHLETE,
       sessionId: 'sess_1',
+      expectedVersion: 1,
     });
   });
 
   it('both refuse a signed-out request', async () => {
     resolveAthleteId.mockResolvedValue(null);
 
-    await expect(updateAthleteSessionAction('sess_1', edit)).resolves.toEqual({
+    await expect(updateAthleteSessionAction('sess_1', edit, 1)).resolves.toEqual({
       ok: false,
       reason: 'not-authenticated',
     });
-    await expect(deleteAthleteSessionAction('sess_1')).resolves.toEqual({
+    await expect(deleteAthleteSessionAction('sess_1', 1)).resolves.toEqual({
       ok: false,
       reason: 'not-authenticated',
     });

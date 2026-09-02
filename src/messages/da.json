@@ -303,6 +303,7 @@
     "bouncePastDay": "Den dag er allerede overstået — sessioner flyttes kun fremad i ugen.",
     "bounceOtherWeek": "Sessioner flyttes kun inden for deres egen mandag–søndag-uge. Bed din Coach om at omlægge ugen.",
     "bounceFrozen": "Denne session er allerede gennemført — træningsjournalen kan ikke ændres.",
+    "bounceConflict": "Din Head Coach ændrede denne session, mens den var åben. Dit flyt blev ikke gennemført — genindlæs for at se deres.",
     "minutes": "min"
   },
   "SessionDrawer": {

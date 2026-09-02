@@ -17,6 +17,7 @@ import { dateKey, isValidDateKey } from '@/lib/date';
 export async function moveSessionAction(
   sessionId: string,
   targetDate: string,
+  expectedVersion: number,
 ): Promise<MoveResult> {
   // The target date is untrusted client input; reject anything that is not a
   // real 'YYYY-MM-DD' before it reaches the rules or the database.
@@ -31,6 +32,7 @@ export async function moveSessionAction(
     sessionId,
     targetDate,
     today: dateKey(new Date()),
+    expectedVersion,
   });
 
   if (result.ok) revalidatePath('/', 'layout');

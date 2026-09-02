@@ -303,6 +303,7 @@
     "bouncePastDay": "That day has already happened — sessions only move forward within the week.",
     "bounceOtherWeek": "Sessions move within their own Mon–Sun week. Ask your Coach to reshape the week.",
     "bounceFrozen": "This session is already completed — the training record is immutable.",
+    "bounceConflict": "Your Head Coach changed this session while it was open. Your move was not applied — refresh to see theirs.",
     "minutes": "min"
   },
   "SessionDrawer": {

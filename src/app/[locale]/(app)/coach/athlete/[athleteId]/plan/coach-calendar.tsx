@@ -32,8 +32,8 @@ export function CoachCalendar({
       unavailableDates={unavailableDates}
       todayKey={todayKey}
       readOnly
-      onMove={(sessionId, targetDate) =>
-        moveSessionAsCoachAction(athleteId, sessionId, targetDate)
+      onMove={(sessionId, targetDate, expectedVersion) =>
+        moveSessionAsCoachAction(athleteId, sessionId, targetDate, expectedVersion)
       }
     />
   );

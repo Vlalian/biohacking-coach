@@ -24,6 +24,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   status: 'completed',
   parked: false,
   dayOrder: 0,
+  version: 1,
   title: 'Ride',
   duration: 60,
   zone: 'Zone 2',

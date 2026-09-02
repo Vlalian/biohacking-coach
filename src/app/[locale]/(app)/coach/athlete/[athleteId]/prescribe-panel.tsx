@@ -61,6 +61,10 @@ export function PrescribePanel({
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The version the row was rendered at, captured when editing starts. Sent
+  // with the edit so an athlete change that landed in between is refused
+  // rather than overwritten.
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const run = (action: () => Promise<PrescribeActionResult>) =>
@@ -70,9 +74,33 @@ export function PrescribePanel({
       if (result.ok) {
         setForm(EMPTY);
         setEditingId(null);
+        setEditingVersion(null);
         router.refresh();
       } else {
         setError(t('error', { reason: result.reason }));
+
+        // A conflict is the one refusal the coach can actually do something
+        // about, and it was the one left in a dead end: the editor kept the
+        // version it had already been refused for, so every retry resent the
+        // stale version and failed identically forever.
+        //
+        // Adopting the winner's version makes the next save a real attempt
+        // against the row as it now stands, and the refresh puts that row on
+        // screen so the coach sees what beat them before deciding. Their form
+        // keeps their own input — this reconciles the version, it does not
+        // decide for them.
+        if ('conflict' in result && result.conflict) {
+          const winner = result.conflict.current;
+          // Null means the winning write deleted the row. There is nothing left
+          // to re-send an edit against, so leave edit mode rather than offer a
+          // save that cannot succeed.
+          if (winner) setEditingVersion(winner.version);
+          else {
+            setEditingId(null);
+            setEditingVersion(null);
+          }
+          router.refresh();
+        }
       }
     });
 
@@ -83,14 +111,15 @@ export function PrescribePanel({
     }
     const input = toInput(form);
     run(() =>
-      editingId
-        ? editPrescribedSessionAction(athleteId, editingId, input)
+      editingId && editingVersion !== null
+        ? editPrescribedSessionAction(athleteId, editingId, input, editingVersion)
         : prescribeSessionAction(athleteId, input),
     );
   };
 
   const startEdit = (s: PlanSession) => {
     setEditingId(s.id);
+    setEditingVersion(s.version);
     setError(null);
     setForm({
       date: s.date,
@@ -164,6 +193,7 @@ export function PrescribePanel({
             disabled={pending}
             onClick={() => {
               setEditingId(null);
+              setEditingVersion(null);
               setForm(EMPTY);
               setError(null);
             }}
@@ -194,7 +224,7 @@ export function PrescribePanel({
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => run(() => deletePrescribedSessionAction(athleteId, s.id))}
+                  onClick={() => run(() => deletePrescribedSessionAction(athleteId, s.id, s.version))}
                   className="rounded border px-2 py-0.5 text-xs text-red-600"
                 >
                   {t('delete')}

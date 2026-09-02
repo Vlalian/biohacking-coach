@@ -6,9 +6,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const limit = vi.fn();
 const countWhere = vi.fn();
 const batch = vi.fn().mockResolvedValue(undefined);
-const updateWhere = vi.fn(() => ({}));
+// `.returning()` is what reports whether the compare-and-set matched: a row
+// means this writer won, an empty array means the version had already moved on.
+const updateReturning = vi.fn().mockResolvedValue([{ version: 2 }]);
+const updateWhere = vi.fn(() => ({ returning: updateReturning }));
 const updateSet = vi.fn(() => ({ where: updateWhere }));
-const deleteWhere = vi.fn(() => ({}));
+const deleteReturning = vi.fn().mockResolvedValue([{ id: 's1' }]);
+const deleteWhere = vi.fn(() => ({ returning: deleteReturning }));
 const insertReturning = vi.fn();
 const insertValues = vi.fn(() => ({
   returning: insertReturning,
@@ -157,10 +161,13 @@ describe('updateAthleteSession', () => {
       durationMin: 30,
       isTraining: true,
       note: 'updated',
+      expectedVersion: 1,
     });
 
-    expect(result).toEqual({ ok: true });
-    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ type: 'Strength' }));
+    expect(result).toEqual({ ok: true, version: 2 });
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'Strength', version: 2 }),
+    );
   });
 
   it('refuses to edit a Coach-planned session — content is read-only', async () => {
@@ -173,6 +180,7 @@ describe('updateAthleteSession', () => {
       durationMin: 30,
       isTraining: true,
       note: 'nope',
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-athlete-authored' });
@@ -189,6 +197,7 @@ describe('updateAthleteSession', () => {
       durationMin: 30,
       isTraining: true,
       note: null,
+      expectedVersion: 1,
     });
 
     expect(result).toEqual({ ok: false, reason: 'not-owner' });
@@ -200,10 +209,28 @@ describe('deleteAthleteSession', () => {
   it("deletes the athlete's own session", async () => {
     limit.mockResolvedValue([{ athleteId: OWNER, origin: 'athlete' }]);
 
-    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 's1' });
+    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 's1', expectedVersion: 1 });
 
-    expect(result).toEqual({ ok: true });
-    expect(batch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: true, version: 1 });
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a delete against a stale version, leaving the row alone', async () => {
+    limit
+      .mockResolvedValueOnce([{ athleteId: OWNER, origin: 'athlete' }])
+      .mockResolvedValueOnce([]);
+    deleteReturning.mockResolvedValueOnce([]);
+
+    const result = await deleteAthleteSession({
+      athleteId: OWNER,
+      sessionId: 's1',
+      expectedVersion: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected a conflict');
+    expect(result.reason).toBe('conflict');
+    expect(insertValues).not.toHaveBeenCalled();
   });
 
   it('deletes a completed one too — the athlete can undo an accepted import', async () => {
@@ -213,27 +240,39 @@ describe('deleteAthleteSession', () => {
     // entry the athlete put there — otherwise a wrong file is permanent.
     limit.mockResolvedValue([{ athleteId: OWNER, origin: 'athlete', status: 'completed' }]);
 
-    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 's1' });
+    const result = await deleteAthleteSession({
+      athleteId: OWNER,
+      sessionId: 's1',
+      expectedVersion: 1,
+    });
 
-    expect(result).toEqual({ ok: true });
-    expect(batch).toHaveBeenCalledTimes(1);
+    // A versioned write reports the version it acted at, delete included — the
+    // caller asked to remove *that* row, and the answer says which one went.
+    expect(result).toEqual({ ok: true, version: 1 });
+    // This used to assert one `db.batch`, which no longer happens and should
+    // not: a compare-and-set has to know whether the delete matched a row
+    // before it may write the event, and a batch commits before anyone can
+    // look. The guarantee it was protecting is unchanged and is asserted
+    // directly instead — an event is written when, and only when, the row went.
+    // The refusal case above proves the other half (`insertValues` not called).
+    expect(insertValues).toHaveBeenCalledTimes(1);
   });
 
   it('refuses to delete a Coach-planned session', async () => {
     limit.mockResolvedValue([{ athleteId: OWNER, origin: 'coach' }]);
 
-    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 's1' });
+    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 's1', expectedVersion: 1 });
 
     expect(result).toEqual({ ok: false, reason: 'not-athlete-authored' });
-    expect(batch).not.toHaveBeenCalled();
+    expect(deleteWhere).not.toHaveBeenCalled();
   });
 
   it('returns not-found when the session does not exist', async () => {
     limit.mockResolvedValue([]);
 
-    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 'missing' });
+    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 'missing', expectedVersion: 1 });
 
     expect(result).toEqual({ ok: false, reason: 'not-found' });
-    expect(batch).not.toHaveBeenCalled();
+    expect(deleteWhere).not.toHaveBeenCalled();
   });
 });

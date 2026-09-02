@@ -92,6 +92,7 @@ export async function createAthleteSessionAction(input: {
 export async function updateAthleteSessionAction(
   sessionId: string,
   input: { type: string; durationMin: number | null; isTraining: boolean; note: string | null },
+  expectedVersion: number,
 ): Promise<AthleteSessionWriteResult | AuthFailure> {
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
@@ -103,6 +104,7 @@ export async function updateAthleteSessionAction(
     durationMin: input.durationMin,
     isTraining: input.isTraining,
     note: input.note,
+    expectedVersion,
   });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
@@ -110,11 +112,12 @@ export async function updateAthleteSessionAction(
 
 export async function deleteAthleteSessionAction(
   sessionId: string,
+  expectedVersion: number,
 ): Promise<AthleteSessionWriteResult | AuthFailure> {
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  const result = await deleteAthleteSession({ athleteId, sessionId });
+  const result = await deleteAthleteSession({ athleteId, sessionId, expectedVersion });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }

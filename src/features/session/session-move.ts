@@ -1,18 +1,25 @@
 import { eq } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { sessions, events } from '@/db/schema';
+import { sessions } from '@/db/schema';
 import { classifyMove } from './move-rules';
+import { casUpdateSession } from './versioned-write';
+import type { SessionConflict } from './conflict';
 
 /**
  * The result of an attempted move. On failure, `reason` says why, so the caller
  * can stay silent (the client already knows) without guessing.
+ *
+ * `'conflict'` is the exception that does carry a payload: the client cannot
+ * know that someone else moved or edited the session underneath it, so the
+ * refusal has to say what won (`versioned-write.ts`).
  */
 export type MoveResult =
   | { ok: true }
   | {
       ok: false;
       reason: 'not-authenticated' | 'not-found' | 'not-owner' | 'frozen' | 'bounce';
-    };
+    }
+  | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 
 /**
  * Who is performing a move. Placement stopped being the athlete's alone on
@@ -50,12 +57,19 @@ export type MoveActor =
  *
  * `from` and `to` are both in the payload because the narrated sentence names
  * both days. A move means the pair, not the destination.
+ *
+ * The move carries the version the client read. A Head Coach editing the same
+ * session sets its `date` too, so placement is contested: without the version
+ * the later of the two writes would silently win. Narration is benched (ticket
+ * 02, amended) — the event is recorded with its actor and `narrated_at` stays
+ * null; nothing is announced.
  */
 export async function applyMove(params: {
   athleteId: string;
   sessionId: string;
   targetDate: string;
   today: string;
+  expectedVersion: number;
   actor: MoveActor;
   /**
    * The gate on the session's `origin`, applied before the Move rules run. The
@@ -70,10 +84,10 @@ export async function applyMove(params: {
    */
   permittedOrigin: (origin: string) => boolean;
 }): Promise<MoveResult> {
-  const { athleteId, sessionId, targetDate, today, actor, permittedOrigin } = params;
-  const db = getDb();
+  const { athleteId, sessionId, targetDate, today, expectedVersion, actor, permittedOrigin } =
+    params;
 
-  const [row] = await db
+  const [row] = await getDb()
     .select()
     .from(sessions)
     .where(eq(sessions.id, sessionId))
@@ -90,21 +104,29 @@ export async function applyMove(params: {
   const verdict = classifyMove({ date: row.date, status: row.status }, targetDate, today);
   if (verdict !== 'move') return { ok: false, reason: verdict };
 
-  await db.batch([
-    db
-      .update(sessions)
-      .set({ date: targetDate, updatedAt: new Date() })
-      .where(eq(sessions.id, sessionId)),
-    db.insert(events).values({
-      athleteId,
+  // The compare-and-set replaces the unconditional update this used to do, and
+  // the event rides inside it rather than beside it: casUpdateSession writes the
+  // event only if the update actually landed, so a refused move cannot leave a
+  // `session_moved` event claiming a move that never happened.
+  //
+  // The actor is main's, not a hardcoded 'athlete'. Narration filters on
+  // actor_type, so writing the wrong one here would either announce an athlete's
+  // own move back at them or silence the Head Coach's.
+  const written = await casUpdateSession({
+    athleteId,
+    sessionId,
+    expectedVersion,
+    set: { date: targetDate },
+    attempted: { date: targetDate },
+    event: {
       actorType: actor.type,
       actorId: actor.type === 'athlete' ? actor.athleteId : actor.headCoachId,
       type: 'session_moved',
       payload: { sessionId, from: row.date, to: targetDate },
-    }),
-  ]);
+    },
+  });
 
-  return { ok: true };
+  return written.ok ? { ok: true } : written;
 }
 
 /**
@@ -123,6 +145,8 @@ export async function moveSession(params: {
   sessionId: string;
   targetDate: string;
   today: string;
+  /** The version the client read. See {@link applyMove}. */
+  expectedVersion: number;
 }): Promise<MoveResult> {
   return applyMove({
     ...params,

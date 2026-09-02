@@ -59,6 +59,9 @@ function session(overrides: Partial<Session> = {}): Session {
   return {
     id: 's1',
     date: TODAY,
+    // Required since FR-5: every session carries the version a write
+    // compare-and-sets on.
+    version: 1,
     type: 'Run',
     // Planned by default: the status-action tests are about what a live session
     // offers. The undo tests below ask for `completed` explicitly, because that

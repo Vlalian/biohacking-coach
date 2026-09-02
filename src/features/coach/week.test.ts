@@ -10,6 +10,7 @@ function session(over: Partial<Session> = {}): Session {
     status: 'planned',
     parked: false,
     dayOrder: 0,
+    version: 1,
     title: null,
     duration: 90,
     zone: '2',

@@ -37,6 +37,9 @@ const TODAY = '2026-08-19';
 const session = (over: Partial<Session> = {}): Session => ({
   id: 'sess_1',
   date: '2026-08-21',
+  // Required since FR-5: every session carries the version a write
+  // compare-and-sets on.
+  version: 1,
   type: 'Endurance',
   status: 'planned',
   parked: false,

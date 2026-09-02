@@ -111,7 +111,8 @@ export async function getSessionsOnDates(
  * session" from "not yours", which a filtered query collapses into one.
  */
 export async function getSessionAuthority(sessionId: string): Promise<
-  { athleteId: string; date: string; status: string; origin: SessionOrigin } | undefined
+  | { athleteId: string; date: string; status: string; origin: SessionOrigin; version: number }
+  | undefined
 > {
   const [row] = await getDb()
     .select({
@@ -119,6 +120,7 @@ export async function getSessionAuthority(sessionId: string): Promise<
       date: sessions.date,
       status: sessions.status,
       origin: sessions.origin,
+      version: sessions.version,
     })
     .from(sessions)
     .where(eq(sessions.id, sessionId))

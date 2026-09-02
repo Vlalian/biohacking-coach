@@ -31,6 +31,7 @@ function row(overrides: Partial<SessionRow> = {}): SessionRow {
     status: 'planned',
     parked: false,
     isTraining: true,
+    version: 1,
     duration: 60,
     zone: 'Zone 2',
     note: 'Easy',
@@ -89,7 +90,9 @@ describe('getSessionsForAthlete', () => {
     // feedback comes through because the calendar renders and pre-fills it.
     // `origin`/`isTraining` came in with the Session Drawer's status and
     // Athlete Session actions (edit/delete gating on origin, Double/Rest
-    // rules on isTraining).
+    // rules on isTraining). `version` came in with write-conflict detection:
+    // nothing renders it, but every editor sends it back so a concurrent
+    // write is refused rather than overwritten.
     expect(Object.keys(result[0]).sort()).toEqual(
       [
         'date',
@@ -106,6 +109,7 @@ describe('getSessionsForAthlete', () => {
         'status',
         'title',
         'type',
+        'version',
         'zone',
       ].sort(),
     );
