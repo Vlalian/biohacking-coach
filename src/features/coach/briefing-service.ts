@@ -1,4 +1,5 @@
 import { refusalReason } from '@/lib/identifiers';
+import { logCoachFailure } from '@/lib/coach-log';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import {
   getBriefingPlan,
@@ -166,7 +167,15 @@ export async function startBriefing(
     // comments and onboarding answers reach `buildBriefingContext` — so a
     // refused identifier is as reachable here as on the athlete side, and gets
     // the same distinct answer rather than "the Coach is unavailable".
-    return { ok: false, reason: refusalReason(error) };
+    const reason = refusalReason(error);
+    logCoachFailure({
+      surface: 'coach_briefing',
+      athleteId,
+      conversationId: null,
+      error,
+      reason,
+    });
+    return { ok: false, reason };
   }
 
   const conversation = await createBriefing({ coachId, athleteId });
@@ -225,7 +234,15 @@ export async function continueBriefing(
       maxTokens: BRIEFING_MAX_TOKENS,
     });
   } catch (error) {
-    return { ok: false, reason: refusalReason(error) };
+    const reason = refusalReason(error);
+    logCoachFailure({
+      surface: 'coach_briefing',
+      athleteId: briefing.athleteId,
+      conversationId: briefing.id,
+      error,
+      reason,
+    });
+    return { ok: false, reason };
   }
 
   const afterBoth = await appendBriefingMessages(coachId, conversationId, [

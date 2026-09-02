@@ -1,14 +1,17 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolveHeadCoachId } from '../../../current-actor';
+import { resolveHeadCoachId } from '../../../../current-actor';
 import {
   deletePrescribedSession,
+  moveSessionAsHeadCoach,
   editPrescribedSession,
   prescribeSession,
   type HeadCoachActionResult,
   type PrescriptionInput,
 } from '@/features/coach/head-coach-service';
+import type { MoveResult } from '@/features/session/session-move';
+import { dateKey } from '@/lib/date';
 
 /**
  * Server actions for the Head Coach's plan edits — the seam the lean coach UI
@@ -31,7 +34,7 @@ export async function prescribeSessionAction(
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
   const result = await prescribeSession({ headCoachId, athleteId, input });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -51,7 +54,9 @@ export async function editPrescribedSessionAction(
     input,
     expectedVersion,
   });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
+  // 'layout' is main's: the edited session shows on more than this page, so a
+  // page-scoped revalidate left the other tabs stale.
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -69,6 +74,38 @@ export async function deletePrescribedSessionAction(
     sessionId,
     expectedVersion,
   });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`);
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
+  return result;
+}
+
+/**
+ * A Session Move performed by the Head Coach (ADR 0003, 2026-08-21 amendment).
+ *
+ * Same shape as the actions above and as the athlete's own `moveSessionAction`:
+ * the acting coach is resolved from the authenticated session, never sent by the
+ * client, and `today` is the server's so the Move rules are judged against a
+ * clock the browser cannot spoof. Revalidates the layout, so the moved session
+ * is not stale on the other tabs.
+ */
+export async function moveSessionAsCoachAction(
+  athleteId: string,
+  sessionId: string,
+  targetDate: string,
+  /** The version the coach's browser read — see moveSessionAsHeadCoach. */
+  expectedVersion: number,
+): Promise<MoveResult | { ok: false; reason: 'not-linked' | 'not-a-coach' }> {
+  const headCoachId = await resolveHeadCoachId();
+  if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
+
+  const result = await moveSessionAsHeadCoach({
+    headCoachId,
+    athleteId,
+    sessionId,
+    targetDate,
+    expectedVersion,
+    today: dateKey(new Date()),
+  });
+
+  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }

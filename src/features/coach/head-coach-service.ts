@@ -3,7 +3,12 @@ import { getDb } from '@/db';
 import { events, sessions } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import { getActiveLink } from './coach-repository';
-import { canHeadCoachEditContent, HEAD_COACH_ORIGIN } from './head-coach-authority';
+import {
+  canHeadCoachEditContent,
+  canHeadCoachMove,
+  HEAD_COACH_ORIGIN,
+} from './head-coach-authority';
+import { applyMove, type MoveResult } from '@/features/session/session-move';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
 import type { SessionConflict } from '@/features/session/conflict';
 
@@ -24,11 +29,18 @@ import type { SessionConflict } from '@/features/session/conflict';
  *      ({@link canHeadCoachEditContent}).
  *
  * Each action writes the session change and a `head_coach`-attributed event in
- * one transaction: both land or neither does. Narration stays benched (ticket
- * 05, ballot 3, amending ticket 02): the event records with `actor_type:
- * head_coach` and the actor's id, `narrated_at` stays null, and nothing is
- * announced to the athlete. This is the audit half; the announcement half waits
- * for the coach interview.
+ * one transaction: both land or neither does. The event records with
+ * `actor_type: head_coach` and the actor's id, and `narrated_at` starts null —
+ * which now means *not yet announced* rather than *never announced*:
+ * `narration-service` un-benched the announcement half (`coached-mode/03`), so
+ * the athlete is told on their next app-open. This module still writes only the
+ * audit half; it does not narrate, and nothing here changed when narration
+ * landed.
+ *
+ * (Until 2026-08-21 this comment said narration "stays benched … nothing is
+ * announced to the athlete", which stopped being true when `coached-mode/03`
+ * shipped. Corrected rather than deleted, per `AGENTS.md`: this is the comment
+ * a reader of the write path trusts.)
  *
  * Head-Coach-authored content is never silently modified by the Coach or its
  * automation, because the only write path to a `head_coach` session is this
@@ -234,4 +246,51 @@ export async function deletePrescribedSession(params: {
   });
 
   return written.ok ? { ok: true, sessionId } : written;
+}
+
+/**
+ * The Head Coach moving a session on a linked athlete's plan (ADR 0003,
+ * 2026-08-21 amendment — placement is shared, not transferred).
+ *
+ * Two gates before anything is written, the same shape as every other action
+ * here: the Coaching Link must be active, and the session's origin must be
+ * within the coach's placement authority — an Athlete Session is not.
+ *
+ * The Move rules themselves are NOT re-implemented for the coach. This delegates
+ * to {@link applyMove}, the same function the athlete's own move runs through,
+ * so "no moving into the past", "not across the week boundary" and "a completed
+ * session is frozen" cannot mean one thing for the athlete and another for their
+ * coach. What differs is only the actor recorded on the `session_moved` event —
+ * which is what will let narration tell the athlete who moved their training.
+ */
+export async function moveSessionAsHeadCoach(params: {
+  headCoachId: string;
+  athleteId: string;
+  sessionId: string;
+  targetDate: string;
+  today: string;
+  /**
+   * The version the coach's browser read. A coach move is a contested write by
+   * definition — the athlete may be dragging the same session — so it carries a
+   * version like every other write in FR-5 rather than being the one path that
+   * still wins by arriving last.
+   */
+  expectedVersion: number;
+}): Promise<MoveResult | { ok: false; reason: 'not-linked' }> {
+  const { headCoachId, athleteId, sessionId, targetDate, today, expectedVersion } = params;
+
+  if (!isValidDateKey(targetDate)) return { ok: false, reason: 'bounce' };
+
+  const link = await getActiveLink(headCoachId, athleteId);
+  if (!link) return { ok: false, reason: 'not-linked' };
+
+  return applyMove({
+    athleteId,
+    sessionId,
+    targetDate,
+    today,
+    expectedVersion,
+    actor: { type: 'head_coach', headCoachId },
+    permittedOrigin: canHeadCoachMove,
+  });
 }

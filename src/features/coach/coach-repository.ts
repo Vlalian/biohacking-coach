@@ -51,6 +51,30 @@ export async function getCoachByUserId(
 }
 
 /**
+ * Whether this user is a Head Coach with someone on their Roster right now.
+ *
+ * Asked by the app shell to decide whether the Navigation Drawer shows a Roster
+ * entry, which CONTEXT.md makes conditional on holding active Coaching Links —
+ * Head Coach is a role on a normal account, not a separate kind of account, and
+ * the same person may be an athlete with training of their own. A coach row on
+ * its own is not enough: the seed hands Mads one for dual-role development, and
+ * an athlete who severed their last link should stop seeing a Roster.
+ *
+ * One query, and it stops at the first row: the caller wants a boolean, and
+ * every View's layout asks it on every request.
+ */
+export async function holdsActiveCoachingLinks(userId: string): Promise<boolean> {
+  const rows = await getDb()
+    .select({ id: coachingLink.id })
+    .from(coachingLink)
+    .innerJoin(coach, eq(coachingLink.coachId, coach.id))
+    .where(and(eq(coach.userId, userId), eq(coachingLink.status, 'active')))
+    .limit(1);
+
+  return rows.length > 0;
+}
+
+/**
  * The coach's Roster: every athlete they hold an active Coaching Link to.
  *
  * The athlete's name is resolved here — `user.name` for a real athlete (left

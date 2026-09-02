@@ -21,7 +21,7 @@ vi.mock('@/db', () => ({
   }),
 }));
 
-const { moveSession } = await import('./session-move');
+const { moveSession, applyMove } = await import('./session-move');
 
 // Today is Wednesday 2026-07-15; the session sits on Thursday of the same week.
 const TODAY = '2026-07-15';
@@ -185,5 +185,124 @@ describe('moveSession — server authority', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not-found' });
     expect(batch).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyMove — the Head Coach as actor', () => {
+  // Placement stopped being the athlete's alone on 2026-08-21 (ADR 0003
+  // amendment). What matters here is that the *rules* did not fork: the coach
+  // reaches the same function, so a move the athlete could not make is one the
+  // coach cannot make either. Only the recorded actor differs.
+  const COACH = 'head_coach_1';
+  const asCoach = { type: 'head_coach', headCoachId: COACH } as const;
+  // What `canHeadCoachMove` admits, stated locally so this suite tests the
+  // session rules rather than the coach feature's constant.
+  const coachOrigins = (origin: string) => origin !== 'athlete';
+
+  beforeEach(() => {
+    limit.mockReset();
+    batch.mockClear();
+    insertValues.mockClear();
+    updateSet.mockClear();
+  });
+
+  it('records the coach as the actor, not the athlete', async () => {
+    limit.mockResolvedValue([sessionRow()]);
+
+    const result = await applyMove({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+      actor: asCoach,
+      permittedOrigin: coachOrigins,
+    });
+
+    expect(result).toEqual({ ok: true });
+    // The event is the material narration will need to tell the athlete who
+    // moved their training (coached-mode/03).
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        athleteId: OWNER,
+        actorType: 'head_coach',
+        actorId: COACH,
+        type: 'session_moved',
+      }),
+    );
+  });
+
+  it('is refused by the same Move rules the athlete faces', async () => {
+    // A completed session is frozen — the training record is immutable, and
+    // outranking the AI does not mean outranking reality (ADR 0003).
+    limit.mockResolvedValue([sessionRow({ status: 'completed' })]);
+
+    const result = await applyMove({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+      actor: asCoach,
+      permittedOrigin: coachOrigins,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'frozen' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a session belonging to a different athlete', async () => {
+    limit.mockResolvedValue([sessionRow({ athleteId: 'someone_else' })]);
+
+    const result = await applyMove({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+      actor: asCoach,
+      permittedOrigin: coachOrigins,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'not-owner' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('honours an origin gate before the Move rules run', async () => {
+    // An Athlete Session is still the athlete's territory — that rule was NOT
+    // reversed. The caller supplies the gate; this proves it is enforced here
+    // rather than only in the UI.
+    limit.mockResolvedValue([sessionRow({ origin: 'athlete' })]);
+
+    const result = await applyMove({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+      actor: asCoach,
+      permittedOrigin: (origin) => origin !== 'athlete',
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'not-owner' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('still records the athlete as actor on their own move', async () => {
+    // The regression guard for the refactor: moveSession now delegates, and
+    // must not start attributing an athlete's move to anyone else.
+    limit.mockResolvedValue([sessionRow()]);
+
+    await moveSession({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ actorType: 'athlete', actorId: OWNER }),
+    );
   });
 });

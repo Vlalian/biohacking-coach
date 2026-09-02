@@ -28,8 +28,12 @@ vi.mock('@/db', () => ({
 }));
 vi.mock('./coach-repository', () => ({ getActiveLink }));
 
-const { prescribeSession, editPrescribedSession, deletePrescribedSession } =
-  await import('./head-coach-service');
+const {
+  prescribeSession,
+  editPrescribedSession,
+  deletePrescribedSession,
+  moveSessionAsHeadCoach,
+} = await import('./head-coach-service');
 
 /** The refusal reason, or 'ok' when the action unexpectedly succeeded. */
 function reasonOf(result: { ok: boolean } & { reason?: string }): string {
@@ -254,5 +258,80 @@ describe('deletePrescribedSession — same content tier', () => {
       reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 'missing', expectedVersion: 1 })),
     ).toBe('not-found');
     expect(batch).not.toHaveBeenCalled();
+  });
+});
+
+describe('moveSessionAsHeadCoach — the Head Coach re-places a session', () => {
+  // Placement became shared on 2026-08-21 (ADR 0003 amendment). The Move rules
+  // are not re-implemented here — they are proven in session-move.test.ts. What
+  // this covers is the gate around them.
+  const TODAY = '2026-07-15';
+
+  it('moves a coach-authored session and records a head_coach event', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ status: 'planned' })]);
+
+    const result = await moveSessionAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ actorType: 'head_coach', actorId: COACH }),
+    );
+  });
+
+  it('refuses a coach with no active link, and reads nothing', async () => {
+    getActiveLink.mockResolvedValue(undefined);
+
+    const result = await moveSessionAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: 'not-my-athlete',
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    expect(reasonOf(result)).toBe('not-linked');
+    expect(limit).not.toHaveBeenCalled();
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('refuses an Athlete Session, which is still the athlete territory', async () => {
+    // The placement rule was reversed; "may only view Athlete Sessions" was not.
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ origin: 'athlete', status: 'planned' })]);
+
+    const result = await moveSessionAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed target date before touching the link or the row', async () => {
+    const result = await moveSessionAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 'sess_1',
+      targetDate: 'tomorrow-ish',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    expect(reasonOf(result)).toBe('bounce');
+    expect(getActiveLink).not.toHaveBeenCalled();
   });
 });

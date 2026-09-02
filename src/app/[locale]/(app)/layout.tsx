@@ -1,5 +1,5 @@
 import { hasLocale } from 'next-intl';
-import { setRequestLocale } from 'next-intl/server';
+import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { ViewId } from '@/components/shell/app-shell';
@@ -8,28 +8,45 @@ import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { holdsActiveCoachingLinks } from '@/features/coach/coach-repository';
 import {
   getOpenConversations,
   getMessages,
   hasHeldWeeklySessionInWeek,
 } from '@/features/coach/conversation-repository';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
+import { narratePendingEvents } from '@/features/coach/narration-service';
+import { logNarrationFailure } from '@/lib/coach-log';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import type { WeeklySessionInitial } from '../weekly-session';
 
-// The Views this port has real pages for. Glossary/Roster join this list as
-// their own tasks land (lovable/briefs build order) — left out for now rather
-// than linking to a page that 404s.
-const AVAILABLE_VIEWS: ViewId[] = [
+// The Views this port has real pages for. Glossary joins this list as its own
+// task lands (lovable/briefs build order) — left out for now rather than
+// linking to a page that 404s.
+const ATHLETE_VIEWS: ViewId[] = [
   'training-plan',
   'information',
   'equipment',
   'settings',
   'privacy',
 ];
+
+/**
+ * Roster is not in that list because it is not available to everyone: CONTEXT.md
+ * makes the entry conditional on the account holding active Coaching Links, so
+ * it cannot be a module constant. Adding it unconditionally would show every
+ * solo athlete a link to a page that tells them they are not a coach.
+ *
+ * It sits after the athlete's own Views rather than at the top — a Head Coach is
+ * usually also an athlete (the seed creates exactly that), and their own
+ * training is still what they open the app for.
+ */
+function availableViewsFor(isHeadCoach: boolean): ViewId[] {
+  return isHeadCoach ? [...ATHLETE_VIEWS, 'roster'] : ATHLETE_VIEWS;
+}
 
 /**
  * Shared frame for every View (ADR 0007): Navigation Drawer, theme cycle, and
@@ -57,6 +74,7 @@ export default async function AppShellLayout({
   }
 
   const athlete = await getAthleteByUserId(session!.user.id);
+  const isHeadCoach = await holdsActiveCoachingLinks(session!.user.id);
   const firstName = session!.user.name.trim().split(/\s+/)[0] ?? '';
 
   // Restore an in-progress Weekly Session on refresh: the transcript is server
@@ -70,6 +88,40 @@ export default async function AppShellLayout({
 
   if (athlete) {
     const today = dateKey(new Date());
+
+    // Narration runs *before* the transcript is read, so anything the Head
+    // Coach did while the athlete was away is already in the thread this render
+    // hands to the Coach Overlay — rather than appearing only on the next
+    // navigation (ADR 0003, "no silent plan mutations"; `coached-mode/03`).
+    //
+    // App-open is the trigger, not the Weekly Session: that is offered and
+    // never forced (ADR 0007), so hanging narration off it would let an athlete
+    // who dismisses the offer never learn their plan changed.
+    //
+    // A write on a render path is deliberate and is safe by construction: with
+    // nothing pending — the overwhelmingly common case — this is one indexed
+    // read and no write at all, and when there is something, the stamp and the
+    // message land in one batch that re-asserts `narrated_at IS NULL`, so two
+    // concurrent renders cannot narrate the same change twice. It never calls
+    // the Anthropic API.
+    //
+    // It is guarded, though, because *safe* is not the same as *infallible*: a
+    // transient database failure here would otherwise reject the render and
+    // take down the whole app shell for that athlete. Narration is not lost by
+    // catching — nothing was stamped, so it stays pending and is narrated on
+    // the next app-open. A missed narration retries; a thrown render does not.
+    const narrationCopy = await getTranslations('Narration');
+    const weekdayOf = new Intl.DateTimeFormat(locale, { weekday: 'long' });
+    try {
+      await narratePendingEvents(
+        athlete.id,
+        (key, values) => narrationCopy(key, values),
+        (key) => weekdayOf.format(new Date(`${key}T12:00:00Z`)),
+      );
+    } catch (error) {
+      logNarrationFailure(athlete.id, error);
+    }
+
     // One query for whatever is open, across kinds — the Overlay is one surface
     // hosting several behaviors (ADR 0007), so the shell does not ask for a kind
     // by name. Both can be open at once by design: the resting Coach Chat, and
@@ -129,7 +181,7 @@ export default async function AppShellLayout({
   return (
     <ShellChrome
       athleteName={session!.user.name}
-      availableViews={AVAILABLE_VIEWS}
+      availableViews={availableViewsFor(isHeadCoach)}
       coachContent={
         <CoachThread
           chatInitial={chatInitial}

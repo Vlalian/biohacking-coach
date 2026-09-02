@@ -233,6 +233,31 @@ describe('deleteAthleteSession', () => {
     expect(insertValues).not.toHaveBeenCalled();
   });
 
+  it('deletes a completed one too — the athlete can undo an accepted import', async () => {
+    // An accepted Detected Activity with no Week Plan match is written as a
+    // retro-logged Athlete Session, already completed (showable-version/14).
+    // Frozenness governs *moving and editing* the record, not disowning an
+    // entry the athlete put there — otherwise a wrong file is permanent.
+    limit.mockResolvedValue([{ athleteId: OWNER, origin: 'athlete', status: 'completed' }]);
+
+    const result = await deleteAthleteSession({
+      athleteId: OWNER,
+      sessionId: 's1',
+      expectedVersion: 1,
+    });
+
+    // A versioned write reports the version it acted at, delete included — the
+    // caller asked to remove *that* row, and the answer says which one went.
+    expect(result).toEqual({ ok: true, version: 1 });
+    // This used to assert one `db.batch`, which no longer happens and should
+    // not: a compare-and-set has to know whether the delete matched a row
+    // before it may write the event, and a batch commits before anyone can
+    // look. The guarantee it was protecting is unchanged and is asserted
+    // directly instead — an event is written when, and only when, the row went.
+    // The refusal case above proves the other half (`insertValues` not called).
+    expect(insertValues).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses to delete a Coach-planned session', async () => {
     limit.mockResolvedValue([{ athleteId: OWNER, origin: 'coach' }]);
 

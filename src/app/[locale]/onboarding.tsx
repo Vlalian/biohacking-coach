@@ -6,6 +6,8 @@ import { usePathname, useRouter } from '@/i18n/navigation';
 import { AlertTriangle, ArrowRight, Check, Loader2 } from 'lucide-react';
 import {
   ONBOARDING_OPTIONS,
+  OPTION_MESSAGE_KEY,
+  type LabelledOption,
   type OnboardingAnswers,
   type OnboardingStepId,
   type StepAnswer,
@@ -56,45 +58,10 @@ const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   constraints: 'stepConstraints',
 };
 
-const DAY_KEYS = [
-  'dayMonday',
-  'dayTuesday',
-  'dayWednesday',
-  'dayThursday',
-  'dayFriday',
-  'daySaturday',
-  'daySunday',
-] as const;
 // One source for every option set: the validation module. The UI only maps
 // values to labels — it can never offer a value the server would refuse.
 const DAYS = ONBOARDING_OPTIONS.days;
 
-const OPT_KEY: Record<string, string> = {
-  Runner: 'optRunner',
-  Cyclist: 'optCyclist',
-  Swimmer: 'optSwimmer',
-  Gym: 'optGym',
-  None: 'optNone',
-  'Under 3h': 'optUnder3',
-  '3–6h': 'opt36',
-  '6–10h': 'opt610',
-  '10h+': 'opt10plus',
-  Completion: 'optCompletion',
-  'Personal challenge': 'optChallenge',
-  Community: 'optCommunity',
-  Performance: 'optPerformance',
-  Swim: 'optSwim',
-  Bike: 'optBike',
-  Run: 'optRun',
-  Equal: 'optEqual',
-  Yes: 'optYes',
-  No: 'optNo',
-  'Heart Rate': 'optHR',
-  Power: 'optPower',
-  HRV: 'optHRV',
-  Pace: 'optPace',
-  Flexible: 'optFlexible',
-};
 
 /** Toggle a value in a multi-select; picking the "None" option clears the rest. */
 function toggleMulti(arr: string[], value: string, noneKey: string | null): string[] {
@@ -171,8 +138,8 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
   const isDone = state.step === 'done';
   const stepIndex = state.step === 'done' ? STEPS.length : STEPS.indexOf(state.step);
 
-  const opt = (value: string, selected: boolean, onClick: () => void) => (
-    <OptionTile key={value} label={t(OPT_KEY[value] ?? value)} selected={selected} onClick={onClick} />
+  const opt = (value: LabelledOption, selected: boolean, onClick: () => void) => (
+    <OptionTile key={value} label={t(OPTION_MESSAGE_KEY[value])} selected={selected} onClick={onClick} />
   );
 
   return (
@@ -406,10 +373,10 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 label={t('qConstraints')}
                 note={t('qConstraintsSub')}
               >
-                {DAYS.map((d, i) => (
+                {DAYS.map((d) => (
                   <OptionTile
                     key={d}
-                    label={t(DAY_KEYS[i])}
+                    label={t(OPTION_MESSAGE_KEY[d])}
                     selected={fixedConstraints.includes(d)}
                     onClick={() => setFixedConstraints((a) => toggleMulti(a, d, null))}
                   />
@@ -419,7 +386,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 {ONBOARDING_OPTIONS.weeklySessionDay.map((o) => (
                   <OptionTile
                     key={o}
-                    label={o === 'Flexible' ? t('optFlexible') : t(DAY_KEYS[DAYS.indexOf(o)])}
+                    label={t(OPTION_MESSAGE_KEY[o])}
                     selected={weeklySessionDay === o}
                     onClick={() => setWeeklySessionDay(weeklySessionDay === o ? '' : o)}
                   />

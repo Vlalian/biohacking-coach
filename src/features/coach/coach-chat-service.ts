@@ -1,4 +1,5 @@
 import { refusalReason } from '@/lib/identifiers';
+import { logCoachFailure } from '@/lib/coach-log';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
@@ -34,15 +35,10 @@ import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
  * the resting conversation, so it stays open and is resumed on every visit.
  */
 
-// The same neutral baseline the Weekly Session uses until a daily Check-in
-// feature exists. Coach Chat asks in words what the numbers do not know.
-const BASELINE_READINESS: Readiness = {
-  body: 7,
-  mental: 7,
-  energy: 7,
-  sleep: 7.5,
-  pulse: 55,
-};
+// The same absence the Weekly Session carries: no Check-in feature exists, so
+// there is no readiness to send, and the prompt says so rather than inventing one
+// (code-health/07). Coach Chat asks in words what no number can tell it.
+const NO_CHECK_IN: Readiness | null = null;
 
 const CHAT_MAX_TOKENS = 1200;
 
@@ -90,7 +86,7 @@ async function renderSystem(
   // the Weekly Session's — how many Weekly Sessions have come before. Passing 1
   // yields 0, the honest value for an athlete the Coach has not yet planned a
   // week with.
-  const checkIn = buildWeeklyCheckIn(athlete, BASELINE_READINESS, 1, language, equipmentItems);
+  const checkIn = buildWeeklyCheckIn(athlete, NO_CHECK_IN, 1, language, equipmentItems);
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.
@@ -183,10 +179,18 @@ export async function sendCoachChatMessage(
     // Told apart deliberately: "the Coach could not be reached" invites a retry,
     // and retrying refused content just fails again. The athlete needs to know
     // which one happened.
-    return {
-      ok: false,
-      reason: refusalReason(error),
-    };
+    const reason = refusalReason(error);
+    // The athlete sees a sentence; without this line the server saw nothing at
+    // all, and a tester who churned after a failure looked exactly like a
+    // tester who simply stopped caring (`showable-version/05`, item 2).
+    logCoachFailure({
+      surface: 'coach_chat',
+      athleteId: athlete.id,
+      conversationId,
+      error,
+      reason,
+    });
+    return { ok: false, reason };
   }
 
   // Lazily created: the resting conversation costs nothing until it is used,

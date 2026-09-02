@@ -18,6 +18,7 @@ import {
   updateLinkVisibilityAction,
   updateWeeklySessionDayAction,
 } from './settings-actions';
+import { deleteMyAccountAction } from './erasure-actions';
 import { SettingsView } from './settings-view';
 
 // Read per-request: the page depends on who is signed in, so it can never be
@@ -87,6 +88,7 @@ export default async function SettingsPage({
       onUpdateLanguage={updateLanguageAction}
       onSetLinkVisibility={updateLinkVisibilityAction}
       onSeverCoachingLink={severCoachingLinkAction}
+      onDeleteAccount={deleteMyAccountAction}
     />
   );
 }
