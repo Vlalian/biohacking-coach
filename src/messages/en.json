@@ -343,7 +343,10 @@
     "typeMobility": "Mobility",
     "typeStrength": "Strength",
     "typeOther": "Other",
-    "error": "That didn't work. Try again."
+    "error": "That didn't work. Try again.",
+    "errorFuture": "This session is in the future — you can mark it complete on the day.",
+    "errorFrozen": "This session is closed. Past weeks are part of your record and don't change.",
+    "errorConflict": "This session changed while you were looking at it. Close and reopen it."
   },
   "Garmin": {
     "upload": "Upload Garmin file",

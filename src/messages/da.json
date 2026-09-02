@@ -343,7 +343,10 @@
     "typeMobility": "Mobilitet",
     "typeStrength": "Styrke",
     "typeOther": "Andet",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "errorFuture": "Denne session ligger i fremtiden — du kan markere den som gennemført på dagen.",
+    "errorFrozen": "Denne session er lukket. Tidligere uger er en del af dit forløb og ændres ikke.",
+    "errorConflict": "Denne session blev ændret, mens du kiggede på den. Luk den, og åbn den igen."
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   completeTransition,
   isFutureDated,
+  offeredStatusActions,
   skipTransition,
   unavailableTransition,
 } from './session-status-rules';
@@ -87,5 +88,42 @@ describe('isFutureDated', () => {
   it('accepts today and the past', () => {
     expect(isFutureDated('2026-07-15', '2026-07-15')).toBe(false);
     expect(isFutureDated('2026-07-14', '2026-07-15')).toBe(false);
+  });
+});
+
+describe('offeredStatusActions', () => {
+  // Today is Wednesday 2026-07-15; the week runs Mon 07-13 – Sun 07-19.
+  const TODAY = '2026-07-15';
+
+  it('does not offer Mark complete on a future-dated session', () => {
+    // The whole of showable-version/08: the Weekly Session writes future
+    // sessions, `completeSession` refuses them, and the drawer offered the
+    // button anyway — so a fresh athlete's first act was a dead press.
+    const offered = offeredStatusActions({ date: '2026-07-16', status: 'planned' }, TODAY);
+
+    expect(offered.complete).toBe(false);
+    // Still movable and skippable: "not yet done" is not "untouchable".
+    expect(offered.skip).toBe(true);
+    expect(offered.unavailable).toBe(true);
+  });
+
+  it('offers Mark complete today and earlier in the same week', () => {
+    expect(offeredStatusActions({ date: TODAY, status: 'planned' }, TODAY).complete).toBe(true);
+    expect(
+      offeredStatusActions({ date: '2026-07-13', status: 'planned' }, TODAY).complete,
+    ).toBe(true);
+  });
+
+  it('offers nothing on a frozen session — completed, or in a past week', () => {
+    expect(offeredStatusActions({ date: TODAY, status: 'completed' }, TODAY)).toEqual({
+      complete: false,
+      skip: false,
+      unavailable: false,
+    });
+    expect(offeredStatusActions({ date: '2026-07-11', status: 'planned' }, TODAY)).toEqual({
+      complete: false,
+      skip: false,
+      unavailable: false,
+    });
   });
 });

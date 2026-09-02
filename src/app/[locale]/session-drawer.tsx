@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
-import { isFrozen } from '@/features/session/move-rules';
+import { offeredStatusActions } from '@/features/session/session-status-rules';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import { undoDetectedImportAction } from './garmin-actions';
@@ -30,6 +30,56 @@ import {
 } from './session-actions';
 
 const ATHLETE_SESSION_TYPES = ['Mobility', 'Strength', 'Other'] as const;
+
+/**
+ * Every refusal a Session Drawer action can come back with, and the message
+ * the athlete reads for it.
+ *
+ * The drawer used to store failure as a boolean, so `'future'` — "this session
+ * is next week" — rendered as the same shrug as `'not-found'`. That is the
+ * second half of showable-version/08: the athlete was told it did not work and
+ * never why, when the honest answer would have ended the confusion.
+ *
+ * Keying the record on the union makes a new reason a type error here rather
+ * than a generic string in front of a tester. As in `garmin-upload.tsx`, the
+ * value type is `string`, so this proves every reason has an entry, not that
+ * every entry names a message that exists — that would need next-intl's
+ * `AppConfig.Messages` augmentation, which this repo does not have.
+ *
+ * Reasons an athlete can do nothing about — a missing row, someone else's
+ * session, a signed-out tab — deliberately share the generic copy. Naming them
+ * would leak the shape of the system without helping.
+ */
+export type ActionRefusal =
+  | 'not-found'
+  | 'not-owner'
+  | 'not-athlete-authored'
+  | 'invalid'
+  | 'frozen'
+  | 'future'
+  | 'conflict'
+  | 'not-authenticated'
+  // From undoDetectedImport (showable-version/14), which arrived on a separate
+  // branch. The type error this union raised on merge is the mechanism working:
+  // a refusal the drawer has never heard of stops the build instead of quietly
+  // rendering the generic string at a tester.
+  | 'not-imported';
+
+export const REFUSAL_KEY: Record<ActionRefusal, string> = {
+  future: 'errorFuture',
+  frozen: 'errorFrozen',
+  conflict: 'errorConflict',
+  'not-found': 'error',
+  'not-owner': 'error',
+  'not-athlete-authored': 'error',
+  invalid: 'error',
+  'not-authenticated': 'error',
+  // Generic on purpose, by the rule above: an athlete cannot act on "the event
+  // log does not call this completion an import". They see undo only where
+  // there IS an import, so reaching this means the session changed underneath
+  // them or the id was forged — neither is theirs to fix.
+  'not-imported': 'error',
+};
 
 const STATUS_KEY: Record<string, string> = {
   completed: 'statusCompleted',
@@ -87,19 +137,24 @@ export function SessionDrawer({
   const router = useRouter();
   const coachOverlay = useCoachOverlay();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<ActionRefusal | null>(null);
   // Bound only while open: this component stays mounted and renders null when
   // closed, so an unconditional binding would swallow Escape for the whole page.
   const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
 
   if (!state.open) return null;
 
-  function run(action: () => Promise<{ ok: boolean }>, after?: () => void) {
-    setError(false);
+  function run(
+    action: () => Promise<{ ok: true } | { ok: false; reason: ActionRefusal }>,
+    after?: () => void,
+  ) {
+    setError(null);
     startTransition(async () => {
       const result = await action();
       if (!result.ok) {
-        setError(true);
+        // Carry the reason, not just the fact. The server already told us why
+        // (ADR 0006 makes it the authority); throwing that away was the bug.
+        setError(result.reason);
         return;
       }
       router.refresh();
@@ -143,7 +198,7 @@ export function SessionDrawer({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {error && (
             <p role="alert" className="px-5 pt-4 font-body text-sm text-destructive">
-              {t('error')}
+              {t(REFUSAL_KEY[error])}
             </p>
           )}
 
@@ -210,9 +265,11 @@ export function SessionDrawer({
 }
 
 /**
- * The read-only body of the drawer, exported so its actions can be tested. It
- * takes `t` as a prop and holds no hooks of its own, so a test can call it and
- * walk the element tree — this repo has no DOM renderer.
+ * The read-only body of the drawer, exported so its action gating can be
+ * tested. It takes `t` as a prop and holds no hooks of its own, so a test can
+ * call it and walk the element tree — this repo has no DOM renderer, and the
+ * wiring between `offeredStatusActions` and these buttons is exactly the seam
+ * showable-version/08 was hiding in.
  */
 export function ViewBody({
   session,
@@ -248,7 +305,7 @@ export function ViewBody({
 }) {
   const isAthlete = session.origin === 'athlete';
   const color = TYPE_COLORS[session.type] ?? DEFAULT_TYPE_COLOR;
-  const frozen = isFrozen({ date: session.date, status: session.status }, todayKey);
+  const offered = offeredStatusActions({ date: session.date, status: session.status }, todayKey);
 
   return (
     <div className="space-y-6 px-5 py-5">
@@ -331,12 +388,12 @@ export function ViewBody({
       </section>
 
       <section className="space-y-2">
-        {session.status !== 'completed' && (
+        {offered.complete && (
           <Action icon={CheckCircle2} primary disabled={pending} onClick={onMarkComplete}>
             {t('markComplete')}
           </Action>
         )}
-        {!frozen && (
+        {offered.skip && (
           <Action
             icon={session.status === 'skipped' ? Undo2 : CalendarX2}
             disabled={pending}
@@ -356,7 +413,11 @@ export function ViewBody({
             {t('undoImport')}
           </Action>
         )}
-        {!frozen && (
+        {/* `!frozen` moved into offeredStatusActions with the other two gates
+            (showable-version/08), so this asks the rule rather than restating
+            it. The undo above stays outside it deliberately: it is offered on a
+            session that IS frozen, which is the whole point of it. */}
+        {offered.unavailable && (
           <Action
             icon={session.status === 'unavailable' ? Undo2 : CalendarX2}
             disabled={pending}
