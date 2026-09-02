@@ -134,6 +134,9 @@ export async function updateAthleteSession(params: {
       type: draft.type,
       duration: draft.durationMin === null ? null : String(draft.durationMin),
       note: draft.note,
+      // Set above, so it has to be comparable here too: an edit that toggles
+      // only this reported no divergence, which reads as "already done".
+      isTraining: String(draft.isTraining),
     },
     // No event: an Athlete Session edit has never logged one, and adding a new
     // event type here would put a row in the activity feed that nothing reads.

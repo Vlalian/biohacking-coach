@@ -78,6 +78,29 @@ export function PrescribePanel({
         router.refresh();
       } else {
         setError(t('error', { reason: result.reason }));
+
+        // A conflict is the one refusal the coach can actually do something
+        // about, and it was the one left in a dead end: the editor kept the
+        // version it had already been refused for, so every retry resent the
+        // stale version and failed identically forever.
+        //
+        // Adopting the winner's version makes the next save a real attempt
+        // against the row as it now stands, and the refresh puts that row on
+        // screen so the coach sees what beat them before deciding. Their form
+        // keeps their own input — this reconciles the version, it does not
+        // decide for them.
+        if ('conflict' in result && result.conflict) {
+          const winner = result.conflict.current;
+          // Null means the winning write deleted the row. There is nothing left
+          // to re-send an edit against, so leave edit mode rather than offer a
+          // save that cannot succeed.
+          if (winner) setEditingVersion(winner.version);
+          else {
+            setEditingId(null);
+            setEditingVersion(null);
+          }
+          router.refresh();
+        }
       }
     });
 

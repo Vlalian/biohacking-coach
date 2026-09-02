@@ -112,6 +112,7 @@ export async function casUpdateSession(params: {
         baseVersion: expectedVersion,
         current: await readCurrent(athleteId, sessionId),
         attempted,
+        intent: 'edit',
       }),
     };
   }
@@ -153,7 +154,10 @@ export async function casDeleteSession(params: {
         sessionId,
         baseVersion: expectedVersion,
         current: await readCurrent(athleteId, sessionId),
+        // A delete names no fields, so there is nothing to compare — the intent
+        // below is what tells a refused delete from a satisfied one.
         attempted: {},
+        intent: 'delete',
       }),
     };
   }

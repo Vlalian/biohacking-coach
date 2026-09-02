@@ -25,6 +25,7 @@ export type ConflictField =
   | 'zone'
   | 'title'
   | 'note'
+  | 'isTraining'
   | 'deleted';
 
 /** One field where the attempted write and the winning write disagree. */
@@ -36,8 +37,16 @@ export type FieldDivergence = {
   attempted: string | null;
 };
 
+/** What the refused writer was trying to do. See {@link isRedundant}. */
+export type WriteIntent = 'edit' | 'delete';
+
 export type SessionConflict = {
   sessionId: string;
+  /**
+   * Edit or delete. Recorded because the two have opposite notions of "already
+   * done", and without it a refused delete cannot be told from a satisfied one.
+   */
+  intent: WriteIntent;
   /** The version this writer read before making their change. */
   baseVersion: number;
   /** The row as it stands now, or null when the winning write deleted it. */
@@ -49,10 +58,21 @@ export type SessionConflict = {
 /** The subset of a session a write can set, as strings for display. */
 export type AttemptedChange = Partial<Record<ConflictField, string | null>>;
 
-const COMPARED: readonly ConflictField[] = ['date', 'type', 'duration', 'zone', 'title', 'note'];
+const COMPARED: readonly ConflictField[] = [
+  'date',
+  'type',
+  'duration',
+  'zone',
+  'title',
+  'note',
+  // An Athlete Session edit can change nothing but this, and a conflict that
+  // reports no divergence reads as "already done" — so leaving it out made a
+  // real disagreement invisible.
+  'isTraining',
+];
 
 /** Renders a stored value as the string the divergence list compares and shows. */
-function display(value: string | number | null | undefined): string | null {
+function display(value: string | number | boolean | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   return text.length > 0 ? text : null;
@@ -70,13 +90,15 @@ export function describeConflict(params: {
   baseVersion: number;
   current: Session | null;
   attempted: AttemptedChange;
+  intent: WriteIntent;
 }): SessionConflict {
-  const { sessionId, baseVersion, current, attempted } = params;
+  const { sessionId, baseVersion, current, attempted, intent } = params;
 
   if (!current) {
     return {
       sessionId,
       baseVersion,
+      intent,
       current: null,
       divergences: [{ field: 'deleted', current: null, attempted: null }],
     };
@@ -87,14 +109,16 @@ export function describeConflict(params: {
     // it, so reporting it would blame them for someone else's change.
     if (!(field in attempted)) return [];
 
-    const currentValue = display(current[field as keyof Session] as string | number | null);
+    const currentValue = display(
+      current[field as keyof Session] as string | number | boolean | null,
+    );
     const attemptedValue = display(attempted[field]);
     if (currentValue === attemptedValue) return [];
 
     return [{ field, current: currentValue, attempted: attemptedValue }];
   });
 
-  return { sessionId, baseVersion, current, divergences };
+  return { sessionId, baseVersion, intent, current, divergences };
 }
 
 /**
@@ -105,5 +129,14 @@ export function describeConflict(params: {
  * say "already done" instead of raising an alarm.
  */
 export function isRedundant(conflict: SessionConflict): boolean {
+  // A delete asks for one outcome: the row gone. It is redundant when someone
+  // else already removed it, and emphatically NOT redundant while the row is
+  // still there — which is exactly what the field comparison below would have
+  // concluded, because a delete names no fields, so `divergences` is always
+  // empty and every refused delete looked satisfied.
+  if (conflict.intent === 'delete') return conflict.current === null;
+
+  // An edit is redundant when the winner already set everything it wanted. A
+  // deleted row is never that: there is nothing left to have wanted.
   return conflict.current !== null && conflict.divergences.length === 0;
 }
