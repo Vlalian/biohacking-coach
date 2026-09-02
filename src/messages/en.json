@@ -325,6 +325,7 @@
     "discuss": "Discuss with Coach",
     "edit": "Edit session",
     "delete": "Delete session",
+    "undoImport": "Undo this import",
     "readOnlyNote": "Content is set by your Coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",
@@ -354,6 +355,23 @@
     "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
     "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
     "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
+  },
+  "Detected": {
+    "label": "Detected activity",
+    "whichSession": "Which session was this?",
+    "addAsNew": "None of these — add it to my week",
+    "status": {
+      "skipped": "skipped",
+      "unavailable": "unavailable"
+    },
+    "body": "Body",
+    "mind": "Mind",
+    "comment": "Anything worth noting?",
+    "minutes": "min",
+    "accept": "Rate and accept",
+    "discard": "Discard",
+    "error": "That didn't work. Try again.",
+    "ordinal": "Session {n}"
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"

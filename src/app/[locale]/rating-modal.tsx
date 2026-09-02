@@ -14,7 +14,12 @@ function rpeHue(score: number): number {
   return Math.round(120 - ((score - 1) * 120) / 4);
 }
 
-function ScoreRow({
+/**
+ * One RPE 1–5 row. Exported because accepting a Detected Activity is a Session
+ * Reflection too — the same gesture on a different surface, so it is the same
+ * control rather than a second one that can drift from this scale.
+ */
+export function ScoreRow({
   label,
   value,
   onPick,

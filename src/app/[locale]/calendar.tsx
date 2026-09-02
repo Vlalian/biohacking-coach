@@ -97,12 +97,16 @@ function dotStyle(session: Session): React.CSSProperties {
 export function Calendar({
   sessions,
   unavailableDates,
+  importedSessionIds = [],
   todayKey,
   readOnly = false,
   onMove,
 }: {
   sessions: Session[];
   unavailableDates: string[];
+  /** Passed through to the Session Drawer, which offers undo on these. Empty
+   *  by default so the Head Coach's read-only calendar needs no extra read. */
+  importedSessionIds?: string[];
   todayKey: string;
   /** A read-only calendar (Head Coach's athlete view) shows the plan and
    *  affords none of the athlete's own actions — no rate, no drawer, no adding
@@ -303,6 +307,7 @@ export function Calendar({
         <SessionDrawer
           state={drawer}
           sessions={sessions}
+          importedSessionIds={importedSessionIds}
           locale={locale}
           todayKey={todayKey}
           onClose={() => setDrawer({ open: false })}
