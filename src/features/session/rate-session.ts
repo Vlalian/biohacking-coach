@@ -6,8 +6,12 @@ export type RateResult =
   | { ok: true }
   | { ok: false; reason: 'invalid' | 'not-found' | 'not-owner' | 'not-completed' };
 
-/** RPE 1–5, whole numbers — the Session Reflection scale (the DB check mirrors this). */
-function isValidScore(n: number): boolean {
+/**
+ * RPE 1–5, whole numbers — the Session Reflection scale (the DB check mirrors
+ * this). Exported because accepting a Detected Activity is also a Reflection,
+ * and a second copy of the range is how the two drift apart.
+ */
+export function isValidScore(n: number): boolean {
   return Number.isInteger(n) && n >= 1 && n <= 5;
 }
 

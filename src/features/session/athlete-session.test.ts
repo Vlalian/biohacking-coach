@@ -206,6 +206,19 @@ describe('deleteAthleteSession', () => {
     expect(batch).toHaveBeenCalledTimes(1);
   });
 
+  it('deletes a completed one too — the athlete can undo an accepted import', async () => {
+    // An accepted Detected Activity with no Week Plan match is written as a
+    // retro-logged Athlete Session, already completed (showable-version/14).
+    // Frozenness governs *moving and editing* the record, not disowning an
+    // entry the athlete put there — otherwise a wrong file is permanent.
+    limit.mockResolvedValue([{ athleteId: OWNER, origin: 'athlete', status: 'completed' }]);
+
+    const result = await deleteAthleteSession({ athleteId: OWNER, sessionId: 's1' });
+
+    expect(result).toEqual({ ok: true });
+    expect(batch).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses to delete a Coach-planned session', async () => {
     limit.mockResolvedValue([{ athleteId: OWNER, origin: 'coach' }]);
 

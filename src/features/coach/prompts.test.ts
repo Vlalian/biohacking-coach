@@ -10,13 +10,10 @@ import {
 } from './prompts';
 import type { CheckIn, Onboarding } from './check-in';
 import type { WeekSession } from './week';
+import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 const BASE: CheckIn = {
-  body: 7,
-  mental: 7,
-  energy: 7,
-  sleep: 7,
-  pulse: 50,
+  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
   phase: 'Base Building',
   personaName: 'Mads',
   commStyle: '',
@@ -390,6 +387,105 @@ describe('no real identity reaches a prompt', () => {
     const chat = buildChatPrompt(BASE);
     expect(weekly).not.toContain('@');
     expect(chat).not.toContain('@');
+  });
+});
+
+// code-health/07 — the Coach must not be told a readiness the athlete never
+// gave. Until a Check-in feature exists there is no readiness, and the honest
+// rendering is *absence*: the STATE line keeps what is real (phase, sessions,
+// xp) and simply carries no scores. Labelling invented numbers as placeholders
+// would be worse — AGENTS.md: if the model must not use a value, do not send it.
+describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
+  const NO_READINESS: CheckIn = {
+    phase: 'Base Building',
+    commStyle: '',
+    experienceLevel: 'intermediate',
+    sessionCount: 5,
+    language: 'English',
+    weeklySessionDay: 'Monday',
+    fixedConstraints: [],
+    equipment: [],
+  };
+
+  // Each score is asserted by its own rendered token rather than a bare number,
+  // so an unrelated digit elsewhere in the prompt cannot make this pass or fail.
+
+  it('the Weekly Session STATE line keeps phase, sessions and xp but carries no scores', () => {
+    const ctx = buildWeeklyContext(
+      { ...NO_READINESS, weeklySessionNumber: 4 },
+      [],
+      [],
+      [],
+      [],
+      null,
+      '2026-08-18',
+    );
+    const prompt = renderWeeklyPrompt(ctx);
+
+    expect(prompt).toContain('STATE: phase=Base Building sessions=5 xp=intermediate');
+    for (const token of READINESS_SCORE_TOKENS) expect(prompt).not.toMatch(token);
+  });
+
+  it('the Coach Chat CONTEXT line carries no scores either', () => {
+    const prompt = buildChatPrompt(NO_READINESS, '2026-08-18');
+
+    expect(prompt).toContain('phase=Base Building xp=intermediate sessions=5');
+    for (const token of READINESS_SCORE_TOKENS) expect(prompt).not.toMatch(token);
+  });
+
+  // The Coach is told to reason from readiness. With none to reason from it must
+  // be told that, and told to ask — which is what the Presence Arc's P1 already
+  // has it doing, so the two must not contradict each other.
+  it('tells the Coach it has no readiness data and should ask', () => {
+    const weekly = renderWeeklyPrompt(
+      buildWeeklyContext({ ...NO_READINESS, weeklySessionNumber: 4 }, [], [], [], [], null, '2026-08-18'),
+    );
+    const chat = buildChatPrompt(NO_READINESS, '2026-08-18');
+
+    expect(weekly).toContain('NO CHECK-IN DATA');
+    expect(chat).toContain('NO CHECK-IN DATA');
+  });
+
+  // The path stays live for when a Check-in feature lands: given real numbers,
+  // the block renders exactly as it does today.
+  it('renders the scores when a real Check-in supplied them', () => {
+    const prompt = buildChatPrompt(
+      { ...NO_READINESS, readiness: { body: 4, mental: 5, energy: 3, sleep: 5.5, pulse: 68 } },
+      '2026-08-18',
+    );
+
+    expect(prompt).toContain('body=4/10 mental=5/10 energy=3/10 sleep=5.5h pulse=68bpm');
+    expect(prompt).not.toContain('NO CHECK-IN DATA');
+  });
+
+  // The same rule as the readiness itself, one field over. A missing optional
+  // renders as an absent token, never as the word "undefined" — the Coach cannot
+  // read a template hole as absence, and not telling it things that are not so
+  // is this whole file's subject.
+  it('omits a token it has no value for, rather than writing undefined', () => {
+    const bare: CheckIn = {
+      phase: undefined,
+      sessionCount: undefined,
+      experienceLevel: undefined,
+      language: 'English',
+      commStyle: '',
+    };
+
+    const prompts = {
+      chat: buildChatPrompt(bare, '2026-08-18'),
+      weekly: renderWeeklyPrompt(
+        buildWeeklyContext({ ...bare, weeklySessionNumber: 1 }, [], [], [], [], null, '2026-08-18'),
+      ),
+    };
+
+    for (const [name, prompt] of Object.entries(prompts)) {
+      expect(prompt, `${name} prompt`).not.toContain('undefined');
+      expect(prompt, `${name} prompt`).not.toContain('sessions=');
+      expect(prompt, `${name} prompt`).not.toContain('phase=');
+      // The field with a documented default still renders, so an absent token
+      // means absent data rather than a whole line quietly dropping out.
+      expect(prompt, `${name} prompt`).toContain('xp=intermediate');
+    }
   });
 });
 

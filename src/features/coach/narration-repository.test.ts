@@ -162,6 +162,28 @@ describe('getPendingNarrationEvents', () => {
     expect(columnNames(whereArgs[0])).toContain('narrated_at');
   });
 
+  it('collects every Head Coach action that changes the plan, moves included', async () => {
+    nextRows = [];
+
+    await getPendingNarrationEvents('a1');
+
+    // `session_moved` was missing here when the Head Coach gained placement
+    // authority, so a coach could rearrange an athlete's week and the event was
+    // written, matched by nothing, and told to no one — a silent mutation, which
+    // ADR 0003 calls non-negotiable. Asserted on the bound values because the
+    // list is the whole mechanism: an action absent from it is unnarratable, and
+    // nothing else in the system notices.
+    const bound = boundValues(whereArgs[0]);
+    for (const type of [
+      'session_prescribed',
+      'session_edited',
+      'session_deleted',
+      'session_moved',
+    ]) {
+      expect(bound, type).toContain(type);
+    }
+  });
+
   it('returns an empty list when nothing is pending', async () => {
     nextRows = [];
     expect(await getPendingNarrationEvents('a1')).toEqual([]);

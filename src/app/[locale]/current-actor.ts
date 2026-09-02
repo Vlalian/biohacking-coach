@@ -104,6 +104,45 @@ export async function resolveHeadCoachId(): Promise<string | null> {
 }
 
 /**
+ * Everything an erasure needs about who is acting — resolved once, from the
+ * authenticated session.
+ *
+ * Its own shape rather than three calls to the helpers above, because an erasure
+ * needs all of it at once and each of those re-reads the session: the athlete id
+ * whose rows cascade, the user id that is deleted last, the coach id if this
+ * account also holds a Roster, and the email the typed confirmation is checked
+ * against.
+ *
+ * `coachId` being null is the normal case, not an error — a Head Coach is a
+ * relationship, not a kind of person (CONTEXT.md), and most accounts hold no
+ * coach row.
+ *
+ * Nothing here comes from a request body. There is deliberately no parameter
+ * that would let a caller name the account being erased (ADR 0006); the only
+ * account this can reach is the one signed in.
+ */
+export async function resolveErasureSubject(): Promise<
+  | { ok: true; athleteId: string; userId: string; coachId: string | null; email: string }
+  | AuthFailure
+> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, reason: 'not-authenticated' };
+
+  const athlete = await getAthleteByUserId(session.user.id);
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  const coach = await getCoachByUserId(session.user.id);
+
+  return {
+    ok: true,
+    athleteId: athlete.id,
+    userId: session.user.id,
+    coachId: coach?.id ?? null,
+    email: session.user.email,
+  };
+}
+
+/**
  * The failure the Head-Coach-side actions return when the caller holds no Roster.
  * The `reason` string is the pre-existing wire value the UI already switches on,
  * so it keeps its spelling.

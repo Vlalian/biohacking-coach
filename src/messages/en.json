@@ -200,13 +200,32 @@
     "severConfirmBody": "This cuts all access, including history, right away. {name} would need a new invite to relink.",
     "severConfirmButton": "Yes, sever it",
     "severCancel": "Cancel",
-    "severed": "Link severed — you're back to training solo."
+    "severed": "Link severed — you're back to training solo.",
+    "sectionYourData": "Your data",
+    "exportLabel": "Download my data",
+    "exportNote": "A copy of everything this app holds about you — your plan, your sessions, your Coach conversations, your uploads and your profile.",
+    "exportButton": "Download",
+    "deleteLabel": "Delete my account",
+    "deleteNote": "Deletes your account and erases everything gathered from it. It happens immediately and cannot be undone.",
+    "deleteButton": "Delete my account",
+    "deleteConfirmTitle": "Delete your account?",
+    "deleteConfirmBody": "This erases your training plan, every session and upload, your Coach conversations, your reflections, your equipment and your profile — and signs you out for good.",
+    "deleteConfirmIrreversible": "It happens straight away. There is no undo, and no backup to restore from.",
+    "deleteConfirmDownloadFirst": "Download a copy first",
+    "deleteConfirmTypePrompt": "Type {email} below to confirm.",
+    "deleteConfirmPlaceholder": "your email address",
+    "deleteConfirmButton": "Delete everything",
+    "deleteCancel": "Keep my account",
+    "deleteError": "That didn’t work. Nothing was deleted."
   },
   "Roster": {
     "title": "Roster",
     "subtitle": "The athletes you coach.",
     "empty": "No athletes linked yet.",
     "notACoach": "You don't have a coach account.",
+    "tabPlan": "Plan",
+    "tabData": "Data",
+    "tabBriefing": "Briefing",
     "backToRoster": "Back to Roster",
     "reportsWithheld": "Reports private",
     "transcriptsWithheld": "Transcripts private"
@@ -306,6 +325,7 @@
     "discuss": "Discuss with Coach",
     "edit": "Edit session",
     "delete": "Delete session",
+    "undoImport": "Undo this import",
     "readOnlyNote": "Content is set by your Coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",
@@ -338,6 +358,23 @@
     "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
     "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
     "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
+  },
+  "Detected": {
+    "label": "Detected activity",
+    "whichSession": "Which session was this?",
+    "addAsNew": "None of these — add it to my week",
+    "status": {
+      "skipped": "skipped",
+      "unavailable": "unavailable"
+    },
+    "body": "Body",
+    "mind": "Mind",
+    "comment": "Anything worth noting?",
+    "minutes": "min",
+    "accept": "Rate and accept",
+    "discard": "Discard",
+    "error": "That didn't work. Try again.",
+    "ordinal": "Session {n}"
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"
@@ -401,7 +438,9 @@
     "optUnder3": "Under 3h",
     "opt36": "3–6h",
     "opt610": "6–10h",
-    "opt10plus": "10h+",
+    "opt1013": "10–13h",
+    "opt1316": "13–16h",
+    "opt16plus": "16h+",
     "optCompletion": "Completion",
     "optChallenge": "Personal challenge",
     "optCommunity": "Community",
@@ -512,7 +551,14 @@
     "editedNoType": "{coach} changed a session on {day}",
     "deleted": "{coach} took the {type} session off {day}",
     "deletedNoType": "{coach} took a session off {day}",
+    "moved": "{coach} moved your session from {fromDay} to {day}",
+    "movedNoFrom": "{coach} moved a session to {day}",
     "yourHeadCoach": "Your Head Coach",
     "recently": "recently"
+  },
+  "Privacy": {
+    "dataRightsTitle": "Your data",
+    "dataRightsBody": "You can download a copy of everything this app holds about you, or delete your account and erase all of it. Both live in Settings.",
+    "dataRightsLink": "Go to Settings"
   }
 }

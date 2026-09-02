@@ -11,6 +11,7 @@ import {
   index,
   primaryKey,
   uniqueIndex,
+  vector,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
@@ -226,6 +227,60 @@ export type SessionStreamRow = typeof sessionStreams.$inferSelect;
 export type NewSessionStreamRow = typeof sessionStreams.$inferInsert;
 
 /**
+ * A Detected Activity waiting for the athlete — an uploaded activity that has
+ * been parsed and reconciled against the Week Plan, and has not yet been
+ * accepted.
+ *
+ * This table exists so that detection can propose without asserting
+ * (`CONTEXT.md`, Detected Activity). The import used to insert a completed
+ * session per activity, which broke that rule three ways at once: it wrote
+ * `completed` with no athlete in between, it never matched the Week Plan so a
+ * planned ride and its upload became two entries for one ride, and it froze
+ * the result where the athlete could not delete it (showable-version/14).
+ *
+ * Holding the proposal *outside* `sessions` is the point. A declined proposal
+ * leaves nothing behind because nothing was ever written, rather than because
+ * a cleanup path remembered to delete it — and no query that reads the
+ * training record has to learn to filter proposals out. The activity's own
+ * data lives here until it is accepted, at which point it moves into the
+ * matched session (or a new Athlete Session) and this row is gone.
+ *
+ * `matchedSessionId` is the Planned Session this proposes to complete, decided
+ * at import by `matchActivities`. It is re-checked on accept: the athlete may
+ * have moved, skipped or completed that session in between, and a stale match
+ * degrades to the retro-log offer rather than writing to the wrong session. On
+ * delete it goes null for the same reason.
+ */
+export const detectedActivities = pgTable(
+  'detected_activities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    type: text('type').notNull(),
+    sport: text('sport'),
+    duration: integer('duration'),
+    note: text('note'),
+    startTime: timestamp('start_time'),
+    summary: jsonb('summary'),
+    samples: jsonb('samples').notNull(),
+    matchedSessionId: uuid('matched_session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // Always read as "everything pending for this athlete", newest day first.
+    index('detected_activities_athlete_date_idx').on(table.athleteId, table.date),
+  ],
+);
+
+export type DetectedActivityRow = typeof detectedActivities.$inferSelect;
+export type NewDetectedActivityRow = typeof detectedActivities.$inferInsert;
+
+/**
  * A coach — a role you *have*, not a kind of person (route ticket 05, ballot 1).
  *
  * The row points at a better-auth user and nothing more: a coach always has a
@@ -326,7 +381,15 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * checked against it, never trusted (ADR 0006).
  *
  * `coachId` is the Briefing owner — a coach, not an athlete. The foreign key
- * landed with slice 11's coach roster, as this comment always promised.
+ * landed with slice 11's coach roster, as this comment always promised. It
+ * cascades since 2026-08-27 (`showable-version/10`), and that is load-bearing
+ * rather than tidy: without it a Head Coach account could not be deleted at all.
+ * A Briefing carries `coachId` = the coach and `athleteId` = *the athlete it is
+ * about*, so a coach's briefings about other athletes are keyed to those
+ * athletes' ids and survive the coach's own erasure — leaving the coach row
+ * referenced and the DELETE throwing. Erasing a coach now takes their briefings
+ * with them, which is right: a briefing is that coach's account of their own
+ * coaching.
  *
  * `weeklySessionNumber` is the 1-based ordinal that selects the Weekly Session's
  * conversational arc (Session 1 welcomes, Session 4+ reviews); null for kinds
@@ -343,7 +406,7 @@ export const conversations = pgTable(
       .notNull()
       .references(() => athlete.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
-    coachId: uuid('coach_id').references(() => coach.id),
+    coachId: uuid('coach_id').references(() => coach.id, { onDelete: 'cascade' }),
     weeklySessionNumber: integer('weekly_session_number'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     endedAt: timestamp('ended_at'),
@@ -524,3 +587,153 @@ export const equipmentItems = pgTable(
 
 export type EquipmentItemRow = typeof equipmentItems.$inferSelect;
 export type NewEquipmentItemRow = typeof equipmentItems.$inferInsert;
+
+/**
+ * What survives an erasure — and the one table here that is **deliberately not
+ * keyed to anybody** (`showable-version/10`, decided 2026-08-27).
+ *
+ * **Do not add an `athlete_id`, a `user_id`, or any foreign key to this table.**
+ * Every other table in this schema hangs off `athlete.id`, so the instinct on
+ * reading this one is that a key was forgotten. It was not. The whole purpose is
+ * to record *that* an account consented to a set of purposes and was then erased,
+ * while carrying nothing that could say whose account it was. A key here would
+ * undo the erasure it exists to document. `erasure.test.ts` asserts the entry's
+ * keys, so the rule is enforced rather than merely written down.
+ *
+ * Why it exists at all: Article 7(1) asks a controller to be able to demonstrate
+ * that consent was given. Erasing the consent rows destroys that proof; retaining
+ * them keeps a record about someone who asked to be forgotten. This is the third
+ * option — the demonstrable fact without the person attached. It also makes the
+ * erasure *itself* auditable, which letting the cascade take the consent rows in
+ * silence does not.
+ *
+ * That this works rests on ADR 0006: `consent` was already keyed on the opaque
+ * athlete id and carried no name or email, so once the `athlete` and `user` rows
+ * are gone the re-identification key has been destroyed by the erasure itself.
+ *
+ * Append-only. Nothing in the app reads it — it is read by a human, from the
+ * database, when someone has a reason to ask. Recorded in `gdpr-decisions.md`
+ * for the privacy review; a design decision written down for a lawyer to check,
+ * not legal advice.
+ */
+export const erasureLog = pgTable('erasure_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  /**
+   * Each purpose that was active at erasure, with the disclosure version it was
+   * granted under. Each keeps its own version rather than being collapsed to
+   * one: `grantConsent` supersedes only the purpose being granted, so an
+   * optional purpose granted under an older disclosure stays active at that
+   * older version while the required ones move forward.
+   */
+  consentedPurposes: jsonb('consented_purposes').notNull(),
+  /** The disclosure version in force at the moment of erasure — what dates the record. */
+  disclosureVersion: text('disclosure_version').notNull(),
+  erasedAt: timestamp('erased_at').notNull().defaultNow(),
+});
+
+export type ErasureLogRow = typeof erasureLog.$inferSelect;
+export type NewErasureLogRow = typeof erasureLog.$inferInsert;
+
+/**
+ * ── The Knowledge Oracle corpus ──────────────────────────────────────────────
+ *
+ * Two tables that touch **nothing** in the training schema above. No athlete id,
+ * no foreign key into an athlete row, no column that could carry one. That is
+ * structural, not stylistic: the corpus is published training science, not
+ * athlete data, and ADR 0006's promise ("a leak of the training data alone names
+ * nobody") is not weakened by adding a table that names Mujika. The reverse rule
+ * matters more — an athlete's query must never be persisted alongside a chunk,
+ * so there is nowhere here for it to go.
+ *
+ * Deferred deliberately in route ticket 05 ("separate project; pgvector ready in
+ * Neon"); that deferral ended when the Knowledge Oracle PRD put the RAG on the
+ * critical path (Decision 3, 2026-08-16).
+ */
+
+/**
+ * One admitted source, and the licence that admits it.
+ *
+ * The licence lives here rather than only in `corpus.md` because `corpus.md` is
+ * gitignored prose: a retrieved passage has to be able to answer "what am I
+ * allowed to do with you?" without a human opening a document that may not exist
+ * on the machine asking. `attribution` is the CC BY credit line, stored ready to
+ * display — a citation should never have to be assembled at read time from
+ * fields that might be null.
+ *
+ * `textDigest` is what makes re-ingestion cheap and safe: unchanged source text
+ * means the same digest, which means the chunks already in the database are
+ * still correct and no embedding call needs to be paid for.
+ */
+export const knowledgeSources = pgTable(
+  'knowledge_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // The manifest's key. Unique so ingest can upsert on it rather than
+    // guessing whether a source is already present.
+    slug: text('slug').notNull().unique(),
+    title: text('title').notNull(),
+    authors: text('authors').notNull(),
+    year: integer('year').notNull(),
+    doi: text('doi'),
+    pmcid: text('pmcid'),
+    licence: text('licence').notNull(),
+    licenceUrl: text('licence_url').notNull(),
+    attribution: text('attribution').notNull(),
+    /** SHA-256 of the source text this row's chunks were built from. */
+    textDigest: text('text_digest').notNull(),
+    ingestedAt: timestamp('ingested_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // A source with no licence recorded is exactly what the register exists to
+    // prevent, so the database refuses it too. Belt to the manifest's braces:
+    // `admit()` can be bypassed by a direct insert; this cannot.
+    check('knowledge_sources_licence_present', sql`length(${table.licence}) > 0`),
+  ],
+);
+
+export type KnowledgeSourceRow = typeof knowledgeSources.$inferSelect;
+export type NewKnowledgeSourceRow = typeof knowledgeSources.$inferInsert;
+
+/**
+ * One retrievable passage.
+ *
+ * `embedding` is `vector(1536)`, the dimensionality of OpenAI's
+ * `text-embedding-3-small` (decided 2026-08-21). The number is baked into the
+ * migration, so changing embedding model later is a migration and a re-ingest,
+ * not a config edit — stated here so nobody discovers it at the wrong moment.
+ *
+ * `ordinal` keeps a chunk resolvable back to its place in the article, which is
+ * what lets a citation say *where* in a paper a claim came from rather than only
+ * which paper.
+ */
+export const knowledgeChunks = pgTable(
+  'knowledge_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: uuid('source_id')
+      .notNull()
+      .references(() => knowledgeSources.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    text: text('text').notNull(),
+    tokenEstimate: integer('token_estimate').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+  },
+  (table) => [
+    // Retrieval (issue 03) searches by cosine distance. HNSW over IVFFlat
+    // because IVFFlat's recall depends on a list count tuned to a row count the
+    // corpus does not have yet — eight sources is far too few to tune against,
+    // and HNSW needs no such parameter to behave.
+    index('knowledge_chunks_embedding_idx').using(
+      'hnsw',
+      table.embedding.op('vector_cosine_ops'),
+    ),
+    // Re-ingest deletes a source's chunks and rewrites them; this is the read.
+    uniqueIndex('knowledge_chunks_source_ordinal_idx').on(
+      table.sourceId,
+      table.ordinal,
+    ),
+  ],
+);
+
+export type KnowledgeChunkRow = typeof knowledgeChunks.$inferSelect;
+export type NewKnowledgeChunkRow = typeof knowledgeChunks.$inferInsert;
