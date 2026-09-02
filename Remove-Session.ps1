@@ -9,6 +9,10 @@
   Run from the main folder. Example:
       .\Remove-Session.ps1 -Name 17-foo
 
+  -Name resolves in BOTH places a session worktree can live: <parent>\bc-<Name>
+  (New-Session.ps1's) and <main>\.claude\worktrees\<Name> (Claude Code's own
+  isolation: "worktree"). It refuses rather than guesses if both exist.
+
   --------------------------------------------------------------------------
   Two changes, 2026-08-26.
 
@@ -88,10 +92,55 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-$Main     = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Worktree = Join-Path (Split-Path -Parent $Main) "bc-$Name"
+$Main = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-if (-not (Test-Path $Worktree)) { throw "No such worktree: $Worktree" }
+# A session worktree lives in one of two places, and this script used to know
+# only the first:
+#
+#   <parent>\bc-<Name>              New-Session.ps1 makes these.
+#   <main>\.claude\worktrees\<Name> Claude Code's own isolation: "worktree".
+#
+# Only knowing the first meant every Claude-Code-created worktree had to be torn
+# down by hand - which is precisely the "reach for git worktree remove because
+# the script does not cover this case" move that caused the 2026-08-28 corpus
+# deletion. A teardown script that covers most cases trains people out of using
+# it for the rest.
+#
+# Note the second kind carries no junctions and often a REAL .scratch, so the
+# refusal below is the one that fires for it. That is correct: those forks have
+# held the only copy of tracker state more than once.
+$candidates = [ordered]@{}
+$candidates["bc-$Name"] = Join-Path (Split-Path -Parent $Main) "bc-$Name"
+$candidates[".claude\worktrees\$Name"] = Join-Path $Main ".claude\worktrees\$Name"
+
+$matched = @($candidates.Keys | Where-Object { Test-Path $candidates[$_] })
+
+if ($matched.Count -eq 0) {
+  throw @"
+No such worktree: '$Name'. Looked in both places one can live:
+    $($candidates["bc-$Name"])
+    $($candidates[".claude\worktrees\$Name"])
+"@
+}
+if ($matched.Count -gt 1) {
+  throw @"
+'$Name' is ambiguous - a worktree of that name exists in BOTH places:
+$($matched | ForEach-Object { "    $($candidates[$_])" } | Out-String)
+Rename one, or remove the one you mean with an explicit path. Guessing here
+would delete the wrong session.
+"@
+}
+
+$Worktree = $candidates[$matched[0]]
+
+# Never saw off the branch you are standing on. git will happily remove the
+# worktree a script is running inside, and the session doing it then cannot
+# report what it destroyed - the same blindness as the .claude hazard.
+$here = (Get-Location).Path.TrimEnd('\')
+$target = (Resolve-Path $Worktree).Path.TrimEnd('\')
+if ($here -eq $target -or $here.StartsWith("$target\", [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "REFUSING: you are inside $target. Run this from the main folder instead."
+}
 
 # Read the branch BEFORE the worktree goes - afterwards there is nothing to ask.
 $Branch = $null
@@ -198,9 +247,34 @@ If it is a Junction, remove the LINK only - never with Remove-Item -Recurse:
 
 # 2. The worktree now holds no junctions - safe for git's recursive delete.
 git -C $Main worktree remove $Worktree --force
+$removeExit = $LASTEXITCODE
 
 Write-Host ""
-Write-Host "Removed session worktree: $Worktree" -ForegroundColor Green
+if ($removeExit -eq 0) {
+  Write-Host "Removed session worktree: $Worktree" -ForegroundColor Green
+} else {
+  # Do NOT claim success git did not report. `git worktree remove` can
+  # deregister the worktree and empty it and still fail to delete the folder -
+  # Windows holds directory handles open, so a leftover empty directory is the
+  # common case rather than an exotic one. Saying "Removed" over the top of
+  # that error is how a partial teardown gets believed and left half-done.
+  $stillRegistered = (git -C $Main worktree list --porcelain) -match [regex]::Escape($Worktree)
+  Write-Host "git worktree remove exited $removeExit for: $Worktree" -ForegroundColor Yellow
+  if ($stillRegistered) {
+    Write-Host "  STILL REGISTERED with git - the teardown did not happen. Investigate before retrying." -ForegroundColor Red
+  } else {
+    Write-Host "  Deregistered from git, so the worktree itself is gone." -ForegroundColor DarkGray
+    if (Test-Path $Worktree) {
+      $left = @(Get-ChildItem $Worktree -Force -ErrorAction SilentlyContinue)
+      if ($left.Count -eq 0) {
+        Write-Host "  An EMPTY directory is left at that path. Safe to delete by hand:" -ForegroundColor DarkGray
+        Write-Host "      Remove-Item `"$Worktree`"" -ForegroundColor DarkGray
+      } else {
+        Write-Host "  $($left.Count) item(s) remain at that path - look before deleting anything." -ForegroundColor Yellow
+      }
+    }
+  }
+}
 
 if (-not $CheckBranch -or -not $Branch) {
   Write-Host "The branch still exists. To find out whether it is safe to delete:"
