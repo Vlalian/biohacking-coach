@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  MessageSquareWarning,
   BookMarked,
   Bike,
   CalendarDays,
@@ -26,7 +27,14 @@ import {
 /*  in English default (handoff-contract rule 2).                      */
 /* ------------------------------------------------------------------ */
 
-/** Note: there is no 'coach' View — the Coach is the always-available Overlay. */
+/**
+ * Note: there is no 'coach' View — the Coach is the always-available Overlay.
+ *
+ * `feedback` is a View id without being a navigable View: the Feedback Interview
+ * is a real page, so it needs a path and a label, but it is reached from the
+ * escape hatch in the drawer footer rather than from the View list. It is
+ * therefore never in `availableViews`.
+ */
 export type ViewId =
   | 'training-plan'
   | 'information'
@@ -35,7 +43,8 @@ export type ViewId =
   | 'messaging'
   | 'settings'
   | 'privacy'
-  | 'roster';
+  | 'roster'
+  | 'feedback';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 
@@ -89,6 +98,10 @@ const VIEW_ICONS: Record<ViewId, typeof MessageSquare> = {
   settings: SettingsIcon,
   privacy: ShieldCheck,
   roster: Users,
+  // Never rendered in the nav list — `feedback` is not in `availableViews`. The
+  // map is total because ViewId is a closed set, and a partial one would make
+  // the next real View's missing icon a runtime hole instead of a type error.
+  feedback: MessageSquareWarning,
 };
 
 const THEME_ICONS: Record<ThemePreference, typeof Sun> = {

@@ -344,6 +344,40 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * Retention and deletion of conversations are a GDPR-track question, not schema —
  * deliberately not decided here.
  */
+/**
+ * The closed set of conversation kinds — the single list both the database
+ * constraint and the `ConversationKind` union are built from.
+ *
+ * Was six until 2026-08-18 (`negotiation` and `reflection` were never written by
+ * any code path; migration 0011 removed them). `feedback` joined 2026-09-01 with
+ * the Feedback Interview (`showable-version/07`): an interview is deliberately
+ * *not* a coaching behaviour, which is the argument for its own kind rather than
+ * hiding it inside `coach_chat`, where it would be resent to the Coach as
+ * training talk on every later turn.
+ *
+ * It lives here, in the schema, because `features/coach/conversation.ts` already
+ * imports from this module — so the union can derive from this constant without
+ * a cycle, and a kind added to one can never be missing from the other.
+ */
+export const CONVERSATION_KINDS = [
+  'weekly_session',
+  'coach_chat',
+  'onboarding',
+  'coach_briefing',
+  'feedback',
+] as const;
+
+/**
+ * A closed set as a SQL literal list, for a CHECK constraint.
+ *
+ * `sql.raw` rather than a bound parameter on purpose: this string is rendered
+ * into DDL by `drizzle-kit generate`, where a placeholder has nothing to bind
+ * to. The inputs are module constants, never anything a request can reach.
+ */
+function quotedList(values: readonly string[]): string {
+  return values.map((value) => `'${value}'`).join(', ');
+}
+
 export const conversations = pgTable(
   'conversations',
   {
@@ -359,11 +393,15 @@ export const conversations = pgTable(
   },
   (table) => [
     index('conversations_athlete_idx').on(table.athleteId, table.createdAt),
-    // The four conversation kinds are a closed set — encode it so a bad write
-    // fails at the database, not silently downstream.
+    // The conversation kinds are a closed set — encoded here so a bad write
+    // fails at the database, not silently downstream. Built from
+    // {@link CONVERSATION_KINDS} rather than repeating the list: the union in
+    // `features/coach/conversation.ts` derives from the same constant, so the
+    // type and the constraint cannot drift apart. They used to be two lists that
+    // had to be edited together, and three tickets in a row noted it.
     check(
       'conversations_kind_valid',
-      sql`${table.kind} IN ('weekly_session', 'coach_chat', 'onboarding', 'coach_briefing')`,
+      sql`${table.kind} IN (${sql.raw(quotedList(CONVERSATION_KINDS))})`,
     ),
   ],
 );
@@ -407,6 +445,71 @@ export const messages = pgTable(
 
 export type MessageRow = typeof messages.$inferSelect;
 export type NewMessageRow = typeof messages.$inferInsert;
+
+/**
+ * The two things a Feedback Interview produces that are **not** conversation
+ * turns (`showable-version/07`).
+ *
+ * The interview transcript itself lives in `conversations`/`messages` like every
+ * other conversation — this table is deliberately not a second transcript store.
+ * It holds:
+ *
+ * - `fallback` — text submitted through the plain textarea that sits beside the
+ *   interview. The escape hatch can never hard-depend on a model call, because a
+ *   tester whose Coach is broken is the tester with the most to say. A row of
+ *   this kind therefore *is* the signal that the model could not answer someone,
+ *   which is why `coachFailureReason` hangs off it rather than being logged and
+ *   forgotten.
+ * - `trust_signal` — the answer to "would you have done something different if
+ *   you'd decided alone?", which `CONTEXT.md` calls the single most valuable
+ *   qualitative data point. Asked once, near the end, inside the interview.
+ *
+ * Keyed to the opaque athlete id and nothing else: no name, no email, no user
+ * id. The cascade is load-bearing rather than tidy — it is what puts this table
+ * inside erasure, and `features/erasure/erasure-schema.test.ts` asserts it by
+ * walking the schema, so forgetting it fails a test that already exists.
+ *
+ * Nothing here is ever shown to a Head Coach or scored back to the athlete.
+ */
+/** The two kinds of row this table holds. See {@link athleteFeedback}. */
+export const ATHLETE_FEEDBACK_KINDS = ['fallback', 'trust_signal'] as const;
+
+export const athleteFeedback = pgTable(
+  'athlete_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    body: text('body').notNull(),
+    /** The View the tester was on when they reached the escape hatch; null from the interview. */
+    view: text('view'),
+    /** The interview this answer came from; null for a fallback submission, which has no conversation. */
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'cascade',
+    }),
+    /** Why the Coach could not answer, for a `fallback` row. Null when the tester simply chose the box. */
+    coachFailureReason: text('coach_failure_reason'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('athlete_feedback_athlete_idx').on(table.athleteId, table.createdAt),
+    check(
+      'athlete_feedback_kind_valid',
+      sql`${table.kind} IN (${sql.raw(quotedList(ATHLETE_FEEDBACK_KINDS))})`,
+    ),
+    // One Trust Signal answer per athlete. The question is asked once by
+    // construction (`shouldAskTrustSignal`); this is the database refusing to
+    // let a second answer overwrite the first if it ever is asked twice.
+    uniqueIndex('athlete_feedback_trust_signal_once')
+      .on(table.athleteId)
+      .where(sql`${table.kind} = 'trust_signal'`),
+  ],
+);
+
+export type AthleteFeedbackRow = typeof athleteFeedback.$inferSelect;
+export type NewAthleteFeedbackRow = typeof athleteFeedback.$inferInsert;
 
 /**
  * An Unavailable Date — a specific day the athlete has declared they cannot

@@ -109,7 +109,14 @@ export async function hasHeldWeeklySessionInWeek(
  * The Coach Overlay hosts one conversation surface across kinds (ADR 0007), so
  * the shell resolves what is open *generically* rather than naming one kind: the
  * resting `coach_chat` and an in-progress `weekly_session` are both open at once
- * by design, and a kind added later needs no extra query at the call site.
+ * by design.
+ *
+ * This comment used to end "and a kind added later needs no extra query at the
+ * call site". True of the query, and dangerously wrong as guidance: `feedback`
+ * was added in 2026-09 and must **not** be picked up by the shell, because a
+ * Feedback Interview restored into the Coach Overlay becomes Coach context. What
+ * comes back here is everything open; deciding what to *restore* is
+ * `selectOpenConversations`'s job, and it names its kinds on purpose.
  */
 export async function getOpenConversations(athleteId: string): Promise<Conversation[]> {
   const rows = await getDb()

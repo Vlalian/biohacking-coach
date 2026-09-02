@@ -21,7 +21,9 @@
     "viewMessaging": "Beskeder",
     "viewSettings": "Indstillinger",
     "viewPrivacy": "Privatliv & vilkår",
-    "viewRoster": "Atleter"
+    "viewRoster": "Atleter",
+    "viewFeedback": "Feedback-interview",
+    "feedbackHatch": "Noget at sige?"
   },
   "AthletePage": {
     "greeting": "Velkommen tilbage, {name}",
@@ -539,5 +541,28 @@
     "dataRightsTitle": "Dine data",
     "dataRightsBody": "Du kan hente en kopi af alt, appen har om dig, eller slette din konto og fjerne det hele. Begge dele finder du under Indstillinger.",
     "dataRightsLink": "Gå til Indstillinger"
+  },
+  "FeedbackInterview": {
+    "title": "Feedback-interview",
+    "intro": "Dette er ikke Coach. Det er en interviewer, der stiller de spørgsmål, holdet bag appen gerne vil have svar på — så den kan spørge videre i stedet for at nøjes med én linje. Intet af det, du siger her, når din Coach.",
+    "emptyTitle": "Fortæl hvad der skete",
+    "emptyBody": "Hvad som helst: noget der gik i stykker, noget der irriterede dig, noget der virkede. Den vil bede dig være konkret.",
+    "inputLabel": "Dit svar",
+    "placeholder": "Hvad skete der?",
+    "send": "Send svar",
+    "thinking": "Tænker",
+    "youLabel": "Dig",
+    "interviewerLabel": "Interviewer",
+    "error": "Det gik ikke igennem. Din tekst står der stadig — prøv igen, eller brug boksen nedenfor.",
+    "consentRequired": "Interviewet kræver AI-samtykke, som du ikke har givet. Boksen nedenfor virker uanset hvad.",
+    "consentRequiredLink": "Privatliv & vilkår",
+    "unsafeContent": "Det kunne ikke sendes — det ser ud til at indeholde kontaktoplysninger. Fjern dem, eller brug boksen nedenfor.",
+    "fallbackTitle": "Eller skriv det bare ned",
+    "fallbackBody": "Ingen samtale, ingen AI. Denne boks virker, også når alt andet ikke gør.",
+    "fallbackLabel": "Din feedback",
+    "fallbackPlaceholder": "Hvad gik galt?",
+    "fallbackSend": "Send feedback",
+    "fallbackSent": "Sendt. Tak — der er nogen, der læser det.",
+    "fallbackError": "Det blev ikke gemt. Prøv igen."
   }
 }

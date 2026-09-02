@@ -14,6 +14,7 @@ import {
   getMessages,
   hasHeldWeeklySessionInWeek,
 } from '@/features/coach/conversation-repository';
+import { selectOpenConversations } from '@/features/coach/conversation';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
 import { logNarrationFailure } from '@/lib/coach-log';
@@ -123,15 +124,16 @@ export default async function AppShellLayout({
     }
 
     // One query for whatever is open, across kinds — the Overlay is one surface
-    // hosting several behaviors (ADR 0007), so the shell does not ask for a kind
-    // by name. Both can be open at once by design: the resting Coach Chat, and
-    // an in-progress Weekly Session on top of it.
+    // hosting several behaviors (ADR 0007) — and then an explicit selection by
+    // name. The query is generic; the *restore* is not, and must not be: a
+    // `feedback` interview is open too, and belongs nowhere near the Overlay
+    // (`selectOpenConversations`).
     const [openConversations, heldWeeklySession] = await Promise.all([
       getOpenConversations(athlete.id),
       hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(today)),
     ]);
-    const open = openConversations.find((c) => c.kind === 'weekly_session') ?? null;
-    const openChat = openConversations.find((c) => c.kind === 'coach_chat') ?? null;
+    const { weeklySession: open, coachChat: openChat } =
+      selectOpenConversations(openConversations);
     const chat = openChat
       ? { conversationId: openChat.id, messages: await getMessages(openChat.id) }
       : null;
