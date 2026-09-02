@@ -43,11 +43,45 @@ $ClaudeSrc = Join-Path $Main ".claude"
 
 if (-not (Test-Path $ClaudeSrc)) { throw "No canonical .claude at $ClaudeSrc - run this from the main folder." }
 
+# Git decides what this script may touch, not the folder name.
+#
+# Globbing bc-* and trusting it was wrong, and not theoretically: of the seven
+# bc-* siblings on the machine this was written on, FOUR are not worktrees -
+# bc-docs (the tracker corpus repo), bc-docs-archive, bc-fabricated-readiness
+# and bc-local-docs-backup. This script severs a .claude junction and rebuilds
+# it against the canonical folder, so pointed at bc-docs it would rewrite the
+# links of the one repository the whole junction discipline exists to protect.
+# It skipped bc-docs only because that folder happens to have no .claude. That
+# is luck, and luck is not a guard.
+$registered = [System.Collections.Generic.HashSet[string]]::new(
+  [System.StringComparer]::OrdinalIgnoreCase
+)
+foreach ($line in (git -C $Main worktree list --porcelain)) {
+  if ($line -like 'worktree *') {
+    $null = $registered.Add((Resolve-Path ($line -replace '^worktree ', '')).Path.TrimEnd('\'))
+  }
+}
+
+function Assert-Registered {
+  param([string]$Path)
+  $resolved = (Resolve-Path $Path -ErrorAction SilentlyContinue)
+  if (-not $resolved) { return $false }
+  return $registered.Contains($resolved.Path.TrimEnd('\'))
+}
+
 $worktrees = if ($Name) {
   $n = if ($Name.StartsWith("bc-")) { $Name } else { "bc-$Name" }
-  @(Join-Path $Parent $n)
+  $candidate = Join-Path $Parent $n
+  # An explicit -Name is refused rather than skipped: the caller named something
+  # specific and is owed the reason it did not happen.
+  if ((Test-Path $candidate) -and -not (Assert-Registered $candidate)) {
+    throw "$candidate is not a registered git worktree. Refusing to touch its links - see the note above."
+  }
+  @($candidate)
 } else {
-  Get-ChildItem $Parent -Directory -Filter "bc-*" | ForEach-Object { $_.FullName }
+  Get-ChildItem $Parent -Directory -Filter "bc-*" |
+    Where-Object { Assert-Registered $_.FullName } |
+    ForEach-Object { $_.FullName }
 }
 
 $repaired = 0; $skipped = 0
