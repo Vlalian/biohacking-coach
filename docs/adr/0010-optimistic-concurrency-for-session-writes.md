@@ -60,6 +60,22 @@ serialisation it gave up by distributing; this app has one Postgres and has give
   change goes unlogged. That is a worse audit trail, never a wrong session row. Closing it means a
   data-modifying CTE and hand-written SQL at each call site; revisit if the event log becomes
   load-bearing.
+
+  **That condition has since been met — 2026-09-02, four days later.**
+  `undoDetectedImport` (`showable-version/14`, PR #47) reads the event log as *the authority* on
+  whether a completion came from a Garmin import: the newest `garmin_imported` /
+  `garmin_import_undone` for a session decides whether undo is offered at all. So "a worse audit
+  trail, never a wrong session row" is no longer the whole consequence — a lost `garmin_imported`
+  makes a real import **un-undoable**, leaving the athlete a completed session with device data they
+  cannot walk back, which is the permanence that ticket exists to remove.
+
+  Note also that the driver is `neon-http`, where every statement is its own HTTP request, so the gap
+  between the two writes is a network round-trip rather than an in-process microsecond.
+
+  The decision below is unchanged and this ADR is **not** superseded: the trade was correct when made
+  and is still correct at test-round scale. What changed is the cost of losing, and that is now
+  scheduled work rather than a contingency — `.scratch/post-testing/MAP.md` entry 8, with the
+  trip-wire that jumps it if a tester reports an import they cannot undo.
 - The athlete-facing message for a lost Session Move is a calendar bounce (`bounceConflict`), reusing
   the existing bounce banner rather than inventing a second refusal surface.
 - Soft-delete tombstones are **not** part of this. A delete is compare-and-set like any other write,
