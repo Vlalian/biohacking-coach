@@ -26,6 +26,10 @@ const CHAIN_METHODS = [
   'onConflictDoUpdate',
   'returning',
   'set',
+  // Added for `knowledgeSearch` (issue 03): the vector search joins the source
+  // row and orders by cosine distance.
+  'innerJoin',
+  'orderBy',
 ] as const;
 
 /** Statement kinds — `db.x(...)` starts one of these. */
@@ -82,7 +86,7 @@ function batchKinds(): string[] {
   return batched.map((s) => s.kind);
 }
 
-const { knowledgeRepository, offlineRepository } = await import(
+const { knowledgeRepository, knowledgeSearch, offlineRepository } = await import(
   './knowledge-repository'
 );
 
@@ -279,5 +283,53 @@ describe('offlineRepository', () => {
     await expect(
       offlineRepository().replaceSource(SOURCE, 'digest-1', CHUNKS),
     ).rejects.toThrow(/cannot write/);
+  });
+});
+
+describe('knowledgeSearch.searchChunks', () => {
+  /**
+   * These prove the JS this repository owns — the order of operations, the limit
+   * it passes, and the distance-to-similarity conversion. They do **not** prove
+   * that Postgres ranks correctly: `getDb()` speaks Neon over HTTP and there is
+   * no test database. Reading real rankings is what `npm run oracle:ask` is for.
+   */
+  it('orders by cosine distance and applies the limit it was given', async () => {
+    nextRows = [];
+    await knowledgeSearch().searchChunks([0.1, 0.2], 4);
+
+    // Ascending distance = nearest first. `orderBy` receiving the same SQL the
+    // projection selected is what stops the ranked number and the returned
+    // number drifting apart.
+    expect(argumentsFor('orderBy')).toHaveLength(1);
+    expect(argumentsFor('limit')).toEqual([4]);
+    expect(argumentsFor('innerJoin')).toHaveLength(1);
+
+    // The projection has to carry the distance and the whole source row: the
+    // distance is what similarity is derived from, and the source row is what a
+    // citation is built out of. An emptied select would return neither.
+    const projection = argumentsFor('select')[0] as Record<string, unknown>;
+    expect(Object.keys(projection).sort()).toEqual([
+      'distance',
+      'ordinal',
+      'source',
+      'text',
+    ]);
+  });
+
+  it('converts distance to similarity, so bigger means closer', async () => {
+    nextRows = [
+      {
+        text: 'A two-week taper produced the largest gain.',
+        ordinal: 3,
+        distance: 0.25,
+        source: { id: 'source-uuid', slug: 'taper-meta-analysis-2023' },
+      },
+    ];
+
+    const [result] = await knowledgeSearch().searchChunks([0.1, 0.2], 6);
+
+    expect(result.similarity).toBeCloseTo(0.75);
+    expect(result.ordinal).toBe(3);
+    expect(result.source.slug).toBe('taper-meta-analysis-2023');
   });
 });

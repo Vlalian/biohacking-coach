@@ -93,3 +93,57 @@ export type RefusalReason = 'unsafe-content' | 'coach-unavailable';
 export function refusalReason(error: unknown): RefusalReason {
   return error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable';
 }
+
+/**
+ * Walks every nested string leaf of an app-assembled prompt input looking for a
+ * *shape-detectable* identifier, and throws if one is found (GDPR decision 1 /
+ * ADR 0006).
+ *
+ * The same runtime guarantee `assertNoIdentity` makes for a check-in,
+ * exposed for any prompt builder that assembles its own material from an
+ * athlete's opaque record — the Coach Briefing (slice 13) is the second caller.
+ * The walk is deep because an identifier realistically hides in a free-text leaf
+ * (an onboarding answer, a session note), not the top-level scalars.
+ *
+ * **What this does and does not guarantee.** AGENTS.md names four identifiers —
+ * name, email, DOB, location — and only some of those have a shape a regex can
+ * recognise. So the control is in two layers, and this function is the second:
+ *
+ *  1. **Structural (primary).** Identity is separated from training data by
+ *     opaque athlete id (ADR 0006): training tables carry no name, email, DOB or
+ *     location column, so a prompt assembled from an athlete's training record
+ *     has nothing to interpolate. `personaName` is refused outright by
+ *     `assertNoIdentity`. This is what actually makes the promise true.
+ *  2. **Shape guard (backstop, here).** Athlete *free text* — a session note, an
+ *     onboarding answer — can say anything, and no pattern can recognise a name
+ *     or a place name in prose. What it can catch is email and phone shapes, so
+ *     it catches those and fails closed.
+ *
+ * A name typed into a session note is therefore *not* caught here, by design —
+ * it is covered by the consent disclosure that says athlete free text reaches
+ * the model (`CONTEXT.md`, Privacy Proxy). Do not describe this function as
+ * asserting that no identifier of any kind can reach a prompt; it asserts the
+ * detectable ones.
+ */
+export function assertNoDirectIdentifier(value: unknown): void {
+  if (typeof value === 'string') {
+    const kind = shapedIdentifierIn(value);
+    if (kind) throw new DirectIdentifierError(kind);
+    return;
+  }
+  // Everything that is not a string is walked by enumerating its values, and
+  // `Object.values` is enough on its own to do it:
+  //
+  //   - an array enumerates to its elements, exactly as `forEach` would, so the
+  //     separate `Array.isArray` branch this used to carry was dead weight;
+  //   - a number, boolean or symbol enumerates to `[]`, so it walks nothing;
+  //   - `null` and `undefined` throw, which is why the truthiness guard stays.
+  //
+  // Both branches were found by mutation testing, not by review: the array walk
+  // and a `typeof value === 'object'` check could each be deleted with every test
+  // still green. Removed rather than suppressed — an equivalent mutant is usually
+  // telling you about the code, not about the test.
+  if (value) {
+    Object.values(value).forEach(assertNoDirectIdentifier);
+  }
+}

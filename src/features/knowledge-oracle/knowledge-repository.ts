@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { cosineDistance, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { knowledgeChunks, knowledgeSources } from '@/db/schema';
 import type { CorpusSource } from './corpus-manifest';
 import type { ChunkToWrite, KnowledgeRepository } from './ingest';
+import type { ChunkSearchResult, KnowledgeSearch } from './retrieval';
 
 /**
  * The only place the corpus is read from and written to Postgres.
@@ -140,6 +141,57 @@ export function offlineRepository(): KnowledgeRepository {
         'offlineRepository cannot write. A live ingest needs DATABASE_URL — this ' +
           'stub exists so a dry run works without one.',
       );
+    },
+  };
+}
+
+/**
+ * The read side of the corpus — the vector search behind {@link KnowledgeSearch}.
+ *
+ * A separate factory from {@link knowledgeRepository} because they are separate
+ * ports: that one writes during ingest, this one reads on every grounded turn.
+ * Same two tables, opposite directions, and no reason for a caller that only
+ * reads to hold a handle that can `replaceSource`.
+ *
+ * Like the write side, no function here takes an `athleteId`. The corpus is
+ * published training science, shared by every athlete and owned by none — there
+ * is no per-athlete scoping to get wrong because there is no per-athlete data.
+ *
+ * Plain Postgres with pgvector, per ADR 0005 — no separate vector database. The
+ * HNSW index on `knowledge_chunks.embedding` was built for this query and is
+ * what keeps it from being a sequential scan.
+ */
+export function knowledgeSearch(): KnowledgeSearch {
+  return {
+    async searchChunks(embedding: number[], limit: number): Promise<ChunkSearchResult[]> {
+      // Computed once and reused in both the projection and the ORDER BY, so the
+      // number that is ranked on is provably the number that is returned. Written
+      // twice, they could drift.
+      const distance = cosineDistance(knowledgeChunks.embedding, embedding);
+
+      const rows = await getDb()
+        .select({
+          text: knowledgeChunks.text,
+          ordinal: knowledgeChunks.ordinal,
+          distance,
+          source: knowledgeSources,
+        })
+        .from(knowledgeChunks)
+        .innerJoin(knowledgeSources, eq(knowledgeChunks.sourceId, knowledgeSources.id))
+        // Ascending: cosine *distance*, so nearest first. This is the direction
+        // the HNSW index is built for.
+        .orderBy(distance)
+        .limit(limit);
+
+      return rows.map((row) => ({
+        text: row.text,
+        ordinal: row.ordinal,
+        // The rest of the module reasons in similarity, where bigger is better,
+        // because a threshold called MIN_SIMILARITY that you had to read as a
+        // maximum distance is how a floor gets set upside down.
+        similarity: 1 - Number(row.distance),
+        source: row.source,
+      }));
     },
   };
 }
