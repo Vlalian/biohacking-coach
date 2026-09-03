@@ -157,9 +157,10 @@ describe('measureComplexity', () => {
 
 describe('measureComplexity — reporting order', () => {
   it('reports a parent before the function nested inside it', () => {
-    // The walk reaches a nested function first and records it first, so the
-    // list is sorted before it is returned. Without that the report reads
-    // inside-out against the file.
+    // The report reads top to bottom against the file. The old walk recorded a
+    // nested function before its parent and needed a sort to fix that;
+    // `eachFunction` descends instead, so the order is a property of the walk
+    // and this is what holds it there.
     const source = [
       'function outer() {',
       '  return [1].map((x) => x);',
@@ -171,5 +172,18 @@ describe('measureComplexity — reporting order', () => {
 
     expect(names[0]).toBe('outer');
     expect(names[names.length - 1]).toBe('after');
+  });
+
+  it('holds the order for a function in a parameter default, not just one in a body', () => {
+    // The case the order depends on and the test above does not reach: a
+    // parameter default is walked *before* the body, so if any position could
+    // hand back a nested function ahead of a later sibling, this is it. With
+    // no sort left to correct it, the walk has to be right on its own.
+    const source = ['function outer(cb = () => 1) {}', 'function after() {}'].join('\n');
+
+    const lines = measureComplexity('t.ts', source).map((f) => f.startLine);
+
+    expect(lines).toEqual([...lines].sort((a, b) => a - b));
+    expect(measureComplexity('t.ts', source)[2].name).toBe('after');
   });
 });

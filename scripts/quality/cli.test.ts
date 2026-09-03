@@ -211,7 +211,7 @@ describe('report — what a human is actually told', () => {
 
   it('says PASS and exits 0 when the verdict passes', () => {
     const { text, code } = output(() =>
-      report([], [], { verdict: 'pass', failures: [], suppressed: 0 }),
+      report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }),
     );
 
     expect(code).toBe(0);
@@ -221,7 +221,7 @@ describe('report — what a human is actually told', () => {
 
   it('says ESCALATE, counts the problems, and exits 1', () => {
     const { text, code } = output(() =>
-      report([], [], {
+      report([], [], [], {
         verdict: 'escalate',
         failures: [
           { kind: 'crap', name: 'big', file: 'src/a.ts', line: 3, detail: 'CRAP 8.0 exceeds the ceiling of 6' },
@@ -239,7 +239,7 @@ describe('report — what a human is actually told', () => {
     // The one instruction that stops an agent "fixing" an escalation by
     // widening the exclusions.
     const { text } = output(() =>
-      report([], [], { verdict: 'escalate', failures: [], suppressed: 0 }),
+      report([], [], [], { verdict: 'escalate', failures: [], suppressed: 0 }),
     );
 
     expect(text).toContain('Do not relax the gate');
@@ -247,7 +247,7 @@ describe('report — what a human is actually told', () => {
 
   it('names the worst functions with their complexity and coverage', () => {
     const { text } = output(() =>
-      report([scored(), scored({ name: 'small', crap: 1, complexity: 1, coverage: 1 })], [], {
+      report([scored(), scored({ name: 'small', crap: 1, complexity: 1, coverage: 1 })], [], [], {
         verdict: 'pass',
         failures: [],
         suppressed: 0,
@@ -262,7 +262,7 @@ describe('report — what a human is actually told', () => {
   it('counts the kills and the suppressions', () => {
     const m = (status: string) => ({ file: 'src/a.ts', line: 1, mutator: 'X', status });
     const { text } = output(() =>
-      report([], [m('Killed'), m('Killed'), m('Ignored')], {
+      report([], [], [m('Killed'), m('Killed'), m('Ignored')], {
         verdict: 'pass',
         failures: [],
         suppressed: 1,
@@ -270,6 +270,54 @@ describe('report — what a human is actually told', () => {
     );
 
     expect(text).toContain('Mutants: 3 — 2 killed, 1 suppressed');
+  });
+
+  const cognitiveScore = (over = {}) => ({
+    name: 'deep',
+    file: 'src/a.ts',
+    startLine: 12,
+    endLine: 30,
+    cognitive: 9,
+    ...over,
+  });
+
+  it('prints cognitive complexity worst-first, and says it does not gate', () => {
+    // The label is the load-bearing part. An agent that reads this as a target
+    // will flatten nesting by hoisting bodies into helpers called once, which
+    // moves the number without helping anyone.
+    const { text } = output(() =>
+      report([], [cognitiveScore(), cognitiveScore({ name: 'shallow', cognitive: 2, startLine: 40 })], [], {
+        verdict: 'pass',
+        failures: [],
+        suppressed: 0,
+      }),
+    );
+
+    expect(text).toContain('does not gate');
+    expect(text).toContain('9  src/a.ts:12  deep');
+    expect(text.indexOf('  deep')).toBeLessThan(text.indexOf('  shallow'));
+  });
+
+  it('passes a run whose cognitive scores are terrible', () => {
+    // The diagnostic must not be able to change the exit code /build-afk keys
+    // off — that is the difference between a diagnostic and a gate.
+    const { code } = output(() =>
+      report([], [cognitiveScore({ cognitive: 500 })], [], {
+        verdict: 'pass',
+        failures: [],
+        suppressed: 0,
+      }),
+    );
+
+    expect(code).toBe(0);
+  });
+
+  it('says nothing at all when there is nothing to report', () => {
+    const { text } = output(() =>
+      report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }),
+    );
+
+    expect(text).not.toContain('cognitive');
   });
 });
 

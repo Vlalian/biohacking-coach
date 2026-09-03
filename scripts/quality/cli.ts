@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
+import { measureCognitive, type FunctionCognitive } from './cognitive';
 import { measureComplexity } from './complexity';
 import { scoreCrap, type CrapScore, type FileCoverage } from './crap';
 import { judge, CRAP_CEILING, type MutantReport } from './policy';
@@ -173,6 +174,25 @@ function collectMutants(files: string[]): MutantReport[] {
 }
 
 /**
+ * The nesting diagnostic, printed under the gate and never part of it.
+ *
+ * Sorted on its own rather than folded into the CRAP rows, because the whole
+ * case for the number is the function that passes CRAP comfortably while
+ * nesting badly — and that function would never appear in a list ranked by
+ * CRAP. If this block stays empty of anything interesting for a few weeks,
+ * cyclomatic was sufficient and that is worth knowing cheaply.
+ */
+function reportCognitive(cognitive: FunctionCognitive[]): void {
+  const worst = [...cognitive].sort((a, b) => b.cognitive - a.cognitive).slice(0, 5);
+  if (worst.length === 0) return;
+
+  console.log('\nHighest cognitive complexity (diagnostic — does not gate):');
+  for (const fn of worst) {
+    console.log(`  ${String(fn.cognitive).padStart(6)}  ${fn.file}:${fn.startLine}  ${fn.name}`);
+  }
+}
+
+/**
  * Everything the run says to a human, and the exit code that goes with it.
  *
  * Split out of `main` so both are gradable: this is the whole product of the
@@ -181,6 +201,7 @@ function collectMutants(files: string[]): MutantReport[] {
  */
 export function report(
   crap: CrapScore[],
+  cognitive: FunctionCognitive[],
   mutants: MutantReport[],
   result: ReturnType<typeof judge>,
 ): number {
@@ -192,6 +213,8 @@ export function report(
         `  (complexity ${fn.complexity}, coverage ${(fn.coverage * 100).toFixed(0)}%)`,
     );
   }
+
+  reportCognitive(cognitive);
 
   const killed = mutants.filter((m) => m.status === 'Killed').length;
   console.log(`\nMutants: ${mutants.length} — ${killed} killed, ${result.suppressed} suppressed`);
@@ -234,14 +257,19 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   console.log(`Grading ${files.length} file(s) — ${CEILING_NOTE}\n`);
 
   const coverage = collectCoverage();
-  const crap = files.flatMap((file) =>
-    scoreCrap(measureComplexity(file, readFileSync(file, 'utf8')), coverage[file]),
+  // Read once, scored twice: both metrics parse the same text, and a second
+  // read would let them disagree about a file edited mid-run.
+  const graded = files.map((file) => ({ file, source: readFileSync(file, 'utf8') }));
+  const crap = graded.flatMap(({ file, source }) =>
+    scoreCrap(measureComplexity(file, source), coverage[file]),
   );
+  const cognitive = graded.flatMap(({ file, source }) => measureCognitive(file, source));
   const gradable = files.filter((f) => !MUTATION_EXEMPT.includes(f));
   const mutants = gradable.length > 0 ? collectMutants(files) : [];
 
   return report(
     crap,
+    cognitive,
     mutants,
     // `ranMutation` is false when every file was exempt: an empty result then
     // means "nothing to mutate", not "the run covered nothing", and the
