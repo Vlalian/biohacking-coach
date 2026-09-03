@@ -16,9 +16,19 @@ let cached: Db | undefined;
 /**
  * The Postgres connection, created on first use rather than on import.
  *
- * Lazy on purpose: importing a module must not open a connection or demand a
- * secret. That keeps `npm run build`, `npm test`, and CI runnable without a
- * live database — only code that actually queries needs DATABASE_URL.
+ * Lazy on purpose: importing a module must not open a connection. That keeps
+ * `npm run build`, `npm test`, and CI runnable without a **live database**.
+ *
+ * It does not keep them runnable without the **env var**, and an earlier
+ * version of this comment claimed it did ("only code that actually queries
+ * needs DATABASE_URL"). `src/lib/auth.ts` calls `getDb()` at module load to
+ * build the better-auth adapter, so every route reaching auth — `/api/export`
+ * is the one that fails first — evaluates this during `next build`'s page-data
+ * collection. A build in a checkout with no `.env.local` therefore dies here,
+ * with this function's own error message and nothing to say it came from a
+ * missing file rather than a broken database. Any value satisfies it; nothing
+ * connects until a query runs. Corrected rather than deleted because the wrong
+ * clause is what makes the failure confusing.
  */
 export function getDb(): Db {
   if (!cached) {

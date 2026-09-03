@@ -62,9 +62,9 @@ directory.
 
 ### Only Mads starts a code review
 
-`/code-review` is his to start. Do not run it on your own initiative, and do not treat it as a step on the way to a commit.
+`/code-review` and `/review-afk` are his to start. Do not run either on your own initiative, and do not treat one as a step on the way to a commit.
 
-The reason is cadence, not distrust. The old rule put a review on every commit, which meant a review per task, and each one costs a session's worth of tokens — they were being started far too often to be worth what they cost. He wants several finished implementations gathered up first, then **one** review across the batch. That is what `/plan-afk` and `/build-afk` accumulate on the `afk/batch` branch.
+The reason is cadence, not distrust. The old rule put a review on every commit, which meant a review per task, and each one costs a session's worth of tokens — they were being started far too often to be worth what they cost. He wants several finished implementations gathered up first, then **one** review across the batch. That is what `/plan-afk` and `/build-afk` accumulate on the `afk/batch` branch, and what `/review-afk` spends.
 
 So: finish the work, run the four checks below, commit, and **say plainly that it is built and unreviewed.** If you think a review is genuinely warranted on this particular change, say so in one sentence and leave the call to him.
 

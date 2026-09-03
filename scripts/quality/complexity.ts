@@ -19,12 +19,23 @@ import ts from 'typescript';
  * a reader cares about.
  */
 
-export type FunctionComplexity = {
+/**
+ * How any metric here points at a function: what to call it, and where it is.
+ *
+ * Shared rather than restated per metric. The two scores are printed against
+ * the same function in one report, so a reader has to be able to match the
+ * rows — and a second copy of these four fields is a second chance for them to
+ * drift apart. `eachFunction` and `rangeOf` are what fill it in, once.
+ */
+export type FunctionRef = {
   /** The declared name, or a positional label where there is none. */
   name: string;
   file: string;
   startLine: number;
   endLine: number;
+};
+
+export type FunctionComplexity = FunctionRef & {
   complexity: number;
 };
 
@@ -48,8 +59,39 @@ const FUNCTION_KINDS = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.Constructor,
 ]);
 
-function isFunctionNode(node: ts.Node): node is FunctionNode {
+export function isFunctionNode(node: ts.Node): node is FunctionNode {
   return FUNCTION_KINDS.has(node.kind);
+}
+
+/**
+ * Calls `visit` once per function in `tree`, nested ones included, in source
+ * order.
+ *
+ * Discovery is separated from scoring so a second metric can reuse it rather
+ * than grow its own copy of "what counts as a function and what is it called"
+ * — two answers to that question drifting apart would make the two scores
+ * describe different sets of functions while appearing side by side in one
+ * report.
+ *
+ * The visitor is handed the node only. What it does about the functions
+ * nested *inside* that node is its own business: both metrics here score them
+ * separately and stop at the boundary, but that is a scoring rule, not a
+ * discovery rule.
+ */
+export function eachFunction(tree: ts.SourceFile, visit: (fn: FunctionNode) => void): void {
+  function descend(node: ts.Node) {
+    if (isFunctionNode(node)) visit(node);
+    ts.forEachChild(node, descend);
+  }
+  ts.forEachChild(tree, descend);
+}
+
+/** The 1-based line range of `node`, as both metrics report it. */
+export function rangeOf(node: ts.Node, tree: ts.SourceFile): { startLine: number; endLine: number } {
+  return {
+    startLine: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1,
+    endLine: tree.getLineAndCharacterOfPosition(node.getEnd()).line + 1,
+  };
 }
 
 /**
@@ -104,7 +146,7 @@ function decisionsAt(node: ts.Node): number {
 }
 
 /** A readable label for a function that has no name of its own. */
-function nameOf(node: FunctionNode, source: ts.SourceFile): string {
+export function nameOf(node: FunctionNode, source: ts.SourceFile): string {
   if (ts.isConstructorDeclaration(node)) return 'constructor';
   if (node.name) return node.name.getText(source);
 
@@ -130,38 +172,25 @@ export function measureComplexity(file: string, source: string): FunctionComplex
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const found: FunctionComplexity[] = [];
 
-  function visitFunction(fn: FunctionNode) {
+  eachFunction(tree, (fn) => {
     let complexity = 1;
 
     // Walk this function's own body only: descending into a nested function
-    // would charge its decisions here as well as to itself.
+    // would charge its decisions here as well as to itself, and `eachFunction`
+    // is already visiting it in its own right.
     function walk(node: ts.Node) {
-      if (node !== fn && isFunctionNode(node)) {
-        visitFunction(node);
-        return;
-      }
+      if (node !== fn && isFunctionNode(node)) return;
       complexity += decisionsAt(node);
       ts.forEachChild(node, walk);
     }
     walk(fn);
 
-    found.push({
-      name: nameOf(fn, tree),
-      file,
-      startLine: tree.getLineAndCharacterOfPosition(fn.getStart(tree)).line + 1,
-      endLine: tree.getLineAndCharacterOfPosition(fn.getEnd()).line + 1,
-      complexity,
-    });
-  }
+    found.push({ name: nameOf(fn, tree), file, ...rangeOf(fn, tree), complexity });
+  });
 
-  function visitTop(node: ts.Node) {
-    if (isFunctionNode(node)) {
-      visitFunction(node);
-      return;
-    }
-    ts.forEachChild(node, visitTop);
-  }
-  ts.forEachChild(tree, visitTop);
-
-  return found.sort((a, b) => a.startLine - b.startLine);
+  // Already in source order, so the sort this used to end with is gone. The
+  // old walk recorded a nested function *before* its parent and needed sorting
+  // to read right; `eachFunction` descends instead, reaching the parent first.
+  // The mutation run is what showed the sort had become a no-op.
+  return found;
 }
