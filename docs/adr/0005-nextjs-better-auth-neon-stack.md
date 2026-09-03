@@ -1,6 +1,6 @@
 # The app moves to Next.js + React, with better-auth and Neon Postgres
 
-Status: accepted (2026-07-16)
+Status: accepted (2026-07-16) · amended 2026-09-02
 
 The POC (Express server, vanilla-JS frontend, localStorage persistence) needs a real backend: a database for athlete data, authentication in front of it, and vector search for the planned RAG (Knowledge Oracle). The deciding criterion was not technical taste but Mads's stated learning goal (2026-07-16): get good at directing LLM tools and agentic workflows, not at hand-coding. That inverts the old trade-off — "you'd write it yourself and learn" stops being a benefit, and AI-legibility becomes the dominant axis. React/TypeScript/Next.js is the most convention-heavy, best-documented, most AI-tool-supported stack available (it is what Lovable and v0 generate toward), so the React rewrite the POC frontend requires is done *by* agents rather than being a cost Mads pays by hand. better-auth is the consolidated open-source auth choice (Lucia retired, Passport dormant, Auth.js's maintainers joined better-auth and point new projects there); users live in our own Postgres. Neon provides that Postgres free at this scale, with pgvector included on every plan — the RAG store comes with the database. Everything is MIT-licensed and exportable; no vendor owns the users or the data.
 
@@ -9,9 +9,29 @@ Alternatives considered (full analysis in [.scratch/research/auth-and-backend-op
 ## Consequences
 
 - The vanilla-JS frontend is not ported; it becomes the *specification* (screens, flows, behavior) for a React rebuild. Lovable may be used for visual iteration via two-way GitHub sync, with Claude Code doing integration work in the same repo — that split is itself the agentic workflow being practiced.
-- Server logic survives: prompt rendering, the deterministic calc module, and Garmin `.fit`/`.gpx` parsing port as plain TypeScript modules (per the pure-core rule in `.scratch/research/codebase-structure-guidelines.md`), now called from Next.js API routes / server actions instead of Express routes.
+- Server logic survives: prompt rendering, ~~the deterministic calc module,~~ **[corrected 2026-09-02 — the calc module is not a survivor; see the amendment below]** and Garmin `.fit`/`.gpx` parsing port as plain TypeScript modules (per the pure-core rule in `.scratch/research/codebase-structure-guidelines.md`), now called from Next.js API routes / server actions instead of Express routes.
 - localStorage persistence (`bh_week_plan`, `bh_session_feedback`, …) is replaced by Postgres via an ORM; the entity refactor required by ADR 0002 happens as part of this migration, not before it.
 - better-auth owns the auth schema in Neon; Garmin OAuth tokens get a home in the same database when that integration lands.
 - Hosting: decided same day by [coach-eval ticket 04](../../.scratch/coach-eval-mvp-route/issues/04-hosting-db-auth-stack.md) — **Vercel Pro** ($20/mo; EU function region, DPA auto-incorporated on Pro — the free Hobby tier lacks both commercial use and the DPA). Neon's EU residency and DPA were verified the same day ([research](../../.scratch/research/postgres-host-eu-residency-dpa.md)): **Frankfurt region**, DPA auto-incorporated via the Databricks MCSA, pgvector free on all plans.
 - **The eval-MVP builds on this stack directly** (Mads, 2026-07-16, "Option B"): this supersedes the coach-eval route's pre-charting lock to build on the hardened vanilla POC. The React rebuild sits between now and the coach evaluation, accepted to avoid hardening a frontend already decided against.
 - The reference implementation for the whole shape is WebDevSimplified/video-blog-suggester-yt (pattern only — no license file, do not copy code).
+
+## Amendment 2026-09-02 — The deterministic calc module was never a survivor; it is new construction
+
+The Consequences list above names three things that "survive" the rewrite as plain TypeScript modules. Two of them did. **The deterministic calc module never existed to survive**, and the sentence has been struck through rather than deleted, because what was believed on 2026-07-16 is part of the record.
+
+Checked in `poc/` while sequencing the rebuild (2026-07-16, [coach-eval route 08](../../.scratch/coach-eval-mvp-route/issues/08-adr-0005-names-a-module-that-does-not-exist.md)):
+
+- `poc/public/js/rules.js` (55 lines) is the **Move rules** matrix — `isFrozen`, `classifyMove`. Pure, tested, and it genuinely did port: it is [`src/features/session/move-rules.ts`](../../src/features/session/move-rules.ts) today. But it is authority logic, not calculation.
+- `poc/public/js/infodata.js` (343 lines) is a **seeded-PRNG synthetic data provider** for the Information View. Its own header calls it "the seam where real data sources plug in later". It fabricates data; it does not compute it.
+- Nothing else in `poc/` computed training load, zones, or phase.
+
+**What the two real survivors are:** prompt rendering (now `src/features/coach/prompts.ts`, and `prompt-blocks.ts` since the block model landed as PR #34) and Garmin `.fit`/`.gpx` parsing (`src/features/garmin/`). The Move rules are a third survivor and are named here as the Move rules, since the original bullet's third slot was occupied by something that was not one.
+
+**The deterministic calculations module is planned new construction**, with MIT sources already vetted on 2026-07-09 (athlete-analytics for zones and training-load; formulas cross-checked against Coggan/TrainingPeaks definitions). That vetting is currently recorded only in the ticket that raised this correction — it has no file of its own in `.scratch/research/`, which is worth fixing before the module is built. The [eval-MVP PRD](../../.scratch/eval-mvp-build/PRD.md) has always recorded it under "Not a port" and excluded it from the port slices; only this ADR said otherwise.
+
+**Still true 48 days later, and load-bearing.** [`build-dataset.ts`](../../src/features/information-view/build-dataset.ts) states it in its own doc comment: *"TSS-family values (tss, fitness, fatigue, form) stay null until the calc module exists — panels gated on them simply don't render."* So this is not a stale document detail. Several Information View panels are dark today for exactly this reason, and the module is still unwritten.
+
+**Why the correction was worth making.** The likely failure was never confusion — it was invention. An agent that trusts this ADR goes looking for the calc module, finds `rules.js` or `infodata.js`, and ports one of them under that name. The second would be the worse outcome by far: a synthetic data generator adopted as the app's calculation layer would produce numbers that look like training load and are not.
+
+**Unchanged by this amendment:** the stack decision itself, every alternative weighed, the hosting ruling, and the Option B supersession. This corrects one factual claim inside a consequence — it is not a change of decision.
