@@ -1,13 +1,17 @@
 'use client';
 
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, MessageSquareWarning } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { SignOutButton } from '@/components/auth/sign-out-button';
-import { usePathname, useRouter } from '@/i18n/navigation';
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { AppShell, type AppShellStrings, type ThemePreference, type ViewId } from './app-shell';
 import { CoachOverlayContext, type CoachReference } from './coach-overlay-context';
+
+/** The escape hatch reads as an equal of Sign out — same weight, same footer. */
+const ESCAPE_HATCH_CLASS =
+  'flex w-full items-center gap-3 px-0 py-0 text-left font-body text-sm tracking-wide text-muted-foreground no-underline transition-colors hover:text-signal';
 
 const SIGN_OUT_BUTTON_CLASS =
   'flex w-full items-center gap-3 px-0 py-0 text-left font-body text-sm tracking-wide text-muted-foreground no-underline transition-colors hover:text-signal disabled:opacity-50';
@@ -31,6 +35,7 @@ const VIEW_PATH: Record<ViewId, string> = {
   settings: '/settings',
   privacy: '/privacy',
   roster: '/coach',
+  feedback: '/feedback',
 };
 
 /**
@@ -110,13 +115,21 @@ export function ShellChrome({
         settings: t('viewSettings'),
         privacy: t('viewPrivacy'),
         roster: t('viewRoster'),
+        feedback: t('viewFeedback'),
       },
     }),
     [t],
   );
 
+  // `feedback` is deliberately not in `availableViews` — it is reached from the
+  // escape hatch, not the View list — which also meant it could never win this
+  // lookup, so the interview page fell through to `availableViews[0]` and the
+  // shell titled itself after a View the tester was not on.
   const currentView =
-    (availableViews.find((v) => pathname.startsWith(VIEW_PATH[v])) ?? availableViews[0]) as ViewId;
+    pathname === VIEW_PATH.feedback
+      ? 'feedback'
+      : ((availableViews.find((v) => pathname.startsWith(VIEW_PATH[v])) ??
+          availableViews[0]) as ViewId);
 
   return (
     <CoachOverlayContext.Provider
@@ -139,10 +152,33 @@ export function ShellChrome({
         coachOverlay={{ open: coachOpen }}
         coachContent={coachContent}
         navFooter={
-          <SignOutButton
-            className={SIGN_OUT_BUTTON_CLASS}
-            icon={<LogOut className="h-4 w-4" />}
-          />
+          // The escape hatch (`showable-version/05` item 4, opening the
+          // Feedback Interview per `07`). It sits in the drawer footer because
+          // that footer is part of the shared shell, so this one placement makes
+          // it reachable from *every* View — the athlete's five and the Head
+          // Coach's Roster, which the same shell has wrapped since PR #41.
+          <div className="flex flex-col gap-3">
+            <Link
+              // Carries the View being left. The interview is its own page, so
+              // `/feedback` is the only path it can see for itself — every
+              // fallback row recorded that and nothing else until this was
+              // passed. `from` is client-supplied by construction and narrowed
+              // server-side (`submittedFromView`).
+              href={{
+                pathname: VIEW_PATH.feedback,
+                query: pathname === VIEW_PATH.feedback ? undefined : { from: pathname },
+              }}
+              className={ESCAPE_HATCH_CLASS}
+              onClick={() => setNavDrawerOpen(false)}
+            >
+              <MessageSquareWarning className="h-4 w-4" />
+              {t('feedbackHatch')}
+            </Link>
+            <SignOutButton
+              className={SIGN_OUT_BUTTON_CLASS}
+              icon={<LogOut className="h-4 w-4" />}
+            />
+          </div>
         }
         onNavigate={(view) => router.push(VIEW_PATH[view])}
         onToggleNavDrawer={() => setNavDrawerOpen((v) => !v)}

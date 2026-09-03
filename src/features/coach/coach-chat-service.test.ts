@@ -12,6 +12,7 @@ const {
   getEquipmentItems,
   getOwnedSession,
   getSessionsForWeek,
+  logCoachFailure,
 } = vi.hoisted(() => ({
   callCoach: vi.fn(),
   createConversation: vi.fn(),
@@ -21,9 +22,11 @@ const {
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
   getOwnedSession: vi.fn(),
   getSessionsForWeek: vi.fn(() => Promise.resolve([] as Session[])),
+  logCoachFailure: vi.fn(),
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./conversation-repository', () => ({
   createConversation,
   getOwnedConversation,
@@ -111,7 +114,7 @@ describe('sendCoachChatMessage', () => {
   });
 
   it('reuses an existing conversation rather than starting a second', async () => {
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
 
     const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'again', '2026-08-12');
 
@@ -120,7 +123,7 @@ describe('sendCoachChatMessage', () => {
   });
 
   it('reports coach-unavailable when the Coach call rejects', async () => {
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     callCoach.mockRejectedValue(new Error('upstream 529'));
 
     const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
@@ -128,10 +131,26 @@ describe('sendCoachChatMessage', () => {
     expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
   });
 
+  it('names Coach Chat as the surface in the failure log', async () => {
+    // The log exists so a churned tester can be told apart from one who simply
+    // stopped caring (`showable-version/05`, item 2), and that only works if the
+    // surfaces are distinguishable. The turn machinery is shared with the
+    // Feedback Interview now, so which surface is reported is this caller's to
+    // get right.
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+    callCoach.mockRejectedValue(new Error('upstream 529'));
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
+
+    expect(logCoachFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: 'coach_chat', conversationId: 'conv_1' }),
+    );
+  });
+
   it('writes nothing when the Coach call rejects — no question without an answer', async () => {
     // The failure mode this ordering exists to prevent: the athlete's turn
     // persisted, the reply never arriving, and a retry duplicating the message.
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     callCoach.mockRejectedValue(new Error('upstream 529'));
 
     await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
@@ -144,7 +163,7 @@ describe('sendCoachChatMessage', () => {
     // email into one and then discussed that session hits the prompt builder's
     // assertion. Told apart from coach-unavailable deliberately: "try again"
     // is useless advice for content that will be refused identically.
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     getOwnedSession.mockResolvedValue({
       id: 'sess_1',
       type: 'Endurance',
@@ -178,7 +197,7 @@ describe('sendCoachChatMessage', () => {
   });
 
   it('stores the turn and the reply together, in order', async () => {
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
 
     await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
 
@@ -190,7 +209,7 @@ describe('sendCoachChatMessage', () => {
   });
 
   it("sends the athlete's turn to the Coach even though it is not stored yet", async () => {
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     getMessages.mockResolvedValue([msg('athlete', 'earlier', 1), msg('coach_ai', 'noted', 2)]);
 
     await sendCoachChatMessage(ATHLETE, 'conv_1', 'and now?', '2026-08-12');
@@ -221,7 +240,7 @@ describe('sendCoachChatMessage', () => {
   });
 
   it('resolves a Reference through an athlete-scoped lookup, not the raw id', async () => {
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     getOwnedSession.mockResolvedValue({
       id: 'sess_1',
       date: '2026-08-18',
@@ -245,7 +264,7 @@ describe('sendCoachChatMessage', () => {
   it('degrades to an ordinary chat when the Reference is not the athlete\'s', async () => {
     // A forged or stale id yields no Reference rather than another athlete's
     // session — and must not fail the message the athlete actually typed.
-    getOwnedConversation.mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     getOwnedSession.mockResolvedValue(undefined);
 
     const result = await sendCoachChatMessage(
@@ -275,7 +294,7 @@ describe('Coach Chat sees the week', () => {
     appendMessages.mockReset().mockResolvedValue([]);
     getMessages.mockReset().mockResolvedValue([]);
     getEquipmentItems.mockClear();
-    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     getOwnedSession.mockReset().mockResolvedValue(undefined);
     getSessionsForWeek.mockReset().mockResolvedValue([]);
   });

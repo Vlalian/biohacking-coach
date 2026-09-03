@@ -1,8 +1,14 @@
 import type { ConversationRow, MessageRow } from '@/db/schema';
 import type { CoachMessage } from './coach-client';
+import type { ConversationKind } from '@/lib/conversation-kinds';
 
 /**
- * The four kinds of Coach conversation (the schema check constraint mirrors this).
+ * The kinds of Coach conversation, defined once in
+ * {@link import('@/lib/conversation-kinds').CONVERSATION_KINDS} and re-exported
+ * here, where the rest of the Coach feature already looks for it. That constant
+ * is also what builds the database CHECK constraint, so the union and the
+ * constraint are literally the same list — they used to be two, edited by hand
+ * together.
  *
  * Was six. `negotiation` and `reflection` were removed 2026-08-18: neither was
  * ever written by any code path. Session Negotiation is not a conversation kind
@@ -13,14 +19,16 @@ import type { CoachMessage } from './coach-client';
  * session — not a transcript, so not a conversation.
  *
  * `onboarding` stays: it is live, written by `onboarding-service`.
+ *
+ * `feedback` joined 2026-09-01 (`showable-version/07`) and is the one kind that
+ * is **not** a Coach conversation at all: the Feedback Interview is conducted by
+ * an interviewer that is explicitly not the Coach, and its transcript must never
+ * reach a Coach prompt. That is exactly why it has its own kind rather than
+ * living inside `coach_chat`, whose whole transcript is resent to the Coach on
+ * every later turn.
  */
-export type ConversationKind =
-  | 'weekly_session'
-  | 'coach_chat'
-  | 'onboarding'
-  | 'coach_briefing';
+export type { ConversationKind };
 
-/** Who spoke a message. */
 export type MessageRole = 'athlete' | 'coach_ai' | 'head_coach';
 
 /**
@@ -36,6 +44,31 @@ export interface Conversation {
   weeklySessionNumber: number | null;
   createdAt: Date;
   endedAt: Date | null;
+}
+
+/**
+ * The two open conversations the app shell restores, chosen from whatever this
+ * athlete has open. Both can be open at once by design: the resting Coach Chat,
+ * and an in-progress Weekly Session on top of it.
+ *
+ * Selected **by name**, deliberately, and this is the one place that decision is
+ * made. A `feedback` interview is also an open conversation belonging to the
+ * same athlete, and it must never be restored into the Coach Overlay: Coach Chat
+ * resends its entire transcript to the model on every later turn, so a complaint
+ * picked up as a chat becomes something the athlete said about their training,
+ * for the rest of the test (`showable-version/07`). A kind is opted *in* here;
+ * it is never inherited by being open.
+ */
+export interface OpenConversations {
+  weeklySession: Conversation | null;
+  coachChat: Conversation | null;
+}
+
+export function selectOpenConversations(open: Conversation[]): OpenConversations {
+  return {
+    weeklySession: open.find((c) => c.kind === 'weekly_session') ?? null,
+    coachChat: open.find((c) => c.kind === 'coach_chat') ?? null,
+  };
 }
 
 /** One message in a transcript, in `seq` order. */

@@ -53,6 +53,7 @@ coverage/
 # Coach reply captures from `npm run coach:say` — local reading material,
 # real API output, never committed.
 .coach-say/
+.oracle-ask/
 
 # Cached article XML for the Knowledge Oracle ingest. Fetched from PMC on
 # demand and re-fetchable, so it is a build artifact rather than source. Whether

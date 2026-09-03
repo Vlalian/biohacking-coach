@@ -21,7 +21,9 @@
     "viewMessaging": "Messaging",
     "viewSettings": "Settings",
     "viewPrivacy": "Privacy & Terms",
-    "viewRoster": "Roster"
+    "viewRoster": "Roster",
+    "viewFeedback": "Feedback Interview",
+    "feedbackHatch": "Something to say?"
   },
   "AthletePage": {
     "greeting": "Welcome back, {name}",
@@ -561,5 +563,27 @@
     "dataRightsTitle": "Your data",
     "dataRightsBody": "You can download a copy of everything this app holds about you, or delete your account and erase all of it. Both live in Settings.",
     "dataRightsLink": "Go to Settings"
+  },
+  "FeedbackInterview": {
+    "title": "Feedback Interview",
+    "intro": "This is not the Coach. It is an interviewer, asking the questions the people building this app want answered — so it can follow up on what you say instead of leaving it at one line. Nothing you say here reaches your Coach.",
+    "emptyTitle": "Tell it what happened",
+    "emptyBody": "Anything: something that broke, something that annoyed you, something that worked. It will ask you to be specific.",
+    "inputLabel": "Your answer",
+    "placeholder": "What happened?",
+    "send": "Send",
+    "thinking": "Thinking",
+    "youLabel": "You",
+    "interviewerLabel": "Interviewer",
+    "error": "That did not go through. Your text is still here — try again, or use the box below.",
+    "consentRequired": "The interview needs AI consent, which you have not given. The box below works either way.",
+    "consentRequiredLink": "Privacy & Terms",
+    "fallbackTitle": "Or just write it down",
+    "fallbackBody": "No conversation, no AI. This box works even when everything else does not.",
+    "fallbackLabel": "Your feedback",
+    "fallbackPlaceholder": "What went wrong?",
+    "fallbackSend": "Submit",
+    "fallbackSent": "Sent. Thank you — someone will read it.",
+    "fallbackError": "That did not save. Try again."
   }
 }

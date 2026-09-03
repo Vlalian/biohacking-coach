@@ -17,6 +17,7 @@
     "db:push": "drizzle-kit push",
     "coach:say": "tsx --conditions=react-server scripts/coach-say.ts",
     "corpus:ingest": "tsx --conditions=react-server scripts/ingest-corpus.ts",
+    "oracle:ask": "tsx --conditions=react-server scripts/oracle-ask.ts",
     "quality": "tsx scripts/quality.ts"
   },
   "dependencies": {

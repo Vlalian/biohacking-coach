@@ -6,11 +6,18 @@ import {
   coach,
   coachingLink,
   sessions,
+  unavailableDates,
   type NewSessionRow,
 } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
 import { dateKey } from '../src/lib/date';
+import {
+  SYNTHETIC_PROFILES,
+  generateSyntheticHistory,
+  toAthleteRow,
+  toSessionRows,
+} from '../src/features/athlete/synthetic-history';
 
 /**
  * Seeds the database for local development and the eval.
@@ -42,14 +49,15 @@ import { dateKey } from '../src/lib/date';
 const SYNTHETIC_ATHLETE_ID = 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213';
 
 /**
- * The shallow synthetic roster (ticket 02): athletes with no login and sparse
- * sessions, present only to give the Roster contrast next to Mads's full
- * profile. Fixed ids so re-seeding converges.
+ * The generated roster: athletes with no login, each with a full Athlete Profile
+ * and ten weeks of history (showable-version/03). Their ids and shapes now live
+ * beside the generator that fills them, so the seed has one source rather than a
+ * list here and a matching list there.
  */
-const SYNTHETIC_ROSTER = [
-  { id: 'b1e7c0d2-3f4a-4b5c-8d6e-7f8a9b0c1d2e', label: 'Alex Rivera' },
-  { id: 'c2f8d1e3-4a5b-4c6d-9e7f-8a9b0c1d2e3f', label: 'Sam Chen' },
-];
+const SYNTHETIC_ROSTER = SYNTHETIC_PROFILES.map((p) => ({
+  id: p.id,
+  label: p.syntheticLabel,
+}));
 
 /** A fixed id for Mads's dev coach row, so the dual-role seed is idempotent. */
 const MADS_COACH_ID = 'd3a9e2f4-5b6c-4d7e-8f90-1a2b3c4d5e6f';
@@ -203,45 +211,75 @@ async function seedSyntheticAthlete() {
 }
 
 /**
- * The shallow synthetic roster: a couple of login-less athletes with a handful
- * of past completed sessions each. They exist to give the coach's Roster
- * contrast — not full histories, just enough that the Roster is not a one-row
- * special case (ticket 02).
+ * The two generated athletes the Head Coach's surfaces are evaluated against
+ * (showable-version/03).
+ *
+ * These rows existed before with three sessions each — enough to prove the
+ * Roster was not a one-row special case, and nothing more. A Head Coach judging
+ * whether the Coach Briefing tells them something they did not already know
+ * cannot do it against three sessions, so each now carries a full Athlete
+ * Profile and ten weeks of history from {@link generateSyntheticHistory}.
+ *
+ * All the shaping lives in that module, which is pure and tested. This stays
+ * what a seed should be: a thin wiring of generated data to the database.
+ *
+ * Re-runnable by the same pattern as Mads's history — fixed ids, and an atomic
+ * delete-then-insert of `origin: 'coach'` rows in one batch, so anything an
+ * athlete or an import produced survives a reseed untouched.
  */
-async function seedSyntheticRoster() {
+async function seedGeneratedAthletes() {
   const db = getDb();
-  for (const { id, label } of SYNTHETIC_ROSTER) {
+  // Fixed, for the same reason the athlete ids are: a reseed should converge on
+  // the same two athletes rather than reshape the Roster every run.
+  const SEED = 20260902;
+  const WEEKS = 10;
+  const now = new Date();
+
+  for (const profile of SYNTHETIC_PROFILES) {
+    const { sessions: generated, unavailableDates: blocked } =
+      generateSyntheticHistory(profile, WEEKS, now, SEED);
+    const row = toAthleteRow(profile);
+
+    // Updated on every run, not just inserted: these two rows already exist from
+    // the earlier shallow seed with null profile columns, and
+    // `onConflictDoNothing` would leave them that way forever — a Roster entry
+    // with no profile behind it, which is the state this ticket exists to end.
     await db
       .insert(athlete)
-      .values({ id, syntheticLabel: label })
-      .onConflictDoNothing({ target: athlete.id });
+      .values(row)
+      .onConflictDoUpdate({ target: athlete.id, set: row });
 
-    // A few completed sessions in the recent past — origin 'coach', reseeded
-    // atomically like Mads's plan so re-running converges.
-    const now = new Date();
-    const rows: NewSessionRow[] = [3, 9, 16].map((daysAgo, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo);
-      return {
-        athleteId: id,
-        date: dateKey(d),
-        origin: 'coach',
-        status: 'completed',
-        dayOrder: 0,
-        type: ['Endurance', 'Tempo', 'Recovery'][i],
-        duration: [70, 50, 40][i],
-        zone: ['Zone 2', 'Zone 3', 'Zone 1'][i],
-        title: `${label.split(' ')[0]}'s session`,
-        isTraining: true,
-      };
-    });
+    const rows: NewSessionRow[] = toSessionRows(profile, generated, now);
+
     await db.batch([
       db
         .delete(sessions)
-        .where(and(eq(sessions.athleteId, id), eq(sessions.origin, 'coach'))),
+        .where(
+          and(eq(sessions.athleteId, profile.id), eq(sessions.origin, 'coach')),
+        ),
+      // Cleared, not just topped up. The blocked days are generated relative to
+      // `now`, so a reseed on a later day produces a different set — and without
+      // this, the old ones stay. Two runs a week apart left the calendar showing
+      // both weeks' Unavailable Dates, and the seed is meant to converge on one
+      // history rather than accumulate every history it has ever generated.
+      db.delete(unavailableDates).where(eq(unavailableDates.athleteId, profile.id)),
       db.insert(sessions).values(rows),
+      // Keyed (athlete, date), so re-seeding the same days is a no-op rather
+      // than a duplicate-key failure that would abort the batch.
+      ...blocked.map((date) =>
+        db
+          .insert(unavailableDates)
+          .values({ athleteId: profile.id, date })
+          .onConflictDoNothing(),
+      ),
     ]);
+
+    console.log(
+      `Seeded ${profile.syntheticLabel}: ${rows.length} sessions over ${WEEKS} weeks, ` +
+        `${blocked.length} unavailable date(s), ` +
+        `${profile.experienceLevel} in ${profile.trainingPhase}.`,
+    );
   }
-  console.log(`Seeded ${SYNTHETIC_ROSTER.length} synthetic roster athletes with sparse sessions.`);
 }
 
 /**
@@ -350,7 +388,7 @@ async function seed() {
   const madsId = await seedMads();
   await seedMadsTrainingHistory(madsId);
   await seedSyntheticAthlete();
-  await seedSyntheticRoster();
+  await seedGeneratedAthletes();
 
   const rosterIds = [madsId, ...SYNTHETIC_ROSTER.map((a) => a.id)];
   await seedCoach(rosterIds);

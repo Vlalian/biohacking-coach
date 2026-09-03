@@ -51,18 +51,39 @@ function errorType(error: unknown): string {
   return typeof error === 'object' && error === null ? 'null' : typeof error;
 }
 
-/** Which Coach surface the failed call came from. */
-export type CoachSurface = 'coach_chat' | 'weekly_session' | 'coach_briefing';
+/**
+ * Which surface the failed model call came from.
+ *
+ * Named for the model call rather than for the Coach, because one of these is
+ * not a Coach surface: `feedback` is the Feedback Interview, conducted by an
+ * interviewer that is explicitly not the Coach (ADR 0009). It is listed here
+ * because a failed interview turn is the one failure a tester is most likely to
+ * be silent about afterwards — they reached the escape hatch to complain and the
+ * escape hatch is what broke — and it shares this log rather than having its own
+ * so the surfaces can be compared in one query.
+ */
+export type ModelSurface = 'coach_chat' | 'weekly_session' | 'coach_briefing' | 'feedback';
 
 export interface CoachFailure {
-  surface: CoachSurface;
+  surface: ModelSurface;
   /** Opaque athlete id — never a name or an email. */
   athleteId: string;
   conversationId: string | null;
   error: unknown;
   /** Overrides the reason derived from the error, where the caller knows better. */
-  reason?: RefusalReason;
+  reason?: FailureReason;
 }
+
+/**
+ * Why a logged call did not do what it set out to.
+ *
+ * Wider than {@link RefusalReason} by exactly one value. A refusal is something
+ * the athlete is told about and can act on; `after-store` is not — it is work
+ * that failed *after* a turn was safely written, swallowed on purpose so it
+ * cannot undo the turn (`conversation-turn.ts`). Nobody sees it but this log,
+ * which is the only reason it is recoverable at all.
+ */
+export type FailureReason = RefusalReason | 'after-store';
 
 /**
  * Writes one structured line for a Coach call that did not produce a reply.
