@@ -556,7 +556,6 @@
     "error": "That did not go through. Your text is still here — try again, or use the box below.",
     "consentRequired": "The interview needs AI consent, which you have not given. The box below works either way.",
     "consentRequiredLink": "Privacy & Terms",
-    "unsafeContent": "That could not be sent — it looks like it contains contact details. Take them out, or use the box below.",
     "fallbackTitle": "Or just write it down",
     "fallbackBody": "No conversation, no AI. This box works even when everything else does not.",
     "fallbackLabel": "Your feedback",

@@ -1,5 +1,3 @@
-import { refusalReason } from '@/lib/identifiers';
-import { logCoachFailure } from '@/lib/coach-log';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
@@ -8,15 +6,9 @@ import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
 import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
-import { callCoach } from './coach-client';
-import {
-  appendMessages,
-  createConversation,
-  getLatestOpenConversation,
-  getMessages,
-  getOwnedConversation,
-} from './conversation-repository';
-import { toApiMessages, type Message } from './conversation';
+import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
+import { getLatestOpenConversation, getMessages } from './conversation-repository';
+import type { Message } from './conversation';
 import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
 
 /**
@@ -25,11 +17,14 @@ import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
  * structured behavior. Not a separate room; the Weekly Session is entered from
  * inside the same surface.
  *
- * Server-side orchestration only, mirroring {@link weekly-session-service}:
- * importing {@link callCoach} (which is `server-only`) keeps this module off
- * the client by construction. The athlete is always resolved from the
- * authenticated session upstream; a client-supplied conversation or session id
- * is checked against that owner by the repository, never trusted (ADR 0006).
+ * Server-side orchestration only. A turn is taken by
+ * {@link takeConversationTurn}, which reaches `coach-client` (and so
+ * `server-only`) and keeps this module off the client by construction. What is
+ * left here is the part that is Coach Chat and not a turn: the prompt, and the
+ * Reference the athlete brought into the thread. The athlete is always resolved
+ * from the authenticated session upstream; a client-supplied conversation or
+ * session id is checked against that owner by the repository, never trusted
+ * (ADR 0006).
  *
  * Unlike the Weekly Session, a Coach Chat is never "ended" by the app — it is
  * the resting conversation, so it stays open and is resumed on every visit.
@@ -114,9 +109,7 @@ export async function getOpenCoachChat(athleteId: string): Promise<CoachChatStat
   return { conversationId: open.id, messages: await getMessages(open.id) };
 }
 
-export type SendChatResult =
-  | { ok: true; conversationId: string; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
+export type SendChatResult = ConversationTurnResult;
 
 /**
  * Sends the athlete's turn and returns the Coach's reply, creating the chat on
@@ -126,16 +119,16 @@ export type SendChatResult =
  * about it, and may then move on.
  *
  * Refuses an empty message, a conversation that is not this athlete's, and a
- * Coach that could not be reached.
+ * Coach that could not be reached — all of that, and the ordering guarantee that
+ * nothing is written until the Coach has answered, belong to
+ * {@link takeConversationTurn}.
  *
- * **Nothing is written until the Coach has answered.** The turn and the reply
- * land together, in one append, after the API call returns. Persisting the
- * athlete's message first is the obvious order and the wrong one: the Anthropic
- * call is the step that realistically fails, and doing it second leaves a
- * transcript holding a question with no answer — which the athlete cannot retry
- * without their message appearing twice. Failing before any write means the
- * client can simply hand the draft back (`coach-chat.tsx`), and the conversation
- * is exactly as it was.
+ * `renderSystem` runs inside that turn's failure boundary rather than before it,
+ * and deliberately: it reads the athlete's equipment and Reference and runs them
+ * through the prompt builder's identifier assertion, which throws. A session
+ * note is free text and unvalidated, so this is reachable — an athlete who typed
+ * an email into one and then discussed that session would otherwise get an
+ * unhandled rejection instead of an answer.
  */
 export async function sendCoachChatMessage(
   athlete: Athlete,
@@ -145,66 +138,16 @@ export async function sendCoachChatMessage(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<SendChatResult> {
-  const trimmed = content.trim();
-  if (!trimmed) return { ok: false, reason: 'empty' };
-
-  // Ownership is checked before any work: a forged conversation id must not
-  // reach a prompt or an API call, let alone a write (ADR 0006).
-  const existing = conversationId
-    ? await getOwnedConversation(athlete.id, conversationId)
-    : null;
-  if (conversationId && !existing) return { ok: false, reason: 'not-owner' };
-
-  const transcript = conversationId ? await getMessages(conversationId) : [];
-
-  let replyText: string;
-  try {
-    // `renderSystem` is inside the boundary too, not just the API call: it reads
-    // the athlete's equipment and Reference and runs them through the prompt
-    // builder's identifier assertion, which throws. A session note is free text
-    // and unvalidated, so this is reachable — an athlete who typed an email into
-    // one and then discussed that session would otherwise get an unhandled
-    // rejection instead of an answer.
-    const system = await renderSystem(athlete, today, language, referenceSessionId);
-    replyText = (
-      await callCoach({
-        system,
-        // The athlete's turn joins the history here rather than being stored
-        // first — same messages the API would have seen, no orphan on failure.
-        messages: [...toApiMessages(transcript), { role: 'user', content: trimmed }],
-        maxTokens: CHAT_MAX_TOKENS,
-      })
-    ).text;
-  } catch (error) {
-    // Told apart deliberately: "the Coach could not be reached" invites a retry,
-    // and retrying refused content just fails again. The athlete needs to know
-    // which one happened.
-    const reason = refusalReason(error);
-    // The athlete sees a sentence; without this line the server saw nothing at
-    // all, and a tester who churned after a failure looked exactly like a
-    // tester who simply stopped caring (`showable-version/05`, item 2).
-    logCoachFailure({
-      surface: 'coach_chat',
-      athleteId: athlete.id,
-      conversationId,
-      error,
-      reason,
-    });
-    return { ok: false, reason };
-  }
-
-  // Lazily created: the resting conversation costs nothing until it is used,
-  // and a Coach that never answered should not mint an empty one.
-  const id =
-    conversationId ??
-    (await createConversation({ athleteId: athlete.id, kind: 'coach_chat' })).id;
-
-  const appended = await appendMessages(athlete.id, id, [
-    { role: 'athlete', content: trimmed },
-    { role: 'coach_ai', content: replyText },
-  ]);
-  if (!appended) return { ok: false, reason: 'not-owner' };
-
-  return { ok: true, conversationId: id, messages: await getMessages(id) };
+  return takeConversationTurn({
+    athleteId: athlete.id,
+    kind: 'coach_chat',
+    surface: 'coach_chat',
+    conversationId,
+    content,
+    maxTokens: CHAT_MAX_TOKENS,
+    prepare: async () => ({
+      system: await renderSystem(athlete, today, language, referenceSessionId),
+    }),
+  });
 }
 

@@ -6,6 +6,7 @@ import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { submittedFromView } from '@/features/feedback/feedback';
 import { getOpenInterview } from '@/features/feedback/feedback-service';
 import { FeedbackInterview } from '../../feedback-interview';
 
@@ -27,10 +28,16 @@ export const dynamic = 'force-dynamic';
  */
 export default async function FeedbackPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { locale } = await params;
+  // The View the escape hatch was opened from, which this page cannot observe
+  // for itself. Read here rather than in the client component so the page keeps
+  // its single Suspense-free render; narrowed again server-side before storage.
+  const { from } = await searchParams;
   if (!hasLocale(routing.locales, locale)) {
     notFound();
   }
@@ -48,6 +55,7 @@ export default async function FeedbackPage({
 
   return (
     <FeedbackInterview
+      openedFrom={submittedFromView(from)}
       initial={
         initial
           ? {

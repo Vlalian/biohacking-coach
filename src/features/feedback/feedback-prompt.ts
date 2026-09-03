@@ -25,7 +25,14 @@ import { assemble, block, languageDirective } from '@/features/coach/prompt-bloc
  * Exported so the service and its tests use the same string the prompt does. A
  * paraphrase would measure something else: this exact question is what
  * `CONTEXT.md` calls "the single most valuable qualitative data point", because
- * it separates genuine delegation to the Coach from passive compliance.
+ * it separates genuine delegation to the Coach from passive compliance. That is
+ * why the ASK THIS NOW block demands it word for word.
+ *
+ * Nothing *depends* on the model complying, and that is deliberate. `feedback.ts`
+ * decides when the question was asked and answered from position in the
+ * transcript, never by matching this string — an earlier version matched, and a
+ * paraphrase then meant the answer was never recorded and the question was
+ * re-asked every turn.
  */
 export const TRUST_SIGNAL_QUESTION =
   "Would you have done something different if you'd decided alone?";
@@ -65,7 +72,7 @@ export function buildInterviewPrompt({
 
     askTrustSignal
       ? block('ASK THIS NOW', [
-          `Work this question in, close to naturally, as your next question: "${TRUST_SIGNAL_QUESTION}"`,
+          `Ask this as your next question, word for word: "${TRUST_SIGNAL_QUESTION}". Lead into it however the conversation makes natural, but do not reword the question itself.`,
           'Then follow up once on the reason. The reason is the part that is worth anything; a yes or a no on its own is not.',
           'Ask it exactly once. Do not return to it later.',
         ])

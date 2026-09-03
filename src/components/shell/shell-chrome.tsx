@@ -152,7 +152,15 @@ export function ShellChrome({
           // Coach's Roster, which the same shell has wrapped since PR #41.
           <div className="flex flex-col gap-3">
             <Link
-              href={VIEW_PATH.feedback}
+              // Carries the View being left. The interview is its own page, so
+              // `/feedback` is the only path it can see for itself — every
+              // fallback row recorded that and nothing else until this was
+              // passed. `from` is client-supplied by construction and narrowed
+              // server-side (`submittedFromView`).
+              href={{
+                pathname: VIEW_PATH.feedback,
+                query: pathname === VIEW_PATH.feedback ? undefined : { from: pathname },
+              }}
               className={ESCAPE_HATCH_CLASS}
               onClick={() => setNavDrawerOpen(false)}
             >

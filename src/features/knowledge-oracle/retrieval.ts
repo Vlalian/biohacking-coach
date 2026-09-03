@@ -1,4 +1,3 @@
-import type { KnowledgeSourceRow } from '@/db/schema';
 import type { Embedder } from './embedder';
 import { buildOracleQuery, type OracleQuery } from './query';
 
@@ -37,19 +36,45 @@ export const MIN_SIMILARITY = 0.3;
  * How many sources the reference list names at most.
  *
  * Ten references under a three-sentence answer reads as noise rather than rigour
- * (code-health/06).
+ * (code-health/06). Equal to {@link TOP_K} rather than below it, and the two must
+ * be moved together: the cap is applied by *source*, so a passage whose source
+ * did not make the cap is dropped with it. Set to 5 against a TOP_K of 6, six
+ * hits from six distinct sources silently returned five passages — a
+ * result-shrinking knob nobody asked for. At TOP_K it can never bind, because
+ * six hits cannot name more than six sources; raise TOP_K and it starts to.
  */
-export const MAX_CITATIONS = 5;
+export const MAX_CITATIONS = TOP_K;
 
 // ── The ports ─────────────────────────────────────────────────────────────────
 
-/** One chunk the vector search matched, with the source row it belongs to. */
+/**
+ * A source of the corpus, as retrieval needs one.
+ *
+ * Declared here rather than imported as `KnowledgeSourceRow`: this module is the
+ * pure core of the Oracle, and the core imports nothing from the database layer
+ * (AGENTS.md). The row satisfies it structurally, so the repository still hands
+ * its rows straight in — what changes is which way the dependency points.
+ */
+export interface KnowledgeSource {
+  id: string;
+  slug: string;
+  title: string;
+  authors: string;
+  year: number;
+  doi: string | null;
+  pmcid: string | null;
+  licence: string;
+  licenceUrl: string;
+  attribution: string;
+}
+
+/** One chunk the vector search matched, with the source it belongs to. */
 export interface ChunkSearchResult {
   text: string;
   ordinal: number;
   /** Cosine similarity in [0, 1] — already converted from distance. */
   similarity: number;
-  source: KnowledgeSourceRow;
+  source: KnowledgeSource;
 }
 
 /**
@@ -126,7 +151,7 @@ export interface RetrievalResult {
  * title unlinked — rather than a dead entry, which is the thing code-health/06
  * asked to be decided rather than discovered.
  */
-export function citationUrl(source: KnowledgeSourceRow): string | null {
+export function citationUrl(source: KnowledgeSource): string | null {
   if (source.doi) return `https://doi.org/${source.doi}`;
   if (source.pmcid) return `https://www.ncbi.nlm.nih.gov/pmc/articles/${source.pmcid}/`;
   return null;

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message } from '@/features/coach/conversation';
+import { DirectIdentifierError } from '@/lib/identifiers';
 import { TRUST_SIGNAL_QUESTION } from './feedback-prompt';
 
 const {
@@ -81,7 +82,7 @@ describe('sendFeedbackTurn', () => {
   beforeEach(() => {
     callCoach.mockReset().mockResolvedValue({ text: 'Which session was it?', toolCalls: [] });
     createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
-    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1' });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'feedback' });
     appendMessages.mockReset().mockResolvedValue([]);
     getMessages.mockReset().mockResolvedValue([]);
     recordTrustSignal.mockClear();
@@ -223,9 +224,16 @@ describe('sendFeedbackTurn', () => {
   });
 
   it('stores the tester’s answer to the Trust Signal against this interview', async () => {
+    // Three stored tester turns: the third carried the ask, so this one is the
+    // answer to it. Position, not the interviewer's wording — the prompt is free
+    // to lead into the question however it likes.
     getMessages.mockResolvedValue([
       turn('athlete', 0),
-      turn('coach_ai', 1, `Right. ${TRUST_SIGNAL_QUESTION}`),
+      turn('coach_ai', 1),
+      turn('athlete', 2),
+      turn('coach_ai', 3),
+      turn('athlete', 4),
+      turn('coach_ai', 5, 'And if nobody had told you — same call?'),
     ]);
 
     await sendFeedbackTurn('athlete_1', 'conv_1', 'no, I would have rested');
@@ -239,9 +247,16 @@ describe('sendFeedbackTurn', () => {
 
   it('does not store a second answer once one exists', async () => {
     hasTrustSignal.mockResolvedValue(true);
+    // Three stored tester turns: the third carried the ask, so this one is the
+    // answer to it. Position, not the interviewer's wording — the prompt is free
+    // to lead into the question however it likes.
     getMessages.mockResolvedValue([
       turn('athlete', 0),
-      turn('coach_ai', 1, `Right. ${TRUST_SIGNAL_QUESTION}`),
+      turn('coach_ai', 1),
+      turn('athlete', 2),
+      turn('coach_ai', 3),
+      turn('athlete', 4),
+      turn('coach_ai', 5, 'And if nobody had told you — same call?'),
     ]);
 
     await sendFeedbackTurn('athlete_1', 'conv_1', 'asked again');
@@ -251,13 +266,80 @@ describe('sendFeedbackTurn', () => {
 
   it('does not store an answer the model never got', async () => {
     callCoach.mockRejectedValue(new Error('upstream 529'));
+    // Three stored tester turns: the third carried the ask, so this one is the
+    // answer to it. Position, not the interviewer's wording — the prompt is free
+    // to lead into the question however it likes.
     getMessages.mockResolvedValue([
       turn('athlete', 0),
-      turn('coach_ai', 1, `Right. ${TRUST_SIGNAL_QUESTION}`),
+      turn('coach_ai', 1),
+      turn('athlete', 2),
+      turn('coach_ai', 3),
+      turn('athlete', 4),
+      turn('coach_ai', 5, 'And if nobody had told you — same call?'),
     ]);
 
     await sendFeedbackTurn('athlete_1', 'conv_1', 'no, I would have rested');
 
     expect(recordTrustSignal).not.toHaveBeenCalled();
+  });
+});
+
+describe('what the tester is told when a turn is refused', () => {
+  beforeEach(() => {
+    callCoach.mockReset();
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'feedback' });
+    getMessages.mockReset().mockResolvedValue([]);
+    appendMessages.mockReset().mockResolvedValue([]);
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    hasTrustSignal.mockReset().mockResolvedValue(false);
+    recordTrustSignal.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('never shows the tester unsafe-content, which cannot happen on this surface', async () => {
+    // The interview prompt assembles nothing from the athlete's record, so the
+    // identifier assertion has nothing to throw over. Should one ever arrive
+    // anyway, the tester gets the refusal that invites a retry rather than a
+    // sentence telling them to edit content they did not write.
+    callCoach.mockRejectedValue(new DirectIdentifierError('email'));
+
+    const result = await sendFeedbackTurn('athlete_1', 'conv_1', 'the plan was wrong');
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+  });
+
+  it('passes every other refusal through as it is', async () => {
+    const result = await sendFeedbackTurn('athlete_1', 'conv_1', '   ');
+
+    expect(result).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  it('reports a conversation that is not this tester’s as not-owner', async () => {
+    getOwnedConversation.mockResolvedValue(null);
+
+    const result = await sendFeedbackTurn('athlete_1', 'conv_other', 'let me in');
+
+    expect(result).toEqual({ ok: false, reason: 'not-owner' });
+  });
+
+  it('stores the Trust Signal answer trimmed, as the transcript stores it', async () => {
+    // The turn and the answer are the same words; storing one padded and the
+    // other not would make the two disagree for whoever reads them side by side.
+    callCoach.mockResolvedValue({ text: 'Thanks.', toolCalls: [] });
+    getMessages.mockResolvedValue([
+      turn('athlete', 0),
+      turn('coach_ai', 1),
+      turn('athlete', 2),
+      turn('coach_ai', 3),
+      turn('athlete', 4),
+      turn('coach_ai', 5, 'And if nobody had told you — same call?'),
+    ]);
+
+    await sendFeedbackTurn('athlete_1', 'conv_1', '  no, I would have rested  ');
+
+    expect(recordTrustSignal).toHaveBeenCalledWith({
+      athleteId: 'athlete_1',
+      conversationId: 'conv_1',
+      body: 'no, I would have rested',
+    });
   });
 });

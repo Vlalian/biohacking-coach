@@ -76,7 +76,7 @@ describe('submitFallbackFeedbackAction', () => {
   it('stores the text with the View the tester was on', async () => {
     const result = await submitFallbackFeedbackAction({
       body: 'the calendar never loaded',
-      view: 'training-plan',
+      view: '/training-plan',
       coachFailureReason: null,
     });
 
@@ -84,7 +84,7 @@ describe('submitFallbackFeedbackAction', () => {
     expect(recordFallback).toHaveBeenCalledWith({
       athleteId: 'athlete_1',
       body: 'the calendar never loaded',
-      view: 'training-plan',
+      view: '/training-plan',
       coachFailureReason: null,
     });
   });
@@ -95,7 +95,7 @@ describe('submitFallbackFeedbackAction', () => {
     // Coach is broken, is the tester with the most to say.
     const result = await submitFallbackFeedbackAction({
       body: 'I withdrew consent and now nothing works',
-      view: 'privacy',
+      view: '/privacy',
       coachFailureReason: null,
     });
 

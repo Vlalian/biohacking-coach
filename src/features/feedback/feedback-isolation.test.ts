@@ -7,19 +7,24 @@ import { athleteFeedback } from '@/db/schema';
 import type { Conversation } from '@/features/coach/conversation';
 import { selectOpenConversations } from '@/features/coach/conversation';
 
-const { getLatestOpenConversation } = vi.hoisted(() => ({
-  getLatestOpenConversation: vi.fn(() => Promise.resolve(null)),
-}));
+const { getLatestOpenConversation, getOwnedConversation, getMessages, callCoach } = vi.hoisted(
+  () => ({
+    getLatestOpenConversation: vi.fn(() => Promise.resolve(null)),
+    getOwnedConversation: vi.fn(),
+    getMessages: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
+    callCoach: vi.fn(),
+  }),
+);
 
 vi.mock('@/features/coach/conversation-repository', () => ({
   getLatestOpenConversation,
-  getMessages: vi.fn(() => Promise.resolve([])),
+  getMessages,
   createConversation: vi.fn(),
-  getOwnedConversation: vi.fn(),
+  getOwnedConversation,
   appendMessages: vi.fn(),
   getOwnedSession: vi.fn(),
 }));
-vi.mock('@/features/coach/coach-client', () => ({ callCoach: vi.fn() }));
+vi.mock('@/features/coach/coach-client', () => ({ callCoach }));
 vi.mock('@/features/equipment/equipment-repository', () => ({
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
 }));
@@ -28,7 +33,9 @@ vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek: vi.fn(() => Promise.resolve([])),
 }));
 
-const { getOpenCoachChat } = await import('@/features/coach/coach-chat-service');
+const { getOpenCoachChat, sendCoachChatMessage } = await import(
+  '@/features/coach/coach-chat-service'
+);
 
 function conversation(kind: Conversation['kind'], id: string): Conversation {
   return {
@@ -58,6 +65,33 @@ describe('a feedback interview is not a Coach Chat', () => {
     await getOpenCoachChat('athlete_1');
 
     expect(getLatestOpenConversation).toHaveBeenCalledWith('athlete_1', 'coach_chat');
+  });
+
+  it('cannot be resumed into a Coach Chat turn, even by its owner', async () => {
+    // The acceptance criterion `showable-version/07` asks to be proven by a test
+    // rather than by inspection: a feedback transcript never reaches
+    // `buildChatPrompt`. It nearly could. Ownership is by athlete, so the
+    // interview passed the only check a turn used to make, and a client sending
+    // its id to the chat action would have had the complaint resumed as chat
+    // history — resent to the Coach on every later turn from then on.
+    const athlete = { id: 'athlete_1' } as Parameters<typeof sendCoachChatMessage>[0];
+    getOwnedConversation.mockResolvedValue(conversation('feedback', 'conv_feedback'));
+    getMessages.mockResolvedValue([
+      {
+        id: 'm1',
+        role: 'athlete',
+        content: 'the long runs were pointless and this app annoyed me on Tuesday',
+        seq: 0,
+        createdAt: new Date('2026-09-01T09:00:00Z'),
+      },
+    ]);
+
+    const result = await sendCoachChatMessage(athlete, 'conv_feedback', 'hello', '2026-09-01');
+
+    expect(result).toEqual({ ok: false, reason: 'not-owner' });
+    // The load-bearing half: refused *before* the prompt is built, so the
+    // interview's words never reach the model at all.
+    expect(callCoach).not.toHaveBeenCalled();
   });
 });
 

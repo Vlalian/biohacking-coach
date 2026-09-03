@@ -1,10 +1,14 @@
-import { CONVERSATION_KINDS, type ConversationRow, type MessageRow } from '@/db/schema';
+import type { ConversationRow, MessageRow } from '@/db/schema';
 import type { CoachMessage } from './coach-client';
+import type { ConversationKind } from '@/lib/conversation-kinds';
 
 /**
- * The kinds of Coach conversation, derived from the schema's
- * {@link CONVERSATION_KINDS} so the union and the database CHECK constraint are
- * literally the same list — they used to be two, edited by hand together.
+ * The kinds of Coach conversation, defined once in
+ * {@link import('@/lib/conversation-kinds').CONVERSATION_KINDS} and re-exported
+ * here, where the rest of the Coach feature already looks for it. That constant
+ * is also what builds the database CHECK constraint, so the union and the
+ * constraint are literally the same list — they used to be two, edited by hand
+ * together.
  *
  * Was six. `negotiation` and `reflection` were removed 2026-08-18: neither was
  * ever written by any code path. Session Negotiation is not a conversation kind
@@ -23,7 +27,7 @@ import type { CoachMessage } from './coach-client';
  * living inside `coach_chat`, whose whole transcript is resent to the Coach on
  * every later turn.
  */
-export type ConversationKind = (typeof CONVERSATION_KINDS)[number];
+export type { ConversationKind };
 
 export type MessageRole = 'athlete' | 'coach_ai' | 'head_coach';
 

@@ -256,6 +256,25 @@ describe('the citations retrieval returns', () => {
     const cited = new Set(result.citations.map((c) => c.sourceId));
     expect(result.passages.every((p) => cited.has(p.sourceId))).toBe(true);
   });
+
+  it('does not drop a passage at the defaults, however many sources the hits span', async () => {
+    // The cap dropping passages is correct *when it binds*; the defaults binding
+    // it was not. MAX_CITATIONS sat at 5 under a TOP_K of 6, so a question
+    // answered by six different papers quietly came back with five passages. The
+    // two are tied together now, and this is what would notice them coming apart.
+    const sixDistinctSources = ['a', 'b', 'c', 'd', 'e', 'f'].map((id, i) =>
+      hit({ similarity: 0.9 - i * 0.05, source: source({ id }) }),
+    );
+
+    const result = await retrievePassages({
+      embedder: fakeEmbedder(),
+      search: fakeSearch(sixDistinctSources),
+      query: { question: 'q' },
+    });
+
+    expect(result.passages).toHaveLength(sixDistinctSources.length);
+    expect(result.citations).toHaveLength(sixDistinctSources.length);
+  });
 });
 describe('retrievePassages edge cases the mutants found', () => {
   it('returns empty when the embedder yields no vector', async () => {

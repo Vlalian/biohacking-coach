@@ -1,6 +1,7 @@
 'use server';
 
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
+import { knownFailureReason, submittedFromView } from '@/features/feedback/feedback';
 import { recordFallback } from '@/features/feedback/feedback-repository';
 import {
   sendFeedbackTurn,
@@ -49,26 +50,17 @@ export async function sendFeedbackTurnAction(input: {
   );
 }
 
-/**
- * The refusals the app itself produces. The client tells us which one it just
- * saw so the stored row says whether this tester was pushed to the box or chose
- * it — narrowed to this set rather than echoed, because it is a client-supplied
- * string landing in a column someone will later group by.
- */
-const KNOWN_FAILURE_REASONS = ['coach-unavailable', 'unsafe-content', 'consent-required'] as const;
-type KnownFailureReason = (typeof KNOWN_FAILURE_REASONS)[number];
-
-function knownReason(reason: string | null): string | null {
-  return KNOWN_FAILURE_REASONS.includes(reason as KnownFailureReason) ? reason : null;
-}
-
 export type FallbackResult =
   | { ok: true }
   | { ok: false; reason: 'empty' | 'not-authenticated' };
 
 export async function submitFallbackFeedbackAction(input: {
   body: string;
-  /** The View the tester came from, for context when someone reads this later. */
+  /**
+   * The View the tester came from, for context when someone reads this later —
+   * carried by the escape hatch's own link, since the interview is its own page
+   * and cannot observe where the tester was. Narrowed on arrival.
+   */
   view: string | null;
   coachFailureReason: string | null;
 }): Promise<FallbackResult> {
@@ -81,8 +73,8 @@ export async function submitFallbackFeedbackAction(input: {
   await recordFallback({
     athleteId,
     body,
-    view: input.view,
-    coachFailureReason: knownReason(input.coachFailureReason),
+    view: submittedFromView(input.view),
+    coachFailureReason: knownFailureReason(input.coachFailureReason),
   });
   return { ok: true };
 }

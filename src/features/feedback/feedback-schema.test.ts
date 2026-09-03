@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getTableConfig } from 'drizzle-orm/pg-core';
-import { athleteFeedback, conversations, CONVERSATION_KINDS } from '@/db/schema';
+import { athleteFeedback, conversations } from '@/db/schema';
+import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
 import type { ConversationKind } from '@/features/coach/conversation';
 
 /**

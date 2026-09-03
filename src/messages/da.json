@@ -556,7 +556,6 @@
     "error": "Det gik ikke igennem. Din tekst står der stadig — prøv igen, eller brug boksen nedenfor.",
     "consentRequired": "Interviewet kræver AI-samtykke, som du ikke har givet. Boksen nedenfor virker uanset hvad.",
     "consentRequiredLink": "Privatliv & vilkår",
-    "unsafeContent": "Det kunne ikke sendes — det ser ud til at indeholde kontaktoplysninger. Fjern dem, eller brug boksen nedenfor.",
     "fallbackTitle": "Eller skriv det bare ned",
     "fallbackBody": "Ingen samtale, ingen AI. Denne boks virker, også når alt andet ikke gør.",
     "fallbackLabel": "Din feedback",

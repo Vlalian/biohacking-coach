@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, CornerDownLeft } from 'lucide-react';
-import { Link, usePathname } from '@/i18n/navigation';
+import { Link } from '@/i18n/navigation';
+import type { FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
 import type { UiMessage } from './weekly-session';
 
@@ -26,23 +27,28 @@ export interface FeedbackInterviewInitial {
   messages: UiMessage[];
 }
 
-type Notice =
-  | { kind: 'none' }
-  | { kind: 'error' }
-  | { kind: 'consentRequired' }
-  | { kind: 'unsafeContent' };
+type Notice = { kind: 'none' } | { kind: 'error' } | { kind: 'consentRequired' };
 
-/** What the notice says happened, as the fallback row will record it. */
-const NOTICE_REASON: Record<Notice['kind'], string | null> = {
+/**
+ * What the notice says happened, in the terms the fallback row records — from
+ * {@link FALLBACK_FAILURE_REASONS}, so the client cannot tag a submission with a
+ * reason the server would then throw away.
+ */
+const NOTICE_REASON: Record<Notice['kind'], FallbackFailureReason | null> = {
   none: null,
   error: 'coach-unavailable',
   consentRequired: 'consent-required',
-  unsafeContent: 'unsafe-content',
 };
 
-export function FeedbackInterview({ initial }: { initial: FeedbackInterviewInitial | null }) {
+export function FeedbackInterview({
+  initial,
+  openedFrom,
+}: {
+  initial: FeedbackInterviewInitial | null;
+  /** The View the escape hatch was opened from, resolved by the page. */
+  openedFrom: string | null;
+}) {
   const t = useTranslations('FeedbackInterview');
-  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -70,11 +76,7 @@ export function FeedbackInterview({ initial }: { initial: FeedbackInterviewIniti
 
       if (!result.ok) {
         setNotice(
-          result.reason === 'consent-required'
-            ? { kind: 'consentRequired' }
-            : result.reason === 'unsafe-content'
-              ? { kind: 'unsafeContent' }
-              : { kind: 'error' },
+          result.reason === 'consent-required' ? { kind: 'consentRequired' } : { kind: 'error' },
         );
         // Hand it back — a failure must never eat what they typed, least of all
         // on the surface they came to because something already failed.
@@ -142,8 +144,6 @@ export function FeedbackInterview({ initial }: { initial: FeedbackInterviewIniti
                       {t('consentRequiredLink')}
                     </Link>
                   </>
-                ) : notice.kind === 'unsafeContent' ? (
-                  t('unsafeContent')
                 ) : (
                   t('error')
                 )}
@@ -183,7 +183,7 @@ export function FeedbackInterview({ initial }: { initial: FeedbackInterviewIniti
       </section>
 
       <FallbackBox
-        view={pathname}
+        view={openedFrom}
         coachFailureReason={NOTICE_REASON[notice.kind]}
         t={t}
       />
@@ -203,7 +203,7 @@ function FallbackBox({
   t,
 }: {
   view: string | null;
-  coachFailureReason: string | null;
+  coachFailureReason: FallbackFailureReason | null;
   t: ReturnType<typeof useTranslations<'FeedbackInterview'>>;
 }) {
   const [pending, startTransition] = useTransition();

@@ -15,6 +15,18 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
+import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
+
+/**
+ * A closed set as a SQL literal list, for a CHECK constraint.
+ *
+ * `sql.raw` rather than a bound parameter on purpose: this string is rendered
+ * into DDL by `drizzle-kit generate`, where a placeholder has nothing to bind
+ * to. The inputs are module constants, never anything a request can reach.
+ */
+function quotedList(values: readonly string[]): string {
+  return values.map((value) => `'${value}'`).join(', ');
+}
 
 /**
  * The athlete.
@@ -344,40 +356,6 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * Retention and deletion of conversations are a GDPR-track question, not schema —
  * deliberately not decided here.
  */
-/**
- * The closed set of conversation kinds — the single list both the database
- * constraint and the `ConversationKind` union are built from.
- *
- * Was six until 2026-08-18 (`negotiation` and `reflection` were never written by
- * any code path; migration 0011 removed them). `feedback` joined 2026-09-01 with
- * the Feedback Interview (`showable-version/07`): an interview is deliberately
- * *not* a coaching behaviour, which is the argument for its own kind rather than
- * hiding it inside `coach_chat`, where it would be resent to the Coach as
- * training talk on every later turn.
- *
- * It lives here, in the schema, because `features/coach/conversation.ts` already
- * imports from this module — so the union can derive from this constant without
- * a cycle, and a kind added to one can never be missing from the other.
- */
-export const CONVERSATION_KINDS = [
-  'weekly_session',
-  'coach_chat',
-  'onboarding',
-  'coach_briefing',
-  'feedback',
-] as const;
-
-/**
- * A closed set as a SQL literal list, for a CHECK constraint.
- *
- * `sql.raw` rather than a bound parameter on purpose: this string is rendered
- * into DDL by `drizzle-kit generate`, where a placeholder has nothing to bind
- * to. The inputs are module constants, never anything a request can reach.
- */
-function quotedList(values: readonly string[]): string {
-  return values.map((value) => `'${value}'`).join(', ');
-}
-
 export const conversations = pgTable(
   'conversations',
   {
@@ -395,8 +373,8 @@ export const conversations = pgTable(
     index('conversations_athlete_idx').on(table.athleteId, table.createdAt),
     // The conversation kinds are a closed set — encoded here so a bad write
     // fails at the database, not silently downstream. Built from
-    // {@link CONVERSATION_KINDS} rather than repeating the list: the union in
-    // `features/coach/conversation.ts` derives from the same constant, so the
+    // {@link CONVERSATION_KINDS} in `lib/conversation-kinds.ts` rather than
+    // repeating the list: `ConversationKind` is that same constant, so the
     // type and the constraint cannot drift apart. They used to be two lists that
     // had to be edited together, and three tickets in a row noted it.
     check(
@@ -446,6 +424,9 @@ export const messages = pgTable(
 export type MessageRow = typeof messages.$inferSelect;
 export type NewMessageRow = typeof messages.$inferInsert;
 
+/** The two kinds of row {@link athleteFeedback} holds. */
+export const ATHLETE_FEEDBACK_KINDS = ['fallback', 'trust_signal'] as const;
+
 /**
  * The two things a Feedback Interview produces that are **not** conversation
  * turns (`showable-version/07`).
@@ -471,9 +452,6 @@ export type NewMessageRow = typeof messages.$inferInsert;
  *
  * Nothing here is ever shown to a Head Coach or scored back to the athlete.
  */
-/** The two kinds of row this table holds. See {@link athleteFeedback}. */
-export const ATHLETE_FEEDBACK_KINDS = ['fallback', 'trust_signal'] as const;
-
 export const athleteFeedback = pgTable(
   'athlete_feedback',
   {
@@ -500,7 +478,7 @@ export const athleteFeedback = pgTable(
       sql`${table.kind} IN (${sql.raw(quotedList(ATHLETE_FEEDBACK_KINDS))})`,
     ),
     // One Trust Signal answer per athlete. The question is asked once by
-    // construction (`shouldAskTrustSignal`); this is the database refusing to
+    // construction (`trustSignalState`); this is the database refusing to
     // let a second answer overwrite the first if it ever is asked twice.
     uniqueIndex('athlete_feedback_trust_signal_once')
       .on(table.athleteId)

@@ -1,4 +1,5 @@
 import type { SessionHistoryItem } from '@/features/coach/check-in';
+import type { PlanType } from '@/features/coach/weekly-session';
 
 /**
  * The training history behind the two generated athletes on the Head Coach's
@@ -26,7 +27,7 @@ import type { SessionHistoryItem } from '@/features/coach/check-in';
 /** One generated session, in the shape the seed inserts. */
 export interface SyntheticSession {
   date: string;
-  type: string;
+  type: PlanType;
   origin: 'coach';
   status: 'completed' | 'skipped';
   duration: number;
@@ -54,17 +55,24 @@ export interface SyntheticProfile {
   /** Sessions per week, before skips. The first-timer trains fewer days. */
   sessionsPerWeek: number;
   /** Minutes per session by type, before the weekly variation is applied. */
-  durations: Record<string, number>;
-  /** The weekly template, drawn from in order. Its mix is the athlete's shape. */
-  week: readonly string[];
+  durations: Record<PlanType, number>;
+  /**
+   * The weekly template, drawn from in order. Its mix is the athlete's shape.
+   *
+   * {@link PlanType} rather than plain strings, and that is a constraint rather
+   * than tidiness: every row this module emits carries `origin: 'coach'`, and
+   * the Coach may only propose these four. Strength is an *Athlete* Session type
+   * (`athlete-session-rules.ts`), so a coach-origin Strength row is one the
+   * app's own rules would refuse — Alex's template carried one until 2026-09-03.
+   */
+  week: readonly PlanType[];
 }
 
-const ZONES: Record<string, string | null> = {
+const ZONES: Record<PlanType, string | null> = {
   Endurance: 'Zone 2',
   Tempo: 'Zone 3',
   Intensity: 'Zone 4',
   Recovery: 'Zone 1',
-  Strength: null,
 };
 
 /**
@@ -91,8 +99,8 @@ export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
     communicationStyle:
       'The athlete is a first-time Ironman athlete. Keep coaching encouraging and process-focused. Avoid jargon. Celebrate effort and consistency.',
     sessionsPerWeek: 4,
-    durations: { Endurance: 55, Recovery: 35, Tempo: 45, Intensity: 35, Strength: 40 },
-    week: ['Endurance', 'Recovery', 'Tempo', 'Endurance', 'Strength', 'Intensity'],
+    durations: { Endurance: 55, Recovery: 35, Tempo: 45, Intensity: 35 },
+    week: ['Endurance', 'Recovery', 'Tempo', 'Endurance', 'Endurance', 'Intensity'],
   },
   {
     id: 'c2f8d1e3-4a5b-4c6d-9e7f-8a9b0c1d2e3f',
@@ -103,7 +111,7 @@ export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
     communicationStyle:
       'The athlete is a veteran Ironman athlete. Tracks Heart Rate, Power. Use data-aware language. Be direct and performance-focused. Skip beginner explanations entirely.',
     sessionsPerWeek: 6,
-    durations: { Endurance: 110, Recovery: 45, Tempo: 70, Intensity: 60, Strength: 45 },
+    durations: { Endurance: 110, Recovery: 45, Tempo: 70, Intensity: 60 },
     week: ['Intensity', 'Endurance', 'Tempo', 'Intensity', 'Endurance', 'Recovery'],
   },
 ] as const;
@@ -182,7 +190,7 @@ function reflectionFor(afterIntensity: boolean, random: () => number): Reflectio
  */
 function buildSession(
   profile: SyntheticProfile,
-  type: string,
+  type: PlanType,
   date: string,
   skipped: boolean,
   reflection: Reflection | null,
@@ -196,7 +204,7 @@ function buildSession(
     status: skipped ? 'skipped' : 'completed',
     // ±10% so two athletes on the same template still look hand-made.
     duration: Math.round(profile.durations[type] * (0.9 + random() * 0.2)),
-    zone: ZONES[type] ?? null,
+    zone: ZONES[type],
     title: `${type} session`,
     note: null,
     feedbackBody: rating.body,
