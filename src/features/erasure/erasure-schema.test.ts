@@ -78,18 +78,75 @@ describe('erasure reaches every table below the athlete', () => {
     expect(tablesBelowAthlete(edges).size).toBeGreaterThan(5);
   });
 
-  it('cascades every foreign key on the path down from athlete', () => {
-    const below = tablesBelowAthlete(edges);
+  /**
+   * Everything a `DELETE FROM athlete` actually removes: reachable from
+   * `athlete` following **cascading edges only**.
+   */
+  function tablesErasedByCascade(input: Edge[]): Set<string> {
+    const reachable = new Set<string>(['athlete']);
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const edge of input) {
+        if (edge.onDelete !== 'cascade') continue;
+        if (reachable.has(edge.parent) && !reachable.has(edge.table)) {
+          reachable.add(edge.table);
+          changed = true;
+        }
+      }
+    }
+    reachable.delete('athlete');
+    return reachable;
+  }
 
-    const notCascading = edges
-      .filter((e) => below.has(e.table) && (below.has(e.parent) || e.parent === 'athlete'))
-      .filter((e) => e.onDelete !== 'cascade')
-      .map((e) => `${e.table}.${e.column} -> ${e.parent} (onDelete: ${e.onDelete})`);
+  it('leaves no table below athlete without a cascading path to it', () => {
+    // Asked per TABLE, not per EDGE — a correction, not a relaxation.
+    //
+    // The question this guard exists to answer is "would an erasure leave rows
+    // behind?", and rows are left behind only when NO cascading path reaches
+    // their table. One non-cascading edge does not mean that.
+    //
+    // The per-edge form gave a false positive as soon as a table had two
+    // parents. `detected_activities` hangs off `athlete` with a cascade, so an
+    // erasure takes every row of it — and it *also* points sideways at
+    // `sessions` with `set null`, which is deliberate: deleting a session must
+    // not destroy an uploaded activity the athlete has not resolved yet.
+    // Cascading that edge to satisfy the old rule would have quietly deleted
+    // athlete data, which is the exact harm showable-version/14 exists to
+    // remove.
+    //
+    // Nothing the old rule caught escapes this one. A table whose only path up
+    // is non-cascading is still unreachable and still fails; a new table added
+    // without a cascade has no path at all and still fails. What no longer
+    // fails is a table that is genuinely erased. The test below proves it.
+    const below = tablesBelowAthlete(edges);
+    const erased = tablesErasedByCascade(edges);
+
+    const leftBehind = [...below]
+      .filter((table) => !erased.has(table))
+      .map((table) => {
+        const parents = edges
+          .filter((e) => e.table === table)
+          .map((e) => `${e.column} -> ${e.parent} (onDelete: ${e.onDelete})`);
+        return `${table}: ${parents.join('; ')}`;
+      });
 
     expect(
-      notCascading,
-      'a table below athlete does not cascade — an erasure would leave its rows behind',
+      leftBehind,
+      'a table below athlete has no cascading path to it — an erasure would leave its rows behind',
     ).toEqual([]);
+  });
+
+  it('still reports a table whose only path up does not cascade', () => {
+    // A guard on the correction: proves the looser-looking rule is not loose.
+    // A fabricated child of `sessions` that only ever `set null`s is below
+    // athlete and unreachable by cascade, so it must not be treated as erased.
+    const fabricated: Edge[] = [
+      ...edges,
+      { table: 'orphan_table', column: 'session_id', parent: 'sessions', onDelete: 'set null' },
+    ];
+
+    expect(tablesBelowAthlete(fabricated).has('orphan_table')).toBe(true);
+    expect(tablesErasedByCascade(fabricated).has('orphan_table')).toBe(false);
   });
 });
 

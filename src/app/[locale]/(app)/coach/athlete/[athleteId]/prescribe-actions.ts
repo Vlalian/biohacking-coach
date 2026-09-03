@@ -42,11 +42,20 @@ export async function editPrescribedSessionAction(
   athleteId: string,
   sessionId: string,
   input: PrescriptionInput,
+  expectedVersion: number,
 ): Promise<PrescribeActionResult> {
   const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
-  const result = await editPrescribedSession({ headCoachId, athleteId, sessionId, input });
+  const result = await editPrescribedSession({
+    headCoachId,
+    athleteId,
+    sessionId,
+    input,
+    expectedVersion,
+  });
+  // 'layout' is main's: the edited session shows on more than this page, so a
+  // page-scoped revalidate left the other tabs stale.
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
@@ -54,11 +63,17 @@ export async function editPrescribedSessionAction(
 export async function deletePrescribedSessionAction(
   athleteId: string,
   sessionId: string,
+  expectedVersion: number,
 ): Promise<PrescribeActionResult> {
   const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
-  const result = await deletePrescribedSession({ headCoachId, athleteId, sessionId });
+  const result = await deletePrescribedSession({
+    headCoachId,
+    athleteId,
+    sessionId,
+    expectedVersion,
+  });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
@@ -76,6 +91,8 @@ export async function moveSessionAsCoachAction(
   athleteId: string,
   sessionId: string,
   targetDate: string,
+  /** The version the coach's browser read — see moveSessionAsHeadCoach. */
+  expectedVersion: number,
 ): Promise<MoveResult | { ok: false; reason: 'not-linked' | 'not-a-coach' }> {
   const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
@@ -85,6 +102,7 @@ export async function moveSessionAsCoachAction(
     athleteId,
     sessionId,
     targetDate,
+    expectedVersion,
     today: dateKey(new Date()),
   });
 

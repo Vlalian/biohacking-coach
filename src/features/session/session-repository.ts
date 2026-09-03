@@ -1,8 +1,9 @@
-import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, type NewSessionRow } from '@/db/schema';
 import { addDays } from '@/lib/date';
 import { toSession, toSessionOrigin, type Session, type SessionOrigin } from './session';
+import type { MatchCandidate } from '@/features/garmin/match-activities';
 
 // These two row shapes deliberately mirror the Coach Briefing's own input types
 // (`BriefingPlanEntry` and `toBriefingReflection`'s argument in
@@ -54,6 +55,48 @@ export async function getSessionsForAthlete(
 }
 
 /**
+ * The Planned Sessions a Detected Activity could be proposing to complete, on
+ * the days an upload actually covered.
+ *
+ * Scoped to the athlete and to the uploaded dates, and deliberately unfiltered
+ * on status and `parked`. Two different rules read this list — what the
+ * matcher may claim (`isEligibleMatch`) and what the athlete may choose
+ * (`isChoosableTarget`) — so a query that pre-filtered would have to pick one
+ * of them and would put half of it here and half there.
+ */
+export type SessionOnDate = MatchCandidate & {
+  duration: number | null;
+  zone: string | null;
+};
+
+export async function getSessionsOnDates(
+  athleteId: string,
+  dates: string[],
+): Promise<SessionOnDate[]> {
+  if (dates.length === 0) return [];
+
+  return getDb()
+    .select({
+      id: sessions.id,
+      date: sessions.date,
+      type: sessions.type,
+      status: sessions.status,
+      parked: sessions.parked,
+      dayOrder: sessions.dayOrder,
+      // Not read by matching, which is why `MatchCandidate` stays narrow — but
+      // the proposal card names its options by what the athlete can recognise,
+      // and a Planned Session has no time of day to name it by: `date` is a
+      // date, `dayOrder` is only ordering, and `start_time` is Garmin
+      // provenance that is null until an import writes it.
+      duration: sessions.duration,
+      zone: sessions.zone,
+    })
+    .from(sessions)
+    .where(and(eq(sessions.athleteId, athleteId), inArray(sessions.date, dates)))
+    .orderBy(asc(sessions.date), asc(sessions.dayOrder));
+}
+
+/**
  * The columns every authority check needs, for one session, by id — owner,
  * placement, status, and authorship.
  *
@@ -68,7 +111,8 @@ export async function getSessionsForAthlete(
  * session" from "not yours", which a filtered query collapses into one.
  */
 export async function getSessionAuthority(sessionId: string): Promise<
-  { athleteId: string; date: string; status: string; origin: SessionOrigin } | undefined
+  | { athleteId: string; date: string; status: string; origin: SessionOrigin; version: number }
+  | undefined
 > {
   const [row] = await getDb()
     .select({
@@ -76,6 +120,7 @@ export async function getSessionAuthority(sessionId: string): Promise<
       date: sessions.date,
       status: sessions.status,
       origin: sessions.origin,
+      version: sessions.version,
     })
     .from(sessions)
     .where(eq(sessions.id, sessionId))

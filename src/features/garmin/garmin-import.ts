@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { getDb } from '@/db';
-import { sessions, sessionStreams, events } from '@/db/schema';
+import { detectedActivities } from '@/db/schema';
+import { getSessionsOnDates } from '@/features/session/session-repository';
 import { parseFit, parseGpx, type FitParseFailure, type ParsedSession } from './garmin';
+import { matchActivities } from './match-activities';
 
 /**
  * Why an upload did not land, in cases the athlete can act on differently.
@@ -19,24 +20,30 @@ export type ImportResult =
   | { ok: false; reason: ImportFailure };
 
 /**
- * Turns an uploaded Garmin file into persisted sessions.
+ * Turns an uploaded Garmin file into **proposed** Detected Activities.
  *
- * The `athleteId` is the caller's own, resolved upstream from the authenticated
- * session — never from the upload request (ADR 0006). Parsing and validation
- * finish *before* any write: a malformed or empty file yields `unreadable` and
- * touches nothing, so a failed upload never leaves an orphaned session, stream,
- * or event behind.
+ * `CONTEXT.md` states the rule this function exists to keep: detection
+ * *proposes, it never asserts* — it never writes `completed` and never writes
+ * `skipped` on its own, and the athlete's Session Reflection is the gesture
+ * that commits an activity to the immutable record. Until 2026-08-26 this
+ * function did the opposite: it inserted a session with `status: 'completed'`
+ * per parsed activity, matched nothing against the Week Plan, and left the
+ * result frozen and undeletable (showable-version/14).
  *
- * Each parsed session and its streams, provenance, and `garmin_imported` event
- * are written in one `db.batch` transaction — the atomic primitive on the
- * neon-http driver. Garmin-origin sessions are `origin: 'garmin'`, which every
- * edit/delete guard keys off to keep device-recorded facts read-only.
+ * So nothing here touches `sessions`. Each activity is reconciled against the
+ * day's Planned Sessions and parked in `detected_activities`, where it waits
+ * for the athlete. Accepting is `acceptDetectedActivity`; declining deletes
+ * the row and the calendar is untouched, because it was never touched.
  *
- * Raw file metadata is not interpolated anywhere near a prompt: the event
- * payload carries only ids and the derived date, and sanitisation policy for the
- * stored fields is deferred to the security-hardening ticket.
+ * The `athleteId` is the caller's own, resolved upstream from the
+ * authenticated session — never from the upload request (ADR 0006). Parsing
+ * and validation still finish *before* any write, so a malformed or empty file
+ * yields a reason and touches nothing.
+ *
+ * Raw file metadata is not interpolated anywhere near a prompt, and a pending
+ * proposal is not plan material: nothing assembles prompts from this table.
  */
-export async function importGarminSessions(params: {
+export async function proposeDetectedActivities(params: {
   athleteId: string;
   filename: string;
   buffer: Buffer;
@@ -66,36 +73,27 @@ export async function importGarminSessions(params: {
   }
 
   const db = getDb();
-  const writes = parsed.flatMap((p) => {
-    const sessionId = randomUUID();
-    return [
-      db.insert(sessions).values({
-        id: sessionId,
-        athleteId,
-        date: p.date,
-        type: p.sessionType,
-        origin: 'garmin',
-        status: 'completed', // device-recorded: it happened
-        isTraining: true,
-        duration: p.duration,
-        note: p.note,
-        dayOrder: 0,
-        startTime: p.startTime ? new Date(p.startTime) : null,
-        sport: p.sport,
-        summary: p.summary,
-      }),
-      db.insert(sessionStreams).values({ sessionId, samples: p.streams }),
-      db.insert(events).values({
-        athleteId,
-        actorType: 'athlete',
-        actorId: athleteId,
-        type: 'garmin_imported',
-        payload: { sessionId, date: p.date },
-      }),
-    ];
-  });
+  // Only the days the file actually covers are read, and the match is decided
+  // before the write so the proposal already knows what it would complete.
+  const days = [...new Set(parsed.map((p) => p.date))];
+  const matched = matchActivities(parsed, await getSessionsOnDates(athleteId, days));
 
-  // A batch needs at least one statement; parsed.length > 0 guarantees three.
+  const writes = matched.map(({ activity, matchedSessionId }) =>
+    db.insert(detectedActivities).values({
+      athleteId,
+      date: activity.date,
+      type: activity.sessionType,
+      sport: activity.sport,
+      duration: activity.duration,
+      note: activity.note,
+      startTime: activity.startTime ? new Date(activity.startTime) : null,
+      summary: activity.summary,
+      samples: activity.streams,
+      matchedSessionId,
+    }),
+  );
+
+  // A batch needs at least one statement; parsed.length > 0 guarantees one.
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 
   return { ok: true, count: parsed.length };

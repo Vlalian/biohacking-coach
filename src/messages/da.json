@@ -305,6 +305,7 @@
     "bouncePastDay": "Den dag er allerede overstået — sessioner flyttes kun fremad i ugen.",
     "bounceOtherWeek": "Sessioner flyttes kun inden for deres egen mandag–søndag-uge. Bed din Coach om at omlægge ugen.",
     "bounceFrozen": "Denne session er allerede gennemført — træningsjournalen kan ikke ændres.",
+    "bounceConflict": "Din Head Coach ændrede denne session, mens den var åben. Dit flyt blev ikke gennemført — genindlæs for at se deres.",
     "minutes": "min"
   },
   "SessionDrawer": {
@@ -327,6 +328,7 @@
     "discuss": "Diskutér med Coach",
     "edit": "Rediger session",
     "delete": "Slet session",
+    "undoImport": "Fortryd denne import",
     "readOnlyNote": "Indholdet er sat af din Coach — du kan flytte eller springe det over.",
     "createLabel": "Ny session",
     "createType": "Type",
@@ -344,7 +346,10 @@
     "typeMobility": "Mobilitet",
     "typeStrength": "Styrke",
     "typeOther": "Andet",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "errorFuture": "Denne session ligger i fremtiden — du kan markere den som gennemført på dagen.",
+    "errorFrozen": "Denne session er lukket. Tidligere uger er en del af dit forløb og ændres ikke.",
+    "errorConflict": "Denne session blev ændret, mens du kiggede på den. Luk den, og åbn den igen."
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",
@@ -356,6 +361,23 @@
     "errorNoSessions": "Filen kunne læses, men indeholdt ingen aktivitet. Eksportér selve aktiviteten — ikke et resumé eller en rute.",
     "errorEmpty": "Den fil er tom. Vælg den .fit- eller .gpx-fil, du eksporterede fra Garmin Connect.",
     "errorNotAuthenticated": "Du er blevet logget ud. Log ind, og upload igen — intet gik tabt."
+  },
+  "Detected": {
+    "label": "Registreret aktivitet",
+    "whichSession": "Hvilken session var dette?",
+    "addAsNew": "Ingen af disse — føj den til min uge",
+    "status": {
+      "skipped": "sprunget over",
+      "unavailable": "utilgængelig"
+    },
+    "body": "Krop",
+    "mind": "Sind",
+    "comment": "Noget værd at notere?",
+    "minutes": "min",
+    "accept": "Bedøm og accepter",
+    "discard": "Kassér",
+    "error": "Det virkede ikke. Prøv igen.",
+    "ordinal": "{n}. session"
   },
   "ThemeToggle": {
     "switch": "Skift tema: lyst, mørkt eller system"

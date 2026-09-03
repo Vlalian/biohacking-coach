@@ -65,15 +65,15 @@ describe('the plan-authoring actions', () => {
     ],
     [
       'editPrescribedSessionAction',
-      () => editPrescribedSessionAction(ATHLETE, 'sess_1', INPUT),
+      () => editPrescribedSessionAction(ATHLETE, 'sess_1', INPUT, 1),
       editPrescribedSession,
-      { headCoachId: COACH, athleteId: ATHLETE, sessionId: 'sess_1', input: INPUT },
+      { headCoachId: COACH, athleteId: ATHLETE, sessionId: 'sess_1', input: INPUT, expectedVersion: 1 },
     ],
     [
       'deletePrescribedSessionAction',
-      () => deletePrescribedSessionAction(ATHLETE, 'sess_1'),
+      () => deletePrescribedSessionAction(ATHLETE, 'sess_1', 1),
       deletePrescribedSession,
-      { headCoachId: COACH, athleteId: ATHLETE, sessionId: 'sess_1' },
+      { headCoachId: COACH, athleteId: ATHLETE, sessionId: 'sess_1', expectedVersion: 1 },
     ],
   ] as const;
 
@@ -124,7 +124,7 @@ describe('moveSessionAsCoachAction', () => {
     resolveHeadCoachId.mockResolvedValue(COACH);
     moveSessionAsHeadCoach.mockResolvedValue({ ok: true });
 
-    const result = await moveSessionAsCoachAction(ATHLETE, 'sess_1', '2026-07-18');
+    const result = await moveSessionAsCoachAction(ATHLETE, 'sess_1', '2026-07-18', 1);
 
     expect(result).toEqual({ ok: true });
     expect(moveSessionAsHeadCoach).toHaveBeenCalledWith({
@@ -133,6 +133,8 @@ describe('moveSessionAsCoachAction', () => {
       sessionId: 'sess_1',
       targetDate: '2026-07-18',
       today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      // A coach move is a contested write like any other (FR-5).
+      expectedVersion: 1,
     });
     expect(revalidatePath).toHaveBeenCalledWith(`/coach/athlete/${ATHLETE}`, 'layout');
   });
@@ -140,7 +142,7 @@ describe('moveSessionAsCoachAction', () => {
   it('refuses a caller with no coach row, without touching the plan', async () => {
     resolveHeadCoachId.mockResolvedValue(null);
 
-    const result = await moveSessionAsCoachAction(ATHLETE, 'sess_1', '2026-07-18');
+    const result = await moveSessionAsCoachAction(ATHLETE, 'sess_1', '2026-07-18', 1);
 
     expect(result).toEqual({ ok: false, reason: 'not-a-coach' });
     expect(moveSessionAsHeadCoach).not.toHaveBeenCalled();
@@ -150,7 +152,7 @@ describe('moveSessionAsCoachAction', () => {
     resolveHeadCoachId.mockResolvedValue(COACH);
     moveSessionAsHeadCoach.mockResolvedValue({ ok: false, reason: 'frozen' });
 
-    await moveSessionAsCoachAction(ATHLETE, 'sess_1', '2026-07-18');
+    await moveSessionAsCoachAction(ATHLETE, 'sess_1', '2026-07-18', 1);
 
     expect(revalidatePath).not.toHaveBeenCalled();
   });

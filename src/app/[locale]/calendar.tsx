@@ -13,7 +13,10 @@ import { markUnavailableDateAction, clearUnavailableDateAction } from './availab
 import { RatingModal } from './rating-modal';
 import { SessionDrawer, type DrawerState } from './session-drawer';
 
-type BounceReason = 'past-day' | 'other-week' | 'frozen';
+// 'conflict' is the only reason the client cannot predict: it means someone
+// else — the Head Coach — changed this session while it was on screen, so the
+// move was refused rather than allowed to overwrite them (versioned-write.ts).
+type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict';
 
 type Day = {
   date: string;
@@ -97,12 +100,16 @@ function dotStyle(session: Session): React.CSSProperties {
 export function Calendar({
   sessions,
   unavailableDates,
+  importedSessionIds = [],
   todayKey,
   readOnly = false,
   onMove,
 }: {
   sessions: Session[];
   unavailableDates: string[];
+  /** Passed through to the Session Drawer, which offers undo on these. Empty
+   *  by default so the Head Coach's read-only calendar needs no extra read. */
+  importedSessionIds?: string[];
   todayKey: string;
   /** A read-only calendar (Head Coach's athlete view) shows the plan and
    *  affords none of the athlete's own actions — no rate, no drawer, no adding
@@ -120,7 +127,11 @@ export function Calendar({
    * Either way the rules are the server's: this only decides which door the
    * request goes through, never whether the move is allowed.
    */
-  onMove?: (sessionId: string, targetDate: string) => Promise<{ ok: boolean }>;
+  onMove?: (
+    sessionId: string,
+    targetDate: string,
+    expectedVersion: number,
+  ) => Promise<{ ok: boolean; reason?: string }>;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -193,9 +204,22 @@ export function Calendar({
       setBounce({ date: day.date, reason });
       window.setTimeout(() => setBounce(null), 2600);
     } else if (dragging.session.date !== day.date) {
-      const id = dragging.session.id;
+      const { id, version } = dragging.session;
       startTransition(async () => {
-        await (onMove ?? moveSessionAction)(id, day.date);
+        // Both callers carry the version the client read, so a move that lost
+        // a race is refused rather than silently winning. `onMove` is the Head
+        // Coach's path (it acts on someone else's calendar and needs the
+        // athlete id), the default is the athlete's own.
+        const result = onMove
+          ? await onMove(id, day.date, version)
+          : await moveSessionAction(id, day.date, version);
+        // A refused move used to look identical to a successful one, because
+        // the result was discarded and the refresh put the session back where
+        // it started. Say so instead.
+        if (!result.ok && 'reason' in result && result.reason === 'conflict') {
+          setBounce({ date: day.date, reason: 'conflict' });
+          window.setTimeout(() => setBounce(null), 4000);
+        }
         router.refresh();
       });
     }
@@ -303,6 +327,7 @@ export function Calendar({
         <SessionDrawer
           state={drawer}
           sessions={sessions}
+          importedSessionIds={importedSessionIds}
           locale={locale}
           todayKey={todayKey}
           onClose={() => setDrawer({ open: false })}
@@ -540,6 +565,7 @@ function WeekRow({
           {bounce.reason === 'past-day' && t('bouncePastDay')}
           {bounce.reason === 'other-week' && t('bounceOtherWeek')}
           {bounce.reason === 'frozen' && t('bounceFrozen')}
+          {bounce.reason === 'conflict' && t('bounceConflict')}
         </p>
       )}
     </div>

@@ -30,7 +30,7 @@ describe('moveSessionAction', () => {
     resolveAthleteId.mockResolvedValue('athlete_1');
     moveSession.mockResolvedValue({ ok: true });
 
-    const result = await moveSessionAction('sess_1', '2026-07-18');
+    const result = await moveSessionAction('sess_1', '2026-07-18', 1);
 
     expect(result).toEqual({ ok: true });
     // `today` is the server's, so the Move rules cannot be judged against a
@@ -40,11 +40,15 @@ describe('moveSessionAction', () => {
       sessionId: 'sess_1',
       targetDate: '2026-07-18',
       today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      // The version the browser read travels with the move (FR-5). Asserted
+      // rather than allowed through, so a caller that stops sending one is a
+      // failing test and not an unversioned write.
+      expectedVersion: 1,
     });
   });
 
   it('rejects a malformed target date before resolving anyone', async () => {
-    const result = await moveSessionAction('sess_1', 'next tuesday');
+    const result = await moveSessionAction('sess_1', 'next tuesday', 1);
 
     expect(result).toEqual({ ok: false, reason: 'bounce' });
     expect(resolveAthleteId).not.toHaveBeenCalled();
@@ -54,7 +58,7 @@ describe('moveSessionAction', () => {
   it('refuses a signed-out request without touching the plan', async () => {
     resolveAthleteId.mockResolvedValue(null);
 
-    const result = await moveSessionAction('sess_1', '2026-07-18');
+    const result = await moveSessionAction('sess_1', '2026-07-18', 1);
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(moveSession).not.toHaveBeenCalled();
@@ -64,7 +68,7 @@ describe('moveSessionAction', () => {
     resolveAthleteId.mockResolvedValue('athlete_1');
     moveSession.mockResolvedValue({ ok: false, reason: 'frozen' });
 
-    await moveSessionAction('sess_1', '2026-07-18');
+    await moveSessionAction('sess_1', '2026-07-18', 1);
 
     expect(revalidatePath).not.toHaveBeenCalled();
   });

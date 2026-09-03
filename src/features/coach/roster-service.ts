@@ -40,6 +40,9 @@ export type PlanSession = {
   note: string | null;
   /** Whether the Head Coach may edit/delete this one (guard on origin). */
   editable: boolean;
+  /** The version this view was read at, sent back with an edit or delete so a
+   *  change the athlete made in between is refused rather than overwritten. */
+  version: number;
 };
 
 /**
@@ -130,6 +133,7 @@ export async function getCoachAthleteView(
       title: r.title,
       note: r.note,
       editable: canHeadCoachEditContent(r.origin),
+      version: r.version,
     }));
 
   return {

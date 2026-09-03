@@ -35,6 +35,42 @@
   - It junctioned back to $Main, whose .scratch is now itself a junction to
     bc-docs. Chained junctions work until the middle link moves. Worktrees now
     point straight at the canonical repo.
+
+  --------------------------------------------------------------------------
+  Why .claude is linked piece by piece and not wholesale (2026-09-01)
+
+  It used to be one junction: <worktree>\.claude -> <main>\.claude. That was
+  fine while the target was an ordinary settings folder. It stopped being fine
+  when the canonical checkout became the link target, because ITS .claude
+  contains worktrees\ - where every live Claude session's worktree lives.
+
+  So a recursive delete of any session folder walked .claude\ into the real
+  .claude\worktrees\ and reached every live session on the machine, INCLUDING
+  the one running the delete, which then could not report what it destroyed.
+  A worse hazard than the .scratch one it was born from: that one destroys
+  documents git can mostly return, this one destroys uncommitted code in
+  several sessions at once.
+
+  The interim rule was "always tear down with Remove-Session.ps1". That rule
+  depends on a human remembering it at exactly the moment they are cleaning
+  up - which is the moment the 2026-08-28 loss happened. So the link is gone
+  rather than documented: every child of .claude is linked individually,
+  worktrees\ is never one of them, and the dangerous path no longer exists to
+  be walked at all.
+
+  Directories become junctions. Top-level FILES cannot - mklink /J only links
+  directories - so they are hard-linked instead, with one deliberate exception:
+
+    settings.json, launch.json   HARD LINK. Hand-edited, rarely, and they have
+                                 to be identical everywhere: settings.json is
+                                 what wires the hooks into every session.
+    settings.local.json          COPIED. Claude Code rewrites this file itself
+                                 when it grants a permission, and an atomic
+                                 write-then-rename SNAPS a hard link silently,
+                                 leaving exactly the private fork this script
+                                 exists to prevent. Per-session permissions are
+                                 meant to differ, so a copy is correct here
+                                 rather than a compromise.
   --------------------------------------------------------------------------
 #>
 param(
@@ -71,8 +107,21 @@ $Links = [ordered]@{
   "docs\agents" = (Join-Path $Docs "docs\agents")
   "poc"         = (Join-Path $Main "poc")
   ".agents"     = (Join-Path $Main ".agents")
-  ".claude"     = (Join-Path $Main ".claude")
 }
+
+# .claude is deliberately absent from the plan above. It is linked child by
+# child, so that .claude\worktrees - which holds every live session - is never
+# reachable from inside a worktree. See the header note.
+#
+# The policy itself lives in SessionLinks.ps1, so this script, the repair
+# script and the TEARDOWN script cannot drift apart. Do not restate it here.
+. "$PSScriptRoot\SessionLinks.ps1"
+
+$ClaudePlan = Get-ClaudeLinkPlan -ClaudeSrc (Join-Path $Main ".claude")
+
+foreach ($rel in $ClaudePlan.Junction.Keys) { $Links[$rel] = $ClaudePlan.Junction[$rel] }
+$FileLinks  = $ClaudePlan.HardLink   # hard links: <relative path> = <absolute target>
+$FileCopies = $ClaudePlan.Copy       # plain copies - files Claude Code rewrites
 
 # 1. Fresh copy of main.
 git -C $Main fetch origin --quiet
@@ -104,6 +153,44 @@ foreach ($rel in $Links.Keys) {
     throw "Junction FAILED for $rel -> $target. Refusing to hand over a worktree with a private copy of the docs."
   }
   Write-Host "  linked $rel -> $target" -ForegroundColor DarkGray
+}
+
+# 3b. The .claude top-level files. Hard links, because mklink /J is directories
+#     only. Verified the same way and just as fatally: a settings.json that
+#     quietly did not link is a session running without the shared hooks.
+foreach ($rel in $FileLinks.Keys) {
+  $target = $FileLinks[$rel]
+  $link   = Join-Path $Worktree $rel
+  $parent = Split-Path $link -Parent
+  if (-not (Test-Path $parent)) { New-Item -ItemType Directory $parent -Force | Out-Null }
+  if (Test-Path $link) { throw "Cannot link $rel - something already exists at $link" }
+
+  cmd /c mklink /H "$link" "$target" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "mklink /H failed for $rel -> $target (exit $LASTEXITCODE)." }
+
+  $item = Get-Item $link -Force -ErrorAction SilentlyContinue
+  if (-not $item) {
+    throw "Hard link FAILED for $rel -> $target. Refusing to hand over a worktree without the shared $rel."
+  }
+  # PowerShell 5.1 reports LinkType 'HardLink'; tolerate a null only if the
+  # sizes agree, so a genuinely wrong file still fails loudly.
+  if ($item.LinkType -and $item.LinkType -ne 'HardLink') {
+    throw "Expected a hard link at $rel, found LinkType '$($item.LinkType)'."
+  }
+  if (-not $item.LinkType -and $item.Length -ne (Get-Item $target -Force).Length) {
+    throw "Hard link unverifiable at $rel and the sizes disagree. Refusing."
+  }
+  Write-Host "  hardlink $rel -> $target" -ForegroundColor DarkGray
+}
+
+# 3c. The files Claude Code rewrites for itself. Copied on purpose - see header.
+foreach ($rel in $FileCopies.Keys) {
+  $target = $FileCopies[$rel]
+  $link   = Join-Path $Worktree $rel
+  $parent = Split-Path $link -Parent
+  if (-not (Test-Path $parent)) { New-Item -ItemType Directory $parent -Force | Out-Null }
+  Copy-Item $target $link -Force
+  Write-Host "  copied $rel  (per-session by design)" -ForegroundColor DarkGray
 }
 
 # 4. Gitignored CLAUDE.md that @-imports the canonical root docs by absolute path.

@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { resolveAthleteId, importGarminSessions, revalidatePath } = vi.hoisted(() => ({
+// `proposeDetectedActivities` became `proposeDetectedActivities` on this branch:
+// the upload no longer imports anything, it proposes. Renamed here rather than
+// aliased, because a test that still says "import" would keep describing the
+// behaviour showable-version/14 was filed to remove.
+const { resolveAthleteId, proposeDetectedActivities, revalidatePath } = vi.hoisted(() => ({
   resolveAthleteId: vi.fn(),
-  importGarminSessions: vi.fn(),
+  proposeDetectedActivities: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('./current-actor', () => ({ resolveAthleteId }));
-vi.mock('@/features/garmin/garmin-import', () => ({ importGarminSessions }));
+vi.mock('@/features/garmin/garmin-import', () => ({ proposeDetectedActivities }));
 
 const { uploadGarminAction } = await import('./garmin-actions');
 
@@ -35,19 +39,19 @@ function fitFile(bytes = [0x0e, 0x10], name = 'activity.fit'): File {
 
 beforeEach(() => {
   resolveAthleteId.mockReset();
-  importGarminSessions.mockReset();
+  proposeDetectedActivities.mockReset();
   revalidatePath.mockClear();
 });
 
 describe('uploadGarminAction', () => {
   it('imports the uploaded file for the signed-in athlete', async () => {
     resolveAthleteId.mockResolvedValue(ATHLETE);
-    importGarminSessions.mockResolvedValue({ ok: true, imported: 1 });
+    proposeDetectedActivities.mockResolvedValue({ ok: true, imported: 1 });
 
     const result = await uploadGarminAction(upload(fitFile()));
 
     expect(result).toEqual({ ok: true, imported: 1 });
-    const call = importGarminSessions.mock.calls[0][0];
+    const call = proposeDetectedActivities.mock.calls[0][0];
     expect(call.athleteId).toBe(ATHLETE);
     expect(call.filename).toBe('activity.fit');
     // The bytes are handed on as a Buffer, not the File — the feature parses
@@ -61,7 +65,7 @@ describe('uploadGarminAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'empty' });
     expect(resolveAthleteId).not.toHaveBeenCalled();
-    expect(importGarminSessions).not.toHaveBeenCalled();
+    expect(proposeDetectedActivities).not.toHaveBeenCalled();
   });
 
   it('rejects a field that is not a file at all', async () => {
@@ -70,14 +74,14 @@ describe('uploadGarminAction', () => {
     const result = await uploadGarminAction(upload('not-a-file'));
 
     expect(result).toEqual({ ok: false, reason: 'empty' });
-    expect(importGarminSessions).not.toHaveBeenCalled();
+    expect(proposeDetectedActivities).not.toHaveBeenCalled();
   });
 
   it('rejects a form with no file field', async () => {
     const result = await uploadGarminAction(upload(undefined));
 
     expect(result).toEqual({ ok: false, reason: 'empty' });
-    expect(importGarminSessions).not.toHaveBeenCalled();
+    expect(proposeDetectedActivities).not.toHaveBeenCalled();
   });
 
   it('refuses a signed-out request without reading the file', async () => {
@@ -86,12 +90,12 @@ describe('uploadGarminAction', () => {
     const result = await uploadGarminAction(upload(fitFile()));
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
-    expect(importGarminSessions).not.toHaveBeenCalled();
+    expect(proposeDetectedActivities).not.toHaveBeenCalled();
   });
 
   it('revalidates nothing when the import fails', async () => {
     resolveAthleteId.mockResolvedValue(ATHLETE);
-    importGarminSessions.mockResolvedValue({ ok: false, reason: 'unreadable' });
+    proposeDetectedActivities.mockResolvedValue({ ok: false, reason: 'unreadable' });
 
     await uploadGarminAction(upload(fitFile()));
 

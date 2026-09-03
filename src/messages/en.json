@@ -305,6 +305,7 @@
     "bouncePastDay": "That day has already happened — sessions only move forward within the week.",
     "bounceOtherWeek": "Sessions move within their own Mon–Sun week. Ask your Coach to reshape the week.",
     "bounceFrozen": "This session is already completed — the training record is immutable.",
+    "bounceConflict": "Your Head Coach changed this session while it was open. Your move was not applied — refresh to see theirs.",
     "minutes": "min"
   },
   "SessionDrawer": {
@@ -327,6 +328,7 @@
     "discuss": "Discuss with Coach",
     "edit": "Edit session",
     "delete": "Delete session",
+    "undoImport": "Undo this import",
     "readOnlyNote": "Content is set by your Coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",
@@ -344,7 +346,10 @@
     "typeMobility": "Mobility",
     "typeStrength": "Strength",
     "typeOther": "Other",
-    "error": "That didn't work. Try again."
+    "error": "That didn't work. Try again.",
+    "errorFuture": "This session is in the future — you can mark it complete on the day.",
+    "errorFrozen": "This session is closed. Past weeks are part of your record and don't change.",
+    "errorConflict": "This session changed while you were looking at it. Close and reopen it."
   },
   "Garmin": {
     "upload": "Upload Garmin file",
@@ -356,6 +361,23 @@
     "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
     "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
     "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
+  },
+  "Detected": {
+    "label": "Detected activity",
+    "whichSession": "Which session was this?",
+    "addAsNew": "None of these — add it to my week",
+    "status": {
+      "skipped": "skipped",
+      "unavailable": "unavailable"
+    },
+    "body": "Body",
+    "mind": "Mind",
+    "comment": "Anything worth noting?",
+    "minutes": "min",
+    "accept": "Rate and accept",
+    "discard": "Discard",
+    "error": "That didn't work. Try again.",
+    "ordinal": "Session {n}"
   },
   "ThemeToggle": {
     "switch": "Switch theme: light, dark, or system"
