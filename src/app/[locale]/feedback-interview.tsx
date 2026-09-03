@@ -75,6 +75,12 @@ export function FeedbackInterview({
       const result = await sendFeedbackTurnAction({ conversationId, content });
 
       if (!result.ok) {
+        // A refused id never becomes valid again — the interview was ended, or
+        // erased, or was never theirs. Holding on to it refuses every later turn
+        // too, so a tester whose page has been open a while cannot say anything
+        // at all until they think to reload. Dropping it starts a fresh
+        // interview on their next send, which is the outcome they wanted.
+        if (result.reason === 'not-owner') setConversationId(null);
         setNotice(
           result.reason === 'consent-required' ? { kind: 'consentRequired' } : { kind: 'error' },
         );

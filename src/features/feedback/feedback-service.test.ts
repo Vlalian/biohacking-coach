@@ -343,3 +343,53 @@ describe('what the tester is told when a turn is refused', () => {
     });
   });
 });
+
+describe('work that runs after the turn is stored', () => {
+  beforeEach(() => {
+    callCoach.mockReset().mockResolvedValue({ text: 'Thanks.', toolCalls: [] });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'feedback' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    hasTrustSignal.mockReset().mockResolvedValue(false);
+    recordTrustSignal.mockReset().mockResolvedValue(undefined);
+    logCoachFailure.mockReset();
+    getMessages.mockReset().mockResolvedValue([
+      turn('athlete', 0),
+      turn('coach_ai', 1),
+      turn('athlete', 2),
+      turn('coach_ai', 3),
+      turn('athlete', 4),
+      turn('coach_ai', 5, 'And if nobody had told you — same call?'),
+    ]);
+  });
+
+  it('logs nothing on a turn that has no after-the-write work', async () => {
+    // Most turns carry none. Calling an absent `onStored` would throw a
+    // TypeError straight into the catch above, so every ordinary turn would file
+    // a failure for work it was never asked to do — and the log is read to tell
+    // a broken surface from a quiet one.
+    getMessages.mockResolvedValue([turn('athlete', 0), turn('coach_ai', 1)]);
+
+    const result = await sendFeedbackTurn('athlete_1', 'conv_1', 'second thing');
+
+    expect(result.ok).toBe(true);
+    expect(recordTrustSignal).not.toHaveBeenCalled();
+    expect(logCoachFailure).not.toHaveBeenCalled();
+  });
+
+  it('keeps the turn when recording the Trust Signal answer fails', async () => {
+    // The turn is already written by the time this runs. Letting the failure out
+    // would report a refusal for a turn the tester can see in the transcript,
+    // and their retry would append the same message and reply a second time —
+    // the exact duplicate the write ordering exists to prevent, arriving through
+    // the back door. The answer is lost instead, and the log says so.
+    recordTrustSignal.mockRejectedValue(new Error('unique violation'));
+
+    const result = await sendFeedbackTurn('athlete_1', 'conv_1', 'no, I would have rested');
+
+    expect(result.ok).toBe(true);
+    expect(logCoachFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: 'feedback', reason: 'after-store' }),
+    );
+  });
+});

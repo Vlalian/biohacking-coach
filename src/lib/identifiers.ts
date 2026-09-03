@@ -26,12 +26,25 @@
 const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
 
 /**
- * A phone-shaped run: `+` followed by 8–15 digits, or a bare contiguous run of
- * 8–15 digits. Deliberately tight so ordinary training prose survives it — an
- * ISO date (`2026-08-18`), a duration (`90 min`), a pulse (`55bpm`) and an
- * interval set (`4x800m`) all have digit runs far shorter than eight.
+ * A phone-shaped run: `+` followed by 8–15 digits, optionally spaced or hyphen
+ * separated, or a bare contiguous run of 8–15 digits. Deliberately tight so
+ * ordinary training prose survives it — an ISO date (`2026-08-18`), a duration
+ * (`90 min`), a pulse (`55bpm`) and an interval set (`4x800m`) all have digit
+ * runs far shorter than eight.
+ *
+ * The `+` branch counts *digits*, not characters. It used to read
+ * `\+\d[\d\s-]{6,16}\d`, which let the separator class fill the quota: 18
+ * digits passed a rule documented — right here — as 8–15, and E.164 has no
+ * numbers that long. Over-matching fails closed, so it never leaked anything;
+ * it refused Oracle input carrying a long numeric identifier and told the
+ * athlete their content looked like contact details.
+ *
+ * The trailing `(?![\d\s-]*\d)` is what makes the ceiling bind. Without it the
+ * pattern simply matched the first fifteen digits of a longer run and called
+ * that a phone number — the bare branch is protected by its closing `\b`, and
+ * the `+` branch had no equivalent.
  */
-const PHONE_SHAPED = /\+\d[\d\s-]{6,16}\d|\b\d{8,15}\b/;
+const PHONE_SHAPED = /\+\d(?:[\s-]?\d){7,14}(?![\d\s-]*\d)|\b\d{8,15}\b/;
 
 const SHAPED_IDENTIFIERS: ReadonlyArray<{ kind: string; pattern: RegExp }> = [
   { kind: 'email', pattern: EMAIL_SHAPED },
@@ -65,8 +78,15 @@ export function shapedIdentifierIn(value: string): string | null {
  * The non-throwing form, for a validator that wants to refuse an input as data
  * rather than fail the request. Null and non-strings are free of identifiers by
  * definition — there is nothing to match.
+ *
+ * `unknown` because its caller is a write boundary taking client-supplied data,
+ * and the `typeof` check is load-bearing rather than defensive typing:
+ * {@link shapedIdentifierIn} runs `RegExp.test`, which stringifies whatever it
+ * is handed, so an array holding one phone-shaped string would otherwise be
+ * reported as *carrying* an identifier and refused — the opposite verdict from
+ * the one this function gives every other non-string.
  */
-export function isFreeOfShapedIdentifiers(value: string | null | undefined): boolean {
+export function isFreeOfShapedIdentifiers(value: unknown): boolean {
   return typeof value !== 'string' || shapedIdentifierIn(value) === null;
 }
 

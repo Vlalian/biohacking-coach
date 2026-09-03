@@ -98,9 +98,43 @@ export async function takeConversationTurn(
   const id = await storeTurn(turn, resumed.conversationId, trimmed, answered.reply);
   if (!id) return { ok: false, reason: 'not-owner' };
 
-  await answered.prepared.onStored?.(id);
+  await runAfterStore(turn, answered.prepared, id);
 
   return { ok: true, conversationId: id, messages: await getMessages(id) };
+}
+
+/**
+ * Runs the surface's after-the-write work, and never lets it undo the turn.
+ *
+ * The turn is already stored by this point, so a rejection here must not reach
+ * the caller: it would report a failure for a turn the athlete can see in the
+ * transcript, and their retry would append the same message and reply a second
+ * time. That is the exact duplicate this module's write ordering exists to
+ * prevent, arriving through the back door.
+ *
+ * So the work is best-effort and its failure is logged rather than raised. What
+ * it costs is real and worth naming: the Trust Signal answer can be missed while
+ * the turn that carried it is kept, and nothing retries it — the question is
+ * asked once, so there is no later turn to catch it. A missing answer is a gap
+ * in the research data; a duplicated turn is a broken conversation the tester
+ * has to look at.
+ */
+async function runAfterStore(
+  turn: ConversationTurn,
+  prepared: PreparedTurn,
+  conversationId: string,
+): Promise<void> {
+  try {
+    await prepared.onStored?.(conversationId);
+  } catch (error) {
+    logCoachFailure({
+      surface: turn.surface,
+      athleteId: turn.athleteId,
+      conversationId,
+      error,
+      reason: 'after-store',
+    });
+  }
 }
 
 /** A conversation being continued, or a fresh one that does not exist yet. */

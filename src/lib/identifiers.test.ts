@@ -148,6 +148,18 @@ describe('gaps the hardening gate found in this file', () => {
     expect(shapedIdentifierIn('1234567890123456')).toBeNull();
   });
 
+  it('applies the same fifteen-digit ceiling to a +-prefixed number', () => {
+    // The bare-run branch was tested at its ceiling and the `+` branch was not,
+    // and the two disagreed: `\+\d[\d\s-]{6,16}\d` counted characters, so the
+    // separator class filled the quota and eighteen digits passed a rule this
+    // module documents as 8-15. It fails closed, so nothing leaked — it refused
+    // athlete content carrying a long numeric id and blamed contact details.
+    expect(shapedIdentifierIn('+12345678901234')).toBe('phone');
+    expect(shapedIdentifierIn('+123456789012345')).toBe('phone');
+    expect(shapedIdentifierIn('+1234567890123456')).toBeNull();
+    expect(shapedIdentifierIn('+123456789012345678')).toBeNull();
+  });
+
   it('leaves ordinary training numbers alone', () => {
     // The values this guard sits in front of, every day: a date, a duration, a
     // pulse and an interval set. A regex that ate these would make the guard
@@ -158,3 +170,16 @@ describe('gaps the hardening gate found in this file', () => {
   });
 });
 
+
+describe('isFreeOfShapedIdentifiers on values that are not strings', () => {
+  it('treats a non-string as free of identifiers, whatever it stringifies to', () => {
+    // Its caller is a write boundary taking client-supplied data, so a non-string
+    // genuinely arrives. `RegExp.test` coerces, so without the `typeof` guard an
+    // array holding a phone-shaped string would be refused as carrying contact
+    // details — while every other non-string passes. The guard is what keeps the
+    // answer consistent.
+    expect(isFreeOfShapedIdentifiers(['+4512345678'])).toBe(true);
+    expect(isFreeOfShapedIdentifiers({ phone: '12345678' })).toBe(true);
+    expect(isFreeOfShapedIdentifiers(12345678)).toBe(true);
+  });
+});

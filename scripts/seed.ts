@@ -257,6 +257,12 @@ async function seedGeneratedAthletes() {
         .where(
           and(eq(sessions.athleteId, profile.id), eq(sessions.origin, 'coach')),
         ),
+      // Cleared, not just topped up. The blocked days are generated relative to
+      // `now`, so a reseed on a later day produces a different set — and without
+      // this, the old ones stay. Two runs a week apart left the calendar showing
+      // both weeks' Unavailable Dates, and the seed is meant to converge on one
+      // history rather than accumulate every history it has ever generated.
+      db.delete(unavailableDates).where(eq(unavailableDates.athleteId, profile.id)),
       db.insert(sessions).values(rows),
       // Keyed (athlete, date), so re-seeding the same days is a no-op rather
       // than a duplicate-key failure that would abort the batch.

@@ -71,8 +71,19 @@ export interface CoachFailure {
   conversationId: string | null;
   error: unknown;
   /** Overrides the reason derived from the error, where the caller knows better. */
-  reason?: RefusalReason;
+  reason?: FailureReason;
 }
+
+/**
+ * Why a logged call did not do what it set out to.
+ *
+ * Wider than {@link RefusalReason} by exactly one value. A refusal is something
+ * the athlete is told about and can act on; `after-store` is not — it is work
+ * that failed *after* a turn was safely written, swallowed on purpose so it
+ * cannot undo the turn (`conversation-turn.ts`). Nobody sees it but this log,
+ * which is the only reason it is recoverable at all.
+ */
+export type FailureReason = RefusalReason | 'after-store';
 
 /**
  * Writes one structured line for a Coach call that did not produce a reply.

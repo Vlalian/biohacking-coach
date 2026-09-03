@@ -84,7 +84,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  const topK = Number(arg('k') ?? TOP_K);
+  // Checked before the embedding call, which is the one step here that costs
+  // money. `Number()` is happy to return NaN, Infinity, -3 or 2.5, and all four
+  // reach Postgres as a LIMIT after the spend has already happened.
+  const requestedK = arg('k');
+  const topK = requestedK === undefined ? TOP_K : Number(requestedK);
+  if (!Number.isSafeInteger(topK) || topK < 1) {
+    console.error(`--k must be a whole number of passages, at least 1. Got: ${requestedK}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const query = {
     question,
     phase: arg('phase'),

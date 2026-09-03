@@ -312,3 +312,19 @@ describe('the two shipped profiles', () => {
     }
   });
 });
+
+describe('the weekly template is drawn in order', () => {
+  it('walks the template forwards through the week, not backwards', () => {
+    // `SyntheticProfile.week` documents itself as "drawn from in order", and it
+    // was not: the loop counts down so the dates count up, and indexing the
+    // template by that same counter reversed every week's sequence. Dates were
+    // already chronological — this is about which type lands on which day.
+    //
+    // One week, so the rotation by week index is zero and the emitted types are
+    // simply the template's own opening run.
+    const profile = SYNTHETIC_PROFILES[0];
+    const { sessions } = generate(profile, 1);
+
+    expect(sessions.map((s) => s.type)).toEqual(profile.week.slice(0, sessions.length));
+  });
+});

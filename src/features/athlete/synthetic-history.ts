@@ -286,7 +286,13 @@ export function generateSyntheticHistory(
     const count = weeklyCount(profile, random);
 
     for (let i = count - 1; i >= 0; i--) {
-      const type = profile.week[(week + i) % profile.week.length];
+      // Indexed by how far into the week this session is, not by the countdown
+      // `i`. They run opposite ways — `i` descends so the *dates* ascend — so
+      // reading the template by `i` walked it backwards, and the comment on
+      // `SyntheticProfile.week` promising it is "drawn from in order" was false
+      // of every week generated.
+      const dayOfWeek = count - 1 - i;
+      const type = profile.week[(week + dayOfWeek) % profile.week.length];
       // One session per day, spread across the week. `i` is under 7, so days
       // within a week are distinct and never reach into the next one.
       const date = dayKey(today, week * 7 + i + 1);

@@ -121,8 +121,15 @@ export function ShellChrome({
     [t],
   );
 
+  // `feedback` is deliberately not in `availableViews` — it is reached from the
+  // escape hatch, not the View list — which also meant it could never win this
+  // lookup, so the interview page fell through to `availableViews[0]` and the
+  // shell titled itself after a View the tester was not on.
   const currentView =
-    (availableViews.find((v) => pathname.startsWith(VIEW_PATH[v])) ?? availableViews[0]) as ViewId;
+    pathname === VIEW_PATH.feedback
+      ? 'feedback'
+      : ((availableViews.find((v) => pathname.startsWith(VIEW_PATH[v])) ??
+          availableViews[0]) as ViewId);
 
   return (
     <CoachOverlayContext.Provider
