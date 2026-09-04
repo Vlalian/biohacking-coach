@@ -86,14 +86,18 @@ const PROPOSAL_ACK =
  * proposal that has drifted out of its window between being staged and being
  * confirmed comes back `stale` rather than being written.
  */
-async function windowFor(athlete: Athlete, today: string): Promise<PlanningWindow> {
+function windowFor(
+  athlete: Athlete,
+  today: string,
+  unavailableDates: string[],
+): PlanningWindow {
   return planningWindow(
     today,
     // Stryker disable next-line ArrayDeclaration: equivalent. A Fixed Constraint
     // is matched by weekday name, so a non-weekday default matches no day and
     // yields the same window as an empty one.
     athlete.profile?.fixedConstraints ?? [],
-    await getUnavailableDates(athlete.id),
+    unavailableDates,
   );
 }
 
@@ -107,6 +111,7 @@ async function renderSystem(
   athlete: Athlete,
   weeklySessionNumber: number,
   today: string,
+  unavailableDates: string[],
   language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
@@ -121,13 +126,18 @@ async function renderSystem(
     language,
     equipmentItems,
   );
-  // This slice wires the two inputs it has a real source for: the week's Session
-  // Reflections (feedback) and its skips. The remaining ported inputs stay empty
-  // because their data sources are later slices, not because they are optional —
-  // sessionHistory (Silent Pattern Insight) needs multi-week check-in history,
-  // weekActivity needs the events log surfaced, and unavailableDates/fixed
-  // constraints are the Unavailable-Dates slice (14). The prompt renders them
-  // conditionally, so an empty input simply omits its block.
+  // The inputs with a real source: the week's Session Reflections (feedback),
+  // its skips, and — since showable-version/15 — the athlete's Unavailable
+  // Dates, which slice 14 has provided since before this call was written. The
+  // Head Coach's Roster had been reading them the whole time; only the
+  // athlete's own Coach was not, so the `UNAVAILABLE:` line had never rendered
+  // and the Coach planned onto days the athlete had marked off.
+  //
+  // The two still-empty inputs are empty because their sources do not exist:
+  // sessionHistory (Silent Pattern Insight) needs multi-week check-in history
+  // and no Check-in feature exists, and weekActivity has no producer anywhere in
+  // `src/`. The prompt renders each block conditionally, so an empty input
+  // simply omits it.
   const ctx = buildWeeklyContext(
     checkIn,
     weekFeedbackFrom(weekSessions),
@@ -137,7 +147,7 @@ async function renderSystem(
     // this argument is empty at all.
     [],
     skippedFrom(weekSessions),
-    [],
+    unavailableDates,
     null,
     today,
   );
@@ -176,12 +186,22 @@ export async function startWeeklySession(
   language?: string,
 ): Promise<StartWeeklySessionResult> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
+  // Read once per turn and threaded from here: the prompt (`renderSystem`)
+  // and the planning window (`windowFor`) both need this list, and each
+  // fetching it for itself is two round trips for one answer.
+  const unavailableDates = await getUnavailableDates(athlete.id);
 
   let reply: CoachReply;
   try {
     // Prompt rendering inside the boundary with the call — it asserts on free
     // text and throws, same as in `continueWeeklySession`.
-    const system = await renderSystem(athlete, weeklySessionNumber, today, language);
+    const system = await renderSystem(
+      athlete,
+      weeklySessionNumber,
+      today,
+      unavailableDates,
+      language,
+    );
     reply = await callCoach({
       system,
       messages: [{ role: 'user', content: WEEKLY_OPENER }],
@@ -253,12 +273,13 @@ async function stageProposal(
   athlete: Athlete,
   conversationId: string,
   today: string,
+  unavailableDates: string[],
   reply: CoachReply,
 ): Promise<PlanProposal | null> {
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (!call) return null;
 
-  const validated = validateProposedPlan(call.input, await windowFor(athlete, today));
+  const validated = validateProposedPlan(call.input, windowFor(athlete, today, unavailableDates));
   if (!validated.ok) return null;
 
   await recordProposal(athlete.id, conversationId, validated.sessions);
@@ -282,14 +303,29 @@ async function askCoach(params: {
   /** Null on a conversation stored before the number was tracked; read as the first. */
   weeklySessionNumber: number | null;
   today: string;
+  unavailableDates: string[];
   language?: string;
   transcript: Message[];
   trimmed: string;
 }): Promise<{ ok: true; reply: CoachReply } | { ok: false; reason: ContinueRefusal }> {
-  const { athlete, conversationId, weeklySessionNumber, today, language, transcript, trimmed } =
-    params;
+  const {
+    athlete,
+    conversationId,
+    weeklySessionNumber,
+    today,
+    unavailableDates,
+    language,
+    transcript,
+    trimmed,
+  } = params;
   try {
-    const system = await renderSystem(athlete, weeklySessionNumber ?? 1, today, language);
+    const system = await renderSystem(
+      athlete,
+      weeklySessionNumber ?? 1,
+      today,
+      unavailableDates,
+      language,
+    );
     const reply = await callCoach({
       system,
       // The athlete's turn joins the history here rather than being stored
@@ -340,8 +376,14 @@ export async function continueWeeklySession(
   // athlete cannot retry without their message appearing twice.
   const transcript = await getMessages(conversationId);
 
+  // Read once per turn and threaded from here: the prompt (`renderSystem`)
+  // and the planning window (`windowFor`) both need this list, and each
+  // fetching it for itself is two round trips for one answer.
+  const unavailableDates = await getUnavailableDates(athlete.id);
+
   const answered = await askCoach({
     athlete,
+    unavailableDates,
     conversationId,
     weeklySessionNumber: conversation.weeklySessionNumber,
     today,
@@ -380,7 +422,7 @@ export async function continueWeeklySession(
   // against a turn that failed to persist would outlive the conversation it
   // belongs to. An invalid proposal simply isn't staged; the Coach's text still
   // shows and the conversation continues.
-  const proposal = await stageProposal(athlete, conversationId, today, reply);
+  const proposal = await stageProposal(athlete, conversationId, today, unavailableDates, reply);
 
   return { ok: true, messages: await getMessages(conversationId), proposal };
 }
@@ -412,7 +454,7 @@ export async function commitWeeklyPlan(
   // whole plan rather than silently commit a shrunken week; the athlete re-plans.
   const validated = validateProposedPlan(
     { sessions: pending.sessions },
-    await windowFor(athlete, today),
+    windowFor(athlete, today, await getUnavailableDates(athlete.id)),
   );
   if (!validated.ok || validated.sessions.length !== pending.sessions.length) {
     return { ok: false, reason: 'stale' };

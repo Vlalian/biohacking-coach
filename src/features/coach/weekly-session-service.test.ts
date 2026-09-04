@@ -250,6 +250,64 @@ describe('continueWeeklySession', () => {
 // this is the seam that proves it is gone from the string that actually reaches
 // Anthropic. The renderer tests prove the prompt *can* omit it; this proves the
 // service *does*.
+/** `unavailableBlock`'s own tail, which nothing else in the prompt says. */
+const UNAVAILABLE_BLOCK = 'no sessions, don';
+
+describe("the Coach is told the athlete's Unavailable Dates", () => {
+  /**
+   * `renderSystem` passed a literal `[]` for `unavailableDates`, and
+   * `unavailableBlock` renders its line only for a non-empty list — so the
+   * `UNAVAILABLE:` line had never once rendered in a Weekly Session, and the
+   * Coach planned training onto days the athlete had explicitly marked off.
+   *
+   * The source has existed since slice 14 and the Head Coach's Roster already
+   * reads it. Only the athlete's own Coach did not.
+   */
+  it('names the days the athlete marked off', async () => {
+    getUnavailableDates.mockResolvedValue(['2026-08-12', '2026-08-13']);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    // The block's own wording, not the bare token: the base prompt already
+    // carries a literal `[UNAVAILABLE:YYYY-MM-DD]` in its constraint-signals
+    // instructions, so asserting on "UNAVAILABLE:" alone would pass whether or
+    // not the block rendered.
+    expect(system).toContain(UNAVAILABLE_BLOCK);
+    expect(system).toContain('2026-08-12');
+    expect(system).toContain('2026-08-13');
+  });
+
+  it('renders no block for an athlete with none', async () => {
+    getUnavailableDates.mockResolvedValue([]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(callCoach.mock.calls[0][0].system).not.toContain(UNAVAILABLE_BLOCK);
+  });
+
+  it('names the dates the repository returned, not a re-derivation', async () => {
+    getUnavailableDates.mockResolvedValue(['2026-11-30']);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    // A date far outside TODAY's week: anything computing its own list from the
+    // week would never produce this, and would pass the first test regardless.
+    expect(callCoach.mock.calls[0][0].system).toContain('2026-11-30');
+  });
+
+  it('reads them once per turn, not once per consumer', async () => {
+    // `renderSystem` needs them for the prompt and `windowFor` needs them for
+    // the planning window, and both run inside `startWeeklySession`. Fetching
+    // in each is two round trips for one answer (showable-version/15).
+    getUnavailableDates.mockResolvedValue(['2026-08-12']);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(getUnavailableDates).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the system prompt carries no invented readiness', () => {
 
   it('sends no readiness scores when the athlete has never given a Check-in', async () => {
