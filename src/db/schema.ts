@@ -16,6 +16,10 @@ import {
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
+// Type-only, so the schema still imports no runtime code from a feature: the
+// pure Oracle core owns the shape of a citation (code-health/06 deliberately
+// waited for knowledge-oracle/03 to define it rather than guessing).
+import type { Citation } from '@/features/knowledge-oracle/retrieval';
 
 /**
  * A closed set as a SQL literal list, for a CHECK constraint.
@@ -473,6 +477,18 @@ export const messages = pgTable(
     role: text('role').notNull(),
     content: text('content').notNull(),
     seq: integer('seq').notNull(),
+    /**
+     * The sources the Coach drew on for this turn, stored with the message so it
+     * re-renders identically when the athlete scrolls back a week later - a
+     * reference that vanishes on reload is not evidence of anything
+     * (code-health/06).
+     *
+     * A column rather than its own table: a reference list is only ever read
+     * with its message and never queried across messages, so a join buys
+     * nothing. Null on every athlete turn and on every message written before
+     * this existed.
+     */
+    citations: jsonb('citations').$type<Citation[]>(),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (table) => [

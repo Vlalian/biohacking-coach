@@ -1,3 +1,4 @@
+import type { Citation } from '@/features/knowledge-oracle/retrieval';
 import type { ConversationRow, MessageRow } from '@/db/schema';
 import type { CoachMessage } from './coach-client';
 import type { ConversationKind } from '@/lib/conversation-kinds';
@@ -77,6 +78,14 @@ export interface Message {
   role: MessageRole;
   content: string;
   seq: number;
+  /**
+   * The sources the Coach drew on for this turn, or an empty list.
+   *
+   * Always a list and never null, so a renderer asks one question ("is this
+   * empty?") rather than two. Empty means the UI renders nothing at all - no
+   * heading, no container. An absent list is honest; an empty one looks broken.
+   */
+  citations: Citation[];
   createdAt: Date;
 }
 
@@ -98,6 +107,7 @@ export function toMessage(row: MessageRow): Message {
     role: row.role as MessageRole,
     content: row.content,
     seq: row.seq,
+    citations: row.citations ?? [],
     createdAt: row.createdAt,
   };
 }

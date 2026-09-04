@@ -59,7 +59,7 @@ const ATHLETE = {
 } as unknown as Parameters<typeof sendCoachChatMessage>[0];
 
 function msg(role: Message['role'], content: string, seq: number): Message {
-  return { id: `m${seq}`, role, content, seq, createdAt: new Date('2026-08-12T09:00:00Z') };
+  return { id: `m${seq}`, role, content, seq, citations: [], createdAt: new Date('2026-08-12T09:00:00Z') };
 }
 
 describe('toApiMessages, as Coach Chat uses it (no primer)', () => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { CitationList } from './citation-list';
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, CornerDownLeft, X } from 'lucide-react';
@@ -234,6 +235,7 @@ function ChatRow({
       <p className="max-w-[62ch] whitespace-pre-wrap text-[15px] leading-[1.7] text-foreground">
         {message.content}
       </p>
+      <CitationList citations={message.citations} heading={t('drewOn')} />
     </div>
   );
 }

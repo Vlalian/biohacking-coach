@@ -45,6 +45,7 @@ export default async function CoachAthleteBriefingPage({
                   role: m.role,
                   content: m.content,
                   seq: m.seq,
+                  citations: [], // not a grounded conversation - nothing retrieves here
                 })),
               }
             : null

@@ -68,6 +68,7 @@ function mRow(overrides: Partial<MessageRow> = {}): MessageRow {
     role: 'athlete',
     content: 'hi',
     seq: 0,
+    citations: null,
     createdAt: new Date(),
     ...overrides,
   };
@@ -152,9 +153,43 @@ describe('appendMessages — ownership and seq', () => {
 
     expect(result).toHaveLength(2);
     expect(insertedValues).toEqual([
-      { conversationId: 'c1', role: 'athlete', content: 'ping', seq: 5 },
-      { conversationId: 'c1', role: 'coach_ai', content: 'pong', seq: 6 },
+      { conversationId: 'c1', role: 'athlete', content: 'ping', citations: null, seq: 5 },
+      { conversationId: 'c1', role: 'coach_ai', content: 'pong', citations: null, seq: 6 },
     ]);
+  });
+
+  it('writes the sources the Coach drew on with the turn that used them', async () => {
+    // code-health/06. The reference list is stored with the message so it
+    // re-renders identically a week later; a reference that vanishes on reload
+    // is not evidence of anything.
+    const citation = {
+      sourceId: 'src_1',
+      slug: 'polarized-training',
+      title: 'Polarized training intensity distribution',
+      authors: 'Seiler S',
+      year: 2019,
+      url: 'https://doi.org/10.1000/example',
+      licence: 'CC BY 4.0',
+      licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
+      attribution: 'Seiler S (2019), CC BY 4.0',
+      ordinals: [3],
+    };
+    const owner = cRow();
+    let call = 0;
+    limit.mockImplementation(() => {
+      call += 1;
+      return Promise.resolve(call === 1 ? [owner] : []);
+    });
+    insertRows = [mRow({ role: 'coach_ai', citations: [citation] })];
+
+    const written = await appendMessages('athlete_1', 'c1', [
+      { role: 'coach_ai', content: 'Thursday is easy on purpose.', citations: [citation] },
+    ]);
+
+    expect(insertedValues).toEqual([
+      expect.objectContaining({ role: 'coach_ai', citations: [citation] }),
+    ]);
+    expect(written?.[0].citations).toEqual([citation]);
   });
 
   it('re-reads and retries when a concurrent append takes the same seq', async () => {
@@ -187,7 +222,7 @@ describe('appendMessages — ownership and seq', () => {
 
     expect(result).toEqual([expect.objectContaining({ seq: 6 })]);
     expect(insertedValues).toEqual([
-      { conversationId: 'c1', role: 'athlete', content: 'ping', seq: 6 },
+      { conversationId: 'c1', role: 'athlete', content: 'ping', citations: null, seq: 6 },
     ]);
   });
 
@@ -218,7 +253,7 @@ describe('appendMessages — ownership and seq', () => {
     await appendMessages('athlete_1', 'c1', [{ role: 'athlete', content: 'first' }]);
 
     expect(insertedValues).toEqual([
-      { conversationId: 'c1', role: 'athlete', content: 'first', seq: 0 },
+      { conversationId: 'c1', role: 'athlete', content: 'first', citations: null, seq: 0 },
     ]);
   });
 });
@@ -288,7 +323,7 @@ describe('appendBriefingMessages — coach ownership', () => {
 
     expect(result).toHaveLength(1);
     expect(insertedValues).toEqual([
-      { conversationId: 'b1', role: 'head_coach', content: 'how has her sleep trended?', seq: 0 },
+      { conversationId: 'b1', role: 'head_coach', content: 'how has her sleep trended?', citations: null, seq: 0 },
     ]);
   });
 });

@@ -151,6 +151,7 @@ export default async function AppShellLayout({
           role: m.role,
           content: m.content,
           seq: m.seq,
+          citations: m.citations,
         })),
         proposal: pending ? { sessions: pending.sessions } : null,
         ended: false,
@@ -165,6 +166,7 @@ export default async function AppShellLayout({
           role: m.role,
           content: m.content,
           seq: m.seq,
+          citations: m.citations,
         })),
       };
     }

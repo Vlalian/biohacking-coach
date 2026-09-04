@@ -65,6 +65,7 @@ export default async function FeedbackPage({
                 role: m.role,
                 content: m.content,
                 seq: m.seq,
+                citations: [], // not a grounded conversation - nothing retrieves here
               })),
             }
           : null

@@ -180,8 +180,8 @@ describe('skippedFrom', () => {
 describe('toWeeklyApiMessages', () => {
   it('opens with the user primer then alternates from the transcript', () => {
     const transcript: Message[] = [
-      { id: 'm0', role: 'coach_ai', content: 'Welcome.', seq: 0, createdAt: new Date() },
-      { id: 'm1', role: 'athlete', content: 'In rhythm.', seq: 1, createdAt: new Date() },
+      { id: 'm0', role: 'coach_ai', content: 'Welcome.', seq: 0, citations: [], createdAt: new Date() },
+      { id: 'm1', role: 'athlete', content: 'In rhythm.', seq: 1, citations: [], createdAt: new Date() },
     ];
     expect(toWeeklyApiMessages(transcript)).toEqual([
       { role: 'user', content: WEEKLY_OPENER },
