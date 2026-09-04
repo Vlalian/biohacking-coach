@@ -642,3 +642,293 @@ describe('the week block inside the Coach Chat prompt', () => {
     ).toThrow(/identifier/i);
   });
 });
+
+/**
+ * The prompt formatters, exercised directly.
+ *
+ * These are the functions that turn training data into the sentences the Coach
+ * reads, and until 2026-09-03 several of their branches were reached by no test
+ * at all — the golden prompts pass empty lists for most of them, so the
+ * formatters returned early and the interesting half never ran. A wrong weekday
+ * or a swallowed qualifier here is invisible in review and obvious to an
+ * athlete.
+ */
+describe('the prompt formatters, branch by branch', () => {
+  it('defaults every optional input when only a check-in is given', () => {
+    // Also the only exercise of the clock seam: `today` defaults to now.
+    const ctx = buildWeeklyContext(BASE);
+    expect(ctx.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(ctx.today).toBe(new Date().toISOString().slice(0, 10));
+    expect(ctx).toMatchObject({
+      patterns: [],
+      skippedSessions: [],
+      unavailableDates: [],
+      feedbackSummary: null,
+      weekActivityLines: null,
+    });
+  });
+
+  it('distinguishes null from empty for skipped sessions', () => {
+    expect(formatSkippedSessions()).toBeNull();
+    expect(formatSkippedSessions([])).toBeNull();
+  });
+
+  it('joins several skipped sessions with a semicolon', () => {
+    expect(
+      formatSkippedSessions([
+        { date: '2026-08-17', sessionType: 'Endurance' },
+        { date: '2026-08-19', sessionType: 'Tempo' },
+      ]),
+    ).toBe('Mon 2026-08-17: Endurance, skipped; Wed 2026-08-19: Tempo, skipped');
+  });
+
+  it('ordinals the Double qualifier 1st, 2nd, 3rd, then Nth', () => {
+    const at = (position: number) =>
+      formatSkippedSessions([{ date: '2026-08-17', sessionType: 'Endurance', position }]);
+    expect(at(1)).toContain('1st Endurance');
+    expect(at(2)).toContain('2nd Endurance');
+    expect(at(3)).toContain('3rd Endurance');
+    expect(at(4)).toContain('4th Endurance');
+  });
+
+  it('names weekdays in en-GB short form, from local midnight', () => {
+    // Sunday is the one that catches a UTC-parsed date key west of Greenwich:
+    // it would render as the Saturday before.
+    expect(formatSkippedSessions([{ date: '2026-08-23', sessionType: 'Recovery' }])).toBe(
+      'Sun 2026-08-23: Recovery, skipped',
+    );
+  });
+
+  it('treats a week activity with no moves and no creations as nothing to report', () => {
+    expect(formatWeekActivity()).toBeNull();
+    expect(formatWeekActivity(null)).toBeNull();
+    expect(formatWeekActivity({})).toBeNull();
+    expect(formatWeekActivity({ moves: [] })).toBeNull();
+    expect(formatWeekActivity({ creations: [] })).toBeNull();
+  });
+
+  it('reports creations when there are no moves at all, and flags a retro-log', () => {
+    expect(
+      formatWeekActivity({
+        creations: [
+          { sessionType: 'Strength', dateKey: '2026-08-18', retro: true },
+          { sessionType: 'Mobility', dateKey: '2026-08-19', retro: false },
+        ],
+      }),
+    ).toBe(
+      '- added Tue 2026-08-18 Strength (retro-logged as done)\n' +
+        '- added Wed 2026-08-19 Mobility',
+    );
+  });
+
+  it('maps a feedback score across the whole emoji scale, and falls back off it', () => {
+    const line = (body: number, mind: number) =>
+      formatWeekFeedback([{ dateKey: '2026-08-18', sessionType: 'Endurance', body, mind, comment: null }]);
+    expect(line(1, 10)).toContain('Body 😫 (1/10)');
+    expect(line(1, 10)).toContain('Mind 😄 (10/10)');
+    expect(line(5, 5)).toContain('Body 😐 (5/10)');
+    // Off the scale entirely: a dash rather than `undefined` in front of the Coach.
+    expect(line(100, 100)).toContain('Body — (100/10)');
+  });
+
+  it('names an untyped session Training, and quotes a comment only when there is one', () => {
+    const [withComment] = [
+      formatWeekFeedback([
+        { dateKey: '2026-08-18', sessionType: '', body: 7, mind: 7, comment: 'legs heavy' },
+      ]),
+    ];
+    expect(withComment).toContain('· Training ·');
+    expect(withComment).toContain('· "legs heavy"');
+
+    const bare = formatWeekFeedback([
+      { dateKey: '2026-08-18', sessionType: 'Endurance', body: 7, mind: 7, comment: null },
+    ]);
+    expect(bare).not.toContain('"');
+  });
+
+  it('distinguishes null from empty for week feedback', () => {
+    expect(formatWeekFeedback()).toBeNull();
+    expect(formatWeekFeedback([])).toBeNull();
+  });
+});
+
+/**
+ * The block builders' branches.
+ *
+ * Each of these is a place where the Coach is either told something or not, and
+ * the difference is a coaching difference rather than a cosmetic one — a joined
+ * list that loses its separator, an omitted tag that renders `undefined`, a
+ * nudge that fires in the wrong week.
+ */
+describe('the weekly prompt block builders, branch by branch', () => {
+  const TUESDAY = '2026-08-18';
+
+  function weekly(overrides: Partial<CheckIn> = {}, unavailable: string[] = []) {
+    return renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, ...overrides },
+        [],
+        [],
+        [],
+        unavailable,
+        null,
+        TUESDAY,
+      ),
+    );
+  }
+
+  it('lists several Fixed Constraints on one line, comma separated', () => {
+    expect(weekly({ fixedConstraints: ['Monday', 'Thursday'] })).toContain(
+      'NO TRAINING ON: Monday, Thursday',
+    );
+  });
+
+  it('names the weekday of the planning day in English', () => {
+    // 2026-08-18 is a Tuesday. A UTC-parsed key would render Monday for anyone
+    // west of Greenwich, and a different locale would not say 'Tuesday' at all.
+    expect(weekly({ weeklySessionDay: 'Monday' })).toContain('today Tuesday');
+  });
+
+  it('lists several Unavailable Dates on one line, comma separated', () => {
+    expect(weekly({}, ['2026-08-20', '2026-08-21'])).toContain(
+      'UNAVAILABLE: 2026-08-20, 2026-08-21',
+    );
+  });
+
+  it('omits a STATE tag whose value is absent or blank, rather than rendering the word', () => {
+    const blank = weekly({ phase: '', experienceLevel: '' });
+    expect(blank).not.toContain('undefined');
+    expect(blank).not.toContain('phase=');
+    // A real value still renders.
+    expect(weekly({ phase: 'Peak' })).toContain('phase=Peak');
+  });
+
+  it('joins several patterns with a semicolon', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TUESDAY);
+    const withPatterns = { ...ctx, patterns: ['sleeps badly before intervals', 'skips Fridays'] };
+    expect(renderWeeklyPrompt(withPatterns)).toContain(
+      'PATTERNS: sleeps badly before intervals; skips Fridays.',
+    );
+  });
+
+});
+
+describe('buildChatPrompt — its own branches', () => {
+  it('renders the CONTEXT line without a tag whose value is missing', () => {
+    const prompt = buildChatPrompt({ ...BASE, phase: undefined, sessionCount: undefined });
+    expect(prompt).not.toContain('undefined');
+    expect(prompt).toContain('xp=intermediate');
+  });
+
+  it('falls back to intermediate when no experience level is set', () => {
+    expect(buildChatPrompt({ ...BASE, experienceLevel: '' })).toContain('xp=intermediate');
+  });
+
+  it('defaults today to the real clock when it is not passed', () => {
+    expect(buildChatPrompt(BASE)).toContain(`TODAY: ${new Date().toISOString().slice(0, 10)}`);
+  });
+});
+
+describe('formatWeekSessions — authorship labels and the parameter tail', () => {
+  // Authorship is load-bearing, not decorative: the Coach's plan authority
+  // differs per author (ADR 0003), so each label is pinned to its exact words.
+  it('names every origin in the athlete-facing wording', () => {
+    const labelFor = (origin: WeekSession['origin']) => formatWeekSessions([planned({ origin })]);
+    expect(labelFor('coach')).toContain('you planned this');
+    expect(labelFor('head_coach')).toContain("the athlete's Head Coach set this");
+    expect(labelFor('athlete')).toContain('the athlete added this themselves');
+    // A Detected Activity in CONTEXT.md's terms, said plainly to the model.
+    expect(labelFor('garmin')).toContain("logged from the athlete's watch");
+  });
+
+  it('renders duration and zone as a separated tail, and omits it entirely when there is neither', () => {
+    expect(formatWeekSessions([planned({ durationMinutes: 60, zone: '4' })])).toContain(
+      ' · 60 min · Zone 4',
+    );
+    expect(formatWeekSessions([planned({ durationMinutes: 60, zone: null })])).toContain(
+      ' · 60 min',
+    );
+    expect(formatWeekSessions([planned({ durationMinutes: null, zone: '4' })])).toContain(
+      ' · Zone 4',
+    );
+
+    // Exactly, not just "no separator": an empty tail must render as nothing at
+    // all, and `toContain` cannot tell nothing from something unexpected.
+    expect(
+      formatWeekSessions([planned({ durationMinutes: null, zone: null, note: null })]),
+    ).toBe('- Tue 2026-08-18: Intensity — planned (you planned this)');
+  });
+});
+
+describe('the last exact-shape assertions', () => {
+  it('renders a feedback line exactly, with and without a comment, one per line', () => {
+    const lines = formatWeekFeedback([
+      { dateKey: '2026-08-18', sessionType: 'Endurance', body: 7, mind: 7, comment: 'legs heavy' },
+      { dateKey: '2026-08-19', sessionType: 'Tempo', body: 7, mind: 7, comment: null },
+    ]);
+    expect(lines).toBe(
+      '- Tue 18 Aug · Endurance · Body 🙂 (7/10) · Mind 🙂 (7/10) · "legs heavy"\n' +
+        '- Wed 19 Aug · Tempo · Body 🙂 (7/10) · Mind 🙂 (7/10)',
+    );
+  });
+
+  it('renders a week-session line exactly', () => {
+    expect(formatWeekSessions([planned({ durationMinutes: 60, zone: '4' })])).toBe(
+      '- Tue 2026-08-18: Intensity · 60 min · Zone 4 — planned (you planned this)',
+    );
+  });
+
+  it('renders the Coach Chat CONTEXT line exactly, with an absent tag simply gone', () => {
+    const prompt = buildChatPrompt(
+      { ...BASE, phase: undefined, sessionCount: 4, experienceLevel: 'advanced', readiness: undefined },
+      '2026-08-18',
+    );
+    expect(prompt).toContain('CONTEXT (use silently — never cite scores/numbers):\nxp=advanced sessions=4');
+  });
+
+  it('accepts a Reference with nothing identifying in it', () => {
+    expect(() =>
+      buildChatPrompt(BASE, '2026-08-18', {
+        type: 'Intensity',
+        dayLabel: 'Tuesday 18 August',
+        duration: '60 min',
+        zone: 'Z4',
+        note: 'threshold set',
+        status: 'planned',
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('the equipment nudge, exhaustively', () => {
+  const at = (weeklySessionNumber: number | undefined, equipment: CheckIn['equipment']) =>
+    renderWeeklyPrompt(
+      buildWeeklyContext({ ...BASE, weeklySessionNumber, equipment }, [], [], [], [], null, '2026-08-18'),
+    );
+
+  const NUDGE = 'EQUIPMENT NUDGE:';
+  const someKit: CheckIn['equipment'] = [
+    {
+      id: 'eq_1',
+      category: 'bike',
+      name: 'Canyon Speedmax',
+      details: 'CF SLX',
+      addedDate: '2026-08-01',
+    },
+  ];
+
+  it('fires in sessions 2 and 3 only, and never once there is equipment', () => {
+    expect(at(2, [])).toContain(NUDGE);
+    expect(at(3, [])).toContain(NUDGE);
+    expect(at(1, [])).not.toContain(NUDGE);
+    expect(at(4, [])).not.toContain(NUDGE);
+    // The whole point of the nudge is an empty tab — a full one silences it.
+    expect(at(2, someKit)).not.toContain(NUDGE);
+    expect(at(3, someKit)).not.toContain(NUDGE);
+  });
+
+  it('does not fire when the session number is unknown or below the range', () => {
+    expect(at(undefined, [])).not.toContain(NUDGE);
+    expect(at(0, [])).not.toContain(NUDGE);
+  });
+});

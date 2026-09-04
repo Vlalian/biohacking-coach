@@ -3,6 +3,7 @@ import type { EquipmentItem } from '@/features/equipment/equipment';
 import type { Session } from '@/features/session/session';
 import type { NewSessionRow } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
+import type { PlanningWindow } from './planning-window';
 import { assertNoIdentity, type CheckIn, type Readiness, type SkippedSession, type WeekFeedbackEntry } from './check-in';
 import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
@@ -58,28 +59,64 @@ export function buildWeeklyCheckIn(
     // Omitted entirely when absent, rather than set to undefined: nothing can
     // then interpolate "undefined" into a prompt.
     ...(readiness ? { readiness } : {}),
-    phase: athlete.trainingPhase ?? undefined,
-    experienceLevel: athlete.experienceLevel ?? undefined,
-    commStyle: athlete.communicationStyle ?? undefined,
-    raceTarget: athlete.raceTarget ?? undefined,
+    ...coachingFactsFrom(athlete),
+    ...constraintFactsFrom(athlete),
     // The STATE line's `sessions=` is coaching-relationship depth — how many
     // Weekly Sessions have come before, not the athlete's weekly frequency.
     // Mapping `trainingSessionsPerWeek` here would mislabel a cadence (6/week)
     // as history (6 sessions had), so relationship depth is used instead.
     sessionCount: Math.max(0, weeklySessionNumber - 1),
     language: language ?? 'en',
-    onboarding: athlete.profile?.onboarding ?? undefined,
     // Equipment lives in its own table (its own screen, its own CRUD), not on
     // the athlete row — the caller fetches it and passes it in.
     equipment: equipmentItems,
-    // The constraint answers from MCQ onboarding (slice 09): no-training days
-    // and the preferred Weekly Session day, both read by the weekly prompt.
-    fixedConstraints: athlete.profile?.fixedConstraints ?? undefined,
-    weeklySessionDay: athlete.profile?.weeklySessionDay ?? undefined,
     weeklySessionNumber,
   };
   assertNoIdentity(checkIn);
   return checkIn;
+}
+
+/**
+ * The athlete's coaching picture, as the prompt names it.
+ *
+ * Every column is nullable and every one becomes `undefined` rather than a
+ * stand-in, because {@link assertNoIdentity} and the prompt builders both treat
+ * absence as a thing to omit — a defaulted value would read to the Coach as
+ * something the athlete said.
+ */
+function coachingFactsFrom(athlete: Athlete) {
+  return {
+    phase: orUndefined(athlete.trainingPhase),
+    experienceLevel: orUndefined(athlete.experienceLevel),
+    commStyle: orUndefined(athlete.communicationStyle),
+    raceTarget: orUndefined(athlete.raceTarget),
+  };
+}
+
+/**
+ * A nullable column as an optional field.
+ *
+ * `null` and `undefined` mean the same thing to every reader of a `CheckIn` -
+ * the athlete has not said - but only `undefined` is omitted by object spread
+ * and by the prompt builders' `tag()`. One conversion, written once, so that
+ * "absent" has a single spelling on the way into a prompt.
+ */
+function orUndefined<T>(value: T | null | undefined): T | undefined {
+  return value ?? undefined;
+}
+
+/**
+ * The answers MCQ onboarding wrote (slice 09), read straight off the opaque
+ * profile: the onboarding block, the no-training days, and the preferred Weekly
+ * Session day. No column here can carry a name or an email.
+ */
+function constraintFactsFrom(athlete: Athlete) {
+  const profile = athlete.profile;
+  return {
+    onboarding: orUndefined(profile?.onboarding),
+    fixedConstraints: orUndefined(profile?.fixedConstraints),
+    weeklySessionDay: orUndefined(profile?.weeklySessionDay),
+  };
 }
 
 /**
@@ -195,6 +232,9 @@ function optionalString(value: unknown): string | null {
 }
 
 function positiveMinutes(value: unknown): number | null {
+  // Stryker disable next-line ConditionalExpression: equivalent. The typeof is
+  // here to narrow for TypeScript; at runtime Number.isInteger already refuses
+  // every non-number, so no behavioural test can tell the two apart.
   return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_SESSION_MINUTES
     ? value
     : null;
@@ -208,37 +248,104 @@ export type ValidatePlanResult =
  * The server-authority gate over a proposed plan.
  *
  * `strict` tool use guarantees the shape, but not the meaning: the Coach could
- * still name an impossible date (2026-02-30) or one in the past. Each row is
- * checked against the real calendar and today; a row that fails is dropped rather
- * than trusted. `malformed` means the input was not even a sessions array;
- * `empty` means nothing valid survived — both are refusals, so nothing is staged.
- * The athlete only ever sees, and confirms, rows that passed here.
+ * still name an impossible date (2026-02-30), one in the past, or one in a week
+ * it was never asked to plan. Each row is checked against the real calendar and
+ * against the {@link PlanningWindow}; a row that fails is dropped rather than
+ * trusted. `malformed` means the input was not even a sessions array; `empty`
+ * means nothing valid survived — both are refusals, so nothing is staged. The
+ * athlete only ever sees, and confirms, rows that passed here.
+ *
+ * The window replaced a bare `today` on 2026-09-03 (`showable-version/11`). The
+ * old check bounded the plan below and not above, so a proposal for any future
+ * week validated cleanly and `proposalDateRange` then wrote whatever span the
+ * model had chosen — the rule that a plan covers the remainder of *this* week
+ * lived only as a sentence in the prompt, and a sentence in a prompt is a
+ * request. The window's own `start` subsumes the past-date rule: it is never
+ * earlier than today.
  */
-export function validateProposedPlan(input: unknown, today: string): ValidatePlanResult {
-  if (!input || typeof input !== 'object') return { ok: false, reason: 'malformed' };
-  const raw = (input as Record<string, unknown>).sessions;
-  if (!Array.isArray(raw)) return { ok: false, reason: 'malformed' };
+export function validateProposedPlan(
+  input: unknown,
+  window: PlanningWindow,
+): ValidatePlanResult {
+  const raw = sessionsArrayFrom(input);
+  if (!raw) return { ok: false, reason: 'malformed' };
 
-  const sessions: ProposedSession[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
-    const s = entry as Record<string, unknown>;
-    const date = typeof s.date === 'string' ? s.date : '';
-    const type = typeof s.type === 'string' ? s.type : '';
-    // A real calendar day, today or later — a past day is history, not a plan.
-    if (!isValidDateKey(date) || date < today) continue;
-    if (!PLAN_TYPES.includes(type as PlanType)) continue;
-    sessions.push({
-      date,
-      type: type as PlanType,
-      durationMinutes: positiveMinutes(s.durationMinutes),
-      zone: optionalString(s.zone),
-      note: optionalString(s.note),
-    });
-  }
+  const sessions = raw
+    .map((entry) => proposedSessionFrom(entry, window))
+    .filter((s): s is ProposedSession => s !== null);
 
   if (sessions.length === 0) return { ok: false, reason: 'empty' };
   return { ok: true, sessions };
+}
+
+/**
+ * The `sessions` array out of the tool input, or `null` when there was not one.
+ *
+ * `malformed` and `empty` are different refusals and this is the seam between
+ * them: nothing here judges a session, only whether the Coach sent a list at all.
+ */
+function sessionsArrayFrom(input: unknown): unknown[] | null {
+  // Optional chaining rather than an explicit object guard: a primitive has no
+  // `sessions` either, so the guard was a second way of saying the same thing —
+  // and a branch nothing can distinguish is a branch no test can hold.
+  const raw = (input as { sessions?: unknown } | null | undefined)?.sessions;
+  return Array.isArray(raw) ? raw : null;
+}
+
+/**
+ * One row of a proposal, or `null` when the Coach named something the server
+ * will not write: a day that is not a real date, a day outside the window, or a
+ * type that is not a Session Type.
+ *
+ * Split out of {@link validateProposedPlan} so the loop reads as "keep the rows
+ * that survive" and the surviving rules live in one place. A dropped row is
+ * silent by design — the plan the athlete confirms is only ever what passed.
+ */
+function proposedSessionFrom(
+  entry: unknown,
+  window: PlanningWindow,
+): ProposedSession | null {
+  // Stryker disable next-line ConditionalExpression: equivalent. Dropping the
+  // typeof half changes nothing observable - a primitive's `.date` is undefined,
+  // and isPlannableDay refuses that on the very next line. The guard earns its
+  // place against `null`, which would throw, and that half IS killed by a test.
+  if (!entry || typeof entry !== 'object') return null;
+  const s = entry as Record<string, unknown>;
+
+  if (!isPlannableDay(s.date, window)) return null;
+  if (!isPlanType(s.type)) return null;
+
+  return {
+    date: s.date,
+    type: s.type,
+    durationMinutes: positiveMinutes(s.durationMinutes),
+    zone: optionalString(s.zone),
+    note: optionalString(s.note),
+  };
+}
+
+/**
+ * Whether an untrusted value is a day the server will write.
+ *
+ * A real calendar day, inside the window — before it is history, or a week that
+ * was not being planned; after it is a week nobody agreed to. Takes `unknown`
+ * and narrows, so there is no sentinel empty string standing in for "not a
+ * date": absence and invalidity are the same refusal and are written once.
+ */
+function isPlannableDay(date: unknown, window: PlanningWindow): date is string {
+  // Stryker disable next-line ConditionalExpression: equivalent. The typeof is
+  // here to narrow for TypeScript; at runtime isValidDateKey already rejects a
+  // non-string, so no behavioural test can tell the two apart.
+  if (typeof date !== 'string' || !isValidDateKey(date)) return false;
+  return date >= window.start && date <= window.end;
+}
+
+/** Whether an untrusted value is one of the Session Types a plan may hold. */
+function isPlanType(type: unknown): type is PlanType {
+  // Stryker disable next-line ConditionalExpression: equivalent. Same reason as
+  // isPlannableDay - the typeof narrows for TypeScript, and `includes` already
+  // refuses a non-string at runtime.
+  return typeof type === 'string' && PLAN_TYPES.includes(type as PlanType);
 }
 
 /** The [start, end] calendar span a proposal covers — the range to replace. */

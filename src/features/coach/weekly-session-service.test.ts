@@ -25,6 +25,13 @@ const {
   getEquipmentItems,
   getSessionsForWeek,
   recordProposal,
+  getPendingProposal,
+  recordPlanCommitted,
+  endConversation,
+  replaceCoachPlanForDateRange,
+  getUnavailableDates,
+  recordPlanDeclined,
+  logCoachFailure,
 } = vi.hoisted(() => ({
   callCoach: vi.fn(),
   appendMessages: vi.fn(),
@@ -36,6 +43,13 @@ const {
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
   getSessionsForWeek: vi.fn(() => Promise.resolve([])),
   recordProposal: vi.fn(() => Promise.resolve()),
+  getPendingProposal: vi.fn(),
+  recordPlanCommitted: vi.fn(() => Promise.resolve()),
+  endConversation: vi.fn(() => Promise.resolve()),
+  replaceCoachPlanForDateRange: vi.fn(() => Promise.resolve()),
+  getUnavailableDates: vi.fn(() => Promise.resolve([] as string[])),
+  recordPlanDeclined: vi.fn(() => Promise.resolve()),
+  logCoachFailure: vi.fn(),
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
@@ -44,23 +58,26 @@ vi.mock('./conversation-repository', () => ({
   countWeeklySessions,
   createConversation,
   deleteOwnedConversation,
-  endConversation: vi.fn(),
+  endConversation,
   getMessages,
   getOwnedConversation,
 }));
 vi.mock('./plan-proposal-repository', () => ({
-  getPendingProposal: vi.fn(),
-  recordPlanCommitted: vi.fn(),
-  recordPlanDeclined: vi.fn(),
+  getPendingProposal,
+  recordPlanCommitted,
+  recordPlanDeclined,
   recordProposal,
 }));
+vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
-  replaceCoachPlanForDateRange: vi.fn(),
+  replaceCoachPlanForDateRange,
 }));
 
-const { startWeeklySession, continueWeeklySession } = await import('./weekly-session-service');
+const { startWeeklySession, continueWeeklySession, commitWeeklyPlan, declineWeeklyPlan } =
+  await import('./weekly-session-service');
 
 const ATHLETE = {
   id: 'athlete_1',
@@ -87,6 +104,13 @@ beforeEach(() => {
   getMessages.mockReset().mockResolvedValue([]);
   getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', weeklySessionNumber: 2 });
   recordProposal.mockClear();
+  getPendingProposal.mockReset();
+  recordPlanCommitted.mockClear();
+  endConversation.mockClear();
+  replaceCoachPlanForDateRange.mockClear();
+  getUnavailableDates.mockReset().mockResolvedValue([]);
+  recordPlanDeclined.mockClear();
+  logCoachFailure.mockClear();
 });
 
 describe('startWeeklySession', () => {
@@ -242,5 +266,430 @@ describe('the system prompt carries no invented readiness', () => {
     const { system } = callCoach.mock.calls[0][0];
     expect(system).toContain('phase=Base Building');
     expect(system).toContain('xp=intermediate');
+  });
+});
+
+/**
+ * The planning window at the commit gate (`showable-version/11`).
+ *
+ * `commitWeeklyPlan` re-validates the staged proposal before writing, and since
+ * 2026-09-03 it re-validates against the *window* rather than against `today`
+ * alone. That matters because the window is derived fresh: a proposal staged
+ * legally and confirmed later, or one whose athlete has since marked the rest of
+ * the week unavailable, is no longer a week the server will write.
+ */
+describe('commitWeeklyPlan and the planning window', () => {
+  // TODAY is 2026-08-12, a Wednesday; its week ends Sunday 2026-08-16.
+  const INSIDE = {
+    date: '2026-08-14',
+    type: 'Endurance',
+    durationMinutes: 60,
+    zone: 'Z2',
+    note: null,
+  };
+  const NEXT_WEEK = { ...INSIDE, date: '2026-08-17' };
+
+  it('writes a proposal that lies inside the window', async () => {
+    getPendingProposal.mockResolvedValue({ sessions: [INSIDE] });
+
+    const result = await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY);
+
+    expect(result).toEqual({
+      ok: true,
+      sessionCount: 1,
+      start: '2026-08-14',
+      end: '2026-08-14',
+    });
+    expect(replaceCoachPlanForDateRange).toHaveBeenCalled();
+  });
+
+  it('refuses as stale a proposal that has drifted beyond the window', async () => {
+    getPendingProposal.mockResolvedValue({ sessions: [INSIDE, NEXT_WEEK] });
+
+    const result = await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY);
+
+    // Refused whole rather than committed shrunken: a week the athlete agreed to
+    // is not the same week once a day of it is dropped, so they re-plan.
+    expect(result).toEqual({ ok: false, reason: 'stale' });
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+    expect(recordPlanCommitted).not.toHaveBeenCalled();
+  });
+
+  it('refuses when Unavailable Dates have emptied the week since staging', async () => {
+    getPendingProposal.mockResolvedValue({ sessions: [INSIDE] });
+    // Every remaining day of the week is now off, so the window falls through to
+    // next week and the staged session sits before its start.
+    getUnavailableDates.mockResolvedValue([
+      '2026-08-12',
+      '2026-08-13',
+      '2026-08-14',
+      '2026-08-15',
+      '2026-08-16',
+    ]);
+
+    const result = await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'stale' });
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The two decision endpoints of a Weekly Session: the athlete confirms the week,
+ * or they do not. Both are ownership-scoped (ADR 0006) and both are reachable
+ * from a client, so what they refuse matters as much as what they do.
+ */
+describe('declineWeeklyPlan', () => {
+  it('refuses a conversation the athlete does not own, and writes nothing', async () => {
+    getOwnedConversation.mockResolvedValue(null);
+
+    expect(await declineWeeklyPlan(ATHLETE, 'conv_1')).toEqual({
+      ok: false,
+      reason: 'not-owner',
+    });
+    expect(getPendingProposal).not.toHaveBeenCalled();
+    expect(recordPlanDeclined).not.toHaveBeenCalled();
+  });
+
+  it('marks a pending proposal declined and leaves the conversation open', async () => {
+    getPendingProposal.mockResolvedValue({
+      sessions: [
+        { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+      ],
+    });
+
+    expect(await declineWeeklyPlan(ATHLETE, 'conv_1')).toEqual({ ok: true });
+    expect(recordPlanDeclined).toHaveBeenCalledWith(ATHLETE.id, 'conv_1');
+    // Declining is not ending: the athlete may keep talking or ask for another week.
+    expect(endConversation).not.toHaveBeenCalled();
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+  });
+
+  it('succeeds with nothing to decline when no proposal is pending', async () => {
+    getPendingProposal.mockResolvedValue(null);
+
+    expect(await declineWeeklyPlan(ATHLETE, 'conv_1')).toEqual({ ok: true });
+    expect(recordPlanDeclined).not.toHaveBeenCalled();
+  });
+});
+
+describe('commitWeeklyPlan — what it refuses', () => {
+  it('refuses a conversation the athlete does not own', async () => {
+    getOwnedConversation.mockResolvedValue(null);
+
+    expect(await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY)).toEqual({
+      ok: false,
+      reason: 'not-owner',
+    });
+    expect(getPendingProposal).not.toHaveBeenCalled();
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+  });
+
+  it('refuses when there is nothing staged to commit', async () => {
+    getPendingProposal.mockResolvedValue(null);
+
+    expect(await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY)).toEqual({
+      ok: false,
+      reason: 'no-proposal',
+    });
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+  });
+
+  it('ends the conversation once the week is written', async () => {
+    getPendingProposal.mockResolvedValue({
+      sessions: [
+        { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+      ],
+    });
+
+    const result = await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY);
+
+    expect(result.ok).toBe(true);
+    expect(recordPlanCommitted).toHaveBeenCalled();
+    // The ritual is over once the week is agreed — the thread does not stay open.
+    expect(endConversation).toHaveBeenCalled();
+  });
+});
+
+describe('the planning window is derived from the athlete, not assumed', () => {
+  it("reads the athlete's Fixed Constraints and Unavailable Dates", async () => {
+    // Every remaining day of TODAY's week is off, so the window falls through and
+    // a session inside that week is no longer commitable.
+    const constrained = {
+      ...ATHLETE,
+      profile: { fixedConstraints: ['Thursday', 'Friday', 'Saturday', 'Sunday'] },
+    } as unknown as typeof ATHLETE;
+    getUnavailableDates.mockResolvedValue(['2026-08-12', '2026-08-13']);
+    getPendingProposal.mockResolvedValue({
+      sessions: [
+        { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+      ],
+    });
+
+    expect(await commitWeeklyPlan(constrained, 'conv_1', TODAY)).toEqual({
+      ok: false,
+      reason: 'stale',
+    });
+    expect(getUnavailableDates).toHaveBeenCalledWith(ATHLETE.id);
+  });
+
+  it('treats an athlete with no profile as having no constraints', async () => {
+    getPendingProposal.mockResolvedValue({
+      sessions: [
+        { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+      ],
+    });
+
+    // ATHLETE.profile is null; the week is plannable, so this commits.
+    expect((await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY)).ok).toBe(true);
+  });
+});
+
+/**
+ * What the service actually hands the Coach, and what it does when the Coach
+ * fails. These are the arguments that decide whether a Weekly Session is a
+ * Weekly Session at all — the opener, the token budget, the proposal tool — and
+ * none of them were asserted before 2026-09-03.
+ */
+describe('what the service sends the Coach', () => {
+  it('opens session N+1 with the fixed opener and the weekly token budget', async () => {
+    countWeeklySessions.mockResolvedValue(3);
+    getMessages.mockResolvedValue([{ id: 'm1', role: 'coach_ai', content: 'Hi', seq: 0 }]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(callCoach).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ role: 'user', content: "Let's do our weekly session." }],
+        maxTokens: 1400,
+      }),
+    );
+    // The fourth session, not the third: the count is of sessions already held.
+    expect(createConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'weekly_session', weeklySessionNumber: 4 }),
+    );
+  });
+
+  it('offers the proposal tool on a continuing turn, with the acknowledgement', async () => {
+    getMessages.mockResolvedValue([{ id: 'm1', role: 'coach_ai', content: 'Hi', seq: 0 }]);
+    appendMessages.mockResolvedValue([]);
+
+    await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    const args = callCoach.mock.calls.at(-1)?.[0];
+    expect(args.maxTokens).toBe(1400);
+    expect(args.tools?.[0]?.name).toBe('propose_week_plan');
+    // The Coach must not tell the athlete the week is saved — it is not, yet.
+    expect(args.toolResult).toContain('Do not say it has been saved');
+    // The athlete's turn reaches the API even though it is not stored yet.
+    expect(args.messages.at(-1)).toEqual({ role: 'user', content: 'plan my week' });
+  });
+
+  it('mints no conversation when the opening call fails', async () => {
+    callCoach.mockRejectedValue(new Error('upstream down'));
+
+    const result = await startWeeklySession(ATHLETE, TODAY);
+
+    expect(result.ok).toBe(false);
+    // A Weekly Session that never spoke is not one the athlete has held: minting
+    // the row anyway would make `countWeeklySessions` skip a number for good.
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(appendMessages).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing when a continuing turn fails', async () => {
+    getMessages.mockResolvedValue([{ id: 'm1', role: 'coach_ai', content: 'Hi', seq: 0 }]);
+    callCoach.mockRejectedValue(new Error('upstream down'));
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(result.ok).toBe(false);
+    expect(appendMessages).not.toHaveBeenCalled();
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+});
+
+describe('staging a proposal on a continuing turn', () => {
+  const validCall = {
+    name: 'propose_week_plan',
+    input: {
+      sessions: [
+        { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    getMessages.mockResolvedValue([{ id: 'm1', role: 'coach_ai', content: 'Hi', seq: 0 }]);
+    appendMessages.mockResolvedValue([{ id: 'm2', role: 'athlete', content: 'ok', seq: 1 }]);
+  });
+
+  it('stages a valid proposal alongside the stored turn', async () => {
+    callCoach.mockResolvedValue({ text: "Here's your week.", toolCalls: [validCall] });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(recordProposal).toHaveBeenCalledWith(ATHLETE.id, 'conv_1', [
+      { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
+    ]);
+  });
+
+  it('stages nothing, but still stores the turn, when the plan falls outside the window', async () => {
+    // 2026-08-17 is the Monday after TODAY's week — a week nobody agreed to.
+    callCoach.mockResolvedValue({
+      text: "Here's your week.",
+      toolCalls: [
+        {
+          name: 'propose_week_plan',
+          input: {
+            sessions: [
+              { date: '2026-08-17', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    // The Coach's words still reach the athlete; only the plan is refused.
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(appendMessages).toHaveBeenCalled();
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+
+  it('stages nothing when the Coach called no tool at all', async () => {
+    callCoach.mockResolvedValue({ text: 'How did the week feel?', toolCalls: [] });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'ok', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the turn could not be stored, and stages nothing', async () => {
+    appendMessages.mockResolvedValue(null);
+    callCoach.mockResolvedValue({ text: "Here's your week.", toolCalls: [validCall] });
+
+    expect(await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY)).toEqual({
+      ok: false,
+      reason: 'not-owner',
+    });
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+});
+
+describe('the last details the Coach path depends on', () => {
+  beforeEach(() => {
+    getMessages.mockResolvedValue([{ id: 'm1', role: 'coach_ai', content: 'Hi', seq: 0 }]);
+    appendMessages.mockResolvedValue([{ id: 'm2', role: 'athlete', content: 'ok', seq: 1 }]);
+  });
+
+  it('tells the Coach exactly what a staged proposal means', async () => {
+    await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(callCoach.mock.calls.at(-1)?.[0].toolResult).toBe(
+      'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
+        'invite them to confirm when ready. Do not say it has been saved.',
+    );
+  });
+
+  it('logs a failed opening turn against the weekly surface with no conversation', async () => {
+    callCoach.mockRejectedValue(new Error('upstream down'));
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(logCoachFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        surface: 'weekly_session',
+        athleteId: ATHLETE.id,
+        // No row exists yet — it is minted only after the Coach has spoken.
+        conversationId: null,
+      }),
+    );
+  });
+
+  it('logs a failed continuing turn against the conversation it belongs to', async () => {
+    callCoach.mockRejectedValue(new Error('upstream down'));
+
+    await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(logCoachFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: 'weekly_session', conversationId: 'conv_1' }),
+    );
+  });
+
+  it('treats a conversation with no session number as the first', async () => {
+    getOwnedConversation.mockResolvedValue({ id: 'conv_1', weeklySessionNumber: null });
+
+    await continueWeeklySession(ATHLETE, 'conv_1', 'hello', TODAY);
+
+    // Session 1 renders the welcome arc, which no later session does.
+    expect(callCoach.mock.calls.at(-1)?.[0].system).toContain('ARC — SESSION 1');
+  });
+
+  it('ignores a tool call that is not the plan proposal', async () => {
+    // The payload is deliberately a VALID week: if the name check were dropped,
+    // this would stage a plan the Coach never proposed. An empty payload would
+    // be refused by validation anyway and would prove nothing.
+    callCoach.mockResolvedValue({
+      text: 'Sure.',
+      toolCalls: [
+        {
+          name: 'some_other_tool',
+          input: {
+            sessions: [
+              { date: '2026-08-14', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'hi', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+
+  it('returns the staged sessions to the caller, not just records them', async () => {
+    callCoach.mockResolvedValue({
+      text: "Here's your week.",
+      toolCalls: [
+        {
+          name: 'propose_week_plan',
+          input: {
+            sessions: [
+              { date: '2026-08-14', type: 'Tempo', durationMinutes: 45, zone: 'Z3', note: null },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
+
+    expect(result).toMatchObject({
+      ok: true,
+      proposal: {
+        sessions: [
+          { date: '2026-08-14', type: 'Tempo', durationMinutes: 45, zone: 'Z3', note: null },
+        ],
+      },
+    });
+  });
+
+  it('tells the Coach about no Unavailable Dates it was not given', async () => {
+    // The service passes a literal [] for unavailableDates today — see
+    // showable-version/15, which is the ticket to wire the real ones through.
+    // When that lands this assertion is the one that should change.
+    await continueWeeklySession(ATHLETE, 'conv_1', 'hi', TODAY);
+
+    // Not the bare word: CONSTRAINT_SIGNALS carries an `[UNAVAILABLE:YYYY-MM-DD]`
+    // token of its own, which is the syntax the Coach emits, not a date list.
+    expect(callCoach.mock.calls.at(-1)?.[0].system).not.toContain(
+      "no sessions, don't mention unless athlete raises it",
+    );
   });
 });

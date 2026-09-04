@@ -9,6 +9,7 @@ import {
   buildEquipmentLines,
   type PromptBlock,
 } from './prompt-blocks';
+import { planningWindow, type PlanningWindow } from './planning-window';
 import { assertNoDirectIdentifier } from './check-in';
 import type { SessionOrigin } from '@/features/session/session';
 import type { WeekSession } from './week';
@@ -45,12 +46,22 @@ function todayISO(): string {
 
 // ── Weekly Session prompt ─────────────────────────────────────────────────────
 
-const ORDINALS = ['', '1st', '2nd', '3rd'];
+// One-based: a Double's position is 1, 2, 3 - never 0 - so the list starts at
+// '1st' rather than carrying an empty slot nothing can reach.
+const ORDINALS = ['1st', '2nd', '3rd'];
 function ordinal(n: number): string {
-  return ORDINALS[n] || `${n}th`;
+  return ORDINALS[n - 1] || `${n}th`;
 }
 
+// Dropping `T00:00:00` below parses the key as UTC, which renders the PREVIOUS
+// weekday for anyone west of Greenwich - a real bug, and invisible to a suite
+// that runs east of it, as this one does. A test that forced the timezone was
+// written and removed: `process.env.TZ` does not take effect inside Stryker's
+// runner, so it aborted the whole mutation run. The durable fix is a fixed TZ
+// for the test environment (vitest config), which is a change for its own PR.
 const weekdayShort = (dateKey: string): string =>
+  // Stryker disable next-line StringLiteral: see above - not equivalent, but
+  // only distinguishable in a timezone this suite never runs in.
   new Date(dateKey + 'T00:00:00').toLocaleDateString('en-GB', {
     weekday: 'short',
   });
@@ -153,6 +164,9 @@ export interface WeeklyContext {
 export function buildWeeklyContext(
   checkIn: CheckIn,
   weekFeedback: WeekFeedbackEntry[] = [],
+  // Stryker disable next-line ArrayDeclaration: equivalent. `detectPatterns`
+  // returns [] for anything shorter than PATTERN_THRESHOLDS.minOccurrences (3),
+  // so a one-element default is indistinguishable from an empty one.
   sessionHistory: SessionHistoryItem[] = [],
   skippedSessions: SkippedSession[] = [],
   unavailableDates: string[] = [],
@@ -240,30 +254,75 @@ function arcBlock(
 }
 
 /**
- * Today, the Weekly Session Day question, and the athlete's Fixed Constraints —
- * the three facts about *when* that the Coach plans around.
+ * The days this plan may cover, and what to say when there are none left.
+ *
+ * A fall-through is the only circumstance in which a new athlete sees an empty
+ * current week, and the decision that allows it (Mads, 2026-09-02) allows it
+ * only on condition that the Coach says when training starts. That condition is
+ * carried here, in the line itself, so the two cannot drift apart.
+ */
+function planningWindowLine(window: PlanningWindow): string {
+  const span = `PLANNING WINDOW: ${window.start} to ${window.end}.`;
+  return window.fellThrough
+    ? `${span} Nothing is plannable in the rest of this week, so the plan starts next week — say when training starts, plainly, rather than leaving an empty week unexplained.`
+    : `${span} Plan these days only; a later week is not yours to write.`;
+}
+
+/**
+ * The question to ask when the athlete opened the Weekly Session off their
+ * preferred day, or nothing when there is no question to ask.
+ *
+ * Nothing when no preferred day is set — `Flexible`, or the question skipped at
+ * onboarding — and nothing when today *is* the preferred day, which is the case
+ * `CONTEXT.md` describes as planning the week ahead without asking.
+ */
+function planningDayLine(today: string, weeklySessionDay?: string): string | null {
+  const prefDay =
+    weeklySessionDay && weeklySessionDay !== 'Flexible' ? weeklySessionDay : null;
+  if (!prefDay) return null;
+
+  // Stryker disable next-line StringLiteral: same as `weekdayShort` above -
+  // only distinguishable in a timezone behind UTC, which this suite is not.
+  const dayOfWeek = new Date(today + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'long',
+  });
+  if (dayOfWeek === prefDay) return null;
+
+  return `PLANNING DAY: Preferred ${prefDay}, today ${dayOfWeek}. Ask: "Plan rest of this week or from next ${prefDay}?"`;
+}
+
+/**
+ * Today, the days the plan may cover, the Weekly Session Day question, and the
+ * athlete's Fixed Constraints — the facts about *when* that the Coach plans
+ * around.
  *
  * Starting the Weekly Session on the preferred day plans the week ahead without
  * asking; on any other day the Coach asks which week it is planning (CONTEXT.md,
  * Weekly Session Day).
+ *
+ * The PLANNING WINDOW line is rendered **unconditionally**, and that is the
+ * point of it (`showable-version/11`). PLANNING DAY below is conditional on a
+ * preferred day being set, and `Flexible` is one of four onboarding choices — so
+ * a Flexible athlete, or one who skipped the question, was told nothing at all
+ * about which week was being planned, and the Coach planned the week ahead every
+ * time without asking. The spec did not cover its own option.
+ *
+ * Note this line only *tells* the Coach the window. The bound that makes it true
+ * is in `validateProposedPlan`, which drops anything outside it — a prompt line
+ * is a request, and the same ticket exists because that was mistaken for a rule.
  */
 function todayBlock(
   today: string,
+  window: PlanningWindow,
   weeklySessionDay?: string,
   fixedConstraints?: string[],
 ): string {
   const lines = [`TODAY: ${today}`];
 
-  const dayOfWeek = new Date(today + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'long',
-  });
-  const prefDay =
-    weeklySessionDay && weeklySessionDay !== 'Flexible' ? weeklySessionDay : null;
-  if (prefDay && dayOfWeek !== prefDay) {
-    lines.push(
-      `PLANNING DAY: Preferred ${prefDay}, today ${dayOfWeek}. Ask: "Plan rest of this week or from next ${prefDay}?"`,
-    );
-  }
+  lines.push(planningWindowLine(window));
+
+  const planningDay = planningDayLine(today, weeklySessionDay);
+  if (planningDay) lines.push(planningDay);
 
   if (fixedConstraints && fixedConstraints.length > 0) {
     lines.push(`NO TRAINING ON: ${fixedConstraints.join(', ')}`);
@@ -377,6 +436,30 @@ After send-off, weave 3-4 sentences — coach orienting athlete, not product tou
 const EQUIPMENT_NUDGE = `EQUIPMENT NUDGE: One sentence in planning — don't know what they train on; Equipment tab helps you be specific. Once only.`;
 
 
+/** The week's skips, or nothing when the athlete missed none. */
+function skippedBlock(skippedSessions?: SkippedSession[]): PromptBlock {
+  if (!skippedSessions || skippedSessions.length === 0) return null;
+  return `SKIPPED: ${formatSkippedSessions(skippedSessions)} — mention naturally in review, no justification needed.`;
+}
+
+/**
+ * The days the athlete said were off, or nothing.
+ *
+ * "don't mention unless athlete raises it" is the point of the wording: an
+ * Unavailable Date is a fact to plan around, not something to be asked about.
+ */
+function unavailableBlock(unavailableDates?: string[]): PromptBlock {
+  if (!unavailableDates || unavailableDates.length === 0) return null;
+  return `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.`;
+}
+
+/** What the athlete rearranged themselves - silent background, never a challenge. */
+function weekActivityBlock(weekActivityLines: string | null): PromptBlock {
+  if (!weekActivityLines) return null;
+  return `WEEK ACTIVITY (silent background — the athlete arranged their own week. NEVER challenge or raise these in the moment; read them as Pattern Insight material only):
+${weekActivityLines}`;
+}
+
 export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   // Same reason as buildChatPrompt: the assertion belongs at the prompt builder,
   // so a caller that assembled the context itself cannot route around the one in
@@ -410,6 +493,10 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   const equipmentLines = buildEquipmentLines(equipment);
   const hasEquipment = equipmentLines.length > 0;
 
+  // Same rule the server enforces on the way back in, asked here so the Coach is
+  // told the bound rather than discovering it as a silently dropped session.
+  const window = planningWindow(today, fixedConstraints, unavailableDates);
+
 
   return assemble([
     openingBlock(language, 'Weekly Session — primary structured conversation, once per week.'),
@@ -418,7 +505,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     arcBlock(weeklySessionNumber, raceTarget),
 
-    todayBlock(today, weeklySessionDay, fixedConstraints),
+    todayBlock(today, window, weeklySessionDay, fixedConstraints),
 
     equipmentBlock(equipmentLines),
 
@@ -434,41 +521,79 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     patternsBlock(patterns),
 
-    skippedSessions && skippedSessions.length > 0
-      ? `SKIPPED: ${formatSkippedSessions(skippedSessions)} — mention naturally in review, no justification needed.`
-      : null,
+    skippedBlock(skippedSessions),
 
-    unavailableDates && unavailableDates.length > 0
-      ? `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.`
-      : null,
+    unavailableBlock(unavailableDates),
 
-    weekActivityLines
-      ? `WEEK ACTIVITY (silent background — the athlete arranged their own week. NEVER challenge or raise these in the moment; read them as Pattern Insight material only):\n${weekActivityLines}`
-      : null,
+    weekActivityBlock(weekActivityLines),
 
     "DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.",
 
-    'SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Plan whatever range you agreed, from today onward.',
+    'SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Every date must fall inside the PLANNING WINDOW above; dates outside it are dropped by the server.',
 
     CONSTRAINT_SIGNALS,
 
     dataUseBlock(readiness),
 
-    // The Guided Tour's first beat, delivered in the Coach's voice at the one
-    // moment the athlete is oriented — never as a UI overlay (ADR 0001).
-    weeklySessionNumber === 1 ? FIRST_SESSION_ORIENTATION : null,
-
-    // Sessions 2-3 only, and only while the Equipment tab is still empty.
-    weeklySessionNumber !== undefined &&
-    weeklySessionNumber >= 2 &&
-    weeklySessionNumber <= 3 &&
-    !hasEquipment
-      ? EQUIPMENT_NUDGE
-      : null,
+    guidedTourBlock(weeklySessionNumber, hasEquipment),
   ]);
 }
 
+/**
+ * The Guided Tour's beat for this week, or nothing.
+ *
+ * Two beats, and both are the Coach's voice rather than a UI overlay (ADR 0001):
+ * session 1 orients the athlete, and sessions 2-3 nudge about Equipment — but
+ * only while the tab is still empty, because a nudge to fill in something already
+ * filled in reads as a Coach that has not looked.
+ */
+function guidedTourBlock(
+  weeklySessionNumber: number | undefined,
+  hasEquipment: boolean,
+): PromptBlock {
+  if (weeklySessionNumber === 1) return FIRST_SESSION_ORIENTATION;
+  if (hasEquipment) return null;
+  return isEquipmentNudgeWeek(weeklySessionNumber) ? EQUIPMENT_NUDGE : null;
+}
+
+/** Sessions 2 and 3 only — early enough to matter, late enough not to crowd week 1. */
+function isEquipmentNudgeWeek(weeklySessionNumber: number | undefined): boolean {
+  // Stryker disable next-line ConditionalExpression: equivalent. The guard
+  // narrows for TypeScript; at runtime `undefined >= 2` is already false.
+  if (weeklySessionNumber === undefined) return false;
+  return weeklySessionNumber >= 2 && weeklySessionNumber <= 3;
+}
+
 // ── Coach Chat prompt ─────────────────────────────────────────────────────────
+
+/**
+ * Every athlete-authored string on the Coach Chat path, checked in one place.
+ *
+ * Three inputs rather than one, and each is a separate way in: the check-in
+ * (equipment names and onboarding answers), the Reference (a session note), and
+ * the week (athlete and Coach notes). Asserting at the prompt builder rather
+ * than per caller is what AGENTS.md asks for - a caller that assembled a CheckIn
+ * itself used to walk straight past the one in `buildWeeklyCheckIn`.
+ */
+function assertChatInputsCarryNoIdentifier(
+  checkIn: CheckIn,
+  sessionContext: SessionContext | null,
+  week: WeekSession[],
+): void {
+  assertNoDirectIdentifier(checkIn);
+  // No truthiness guard on the Reference: `assertNoDirectIdentifier` already
+  // no-ops on null, so a guard here was a second way of saying the same thing.
+  // Removed rather than suppressed, on that function's own advice - an
+  // equivalent mutant is usually telling you about the code.
+  assertNoDirectIdentifier(sessionContext);
+  assertNoDirectIdentifier(week);
+}
+
+/** The athlete's no-training days as a CONTEXT fragment, or nothing. */
+function noTrainFragment(fixedConstraints?: string[]): string {
+  if (!fixedConstraints || fixedConstraints.length === 0) return '';
+  return ` no-train=${fixedConstraints.join(', ')}`;
+}
 
 /**
  * The Coach Chat system prompt — the Coach Overlay's baseline mode (ADR 0007:
@@ -494,12 +619,7 @@ export function buildChatPrompt(
   // free text) and the Reference, which arrives separately and carries a session
   // note. Relying on the upstream builder left this reachable by any caller that
   // assembled a CheckIn itself.
-  assertNoDirectIdentifier(checkIn);
-  if (sessionContext) assertNoDirectIdentifier(sessionContext);
-  // The week arrives separately and carries athlete and Coach free text in its
-  // notes, so it is asserted here for the same reason the Reference is: at the
-  // prompt builder, not per caller.
-  assertNoDirectIdentifier(week);
+  assertChatInputsCarryNoIdentifier(checkIn, sessionContext, week);
 
   const {
     readiness,
@@ -515,10 +635,7 @@ export function buildChatPrompt(
   } = checkIn;
 
   const race = raceTarget ? ` race=${raceTarget}` : '';
-  const noTrain =
-    fixedConstraints && fixedConstraints.length > 0
-      ? ` no-train=${fixedConstraints.join(', ')}`
-      : '';
+  const noTrain = noTrainFragment(fixedConstraints);
 
   return assemble([
     openingBlock(
@@ -588,36 +705,47 @@ const ORIGIN_LABEL: Record<SessionOrigin, string> = {
  */
 export function formatWeekSessions(week?: WeekSession[]): string | null {
   if (!week || week.length === 0) return null;
-  return week
-    .map((s) => {
-      // The athlete's own label, when they gave one: a session typed `Other`
-      // says nothing on its own, and "Other" is not a thing a Coach can discuss.
-      const label = s.title ? ` "${s.title}"` : '';
-      const head = `- ${dayReference(s.date)}: ${qualifiedType(s.sessionType, s.position)}${label}`;
-      const authorship = ORIGIN_LABEL[s.origin];
+  return week.map(weekSessionLine).join('\n');
+}
 
-      if (s.isReference) {
-        return `${head} — ${s.status} (${authorship}) · this is the one they tapped, detail below`;
-      }
+/** One session as the Coach reads it: day, type, parameters, status, author. */
+function weekSessionLine(s: WeekSession): string {
+  // The athlete's own label, when they gave one: a session typed `Other`
+  // says nothing on its own, and "Other" is not a thing a Coach can discuss.
+  const label = s.title ? ` "${s.title}"` : '';
+  const head = `- ${dayReference(s.date)}: ${qualifiedType(s.sessionType, s.position)}${label}`;
+  const authorship = ORIGIN_LABEL[s.origin];
 
-      const params = [
-        s.durationMinutes ? `${s.durationMinutes} min` : null,
-        s.zone ? `Zone ${s.zone}` : null,
-      ].filter(Boolean);
-      const paramPart = params.length > 0 ? ` · ${params.join(' · ')}` : '';
-      // **A Head Coach's note is never sent** (Mads, 2026-08-21). The other
-      // origins are fine here: a `coach` note is the Coach's own words coming
-      // back, and an `athlete` or `garmin` note is the athlete's own free text,
-      // which the consent disclosure covers. A Head Coach's note is neither —
-      // it is a third party's prose *about* the athlete, written by someone who
-      // never agreed to have it processed, and "I want you sharp for Lars's
-      // ride" puts a name in front of the model that
-      // `assertNoDirectIdentifier` cannot see (it recognises email and phone
-      // shapes, never a name in prose). Structural, not filtered: not sent.
-      const notePart = s.note && s.origin !== 'head_coach' ? ` · "${s.note}"` : '';
-      return `${head}${paramPart} — ${s.status} (${authorship})${notePart}`;
-    })
-    .join('\n');
+  if (s.isReference) {
+    return `${head} — ${s.status} (${authorship}) · this is the one they tapped, detail below`;
+  }
+
+  return `${head}${sessionParams(s)} — ${s.status} (${authorship})${sessionNote(s)}`;
+}
+
+/** Duration and zone as a separated tail, or nothing when the session has neither. */
+function sessionParams(s: WeekSession): string {
+  const params = [
+    s.durationMinutes ? `${s.durationMinutes} min` : null,
+    s.zone ? `Zone ${s.zone}` : null,
+  ].filter(Boolean);
+  return params.length > 0 ? ` · ${params.join(' · ')}` : '';
+}
+
+/**
+ * The session's note, unless a Head Coach wrote it.
+ *
+ * **A Head Coach's note is never sent** (Mads, 2026-08-21). The other origins are
+ * fine here: a `coach` note is the Coach's own words coming back, and an
+ * `athlete` or `garmin` note is the athlete's own free text, which the consent
+ * disclosure covers. A Head Coach's note is neither — it is a third party's prose
+ * *about* the athlete, written by someone who never agreed to have it processed,
+ * and "I want you sharp for Lars's ride" puts a name in front of the model that
+ * `assertNoDirectIdentifier` cannot see (it recognises email and phone shapes,
+ * never a name in prose). Structural, not filtered: not sent.
+ */
+function sessionNote(s: WeekSession): string {
+  return s.note && s.origin !== 'head_coach' ? ` · "${s.note}"` : '';
 }
 
 /**

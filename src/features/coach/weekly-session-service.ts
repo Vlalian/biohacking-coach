@@ -3,11 +3,13 @@ import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
+import { getUnavailableDates } from '@/features/availability/availability-repository';
 import {
   getSessionsForWeek,
   replaceCoachPlanForDateRange,
 } from '@/features/session/session-repository';
 import { buildWeeklyContext, renderWeeklyPrompt } from './prompts';
+import { planningWindow, type PlanningWindow } from './planning-window';
 import { callCoach, type CoachReply } from './coach-client';
 import {
   appendMessages,
@@ -77,6 +79,25 @@ const PROPOSAL_ACK =
 
 
 /**
+ * The window this athlete's plan may be written into, today.
+ *
+ * Derived here rather than passed in, so both the staging path and the commit
+ * path ask the same question of the same rule (`showable-version/11`), and so a
+ * proposal that has drifted out of its window between being staged and being
+ * confirmed comes back `stale` rather than being written.
+ */
+async function windowFor(athlete: Athlete, today: string): Promise<PlanningWindow> {
+  return planningWindow(
+    today,
+    // Stryker disable next-line ArrayDeclaration: equivalent. A Fixed Constraint
+    // is matched by weekday name, so a non-weekday default matches no day and
+    // yields the same window as an empty one.
+    athlete.profile?.fixedConstraints ?? [],
+    await getUnavailableDates(athlete.id),
+  );
+}
+
+/**
  * Renders the Weekly Session system prompt for this athlete, reviewing the week
  * just lived. The Coach reads that week's Session Reflections (rated sessions)
  * and skips; no name or email is ever assembled into the check-in (GDPR
@@ -110,6 +131,10 @@ async function renderSystem(
   const ctx = buildWeeklyContext(
     checkIn,
     weekFeedbackFrom(weekSessions),
+    // Stryker disable next-line ArrayDeclaration: equivalent. `detectPatterns`
+    // returns [] below PATTERN_THRESHOLDS.minOccurrences (3), so a one-element
+    // history is indistinguishable from none. See showable-version/15 for why
+    // this argument is empty at all.
     [],
     skippedFrom(weekSessions),
     [],
@@ -208,9 +233,85 @@ export async function startWeeklySession(
   };
 }
 
+/** Why a continuing turn was refused. Named so the Coach-call boundary can return it. */
+export type ContinueRefusal = 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content';
+
 export type ContinueResult =
   | { ok: true; messages: Message[]; proposal: PlanProposal | null }
-  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
+  | { ok: false; reason: ContinueRefusal };
+
+/**
+ * Stages the Coach's proposed week, when it proposed one the server will accept.
+ *
+ * Called only once the turn is safely stored: the server is the authority on
+ * what is a legal week (ADR 0003), and a proposal recorded against a turn that
+ * failed to persist would outlive the conversation it belongs to. An invalid
+ * proposal is simply not staged — the Coach's text still shows, and the
+ * conversation continues.
+ */
+async function stageProposal(
+  athlete: Athlete,
+  conversationId: string,
+  today: string,
+  reply: CoachReply,
+): Promise<PlanProposal | null> {
+  const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
+  if (!call) return null;
+
+  const validated = validateProposedPlan(call.input, await windowFor(athlete, today));
+  if (!validated.ok) return null;
+
+  await recordProposal(athlete.id, conversationId, validated.sessions);
+  return { sessions: validated.sessions };
+}
+
+/**
+ * One continuing turn's Coach call, with its failure boundary.
+ *
+ * `renderSystem` is inside the boundary too, not just the API call: it asserts
+ * on athlete free text and throws (`assertNoDirectIdentifier`). Leaving it
+ * outside was the exact mistake this branch fixed in Coach Chat.
+ *
+ * Refused content and an unreachable Coach are different problems and get
+ * different answers, the same split Coach Chat makes: "try again" is useless
+ * advice for text that will be refused identically every time.
+ */
+async function askCoach(params: {
+  athlete: Athlete;
+  conversationId: string;
+  /** Null on a conversation stored before the number was tracked; read as the first. */
+  weeklySessionNumber: number | null;
+  today: string;
+  language?: string;
+  transcript: Message[];
+  trimmed: string;
+}): Promise<{ ok: true; reply: CoachReply } | { ok: false; reason: ContinueRefusal }> {
+  const { athlete, conversationId, weeklySessionNumber, today, language, transcript, trimmed } =
+    params;
+  try {
+    const system = await renderSystem(athlete, weeklySessionNumber ?? 1, today, language);
+    const reply = await callCoach({
+      system,
+      // The athlete's turn joins the history here rather than being stored
+      // first — the same messages the API would have seen either way.
+      messages: [...toWeeklyApiMessages(transcript), { role: 'user', content: trimmed }],
+      maxTokens: WEEKLY_MAX_TOKENS,
+      tools: [PROPOSE_WEEK_PLAN_TOOL],
+      toolResult: PROPOSAL_ACK,
+    });
+    return { ok: true, reply };
+  } catch (error) {
+    const reason = refusalReason(error);
+    logCoachFailure({
+      surface: 'weekly_session',
+      athleteId: athlete.id,
+      conversationId,
+      error,
+      reason,
+    });
+    return { ok: false, reason };
+  }
+}
 
 /**
  * Adds the athlete's turn and the Coach's reply to an owned Weekly Session,
@@ -239,43 +340,17 @@ export async function continueWeeklySession(
   // athlete cannot retry without their message appearing twice.
   const transcript = await getMessages(conversationId);
 
-  let reply: CoachReply;
-  try {
-    // `renderSystem` is inside the boundary too, not just the API call: it
-    // asserts on athlete free text and throws (`assertNoDirectIdentifier`).
-    // Leaving it outside was the exact mistake this branch fixed in Coach Chat.
-    const system = await renderSystem(
-      athlete,
-      conversation.weeklySessionNumber ?? 1,
-      today,
-      language,
-    );
-    reply = await callCoach({
-      system,
-      // The athlete's turn joins the history here rather than being stored
-      // first — the same messages the API would have seen either way.
-      messages: [...toWeeklyApiMessages(transcript), { role: 'user', content: trimmed }],
-      maxTokens: WEEKLY_MAX_TOKENS,
-      tools: [PROPOSE_WEEK_PLAN_TOOL],
-      toolResult: PROPOSAL_ACK,
-    });
-  } catch (error) {
-    // Refused content and an unreachable Coach are different problems and get
-    // different answers, the same split Coach Chat makes: "try again" is useless
-    // advice for text that will be refused identically every time.
-    const reason = refusalReason(error);
-    logCoachFailure({
-      surface: 'weekly_session',
-      athleteId: athlete.id,
-      conversationId,
-      error,
-      reason,
-    });
-    return {
-      ok: false,
-      reason,
-    };
-  }
+  const answered = await askCoach({
+    athlete,
+    conversationId,
+    weeklySessionNumber: conversation.weeklySessionNumber,
+    today,
+    language,
+    transcript,
+    trimmed,
+  });
+  if (!answered.ok) return answered;
+  const reply = answered.reply;
 
   // A turn with no words is refused, proposal or not.
   //
@@ -305,15 +380,7 @@ export async function continueWeeklySession(
   // against a turn that failed to persist would outlive the conversation it
   // belongs to. An invalid proposal simply isn't staged; the Coach's text still
   // shows and the conversation continues.
-  let proposal: PlanProposal | null = null;
-  const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
-  if (call) {
-    const validated = validateProposedPlan(call.input, today);
-    if (validated.ok) {
-      await recordProposal(athlete.id, conversationId, validated.sessions);
-      proposal = { sessions: validated.sessions };
-    }
-  }
+  const proposal = await stageProposal(athlete, conversationId, today, reply);
 
   return { ok: true, messages: await getMessages(conversationId), proposal };
 }
@@ -343,7 +410,10 @@ export async function commitWeeklyPlan(
   // Stale if the proposal no longer fully validates against today — e.g. it was
   // confirmed a day later and a day it included is now in the past. Refuse the
   // whole plan rather than silently commit a shrunken week; the athlete re-plans.
-  const validated = validateProposedPlan({ sessions: pending.sessions }, today);
+  const validated = validateProposedPlan(
+    { sessions: pending.sessions },
+    await windowFor(athlete, today),
+  );
   if (!validated.ok || validated.sessions.length !== pending.sessions.length) {
     return { ok: false, reason: 'stale' };
   }
