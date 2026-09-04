@@ -306,7 +306,11 @@
     "bounceOtherWeek": "Sessions move within their own Mon–Sun week. Ask your Coach to reshape the week.",
     "bounceFrozen": "This session is already completed — the training record is immutable.",
     "bounceConflict": "Your Head Coach changed this session while it was open. Your move was not applied — refresh to see theirs.",
-    "minutes": "min"
+    "minutes": "min",
+    "bounceRefused": "That day doesn't work for this session.",
+    "bounceNotYours": "This is the athlete's own session — it stays where they put it.",
+    "bounceError": "That didn't work. Try again.",
+    "bounceParked": "This session is held by a rest day. Move the rest block first."
   },
   "SessionDrawer": {
     "close": "Close session",

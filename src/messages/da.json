@@ -306,7 +306,11 @@
     "bounceOtherWeek": "Sessioner flyttes kun inden for deres egen mandag–søndag-uge. Bed din Coach om at omlægge ugen.",
     "bounceFrozen": "Denne session er allerede gennemført — træningsjournalen kan ikke ændres.",
     "bounceConflict": "Din Head Coach ændrede denne session, mens den var åben. Dit flyt blev ikke gennemført — genindlæs for at se deres.",
-    "minutes": "min"
+    "minutes": "min",
+    "bounceRefused": "Den dag går ikke til denne session.",
+    "bounceNotYours": "Det er atletens egen session — den bliver, hvor de har lagt den.",
+    "bounceError": "Det virkede ikke. Prøv igen.",
+    "bounceParked": "Denne session holdes af en hviledag. Flyt hvileblokken først."
   },
   "SessionDrawer": {
     "close": "Luk session",
