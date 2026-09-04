@@ -353,7 +353,18 @@
     "error": "That didn't work. Try again.",
     "errorFuture": "This session is in the future — you can mark it complete on the day.",
     "errorFrozen": "This session is closed. Past weeks are part of your record and don't change.",
-    "errorConflict": "This session changed while you were looking at it. Close and reopen it."
+    "errorConflict": "This session changed while you were looking at it. Close and reopen it.",
+    "refusalAthletesOwn": "This is the athlete's own session. It stays theirs to change.",
+    "refusalImportedRecord": "This is an imported activity — the record of what happened.",
+    "refusalFrozenRecord": "This session is part of the training record and can no longer be changed.",
+    "refusalAuthorsContent": "This session belongs to whoever wrote it.",
+    "formDate": "Date",
+    "formType": "Type",
+    "formDuration": "Duration (minutes)",
+    "formZone": "Zone",
+    "formTitle": "Title",
+    "formNote": "Note",
+    "save": "Save"
   },
   "Garmin": {
     "upload": "Upload Garmin file",

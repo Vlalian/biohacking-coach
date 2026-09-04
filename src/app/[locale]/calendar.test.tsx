@@ -89,6 +89,23 @@ describe('Calendar — what a read-only calendar offers', () => {
     expect(markup).toMatch(SESSION_AS_BUTTON);
   });
 
+  it('opens a session for a Head Coach on a linked athlete', () => {
+    // The read-only calendar rendered no drawer at all, so a coach could see a
+    // session and never read it — not the note, not the reflection, not the
+    // record they are meant to judge the plan against (showable-version/20).
+    // `readOnly` still holds for everything else on the surface.
+    const markup = render({ readOnly: true, coachAthleteId: 'ath_1' });
+
+    expect(markup).toMatch(SESSION_AS_BUTTON);
+  });
+
+  it("still renders no button for a read-only calendar that is nobody's coach view", () => {
+    // The guard must stay "is there a drawer to open", not "is it read-only".
+    const markup = render({ readOnly: true });
+
+    expect(markup).not.toMatch(SESSION_AS_BUTTON);
+  });
+
   it('keeps the coach able to drag what they cannot open', () => {
     // Placement became shared on 2026-08-21 (ADR 0003) while the rest of the
     // surface stayed read-only. Removing the button must not take drag with it.

@@ -353,7 +353,18 @@
     "error": "Det virkede ikke. Prøv igen.",
     "errorFuture": "Denne session ligger i fremtiden — du kan markere den som gennemført på dagen.",
     "errorFrozen": "Denne session er lukket. Tidligere uger er en del af dit forløb og ændres ikke.",
-    "errorConflict": "Denne session blev ændret, mens du kiggede på den. Luk den, og åbn den igen."
+    "errorConflict": "Denne session blev ændret, mens du kiggede på den. Luk den, og åbn den igen.",
+    "refusalAthletesOwn": "Det er atletens egen session. Den er deres at ændre.",
+    "refusalImportedRecord": "Det er en importeret aktivitet — registreringen af, hvad der skete.",
+    "refusalFrozenRecord": "Denne session er en del af træningsregistreringen og kan ikke længere ændres.",
+    "refusalAuthorsContent": "Denne session tilhører den, der har skrevet den.",
+    "formDate": "Dato",
+    "formType": "Sessionstype",
+    "formDuration": "Varighed (minutter)",
+    "formZone": "Zone",
+    "formTitle": "Titel",
+    "formNote": "Bemærkning",
+    "save": "Gem"
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",

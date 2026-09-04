@@ -194,6 +194,7 @@ export function Calendar({
   todayKey,
   readOnly = false,
   onMove,
+  coachAthleteId,
 }: {
   sessions: Session[];
   unavailableDates: string[];
@@ -222,6 +223,15 @@ export function Calendar({
     targetDate: string,
     expectedVersion: number,
   ) => Promise<{ ok: true } | { ok: false; reason: MoveRefusal }>;
+  /**
+   * The athlete this calendar belongs to, when the Head Coach is the one
+   * looking at it. Opens the Session Drawer on their behalf.
+   *
+   * A read-only calendar rendered no drawer at all, so a coach could see a
+   * session and never read it — not its note, not its reflection, not the
+   * record they are meant to judge the plan against (showable-version/20).
+   */
+  coachAthleteId?: string;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -389,6 +399,7 @@ export function Calendar({
             week={week}
             expanded={expanded.includes(week.isoWeekStart)}
             readOnly={readOnly}
+            canOpenSession={!readOnly || Boolean(coachAthleteId)}
             canDrag={canDrag}
             todayKey={todayKey}
             locale={locale}
@@ -415,8 +426,9 @@ export function Calendar({
 
       <Legend t={t} />
 
-      {!readOnly && (
+      {(!readOnly || coachAthleteId) && (
         <SessionDrawer
+          coachAthleteId={coachAthleteId}
           state={drawer}
           sessions={sessions}
           importedSessionIds={importedSessionIds}
@@ -442,6 +454,7 @@ function WeekRow({
   week,
   expanded,
   readOnly,
+  canOpenSession,
   canDrag,
   todayKey,
   locale,
@@ -463,6 +476,9 @@ function WeekRow({
   week: Week;
   expanded: boolean;
   readOnly: boolean;
+  /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
+   *  calendar is read-only and opens one (showable-version/20). */
+  canOpenSession: boolean;
   /** Whether session blocks may be dragged — not implied by `readOnly`. */
   canDrag: boolean;
   todayKey: string;
@@ -618,7 +634,11 @@ function WeekRow({
                       t={t}
                       canDrag={canDrag}
                       refusal={liftRefusal(s, todayKey)}
-                      onOpen={readOnly ? undefined : () => onOpenSession(s)}
+                      // Omitted only where there is genuinely no drawer to
+                      // open. A coach viewing a linked athlete has one now.
+                      // Omitted only where there is genuinely no drawer to
+                      // open. A coach viewing a linked athlete has one now.
+                      onOpen={canOpenSession ? () => onOpenSession(s) : undefined}
                       onDragStart={() => onDragStart(s)}
                       onDragEnd={onDragEnd}
                     />

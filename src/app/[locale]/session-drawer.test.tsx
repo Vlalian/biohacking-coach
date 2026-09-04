@@ -11,6 +11,12 @@ vi.mock('@/components/shell/coach-overlay-context', () => ({
   useCoachOverlay: () => ({ setReference: vi.fn(), setOpen: vi.fn() }),
 }));
 vi.mock('./garmin-actions', () => ({ undoDetectedImportAction: vi.fn() }));
+// The Head Coach's own actions, reached since the drawer began serving them
+// too (showable-version/20). Same reason as the athlete's above: the import
+// chain ends at the database, and no first render calls one.
+vi.mock('./(app)/coach/athlete/[athleteId]/prescribe-actions', () => ({
+  deletePrescribedSessionAction: vi.fn(),
+}));
 vi.mock('./session-actions', () => ({
   markCompleteAction: vi.fn(),
   toggleSkipAction: vi.fn(),
@@ -21,6 +27,9 @@ vi.mock('./session-actions', () => ({
 }));
 
 const { ViewBody, REFUSAL_KEY } = await import('./session-drawer');
+const { athleteDrawerPolicy, headCoachDrawerPolicy } = await import(
+  '@/features/session/drawer-policy',
+);
 
 /**
  * What the Session Drawer offers, and why each of the two efforts that landed
@@ -86,6 +95,9 @@ function render(s: Session, fromImport = false) {
   return labels(
     ViewBody({
       session: s,
+      // The athlete's policy, which is what these characterisation tests are
+      // about: parameterising the drawer must not change what she sees.
+      policy: athleteDrawerPolicy(s),
       fromImport,
       todayKey: TODAY,
       locale: 'en',
@@ -129,6 +141,49 @@ describe('ViewBody status actions', () => {
   });
 });
 
+describe('ViewBody content authority — characterisation', () => {
+  /**
+   * Written before `ViewBody` took its action policy as a parameter
+   * (showable-version/20), not after. The origin gate was the one part of this
+   * component with no test at all, and it is the part that decides whether one
+   * person may rewrite another's training — so the refactor needed a net under
+   * it rather than beside it.
+   *
+   * These assert the athlete's behaviour as it stood. If the parameterisation
+   * changes any of them, it has changed what the athlete sees, which it must
+   * not.
+   */
+  it("offers edit and delete on the athlete's own session", () => {
+    const shown = render(session({ origin: 'athlete' }));
+
+    expect(shown).toContain('edit');
+    expect(shown).toContain('delete');
+  });
+
+  it('offers neither on a Coach-planned session', () => {
+    // CONTEXT.md, Prescribed Session: content belongs to the author. Changing
+    // the Coach's session is a conversation; skipping it records reality.
+    const shown = render(session({ origin: 'coach' }));
+
+    expect(shown).not.toContain('edit');
+    expect(shown).not.toContain('delete');
+  });
+
+  it('offers neither on a Head Coach prescription', () => {
+    const shown = render(session({ origin: 'head_coach' }));
+
+    expect(shown).not.toContain('edit');
+    expect(shown).not.toContain('delete');
+  });
+
+  it('offers neither on an imported activity, which is the record', () => {
+    const shown = render(session({ origin: 'garmin', status: 'completed' }));
+
+    expect(shown).not.toContain('edit');
+    expect(shown).not.toContain('delete');
+  });
+});
+
 describe('ViewBody undo import', () => {
   it('offers no undo on an ordinary completed session', () => {
     expect(render(session({ status: 'completed' }))).not.toContain('undoImport');
@@ -166,6 +221,126 @@ describe('REFUSAL_KEY', () => {
     expect(REFUSAL_KEY.frozen).not.toBe('error');
 
     for (const key of Object.values(REFUSAL_KEY)) {
+      expect(Object.keys(en), `no message for "${key}"`).toContain(key);
+    }
+  });
+});
+
+/**
+ * The same drawer, opened by the Head Coach on a linked athlete's session.
+ *
+ * One surface, two audiences (CONTEXT.md, Session Drawer). `drawer-policy.ts`
+ * decides and is tested on its own; what is proven here is the *wiring* — that
+ * the drawer asks the policy, and that each flag gates the control it names. A
+ * pure rule with a miswired consumer is exactly the test that appears to guard
+ * and does not, which is the lesson this file already carries from
+ * showable-version/08.
+ */
+function renderAsCoach(s: Session) {
+  return labels(
+    ViewBody({
+      session: s,
+      policy: headCoachDrawerPolicy(s, TODAY),
+      fromImport: false,
+      todayKey: TODAY,
+      locale: 'en',
+      pending: false,
+      t: ((key: string) => key) as never,
+      onMarkComplete: vi.fn(),
+      onSkip: vi.fn(),
+      onMarkUnavailable: vi.fn(),
+      onUndoImport: vi.fn(),
+      onDiscussWithCoach: vi.fn(),
+      onRate: vi.fn(),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+    }),
+  );
+}
+
+describe('ViewBody as the Head Coach', () => {
+  it('offers edit and delete on a session the coach may edit', () => {
+    const shown = renderAsCoach(session({ origin: 'coach' }));
+
+    expect(shown).toContain('edit');
+    expect(shown).toContain('delete');
+  });
+
+  it('withholds them on the athlete&apos;s own session, and says whose it is', () => {
+    const shown = renderAsCoach(session({ origin: 'athlete' }));
+
+    expect(shown).not.toContain('edit');
+    expect(shown).not.toContain('delete');
+    expect(shown).toContain('refusalAthletesOwn');
+  });
+
+  it('withholds them on an imported activity, and calls it the record', () => {
+    const shown = renderAsCoach(session({ origin: 'garmin', status: 'completed' }));
+
+    expect(shown).not.toContain('edit');
+    expect(shown).toContain('refusalImportedRecord');
+  });
+
+  it('withholds them on a completed session, and calls it frozen', () => {
+    // The server does not refuse this — `loadEditable` checks origin and
+    // nothing else — so until the drawer opened on every session, the only
+    // thing preventing it was `planSessions` filtering completed sessions off
+    // the surface. Filed separately; this is the client half holding the line.
+    const shown = renderAsCoach(session({ origin: 'coach', status: 'completed' }));
+
+    expect(shown).not.toContain('edit');
+    expect(shown).toContain('refusalFrozenRecord');
+  });
+
+  it('never offers a status action, whatever the session', () => {
+    // Completing a session claims training happened in someone else's body.
+    // The Head Coach outranks the AI but not reality (ADR 0003).
+    for (const status of ['planned', 'completed', 'skipped']) {
+      const shown = renderAsCoach(session({ origin: 'coach', status }));
+
+      expect(shown, status).not.toContain('markComplete');
+      expect(shown, status).not.toContain('skip');
+      expect(shown, status).not.toContain('unavailable');
+    }
+  });
+
+  it('never offers to rate, because a reflection is the athlete&apos;s report', () => {
+    const rated = renderAsCoach(
+      session({ origin: 'coach', status: 'completed', feedbackBody: 4, feedbackMind: 4 }),
+    );
+    const unrated = renderAsCoach(session({ origin: 'coach', status: 'completed' }));
+
+    expect(rated).not.toContain('editRating');
+    expect(unrated).not.toContain('rate');
+  });
+
+  it('shows a reflection it was given, because reading one is the job', () => {
+    // Link Visibility is applied server-side in `roster-service`: a withheld
+    // reflection never reaches this component. What arrives is meant to be read.
+    const shown = renderAsCoach(
+      session({ origin: 'coach', status: 'completed', feedbackBody: 4, feedbackMind: 2 }),
+    );
+
+    expect(shown).toContain('reflection');
+  });
+
+  it('shows no reflection when Link Visibility withheld it', () => {
+    // Stripped upstream, so the fields arrive null and the drawer must not
+    // invent a rating from anything else it holds.
+    const shown = renderAsCoach(session({ origin: 'coach', status: 'completed' }));
+
+    expect(shown).toContain('notRated');
+  });
+
+  it('never offers Discuss with Coach, because they are the coach', () => {
+    expect(renderAsCoach(session({ origin: 'coach' }))).not.toContain('discuss');
+  });
+
+  it('names a message that exists, for every refusal it can state', async () => {
+    const { CONTENT_REFUSAL_KEY } = await import('./session-drawer');
+    const en = (await import('@/messages/en.json')).default.SessionDrawer;
+
+    for (const key of Object.values(CONTENT_REFUSAL_KEY)) {
       expect(Object.keys(en), `no message for "${key}"`).toContain(key);
     }
   });
