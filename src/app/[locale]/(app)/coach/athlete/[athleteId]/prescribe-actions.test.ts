@@ -67,13 +67,29 @@ describe('the plan-authoring actions', () => {
       'editPrescribedSessionAction',
       () => editPrescribedSessionAction(ATHLETE, 'sess_1', INPUT, 1),
       editPrescribedSession,
-      { headCoachId: COACH, athleteId: ATHLETE, sessionId: 'sess_1', input: INPUT, expectedVersion: 1 },
+      {
+        headCoachId: COACH,
+        athleteId: ATHLETE,
+        sessionId: 'sess_1',
+        input: INPUT,
+        expectedVersion: 1,
+        // The server's clock, as the move action already passes. Matched by
+        // shape rather than value so the assertion does not depend on the day
+        // the suite runs — showable-version/22.
+        today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      },
     ],
     [
       'deletePrescribedSessionAction',
       () => deletePrescribedSessionAction(ATHLETE, 'sess_1', 1),
       deletePrescribedSession,
-      { headCoachId: COACH, athleteId: ATHLETE, sessionId: 'sess_1', expectedVersion: 1 },
+      {
+        headCoachId: COACH,
+        athleteId: ATHLETE,
+        sessionId: 'sess_1',
+        expectedVersion: 1,
+        today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      },
     ],
   ] as const;
 

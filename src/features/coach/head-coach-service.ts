@@ -9,6 +9,7 @@ import {
   HEAD_COACH_ORIGIN,
 } from './head-coach-authority';
 import { applyMove, type MoveResult } from '@/features/session/session-move';
+import { isFrozen } from '@/features/session/move-rules';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
 import type { SessionConflict } from '@/features/session/conflict';
 
@@ -52,7 +53,15 @@ export type HeadCoachActionResult =
   | { ok: true; sessionId: string }
   | {
       ok: false;
-      reason: 'not-linked' | 'invalid' | 'not-found' | 'wrong-athlete' | 'forbidden-origin';
+      reason:
+        | 'not-linked'
+        | 'invalid'
+        | 'not-found'
+        | 'wrong-athlete'
+        | 'forbidden-origin'
+        // The record is immutable for everyone. Content editing did not check this
+        // until 2026-09-04; Session Move always has.
+        | 'frozen';
     }
   // The athlete writes these rows too, so an edit can lose a race. The refusal
   // carries what won, because the Head Coach has no other way to find out.
@@ -88,15 +97,22 @@ function isValidPrescription(input: PrescriptionInput): boolean {
 async function loadEditableSession(
   athleteId: string,
   sessionId: string,
+  /** The server's clock, passed in like the move path's — never `new Date()`
+   *  here, or the rule stops being judged against the server. */
+  today: string,
 ): Promise<
   | { ok: true; origin: string; date: string; version: number }
-  | { ok: false; reason: 'not-found' | 'wrong-athlete' | 'forbidden-origin' }
+  | { ok: false; reason: 'not-found' | 'wrong-athlete' | 'forbidden-origin' | 'frozen' }
 > {
   const [row] = await getDb()
     .select({
       athleteId: sessions.athleteId,
       origin: sessions.origin,
       date: sessions.date,
+      // Added to the existing select rather than read separately: a value
+      // fetched fresh for its own check makes that check pass by construction,
+      // which is the trap the `expectedVersion` comment below describes.
+      status: sessions.status,
       version: sessions.version,
     })
     .from(sessions)
@@ -108,6 +124,17 @@ async function loadEditableSession(
   // cannot be paired with a foreign session id to reach across athletes.
   if (row.athleteId !== athleteId) return { ok: false, reason: 'wrong-athlete' };
   if (!canHeadCoachEditContent(row.origin)) return { ok: false, reason: 'forbidden-origin' };
+  // Origin first, deliberately: an Athlete Session is refused as "not yours"
+  // rather than "too late", because that is the more fundamental answer and it
+  // is the ordering `drawer-policy.ts` already gives the coach on screen.
+  //
+  // `isFrozen` rather than a second rule. It is what Session Move asks, so
+  // "a completed session is frozen" cannot mean one thing for placement and
+  // another for content — the same argument the move path makes in its own
+  // comment below.
+  if (isFrozen({ date: row.date, status: row.status }, today)) {
+    return { ok: false, reason: 'frozen' };
+  }
 
   return { ok: true, origin: row.origin, date: row.date, version: row.version };
 }
@@ -178,14 +205,17 @@ export async function editPrescribedSession(params: {
    * anything if the number comes from what the writer actually saw.
    */
   expectedVersion: number;
+  /** The server's clock. The record is immutable, and that is judged here
+   *  rather than in the browser (ADR 0006). */
+  today: string;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, sessionId, input, expectedVersion } = params;
+  const { headCoachId, athleteId, sessionId, input, expectedVersion, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
   if (!isValidPrescription(input)) return { ok: false, reason: 'invalid' };
 
-  const target = await loadEditableSession(athleteId, sessionId);
+  const target = await loadEditableSession(athleteId, sessionId, today);
   if (!target.ok) return target;
 
   const columns = contentColumns(input);
@@ -224,13 +254,16 @@ export async function deletePrescribedSession(params: {
   /** As for {@link editPrescribedSession}: the version the coach was shown, so
    *  a delete cannot discard an edit that landed while they were deciding. */
   expectedVersion: number;
+  /** The server's clock. The record is immutable, and that is judged here
+   *  rather than in the browser (ADR 0006). */
+  today: string;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, sessionId, expectedVersion } = params;
+  const { headCoachId, athleteId, sessionId, expectedVersion, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
 
-  const target = await loadEditableSession(athleteId, sessionId);
+  const target = await loadEditableSession(athleteId, sessionId, today);
   if (!target.ok) return target;
 
   const written = await casDeleteSession({

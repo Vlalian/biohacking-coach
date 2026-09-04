@@ -53,6 +53,9 @@ export async function editPrescribedSessionAction(
     sessionId,
     input,
     expectedVersion,
+    // The server's clock, like the move action below: the record's
+    // immutability must not be judged against a browser's idea of today.
+    today: dateKey(new Date()),
   });
   // 'layout' is main's: the edited session shows on more than this page, so a
   // page-scoped revalidate left the other tabs stale.
@@ -73,6 +76,9 @@ export async function deletePrescribedSessionAction(
     athleteId,
     sessionId,
     expectedVersion,
+    // The server's clock, like the move action below: the record's
+    // immutability must not be judged against a browser's idea of today.
+    today: dateKey(new Date()),
   });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;

@@ -45,10 +45,16 @@ const ATHLETE = 'athlete_1';
 const LINK = { shareAthleteReports: true, shareAiTranscripts: false };
 const VALID = { date: '2026-07-16', type: 'Endurance', duration: 60, zone: 'Zone 2' };
 
+// TODAY sits in the same Mon–Sun week as the row's default date, so an
+// unqualified row is live rather than frozen and the existing content-tier tests
+// keep testing what they were written to test.
+const TODAY = '2026-07-16';
+
 const sessionRow = (over: Record<string, unknown> = {}) => ({
   athleteId: ATHLETE,
   origin: 'coach',
   date: '2026-07-16',
+  status: 'planned',
   ...over,
 });
 
@@ -123,6 +129,7 @@ describe('editPrescribedSession — the content tier holds', () => {
       sessionId: 's1',
       input: { ...VALID, title: 'Revised threshold set' },
       expectedVersion: 1,
+      today: TODAY,
     });
 
     expect(result).toEqual({ ok: true, sessionId: 's1' });
@@ -139,7 +146,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     limit.mockResolvedValue([sessionRow({ origin: 'head_coach' })]);
 
     expect(
-      (await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 })).ok,
+      (await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1, today: TODAY })).ok,
     ).toBe(true);
   });
 
@@ -147,7 +154,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ origin: 'athlete' })]);
 
-    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 });
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1, today: TODAY });
 
     expect(result).toEqual({ ok: false, reason: 'forbidden-origin' });
     expect(batch).not.toHaveBeenCalled();
@@ -158,7 +165,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     limit.mockResolvedValue([sessionRow({ origin: 'garmin' })]);
 
     expect(
-      reasonOf(await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 })),
+      reasonOf(await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1, today: TODAY })),
     ).toBe('forbidden-origin');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -166,7 +173,7 @@ describe('editPrescribedSession — the content tier holds', () => {
   it('refuses with no active link before reading the session', async () => {
     getActiveLink.mockResolvedValue(undefined);
 
-    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 });
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1, today: TODAY });
 
     expect(result).toEqual({ ok: false, reason: 'not-linked' });
     expect(limit).not.toHaveBeenCalled();
@@ -191,6 +198,7 @@ describe('editPrescribedSession — the content tier holds', () => {
       sessionId: 's1',
       input: VALID,
       expectedVersion: 1,
+      today: TODAY,
     });
 
     expect(result.ok).toBe(false);
@@ -210,7 +218,7 @@ describe('editPrescribedSession — the content tier holds', () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ athleteId: 'another_athlete' })]);
 
-    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1 });
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 1, today: TODAY });
 
     expect(result).toEqual({ ok: false, reason: 'wrong-athlete' });
     expect(batch).not.toHaveBeenCalled();
@@ -222,7 +230,7 @@ describe('deletePrescribedSession — same content tier', () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ origin: 'head_coach' })]);
 
-    const result = await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', expectedVersion: 1 });
+    const result = await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', expectedVersion: 1, today: TODAY });
 
     expect(result).toEqual({ ok: true, sessionId: 's1' });
     expect(deleteWhere).toHaveBeenCalledTimes(1);
@@ -236,7 +244,7 @@ describe('deletePrescribedSession — same content tier', () => {
     limit.mockResolvedValue([sessionRow({ origin: 'athlete' })]);
 
     expect(
-      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', expectedVersion: 1 })),
+      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', expectedVersion: 1, today: TODAY })),
     ).toBe('forbidden-origin');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -245,7 +253,7 @@ describe('deletePrescribedSession — same content tier', () => {
     getActiveLink.mockResolvedValue(undefined);
 
     expect(
-      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: 'a_stranger', sessionId: 's1', expectedVersion: 1 })),
+      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: 'a_stranger', sessionId: 's1', expectedVersion: 1, today: TODAY })),
     ).toBe('not-linked');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -255,7 +263,7 @@ describe('deletePrescribedSession — same content tier', () => {
     limit.mockResolvedValue([]);
 
     expect(
-      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 'missing', expectedVersion: 1 })),
+      reasonOf(await deletePrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 'missing', expectedVersion: 1, today: TODAY })),
     ).toBe('not-found');
     expect(batch).not.toHaveBeenCalled();
   });
@@ -333,5 +341,169 @@ describe('moveSessionAsHeadCoach — the Head Coach re-places a session', () => 
 
     expect(reasonOf(result)).toBe('bounce');
     expect(getActiveLink).not.toHaveBeenCalled();
+  });
+});
+
+describe('the record is immutable for the Head Coach too', () => {
+  /**
+   * `loadEditableSession` refused three things — not-found, wrong-athlete and
+   * forbidden-origin — and never looked at status or date. So a *completed*
+   * coach-authored session passed the gate and could be rewritten or removed.
+   *
+   * Nothing was exposed until 2026-09-04, because `roster-service.planSessions`
+   * filters completed sessions off the Head Coach's only editing surface. That
+   * made the record's immutability a property of a list filter, and
+   * showable-version/20 opened a drawer on every session — so the protection
+   * became purely client-side, which is the arrangement ADR 0006 forbids.
+   */
+  it('refuses to edit a completed session', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ origin: 'coach', status: 'completed' })]);
+
+    const result = await editPrescribedSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 's1',
+      input: VALID,
+      expectedVersion: 1,
+      today: TODAY,
+    });
+
+    expect(reasonOf(result)).toBe('frozen');
+    expect(updateSet).not.toHaveBeenCalled();
+  });
+
+  it('refuses to delete a completed session', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ origin: 'coach', status: 'completed' })]);
+
+    const result = await deletePrescribedSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 's1',
+      expectedVersion: 1,
+      today: TODAY,
+    });
+
+    expect(reasonOf(result)).toBe('frozen');
+    expect(deleteWhere).not.toHaveBeenCalled();
+  });
+
+  it('refuses to edit anything in a past week, whatever its status', async () => {
+    // Frozen for a different reason than completed: Week Rebalancing has already
+    // absorbed the missed load (ADR 0002), so last week is closed even for a
+    // session that never happened.
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ date: '2026-07-08', status: 'planned' })]);
+
+    const result = await editPrescribedSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 's1',
+      input: VALID,
+      expectedVersion: 1,
+      today: TODAY,
+    });
+
+    expect(reasonOf(result)).toBe('frozen');
+  });
+
+  it('refuses to delete anything in a past week', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ date: '2026-07-08', status: 'planned' })]);
+
+    expect(
+      reasonOf(
+        await deletePrescribedSession({
+          headCoachId: COACH,
+          athleteId: ATHLETE,
+          sessionId: 's1',
+          expectedVersion: 1,
+          today: TODAY,
+        }),
+      ),
+    ).toBe('frozen');
+  });
+
+  it('still edits an ordinary planned session in the current week', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow()]);
+
+    expect(
+      (
+        await editPrescribedSession({
+          headCoachId: COACH,
+          athleteId: ATHLETE,
+          sessionId: 's1',
+          input: VALID,
+          expectedVersion: 1,
+          today: TODAY,
+        })
+      ).ok,
+    ).toBe(true);
+  });
+
+  it('still edits a future-dated session', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ date: '2026-07-18' })]);
+
+    expect(
+      (
+        await editPrescribedSession({
+          headCoachId: COACH,
+          athleteId: ATHLETE,
+          sessionId: 's1',
+          input: VALID,
+          expectedVersion: 1,
+          today: TODAY,
+        })
+      ).ok,
+    ).toBe(true);
+  });
+
+  it('says "not yours" before it says "too late"', async () => {
+    // An Athlete Session that is also completed fails both gates. Origin is the
+    // more fundamental answer and is the one the coach should read — the same
+    // ordering `drawer-policy.ts` gives them on screen.
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ origin: 'athlete', status: 'completed' })]);
+
+    const result = await editPrescribedSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 's1',
+      input: VALID,
+      expectedVersion: 1,
+      today: TODAY,
+    });
+
+    expect(reasonOf(result)).toBe('forbidden-origin');
+  });
+
+  it('refuses exactly what isFrozen calls frozen, and nothing else', async () => {
+    // The rule lives in move-rules.ts and Session Move asks the same function,
+    // so "a completed session is frozen" cannot mean one thing for placement and
+    // another for content. A second copy here is how those two drift.
+    const { isFrozen } = await import('@/features/session/move-rules');
+
+    for (const date of ['2026-07-08', TODAY, '2026-07-18']) {
+      for (const status of ['planned', 'completed', 'skipped', 'unavailable']) {
+        getActiveLink.mockResolvedValue(LINK);
+        limit.mockResolvedValue([sessionRow({ date, status })]);
+
+        const result = await editPrescribedSession({
+          headCoachId: COACH,
+          athleteId: ATHLETE,
+          sessionId: 's1',
+          input: VALID,
+          expectedVersion: 1,
+          today: TODAY,
+        });
+
+        expect(reasonOf(result) === 'frozen', `${date}/${status}`).toBe(
+          isFrozen({ date, status }, TODAY),
+        );
+      }
+    }
   });
 });
