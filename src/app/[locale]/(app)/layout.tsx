@@ -1,3 +1,4 @@
+import { getRatingsForConversation } from '@/features/feedback/message-feedback-repository';
 import { hasLocale } from 'next-intl';
 import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
@@ -137,12 +138,19 @@ export default async function AppShellLayout({
     const chat = openChat
       ? { conversationId: openChat.id, messages: await getMessages(openChat.id) }
       : null;
+    // The tester's own thumbs, restored with the transcript so a flag left last
+    // week is still there on load (`showable-version/05`, item 3). Read here
+    // rather than per row: one query for the thread, not one per message.
+    const chatRatings = chat
+      ? await getRatingsForConversation(athlete.id, chat.conversationId)
+      : {};
 
     if (open) {
       const transcript = await getMessages(open.id);
       // A refresh mid-decision must not lose the pending plan: restore the
       // proposal too, so the confirm/cancel popup reappears.
       const pending = await getPendingProposal(athlete.id, open.id);
+      const weeklyRatings = await getRatingsForConversation(athlete.id, open.id);
       weeklyInitial = {
         conversationId: open.id,
         weeklySessionNumber: open.weeklySessionNumber ?? 1,
@@ -152,6 +160,7 @@ export default async function AppShellLayout({
           content: m.content,
           seq: m.seq,
           citations: m.citations,
+          rating: weeklyRatings[m.id] ?? null,
         })),
         proposal: pending ? { sessions: pending.sessions } : null,
         ended: false,
@@ -167,6 +176,7 @@ export default async function AppShellLayout({
           content: m.content,
           seq: m.seq,
           citations: m.citations,
+          rating: chatRatings[m.id] ?? null,
         })),
       };
     }

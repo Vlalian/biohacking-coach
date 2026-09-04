@@ -46,6 +46,7 @@ export default async function CoachAthleteBriefingPage({
                   content: m.content,
                   seq: m.seq,
                   citations: [], // not a grounded conversation - nothing retrieves here
+                  rating: null, // the thumbs are for the Coach's own turns only
                 })),
               }
             : null

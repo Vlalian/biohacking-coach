@@ -1,5 +1,7 @@
 'use client';
 
+import type { MessageRating } from '@/db/schema';
+import { MessageThumbs } from './message-thumbs';
 import type { Citation } from '@/features/knowledge-oracle/retrieval';
 import { CitationList } from './citation-list';
 import {
@@ -34,6 +36,13 @@ export interface UiMessage {
    * at all.
    */
   citations: Citation[];
+  /**
+   * This tester's own thumbs on this message, or none yet
+   * (`showable-version/05`, item 3). Passed from the server so a flag left last
+   * week is still there on load - a mark that vanishes on reload teaches the
+   * tester the button does nothing.
+   */
+  rating?: { rating: MessageRating; comment: string | null } | null;
 }
 
 /** One proposed session, as the confirmation popup shows it. */
@@ -538,6 +547,18 @@ function MessageRow({
         {message.content}
       </p>
       <CitationList citations={message.citations} heading={t('drewOn')} />
+      {message.role === 'coach_ai' && (
+        <MessageThumbs
+          messageId={message.id}
+          initial={message.rating ?? null}
+          labels={{
+            up: t('thumbUp'),
+            down: t('thumbDown'),
+            commentPlaceholder: t('thumbComment'),
+            save: t('thumbSave'),
+          }}
+        />
+      )}
     </div>
   );
 }

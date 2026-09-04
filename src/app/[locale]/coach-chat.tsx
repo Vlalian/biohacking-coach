@@ -1,5 +1,6 @@
 'use client';
 
+import { MessageThumbs } from './message-thumbs';
 import { CitationList } from './citation-list';
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
@@ -236,6 +237,18 @@ function ChatRow({
         {message.content}
       </p>
       <CitationList citations={message.citations} heading={t('drewOn')} />
+      {message.role === 'coach_ai' && (
+        <MessageThumbs
+          messageId={message.id}
+          initial={message.rating ?? null}
+          labels={{
+            up: t('thumbUp'),
+            down: t('thumbDown'),
+            commentPlaceholder: t('thumbComment'),
+            save: t('thumbSave'),
+          }}
+        />
+      )}
     </div>
   );
 }

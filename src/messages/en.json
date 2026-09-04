@@ -490,7 +490,11 @@
     "consentRequiredLink": "Open Privacy & consent",
     "error": "That didn't send. Try again.",
     "unsafeContent": "A note or a piece of gear you have saved contains what looks like an email address or phone number. Your Coach cannot read that. Edit it out and try again.",
-    "drewOn": "What I drew on"
+    "drewOn": "What I drew on",
+    "thumbUp": "This helped",
+    "thumbDown": "This was off",
+    "thumbComment": "Anything you want to add? (optional)",
+    "thumbSave": "Save"
   },
   "WeeklySession": {
     "title": "Weekly Session",
@@ -521,7 +525,11 @@
     "error": "That didn't work. Try again.",
     "coachUnavailable": "Your Coach didn't answer that one. Nothing was lost — send it again.",
     "unsafeContent": "Something saved in your training — a note or a piece of gear — looks like an email address or phone number. Your Coach can't read that. Edit it out and try again.",
-    "drewOn": "What I drew on"
+    "drewOn": "What I drew on",
+    "thumbUp": "This helped",
+    "thumbDown": "This was off",
+    "thumbComment": "Anything you want to add? (optional)",
+    "thumbSave": "Save"
   },
   "Messaging": {
     "title": "Coaching Channel",

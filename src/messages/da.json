@@ -490,7 +490,11 @@
     "consentRequiredLink": "Åbn Privatliv & samtykke",
     "error": "Beskeden blev ikke sendt. Prøv igen.",
     "unsafeContent": "En note eller et stykke udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen.",
-    "drewOn": "Det jeg trak på"
+    "drewOn": "Det jeg trak på",
+    "thumbUp": "Det her hjalp",
+    "thumbDown": "Det her ramte forkert",
+    "thumbComment": "Vil du tilføje noget? (valgfrit)",
+    "thumbSave": "Gem"
   },
   "WeeklySession": {
     "title": "Ugentlig session",
@@ -521,7 +525,11 @@
     "error": "Det virkede ikke. Prøv igen.",
     "coachUnavailable": "Din Coach svarede ikke på den. Intet gik tabt — send den igen.",
     "unsafeContent": "Noget gemt i din træning — en note eller et stykke udstyr — ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen.",
-    "drewOn": "Det jeg trak på"
+    "drewOn": "Det jeg trak på",
+    "thumbUp": "Det her hjalp",
+    "thumbDown": "Det her ramte forkert",
+    "thumbComment": "Vil du tilføje noget? (valgfrit)",
+    "thumbSave": "Gem"
   },
   "Messaging": {
     "title": "Coaching Channel",

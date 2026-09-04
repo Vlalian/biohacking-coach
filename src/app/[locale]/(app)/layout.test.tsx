@@ -7,6 +7,7 @@ const {
   getOpenConversations,
   getMessages,
   getPendingProposal,
+  getRatingsForConversation,
   hasHeldWeeklySessionInWeek,
   narratePendingEvents,
   holdsActiveCoachingLinks,
@@ -24,6 +25,7 @@ const {
   getOpenConversations: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getMessages: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getPendingProposal: vi.fn(() => Promise.resolve(null)),
+  getRatingsForConversation: vi.fn(() => Promise.resolve({})),
   hasHeldWeeklySessionInWeek: vi.fn(() => Promise.resolve(false)),
   // Narration has its own tests; here the layout's job is only to run it, with
   // the athlete's id, before the transcript is read.
@@ -46,6 +48,9 @@ vi.mock('@/features/coach/conversation-repository', () => ({
   hasHeldWeeklySessionInWeek,
 }));
 vi.mock('@/features/coach/plan-proposal-repository', () => ({ getPendingProposal }));
+vi.mock('@/features/feedback/message-feedback-repository', () => ({
+  getRatingsForConversation,
+}));
 vi.mock('@/features/coach/narration-service', () => ({ narratePendingEvents }));
 vi.mock('@/features/coach/coach-repository', () => ({ holdsActiveCoachingLinks }));
 // Client components pulling in browser deps; the layout's own wiring is under

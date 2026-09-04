@@ -848,3 +848,52 @@ export const knowledgeChunks = pgTable(
 
 export type KnowledgeChunkRow = typeof knowledgeChunks.$inferSelect;
 export type NewKnowledgeChunkRow = typeof knowledgeChunks.$inferInsert;
+
+/** The two ways a tester can flag a Coach message. */
+export const MESSAGE_RATINGS = ['up', 'down'] as const;
+export type MessageRating = (typeof MESSAGE_RATINGS)[number];
+
+/**
+ * A tester's thumbs on one Coach message (`showable-version/05`, item 3).
+ *
+ * The artifact-pinning half of the feedback instrumentation. Testers try the app
+ * unattended, which means nobody can ask "what just happened?" - so a flag has
+ * to pin itself to something readable afterwards. "The Coach felt off sometimes"
+ * is unactionable; this message, thumbs down, opens the transcript at the exact
+ * text. The thumbs say *where*; the Feedback Interview says *why*.
+ *
+ * A table of its own rather than a kind on `athlete_feedback`: that one is keyed
+ * by athlete with a partial unique index for the Trust Signal, and this is keyed
+ * by message. Different artifact, different key.
+ *
+ * `athleteId` is denormalised deliberately. It scopes every read without joining
+ * through `conversations`, and it is what erasure cascades from - a message
+ * cascade alone would leave the row alive until the conversation went.
+ */
+export const messageFeedback = pgTable(
+  'message_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    rating: text('rating').notNull(),
+    /** The tester's optional one line. Athlete free text: never reaches a prompt. */
+    comment: text('comment'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    // One flag per message, changeable. Enforced by the schema and not only by
+    // the service, so a second write updates rather than accumulating a history
+    // nobody asked for.
+    uniqueIndex('message_feedback_message_once').on(table.messageId),
+    check(
+      'message_feedback_rating_valid',
+      sql`${table.rating} IN (${sql.raw(quotedList(MESSAGE_RATINGS))})`,
+    ),
+  ],
+);
