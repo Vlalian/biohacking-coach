@@ -23,7 +23,11 @@ import {
   deletePrescribedSessionAction,
   editPrescribedSessionAction,
 } from './(app)/coach/athlete/[athleteId]/prescribe-actions';
-import { DEFAULT_TYPE_COLOR, FILTERABLE_TYPES, TYPE_COLORS } from '@/features/session/type-colors';
+import {
+  DEFAULT_TYPE_COLOR,
+  PRESCRIBABLE_TYPES,
+  TYPE_COLORS,
+} from '@/features/session/type-colors';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import { undoDetectedImportAction } from './garmin-actions';
 import {
@@ -36,10 +40,6 @@ import {
 } from './session-actions';
 
 const ATHLETE_SESSION_TYPES = ['Mobility', 'Strength', 'Other'] as const;
-
-/** The types a Head Coach may prescribe — the Coach's list, plus Rest and
- *  Strength, matching what `PrescribePanel` offers when adding one. */
-const COACH_SESSION_TYPES = [...FILTERABLE_TYPES, 'Rest', 'Strength'];
 
 /**
  * Every refusal a Session Drawer action can come back with, and the message
@@ -628,7 +628,7 @@ function HeadCoachSessionForm({
       </Field>
       <Field label={t('formType')}>
         <select value={type} onChange={(e) => setType(e.target.value)} className={FIELD}>
-          {COACH_SESSION_TYPES.map((x) => (
+          {PRESCRIBABLE_TYPES.map((x) => (
             <option key={x} value={x}>
               {x}
             </option>

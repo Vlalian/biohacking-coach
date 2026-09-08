@@ -1,7 +1,6 @@
 'use client';
 
-import { MessageThumbs } from './message-thumbs';
-import { CitationList } from './citation-list';
+import { CoachMessageFooter } from './coach-message-footer';
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, CornerDownLeft, X } from 'lucide-react';
@@ -236,19 +235,7 @@ function ChatRow({
       <p className="max-w-[62ch] whitespace-pre-wrap text-[15px] leading-[1.7] text-foreground">
         {message.content}
       </p>
-      <CitationList citations={message.citations} heading={t('drewOn')} />
-      {message.role === 'coach_ai' && (
-        <MessageThumbs
-          messageId={message.id}
-          initial={message.rating ?? null}
-          labels={{
-            up: t('thumbUp'),
-            down: t('thumbDown'),
-            commentPlaceholder: t('thumbComment'),
-            save: t('thumbSave'),
-          }}
-        />
-      )}
+      <CoachMessageFooter message={message} t={t} />
     </div>
   );
 }

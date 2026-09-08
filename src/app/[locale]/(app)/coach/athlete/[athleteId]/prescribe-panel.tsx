@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { FILTERABLE_TYPES } from '@/features/session/type-colors';
+import { PRESCRIBABLE_TYPES } from '@/features/session/type-colors';
 import { prescribeSessionAction, type PrescribeActionResult } from './prescribe-actions';
 
 /**
@@ -23,7 +23,6 @@ import { prescribeSessionAction, type PrescribeActionResult } from './prescribe-
  * session. A failed action surfaces its reason rather than pretending success.
  */
 
-const TYPES = [...FILTERABLE_TYPES, 'Rest', 'Strength'];
 
 type FormState = {
   date: string;
@@ -95,7 +94,7 @@ export function PrescribePanel({ athleteId }: { athleteId: string }) {
         <label className="flex flex-col gap-1 text-xs">
           {t('type')}
           <select className="rounded border bg-background px-2 py-1 text-sm" {...field('type')}>
-            {TYPES.map((ty) => (
+            {PRESCRIBABLE_TYPES.map((ty) => (
               <option key={ty} value={ty}>
                 {ty}
               </option>

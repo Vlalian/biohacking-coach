@@ -4,7 +4,6 @@ import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import {
   buildWeeklyCheckIn,
-  proposalDateRange,
   proposedToNewSessionRows,
   reflectionScoreToTen,
   skippedFrom,
@@ -14,7 +13,6 @@ import {
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   PROPOSE_WEEK_PLAN_TOOL,
   WEEKLY_OPENER,
-  type ProposedSession,
   type Readiness,
 } from './weekly-session';
 import { planningWindow } from './planning-window';
@@ -140,7 +138,6 @@ describe('weekFeedbackFrom', () => {
       },
     ]);
   });
-});
 
   // A Session Reflection is two scores and the pair is what makes it a reflection.
   // Half of one is not "partly rated" - it is a session the athlete started
@@ -154,6 +151,7 @@ describe('weekFeedbackFrom', () => {
       ]),
     ).toEqual([]);
   });
+});
 
 describe('the propose_week_plan tool contract', () => {
   // The name is not an internal identifier: Anthropic echoes it back on a tool
@@ -417,17 +415,6 @@ describe('validateProposedPlan', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.sessions.map((s) => s.durationMinutes)).toEqual([null, null]);
-  });
-});
-
-describe('proposalDateRange', () => {
-  it('spans the earliest to the latest date, unsorted input', () => {
-    const sessions: ProposedSession[] = [
-      { date: '2026-08-02', type: 'Endurance', durationMinutes: null, zone: null, note: null },
-      { date: '2026-07-29', type: 'Intensity', durationMinutes: null, zone: null, note: null },
-      { date: '2026-07-31', type: 'Tempo', durationMinutes: null, zone: null, note: null },
-    ];
-    expect(proposalDateRange(sessions)).toEqual({ start: '2026-07-29', end: '2026-08-02' });
   });
 });
 

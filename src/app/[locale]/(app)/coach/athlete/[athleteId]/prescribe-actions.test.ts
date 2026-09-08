@@ -61,7 +61,14 @@ describe('the plan-authoring actions', () => {
       'prescribeSessionAction',
       () => prescribeSessionAction(ATHLETE, INPUT),
       prescribeSession,
-      { headCoachId: COACH, athleteId: ATHLETE, input: INPUT },
+      {
+        headCoachId: COACH,
+        athleteId: ATHLETE,
+        input: INPUT,
+        // Creating carries the server's day too, since 2026-09-08: prescribing
+        // into a week that is already over is refused like editing one.
+        today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      },
     ],
     [
       'editPrescribedSessionAction',

@@ -71,7 +71,7 @@ describe('prescribeSession — the Head Coach adds a Prescribed Session', () => 
   it('persists origin head_coach and records a head_coach event in one batch', async () => {
     getActiveLink.mockResolvedValue(LINK);
 
-    const result = await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: VALID });
+    const result = await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: VALID, today: TODAY });
 
     expect(result.ok).toBe(true);
     expect(batch).toHaveBeenCalledTimes(1);
@@ -96,10 +96,53 @@ describe('prescribeSession — the Head Coach adds a Prescribed Session', () => 
     expect(eventCall).not.toHaveProperty('narratedAt');
   });
 
+  /**
+   * Creating into a frozen week (`showable-version/22`, decided by Mads
+   * 2026-09-08).
+   *
+   * The create path had no clock at all, so a Head Coach could prescribe onto
+   * last Tuesday and it landed as a *planned* session in a week that was over.
+   * `isFrozen` counts anything in a past week, and since `794a3c7` edit and
+   * delete enforce that — so such a row was permanent the moment it existed:
+   * its own author could not edit it, delete it or move it. The athlete's path
+   * cannot reach that state, because `createdStatusFor` records a past-dated
+   * session as completed; they are logging reality, and a coach is not.
+   */
+  it('refuses to prescribe into a past week, with the same reason edit and delete give', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+
+    // TODAY is Thursday 2026-07-16, so its week starts Mon 2026-07-13.
+    // 2026-07-10 is the Friday before — a week that is over.
+    const result = await prescribeSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      input: { ...VALID, date: '2026-07-10' },
+      today: TODAY,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'frozen' });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('allows an earlier day inside the current week — the week is the unit, not the day', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+
+    // Monday of TODAY's own week. Past as a day, not past as a week, and
+    // `isFrozen` judges by week — so this must still be prescribable.
+    const result = await prescribeSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      input: { ...VALID, date: '2026-07-13' },
+      today: TODAY,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it('refuses when the Head Coach has no active link to the athlete — nothing written', async () => {
     getActiveLink.mockResolvedValue(undefined);
 
-    const result = await prescribeSession({ headCoachId: COACH, athleteId: 'a_stranger', input: VALID });
+    const result = await prescribeSession({ headCoachId: COACH, athleteId: 'a_stranger', input: VALID, today: TODAY });
 
     expect(result).toEqual({ ok: false, reason: 'not-linked' });
     expect(batch).not.toHaveBeenCalled();
@@ -109,10 +152,10 @@ describe('prescribeSession — the Head Coach adds a Prescribed Session', () => 
     getActiveLink.mockResolvedValue(LINK);
 
     expect(
-      (await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: { date: '2026-13-40', type: 'X' } })).ok,
+      (await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: { date: '2026-13-40', type: 'X' }, today: TODAY })).ok,
     ).toBe(false);
     expect(
-      (await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: { date: '2026-07-16', type: '  ' } })).ok,
+      (await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: { date: '2026-07-16', type: '  ' }, today: TODAY })).ok,
     ).toBe(false);
     expect(batch).not.toHaveBeenCalled();
   });

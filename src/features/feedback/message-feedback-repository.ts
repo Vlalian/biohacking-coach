@@ -40,6 +40,14 @@ export interface StoredRating {
  * that true in the schema, and the upsert is how a change lands on it. A second
  * thumbs is the tester changing their mind, not a second opinion, so `createdAt`
  * is left alone — the moment they first reacted is the interesting one.
+ *
+ * The update half carries the athlete predicate as well as the message id. The
+ * unique index is on `message_id` alone, so without it a conflict on a row
+ * belonging to someone else would be *updated* with this athlete's rating and
+ * comment rather than refused. `flaggableCoachMessage` makes that unreachable
+ * today, which is exactly why the predicate is here: a guard left behind in the
+ * read guards nothing (ADR 0010), and the module header above claims this
+ * scoping for every function in it.
  */
 export async function rateMessage(input: MessageRatingInput): Promise<void> {
   await getDb()
@@ -57,6 +65,7 @@ export async function rateMessage(input: MessageRatingInput): Promise<void> {
         comment: input.comment,
         updatedAt: new Date(),
       },
+      where: eq(messageFeedback.athleteId, input.athleteId),
     });
 }
 

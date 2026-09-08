@@ -297,7 +297,7 @@ describe("the Coach is told the athlete's Unavailable Dates", () => {
   });
 
   it('reads them once per turn, not once per consumer', async () => {
-    // `renderSystem` needs them for the prompt and `windowFor` needs them for
+    // `renderSystem` needs them for the prompt and `planningWindowFor` needs them for
     // the planning window, and both run inside `startWeeklySession`. Fetching
     // in each is two round trips for one answer (showable-version/15).
     getUnavailableDates.mockResolvedValue(['2026-08-12']);
@@ -355,10 +355,31 @@ describe('commitWeeklyPlan and the planning window', () => {
     expect(result).toEqual({
       ok: true,
       sessionCount: 1,
-      start: '2026-08-14',
-      end: '2026-08-14',
+      // The window, not the proposal's own span — see the test below.
+      start: '2026-08-12',
+      end: '2026-08-16',
     });
     expect(replaceCoachPlanForDateRange).toHaveBeenCalled();
+  });
+
+  it('clears the whole window, not only the days the proposal filled', async () => {
+    // The bound has to reach the *write*, not just the validation. A proposal
+    // covering one day used to replace one day, so a Coach session already
+    // sitting on a window day the new plan omits survived a replace that was
+    // meant to hand the athlete a fresh week — the model's choice of days
+    // silently decided what got cleared. `showable-version/11`: the window is
+    // one rule, and a rule that stops short of the write is a request.
+    getPendingProposal.mockResolvedValue({ sessions: [INSIDE] });
+
+    const result = await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY);
+
+    expect(result).toMatchObject({ ok: true, start: '2026-08-12', end: '2026-08-16' });
+    expect(replaceCoachPlanForDateRange).toHaveBeenCalledWith(
+      ATHLETE.id,
+      '2026-08-12',
+      '2026-08-16',
+      expect.any(Array),
+    );
   });
 
   it('refuses as stale a proposal that has drifted beyond the window', async () => {

@@ -525,12 +525,21 @@ function WeekRow({
       <div
         className="grid grid-cols-1 md:grid-cols-[56px_repeat(7,minmax(0,1fr))]"
         onClick={(e) => {
-          if ((e.target as HTMLElement).closest('[data-day]')) return;
+          // Two things must not reach this handler. A day cell has controls of
+          // its own, and the date label below is a real button that already
+          // toggles — without this it would toggle twice and cancel itself out,
+          // for the keyboard user it was kept for as much as for the mouse.
+          if ((e.target as HTMLElement).closest('[data-day], [data-week-toggle]')) return;
           onToggleWeek();
         }}
       >
         <button
           type="button"
+          // Marks this button out of the row handler above. A marker rather
+          // than stopPropagation because the row's rule then stays one
+          // selector, readable in one place and visible in the markup a test
+          // can render.
+          data-week-toggle=""
           onClick={onToggleWeek}
           // The chevron's rotation is the only cue that a week is expanded, and
           // rotation is invisible to a screen reader.

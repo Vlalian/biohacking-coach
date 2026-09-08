@@ -102,6 +102,27 @@ describe('rateMessage', () => {
     expect(conflict.set).not.toHaveProperty('createdAt');
   });
 
+  it('scopes the update half to the athlete, not to the message alone', async () => {
+    // The unique index is on `message_id` alone, so a conflict is matched by
+    // message and nothing else. Without this predicate a flag belonging to
+    // another athlete would be *updated* with this one's rating and comment
+    // instead of refused. `flaggableCoachMessage` makes that unreachable from
+    // the action today - which is the reason to write it here and not the
+    // reason to leave it out: a guard left behind in the read guards nothing
+    // (ADR 0010), and the module header claims this scoping for every function.
+    await repo.rateMessage({
+      athleteId: OWNER,
+      messageId: 'm1',
+      rating: 'up',
+      comment: null,
+    });
+
+    const [conflict] = onConflictDoUpdate.mock.calls[0] as unknown as [
+      { where?: unknown },
+    ];
+    expect(boundValues(conflict.where)).toContain(OWNER);
+  });
+
   it('stores an optional one-line comment, and null when there is none', async () => {
     await repo.rateMessage({
       athleteId: OWNER,

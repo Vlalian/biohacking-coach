@@ -348,15 +348,6 @@ function isPlanType(type: unknown): type is PlanType {
   return typeof type === 'string' && PLAN_TYPES.includes(type as PlanType);
 }
 
-/** The [start, end] calendar span a proposal covers — the range to replace. */
-export function proposalDateRange(sessions: ProposedSession[]): {
-  start: string;
-  end: string;
-} {
-  const dates = sessions.map((s) => s.date).sort();
-  return { start: dates[0], end: dates[dates.length - 1] };
-}
-
 /**
  * Maps validated proposed sessions to insertable rows.
  *

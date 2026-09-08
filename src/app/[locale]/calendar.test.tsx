@@ -307,4 +307,15 @@ describe('Calendar — the week row is the toggle', () => {
 
     expect(markup).toMatch(/<button[^>]*aria-expanded=/);
   });
+
+  it('keeps the date label out of the row handler, so it toggles once', () => {
+    // The button and the row both toggle. Without the marker the button's own
+    // click bubbles to the row, `toggleWeek` runs twice against a functional
+    // setState, and the week does not move at all — the failure is silent and
+    // it lands hardest on the keyboard user, whose Enter also fires a click.
+    // The marker is what the row handler's selector excludes.
+    const markup = render();
+
+    expect(markup).toMatch(/<button[^>]*data-week-toggle=/);
+  });
 });

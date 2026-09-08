@@ -1,4 +1,4 @@
-import type { Citation } from '@/features/knowledge-oracle/retrieval';
+import type { Citation } from '@/lib/citation';
 
 /**
  * The sources behind a Coach message, as a plain reference list.

@@ -16,10 +16,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
-// Type-only, so the schema still imports no runtime code from a feature: the
-// pure Oracle core owns the shape of a citation (code-health/06 deliberately
-// waited for knowledge-oracle/03 to define it rather than guessing).
-import type { Citation } from '@/features/knowledge-oracle/retrieval';
+import type { Citation } from '@/lib/citation';
 
 /**
  * A closed set as a SQL literal list, for a CHECK constraint.

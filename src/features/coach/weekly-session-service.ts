@@ -29,7 +29,6 @@ import {
 } from './plan-proposal-repository';
 import {
   buildWeeklyCheckIn,
-  proposalDateRange,
   proposedToNewSessionRows,
   skippedFrom,
   toWeeklyApiMessages,
@@ -86,7 +85,7 @@ const PROPOSAL_ACK =
  * proposal that has drifted out of its window between being staged and being
  * confirmed comes back `stale` rather than being written.
  */
-function windowFor(
+function planningWindowFor(
   athlete: Athlete,
   today: string,
   unavailableDates: string[],
@@ -187,7 +186,7 @@ export async function startWeeklySession(
 ): Promise<StartWeeklySessionResult> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
   // Read once per turn and threaded from here: the prompt (`renderSystem`)
-  // and the planning window (`windowFor`) both need this list, and each
+  // and the planning window (`planningWindowFor`) both need this list, and each
   // fetching it for itself is two round trips for one answer.
   const unavailableDates = await getUnavailableDates(athlete.id);
 
@@ -279,7 +278,7 @@ async function stageProposal(
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (!call) return null;
 
-  const validated = validateProposedPlan(call.input, windowFor(athlete, today, unavailableDates));
+  const validated = validateProposedPlan(call.input, planningWindowFor(athlete, today, unavailableDates));
   if (!validated.ok) return null;
 
   await recordProposal(athlete.id, conversationId, validated.sessions);
@@ -377,7 +376,7 @@ export async function continueWeeklySession(
   const transcript = await getMessages(conversationId);
 
   // Read once per turn and threaded from here: the prompt (`renderSystem`)
-  // and the planning window (`windowFor`) both need this list, and each
+  // and the planning window (`planningWindowFor`) both need this list, and each
   // fetching it for itself is two round trips for one answer.
   const unavailableDates = await getUnavailableDates(athlete.id);
 
@@ -452,15 +451,18 @@ export async function commitWeeklyPlan(
   // Stale if the proposal no longer fully validates against today — e.g. it was
   // confirmed a day later and a day it included is now in the past. Refuse the
   // whole plan rather than silently commit a shrunken week; the athlete re-plans.
-  const validated = validateProposedPlan(
-    { sessions: pending.sessions },
-    windowFor(athlete, today, await getUnavailableDates(athlete.id)),
-  );
+  const window = planningWindowFor(athlete, today, await getUnavailableDates(athlete.id));
+  const validated = validateProposedPlan({ sessions: pending.sessions }, window);
   if (!validated.ok || validated.sessions.length !== pending.sessions.length) {
     return { ok: false, reason: 'stale' };
   }
 
-  const { start, end } = proposalDateRange(validated.sessions);
+  // The window is the range replaced, not the span the proposal happens to
+  // cover. Those differ whenever the Coach plans fewer days than the window
+  // holds, and the difference is a Coach session left standing on a day the new
+  // week never mentions — a leftover from the plan the athlete just replaced.
+  // The window is what they agreed to re-plan, so the window is what clears.
+  const { start, end } = window;
   const rows = proposedToNewSessionRows(validated.sessions, athlete.id);
   await replaceCoachPlanForDateRange(athlete.id, start, end, rows);
   await recordPlanCommitted(athlete.id, conversationId, validated.sessions);

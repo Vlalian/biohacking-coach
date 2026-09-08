@@ -154,17 +154,34 @@ function contentColumns(input: PrescriptionInput) {
 
 /**
  * Adds a Prescribed Session (`origin: 'head_coach'`) to a linked athlete's plan.
+ *
+ * `today` is the server's day, never the browser's — the same rule the edit and
+ * move paths follow, for the same reason: whether a week is closed must not be
+ * judged against a clock the client controls.
  */
 export async function prescribeSession(params: {
   headCoachId: string;
   athleteId: string;
   input: PrescriptionInput;
+  today: string;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, input } = params;
+  const { headCoachId, athleteId, input, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
   if (!isValidPrescription(input)) return { ok: false, reason: 'invalid' };
+  // Creating into a closed week is refused, like editing and deleting in one
+  // (`showable-version/22`, decided 2026-09-08). Asked of `isFrozen` rather
+  // than re-derived, so "this week is over" cannot mean one thing for creation
+  // and another for content. The row would be `planned`, so only the date can
+  // freeze it — but the question is still `isFrozen`'s to answer.
+  // Stryker disable next-line StringLiteral — equivalent. `isFrozen` reads
+  // status only as `=== 'completed'`, and a row being created is never that, so
+  // every other string it could be mutated to yields the same verdict. The
+  // literal is here to say what is being asked about, not to carry the answer.
+  if (isFrozen({ date: input.date, status: 'planned' }, today)) {
+    return { ok: false, reason: 'frozen' };
+  }
 
   const db = getDb();
   const id = crypto.randomUUID();

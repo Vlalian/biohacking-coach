@@ -1,4 +1,4 @@
-import type { Citation } from '@/features/knowledge-oracle/retrieval';
+import type { Citation } from '@/lib/citation';
 import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';

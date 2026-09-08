@@ -1,4 +1,5 @@
-import type { Citation, RetrievalResult } from '@/features/knowledge-oracle/retrieval';
+import type { Citation } from '@/lib/citation';
+import type { RetrievalResult } from '@/features/knowledge-oracle/retrieval';
 
 /**
  * The citation channel: how the sources behind a Coach answer reach the athlete.

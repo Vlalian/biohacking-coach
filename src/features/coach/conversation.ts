@@ -1,4 +1,4 @@
-import type { Citation } from '@/features/knowledge-oracle/retrieval';
+import type { Citation } from '@/lib/citation';
 import type { ConversationRow, MessageRow } from '@/db/schema';
 import type { CoachMessage } from './coach-client';
 import type { ConversationKind } from '@/lib/conversation-kinds';
