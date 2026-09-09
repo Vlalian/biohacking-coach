@@ -7,6 +7,7 @@ import { ChevronDown, ChevronsUpDown, Plus, type LucideIcon } from 'lucide-react
 import type { Session } from '@/features/session/session';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
+import type { MoveResult } from '@/features/session/session-move';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { moveSessionAction } from './move-actions';
 import { markUnavailableDateAction, clearUnavailableDateAction } from './availability-actions';
@@ -16,7 +17,96 @@ import { SessionDrawer, type DrawerState } from './session-drawer';
 // 'conflict' is the only reason the client cannot predict: it means someone
 // else — the Head Coach — changed this session while it was on screen, so the
 // move was refused rather than allowed to overwrite them (versioned-write.ts).
-type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict';
+type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked';
+
+/**
+ * Every reason a Session Move can come back refused from the server, and the
+ * message the athlete reads for it.
+ *
+ * The calendar decided two refusals for itself — a past day and another week —
+ * and explained both. It explained none of the server's: `handleDrop` matched
+ * `conflict` and let the rest fall through to a bare `router.refresh()`, which
+ * put the block back and looked exactly like a move that had worked. The comment
+ * on that line already said what it should do — *"A refused move used to look
+ * identical to a successful one... Say so instead."* — and it was true of one
+ * reason out of five.
+ *
+ * Keyed on the server's own union, so a reason nobody mapped is a type error
+ * here rather than silence in front of a tester. As in `REFUSAL_KEY`, the value
+ * type is `string`: this proves every reason has an entry, not that every entry
+ * names a message that exists — `calendar.test.tsx` checks that against the
+ * catalogue.
+ *
+ * `not-found` and `not-authenticated` share the generic copy by the same rule
+ * the drawer states: a missing row or a signed-out tab is not the athlete's to
+ * fix, and naming it leaks the shape of the system without helping. Every other
+ * reason is something the person can act on, so every other reason is named.
+ */
+type MoveRefusal =
+  | Extract<MoveResult, { ok: false }>['reason']
+  // The Head Coach's door refuses two more ways than the athlete's
+  // (`moveSessionAsCoachAction`): the Coaching Link was severed under them, or
+  // they hold no coach row at all. Both were invisible before this — the coach
+  // dragged, and the block went back.
+  | 'not-linked'
+  | 'not-a-coach';
+
+/**
+ * Why this session cannot be picked up at all, or null when it can.
+ *
+ * The block already knew this and threw the reason away: `draggable` is
+ * `canDrag && !frozen && !session.parked`, a boolean built from two quite
+ * different refusals. So a completed session and a session parked behind a Rest
+ * block were equally inert and equally silent, and `bounceFrozen` — written and
+ * translated — was unreachable, because the drag that would have raised it could
+ * never start.
+ *
+ * `isFrozen` is asked rather than re-implemented: the server applies the same
+ * rules (ADR 0006), and a second copy here is how the message and the refusal
+ * drift apart.
+ *
+ * Parked is deliberately not folded into frozen. A parked session returns to
+ * planned on its own when the Rest block moves away (CONTEXT.md, Displacement);
+ * telling the athlete it is frozen would describe something permanent.
+ */
+export function liftRefusal(
+  session: { date: string; status: string; parked: boolean },
+  todayKey: string,
+): Extract<BounceReason, 'frozen' | 'parked'> | null {
+  if (isFrozen({ date: session.date, status: session.status }, todayKey)) return 'frozen';
+  if (session.parked) return 'parked';
+  return null;
+}
+
+/**
+ * The message for each refusal the *calendar* decides for itself, so that a
+ * bounce carries a message key whoever raised it — the client's own verdict or
+ * the server's. Without one vocabulary the render site has to know both, which
+ * is how `bounceFrozen` ended up listed in a branch that could not be reached.
+ */
+export const BOUNCE_KEY: Record<BounceReason, string> = {
+  'past-day': 'bouncePastDay',
+  'other-week': 'bounceOtherWeek',
+  frozen: 'bounceFrozen',
+  conflict: 'bounceConflict',
+  parked: 'bounceParked',
+};
+
+export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
+  conflict: 'bounceConflict',
+  frozen: 'bounceFrozen',
+  bounce: 'bounceRefused',
+  // Reached by the Head Coach, not the athlete: `canHeadCoachMove` excludes
+  // Athlete Sessions, so dragging one is refused server-side. Until now that
+  // refusal was the silent one — the coach dragged, and the block went back.
+  'not-owner': 'bounceNotYours',
+  'not-found': 'bounceError',
+  'not-authenticated': 'bounceError',
+  // Generic by the same rule: a link severed in another tab, or an account that
+  // is not a coach, is a state the person cannot resolve from this drag.
+  'not-linked': 'bounceError',
+  'not-a-coach': 'bounceError',
+};
 
 type Day = {
   date: string;
@@ -104,6 +194,7 @@ export function Calendar({
   todayKey,
   readOnly = false,
   onMove,
+  coachAthleteId,
 }: {
   sessions: Session[];
   unavailableDates: string[];
@@ -131,7 +222,16 @@ export function Calendar({
     sessionId: string,
     targetDate: string,
     expectedVersion: number,
-  ) => Promise<{ ok: boolean; reason?: string }>;
+  ) => Promise<{ ok: true } | { ok: false; reason: MoveRefusal }>;
+  /**
+   * The athlete this calendar belongs to, when the Head Coach is the one
+   * looking at it. Opens the Session Drawer on their behalf.
+   *
+   * A read-only calendar rendered no drawer at all, so a coach could see a
+   * session and never read it — not its note, not its reflection, not the
+   * record they are meant to judge the plan against (showable-version/20).
+   */
+  coachAthleteId?: string;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -151,7 +251,7 @@ export function Calendar({
   const [expanded, setExpanded] = useState<string[]>([weekStartOf(todayKey)]);
   const [dragging, setDragging] = useState<{ session: Session; week: string } | null>(null);
   const [hoverDate, setHoverDate] = useState<string | null>(null);
-  const [bounce, setBounce] = useState<{ date: string; reason: BounceReason } | null>(null);
+  const [bounce, setBounce] = useState<{ date: string; messageKey: string } | null>(null);
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
   const [ratingSession, setRatingSession] = useState<Session | null>(null);
 
@@ -201,7 +301,7 @@ export function Calendar({
     const reason = rejectionFor(day);
     setHoverDate(null);
     if (reason) {
-      setBounce({ date: day.date, reason });
+      setBounce({ date: day.date, messageKey: BOUNCE_KEY[reason] });
       window.setTimeout(() => setBounce(null), 2600);
     } else if (dragging.session.date !== day.date) {
       const { id, version } = dragging.session;
@@ -215,9 +315,11 @@ export function Calendar({
           : await moveSessionAction(id, day.date, version);
         // A refused move used to look identical to a successful one, because
         // the result was discarded and the refresh put the session back where
-        // it started. Say so instead.
-        if (!result.ok && 'reason' in result && result.reason === 'conflict') {
-          setBounce({ date: day.date, reason: 'conflict' });
+        // it started. Say so instead — for *every* reason. This matched only
+        // `conflict` until 2026-09-04, so the sentence above was true of one
+        // refusal out of five and silently false of the rest.
+        if (!result.ok) {
+          setBounce({ date: day.date, messageKey: MOVE_REFUSAL_KEY[result.reason] });
           window.setTimeout(() => setBounce(null), 4000);
         }
         router.refresh();
@@ -297,6 +399,7 @@ export function Calendar({
             week={week}
             expanded={expanded.includes(week.isoWeekStart)}
             readOnly={readOnly}
+            canOpenSession={!readOnly || Boolean(coachAthleteId)}
             canDrag={canDrag}
             todayKey={todayKey}
             locale={locale}
@@ -323,8 +426,9 @@ export function Calendar({
 
       <Legend t={t} />
 
-      {!readOnly && (
+      {(!readOnly || coachAthleteId) && (
         <SessionDrawer
+          coachAthleteId={coachAthleteId}
           state={drawer}
           sessions={sessions}
           importedSessionIds={importedSessionIds}
@@ -350,6 +454,7 @@ function WeekRow({
   week,
   expanded,
   readOnly,
+  canOpenSession,
   canDrag,
   todayKey,
   locale,
@@ -371,13 +476,16 @@ function WeekRow({
   week: Week;
   expanded: boolean;
   readOnly: boolean;
+  /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
+   *  calendar is read-only and opens one (showable-version/20). */
+  canOpenSession: boolean;
   /** Whether session blocks may be dragged — not implied by `readOnly`. */
   canDrag: boolean;
   todayKey: string;
   locale: string;
   dragging: { session: Session; week: string } | null;
   hoverDate: string | null;
-  bounce: { date: string; reason: BounceReason } | null;
+  bounce: { date: string; messageKey: string } | null;
   pending: boolean;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
   rejectionFor: (day: Day) => BounceReason | null;
@@ -403,9 +511,35 @@ function WeekRow({
 
   return (
     <div>
-      <div className="grid grid-cols-1 md:grid-cols-[56px_repeat(7,minmax(0,1fr))]">
+      {/* `CONTEXT.md`, Expanded Week: "Tapping a week row toggles it." Only the
+          date label was a button, so the row and the glossary disagreed.
+
+          A handler on the row rather than a larger button, deliberately. Each
+          day cell is a drop target with controls of its own, and wrapping them
+          in a <button> would nest interactive elements and swallow every one of
+          them. This lets anything originating inside a day through untouched.
+
+          The button below stays and remains the accessible path: a div with an
+          onClick is not reachable by keyboard, so widening the hit area for a
+          mouse must not narrow who can reach it. */}
+      <div
+        className="grid grid-cols-1 md:grid-cols-[56px_repeat(7,minmax(0,1fr))]"
+        onClick={(e) => {
+          // Two things must not reach this handler. A day cell has controls of
+          // its own, and the date label below is a real button that already
+          // toggles — without this it would toggle twice and cancel itself out,
+          // for the keyboard user it was kept for as much as for the mouse.
+          if ((e.target as HTMLElement).closest('[data-day], [data-week-toggle]')) return;
+          onToggleWeek();
+        }}
+      >
         <button
           type="button"
+          // Marks this button out of the row handler above. A marker rather
+          // than stopPropagation because the row's rule then stays one
+          // selector, readable in one place and visible in the markup a test
+          // can render.
+          data-week-toggle=""
           onClick={onToggleWeek}
           // The chevron's rotation is the only cue that a week is expanded, and
           // rotation is invisible to a screen reader.
@@ -426,6 +560,10 @@ function WeekRow({
           return (
             <div
               key={day.date}
+              // Read by the row's toggle handler to tell "clicked the week" from
+              // "clicked inside a day". Without it the row would swallow the
+              // day's own controls — the ✕, the +, a session block, a drag.
+              data-day={day.date}
               onDragOver={(e) => {
                 if (dragging) {
                   e.preventDefault();
@@ -504,8 +642,12 @@ function WeekRow({
                       session={s}
                       t={t}
                       canDrag={canDrag}
-                      frozen={isFrozen({ date: s.date, status: s.status }, todayKey)}
-                      onOpen={readOnly ? undefined : () => onOpenSession(s)}
+                      refusal={liftRefusal(s, todayKey)}
+                      // Omitted only where there is genuinely no drawer to
+                      // open. A coach viewing a linked athlete has one now.
+                      // Omitted only where there is genuinely no drawer to
+                      // open. A coach viewing a linked athlete has one now.
+                      onOpen={canOpenSession ? () => onOpenSession(s) : undefined}
                       onDragStart={() => onDragStart(s)}
                       onDragEnd={onDragEnd}
                     />
@@ -524,7 +666,14 @@ function WeekRow({
                     // It keeps its label so a screen reader still announces the
                     // session — what it loses is the focus stop and the pointer
                     // that promise something to click.
-                    readOnly ? (
+                    //
+                    // It asks `canOpenSession`, not `readOnly`, because those
+                    // are different questions and the Head Coach answers them
+                    // differently: their calendar is read-only *and* opens a
+                    // drawer. Reading `readOnly` here made a session openable in
+                    // an expanded week and dead in a collapsed one, while this
+                    // comment claimed both branches agreed. CodeRabbit, PR #57.
+                    !canOpenSession ? (
                       <span
                         key={s.id}
                         title={s.title ?? s.type}
@@ -562,10 +711,7 @@ function WeekRow({
 
       {bounce && week.days.some((d) => d.date === bounce.date) && (
         <p className="flex items-center gap-2 border-t border-destructive/40 bg-destructive/5 px-3 py-1.5 font-body text-xs text-destructive">
-          {bounce.reason === 'past-day' && t('bouncePastDay')}
-          {bounce.reason === 'other-week' && t('bounceOtherWeek')}
-          {bounce.reason === 'frozen' && t('bounceFrozen')}
-          {bounce.reason === 'conflict' && t('bounceConflict')}
+          {t(bounce.messageKey)}
         </p>
       )}
     </div>
@@ -576,7 +722,7 @@ function SessionBlock({
   session,
   t,
   canDrag,
-  frozen,
+  refusal,
   onOpen,
   onDragStart,
   onDragEnd,
@@ -584,7 +730,14 @@ function SessionBlock({
   session: Session;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
   canDrag: boolean;
-  frozen: boolean;
+  /**
+   * Why this session cannot be lifted, or null when it can — the reason rather
+   * than the boolean it used to be. A block that simply will not move, and says
+   * nothing about it, is the defect this replaced: `bounceFrozen` was written
+   * and translated and could never be reached, because the drag that would have
+   * raised it could not start.
+   */
+  refusal: 'frozen' | 'parked' | null;
   /**
    * Omitted where there is nothing to open — the Head Coach's read-only
    * calendar, which renders no `SessionDrawer`. Without it this renders plain
@@ -598,7 +751,11 @@ function SessionBlock({
 }) {
   const color = typeColor(session.type);
   const muted = session.status === 'skipped' || session.status === 'unavailable';
-  const draggable = canDrag && !frozen && !session.parked;
+  const draggable = canDrag && refusal === null;
+  // Surfaced on the block itself, because the refusal happens *before* any drop:
+  // there is no bounce to attach it to, and the athlete needs it at the moment
+  // they try to pick the session up.
+  const refusalText = refusal ? t(BOUNCE_KEY[refusal]) : undefined;
 
   // Drag is deliberately independent of opening: the Head Coach may re-place a
   // session (ADR 0003, 2026-08-21 amendment) on a calendar they cannot open.
@@ -629,10 +786,12 @@ function SessionBlock({
         draggable={draggable}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        title={refusalText}
         className={className}
         style={{ borderColor: color }}
       >
         {content}
+        {refusalText && <span className="sr-only">{refusalText}</span>}
       </div>
     );
   }
@@ -644,10 +803,15 @@ function SessionBlock({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
+      title={refusalText}
       className={className}
       style={{ borderColor: color }}
     >
       {content}
+      {/* `title` alone is a hover affordance and reaches neither a screen reader
+          reliably nor a touch device at all. The visually-hidden copy is the one
+          that actually carries the reason. */}
+      {refusalText && <span className="sr-only">{refusalText}</span>}
     </button>
   );
 }

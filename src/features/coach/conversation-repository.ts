@@ -1,3 +1,4 @@
+import type { Citation } from '@/lib/citation';
 import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
@@ -215,6 +216,20 @@ export async function getOwnedConversationWithMessages(
 }
 
 /**
+ * One turn on its way into a transcript.
+ *
+ * `citations` is optional and defaults to none, which is what every athlete turn
+ * and every ungrounded Coach turn carries. It is supplied by the caller from the
+ * retrieval it performed - never parsed out of the Coach's text, which is the
+ * guarantee `citations.ts` exists to state.
+ */
+export interface MessageEntry {
+  role: MessageRole;
+  content: string;
+  citations?: Citation[];
+}
+
+/**
  * Appends messages to an owned conversation, assigning each the next `seq` in
  * turn. Ownership is verified first: an id that is not this athlete's is refused
  * (returns null) and nothing is written. Returns the appended messages in order.
@@ -222,11 +237,31 @@ export async function getOwnedConversationWithMessages(
 export async function appendMessages(
   athleteId: string,
   conversationId: string,
-  entries: { role: MessageRole; content: string }[],
+  entries: MessageEntry[],
 ): Promise<Message[] | null> {
   const owned = await getOwnedConversation(athleteId, conversationId);
   if (!owned) return null;
   return appendInOrder(conversationId, entries);
+}
+
+/**
+ * One entry as the row that stores it.
+ *
+ * The references are stored with the turn rather than derived later: the athlete
+ * may scroll back to it a week from now, and the sources have to be the ones
+ * that were actually in front of the Coach at the time. `null` for every athlete
+ * turn and every ungrounded Coach turn - the column is absence, not an empty
+ * list, so a row written before the column existed reads the same as one written
+ * without references.
+ */
+function messageRow(conversationId: string, entry: MessageEntry, seq: number) {
+  return {
+    conversationId,
+    role: entry.role,
+    content: entry.content,
+    citations: entry.citations ?? null,
+    seq,
+  };
 }
 
 /**
@@ -243,7 +278,7 @@ export async function appendMessages(
  */
 async function appendInOrder(
   conversationId: string,
-  entries: { role: MessageRole; content: string }[],
+  entries: MessageEntry[],
 ): Promise<Message[]> {
   if (entries.length === 0) return [];
 
@@ -260,12 +295,7 @@ async function appendInOrder(
       const rows = await getDb()
         .insert(messages)
         .values(
-          entries.map((e, i) => ({
-            conversationId,
-            role: e.role,
-            content: e.content,
-            seq: startSeq + i,
-          })),
+          entries.map((e, i) => messageRow(conversationId, e, startSeq + i)),
         )
         .returning();
       return rows.map(toMessage);

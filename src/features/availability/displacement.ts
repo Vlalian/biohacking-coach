@@ -13,55 +13,28 @@
  * produce a placement the Move rules would refuse.
  */
 
-/** What the park rule reads off a session sitting on a newly-unavailable day. */
-export type ParkCandidate = {
-  id: string;
-  isTraining: boolean;
-  status: string;
-};
-
 /**
- * The sessions parked when a date becomes unavailable: every *planned* training
- * session on the day. Only a planned session is still-to-happen and so genuinely
- * displaced; a completed or skipped session is already a resolved record and is
- * left untouched — restoring it would rewrite it to `planned` and lose what the
- * athlete recorded, the record mutation ADR 0002 forbids. Non-training sessions
- * (Mobility, Other-as-not-training) coexist with unavailability and stay put.
+ * Whether clearing an Unavailable Date restores that day's parked sessions.
  *
- * The clean consequence: parking is the single transition planned → unavailable,
- * and restore is its exact inverse, so a park/restore round-trip loses nothing.
- */
-export function sessionsToPark(occupants: ParkCandidate[]): string[] {
-  return occupants
-    .filter((o) => o.isTraining && o.status === 'planned')
-    .map((o) => o.id);
-}
-
-/** What the restore rule reads off a session when its date is cleared. */
-export type RestoreCandidate = {
-  id: string;
-  parked: boolean;
-};
-
-/**
- * The sessions returned to `planned` when an Unavailable Date is cleared — that
- * day's own parked sessions, in place, without the athlete asking. Guarded by
- * the day: clearing a *past* date restores nothing, because the athlete genuinely
- * was unavailable and the training record is immutable (ADR 0002). A current or
- * future date restores freely — the athlete said the day was off and then said
- * it wasn't, so the sessions come back.
+ * The rule the clear path used to carry inside a row filter, kept here on its
+ * own because it never depended on a row: clearing a *past* date restores
+ * nothing, because the athlete genuinely was unavailable and the training record
+ * is immutable (ADR 0002). A current or future date restores freely - the
+ * athlete said the day was off and then said it wasn't, so the sessions come
+ * back.
  *
  * `date` and `today` are 'YYYY-MM-DD' keys, compared with the same string
- * ordering the Move rules use. "Past" is day-level, not week-level: a day earlier
- * this same week that has already passed is still history.
+ * ordering the Move rules use. "Past" is day-level, not week-level: a day
+ * earlier this same week that has already passed is still history.
+ *
+ * Its former companions - `sessionsToPark` and `sessionsToRestore` - are gone.
+ * Which rows park or restore is now decided by the `WHERE` of a single
+ * statement, so that the read-then-write race they sat in the middle of cannot
+ * happen; the rules they held are asserted as rendered SQL in
+ * `unavailable-date.test.ts`.
  */
-export function sessionsToRestore(
-  occupants: RestoreCandidate[],
-  date: string,
-  today: string,
-): string[] {
-  if (date < today) return []; // a day that has passed is history, not a setting
-  return occupants.filter((o) => o.parked).map((o) => o.id);
+export function canRestoreOnClear(date: string, today: string): boolean {
+  return date >= today;
 }
 
 /**

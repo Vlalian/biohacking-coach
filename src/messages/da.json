@@ -306,7 +306,11 @@
     "bounceOtherWeek": "Sessioner flyttes kun inden for deres egen mandag–søndag-uge. Bed din Coach om at omlægge ugen.",
     "bounceFrozen": "Denne session er allerede gennemført — træningsjournalen kan ikke ændres.",
     "bounceConflict": "Din Head Coach ændrede denne session, mens den var åben. Dit flyt blev ikke gennemført — genindlæs for at se deres.",
-    "minutes": "min"
+    "minutes": "min",
+    "bounceRefused": "Den dag går ikke til denne session.",
+    "bounceNotYours": "Det er atletens egen session — den bliver, hvor de har lagt den.",
+    "bounceError": "Det virkede ikke. Prøv igen.",
+    "bounceParked": "Denne session holdes af en hviledag. Flyt hvileblokken først."
   },
   "SessionDrawer": {
     "close": "Luk session",
@@ -349,7 +353,18 @@
     "error": "Det virkede ikke. Prøv igen.",
     "errorFuture": "Denne session ligger i fremtiden — du kan markere den som gennemført på dagen.",
     "errorFrozen": "Denne session er lukket. Tidligere uger er en del af dit forløb og ændres ikke.",
-    "errorConflict": "Denne session blev ændret, mens du kiggede på den. Luk den, og åbn den igen."
+    "errorConflict": "Denne session blev ændret, mens du kiggede på den. Luk den, og åbn den igen.",
+    "refusalAthletesOwn": "Det er atletens egen session. Den er deres at ændre.",
+    "refusalImportedRecord": "Det er en importeret aktivitet — registreringen af, hvad der skete.",
+    "refusalFrozenRecord": "Denne session er en del af træningsregistreringen og kan ikke længere ændres.",
+    "refusalAuthorsContent": "Denne session tilhører den, der har skrevet den.",
+    "formDate": "Dato",
+    "formType": "Sessionstype",
+    "formDuration": "Varighed (minutter)",
+    "formZone": "Zone",
+    "formTitle": "Titel",
+    "formNote": "Bemærkning",
+    "save": "Gem"
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",
@@ -489,7 +504,12 @@
     "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
     "consentRequiredLink": "Åbn Privatliv & samtykke",
     "error": "Beskeden blev ikke sendt. Prøv igen.",
-    "unsafeContent": "En note eller et stykke udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
+    "unsafeContent": "En note eller et stykke udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen.",
+    "drewOn": "Det jeg trak på",
+    "thumbUp": "Det her hjalp",
+    "thumbDown": "Det her ramte forkert",
+    "thumbComment": "Vil du tilføje noget? (valgfrit)",
+    "thumbSave": "Gem"
   },
   "WeeklySession": {
     "title": "Ugentlig session",
@@ -519,7 +539,12 @@
     "consentRequiredLink": "Åbn Privatliv & samtykke",
     "error": "Det virkede ikke. Prøv igen.",
     "coachUnavailable": "Din Coach svarede ikke på den. Intet gik tabt — send den igen.",
-    "unsafeContent": "Noget gemt i din træning — en note eller et stykke udstyr — ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen."
+    "unsafeContent": "Noget gemt i din træning — en note eller et stykke udstyr — ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen.",
+    "drewOn": "Det jeg trak på",
+    "thumbUp": "Det her hjalp",
+    "thumbDown": "Det her ramte forkert",
+    "thumbComment": "Vil du tilføje noget? (valgfrit)",
+    "thumbSave": "Gem"
   },
   "Messaging": {
     "title": "Coaching Channel",

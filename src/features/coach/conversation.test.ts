@@ -93,10 +93,49 @@ describe('toConversation / toMessage', () => {
       id: 'm1',
       conversationId: 'c1',
       role: 'coach_ai',
+      citations: null,
       content: 'Hello',
       seq: 0,
       createdAt: new Date(),
     };
     expect(toMessage(mRow)).toMatchObject({ role: 'coach_ai', content: 'Hello', seq: 0 });
+  });
+});
+
+describe('toMessage — the citation channel (code-health/06)', () => {
+  const base = {
+    id: 'm1',
+    conversationId: 'c1',
+    role: 'coach_ai',
+    content: 'Thursday is easy on purpose.',
+    seq: 0,
+    createdAt: new Date(),
+  };
+
+  const citation = {
+    sourceId: 'src_1',
+    slug: 'polarized-training',
+    title: 'Polarized training intensity distribution',
+    authors: 'Seiler S',
+    year: 2019,
+    url: 'https://doi.org/10.1000/example',
+    licence: 'CC BY 4.0',
+    licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    attribution: 'Seiler S (2019), CC BY 4.0',
+    ordinals: [3],
+  };
+
+  it('reads a stored reference list back unchanged', () => {
+    // A reference that vanishes on reload is not evidence of anything, so the
+    // list has to survive the round trip exactly as it was written.
+    expect(toMessage({ ...base, citations: [citation] } as MessageRow).citations).toEqual([
+      citation,
+    ]);
+  });
+
+  it('reads a message with no references as an empty list, never null', () => {
+    // Every athlete turn, and every message stored before the column existed.
+    // The UI asks "is this empty?" and should not also have to ask "is it null?".
+    expect(toMessage({ ...base, citations: null } as MessageRow).citations).toEqual([]);
   });
 });

@@ -148,9 +148,19 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
   // while proving nothing.
   const SRC = fileURLToPath(new URL('../..', import.meta.url));
 
-  const readers = sourceFiles(SRC).filter((file) =>
-    /athleteFeedback|feedback-repository/.test(readFileSync(file, 'utf8')),
-  );
+  /** Files mentioning a store, as repo-relative paths. */
+  function readersOf(pattern: RegExp): string[] {
+    return sourceFiles(SRC)
+      .filter((file) => pattern.test(readFileSync(file, 'utf8')))
+      .map((file) => file.slice(SRC.length).split(sep).join('/'))
+      .sort();
+  }
+
+  // Two separate stores, matched separately on purpose: `message-feedback-repository`
+  // contains the substring `feedback-repository`, so one loose pattern would
+  // conflate them and each list would stop meaning anything.
+  const interviewReaders = readersOf(/athleteFeedback|[/']feedback-repository/);
+  const thumbsReaders = readersOf(/messageFeedback|message-feedback-repository/);
 
   it('is reached only from the feedback feature and its own server action', () => {
     // `showable-version/07`: "Nothing here is visible to a Head Coach." The
@@ -158,15 +168,27 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
     // ordinary modules under src/ — if any of them ever read this table, this
     // list grows and the test says so. There is deliberately no by-coach query
     // in the repository for them to call, and this is the guard on that.
-    const relative = readers
-      .map((file) => file.slice(SRC.length).split(sep).join('/'))
-      .sort();
-
-    expect(relative).toEqual([
+    expect(interviewReaders).toEqual([
       'app/[locale]/feedback-actions.ts',
       'db/schema.ts',
       'features/feedback/feedback-repository.ts',
       'features/feedback/feedback-service.ts',
+    ]);
+  });
+
+  it('keeps the thumbs equally out of every Head Coach surface', () => {
+    // `showable-version/05` item 3: a flag is "never shown to the Head Coach".
+    // Same guard, same reason - the Roster, the Coach Briefing and the athlete
+    // pages under /coach are ordinary modules under src/, so if any of them ever
+    // reads this table, this list grows and the test says so.
+    expect(thumbsReaders).toEqual([
+      'app/[locale]/(app)/layout.tsx',
+      'app/[locale]/message-feedback-actions.ts',
+      // Note what is absent: `message-thumbs.tsx`, the client control, talks to
+      // the server action and never to the store. The store has exactly one
+      // caller on the write path and one on the read path.
+      'db/schema.ts',
+      'features/feedback/message-feedback-repository.ts',
     ]);
   });
 

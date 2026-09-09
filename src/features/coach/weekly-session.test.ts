@@ -4,17 +4,18 @@ import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import {
   buildWeeklyCheckIn,
-  proposalDateRange,
   proposedToNewSessionRows,
   reflectionScoreToTen,
   skippedFrom,
   toWeeklyApiMessages,
   validateProposedPlan,
   weekFeedbackFrom,
+  PROPOSE_WEEK_PLAN_TOOL_NAME,
+  PROPOSE_WEEK_PLAN_TOOL,
   WEEKLY_OPENER,
-  type ProposedSession,
   type Readiness,
 } from './weekly-session';
+import { planningWindow } from './planning-window';
 
 const READINESS: Readiness = { body: 7, mental: 6, energy: 8, sleep: 7.5, pulse: 52 };
 
@@ -137,6 +138,30 @@ describe('weekFeedbackFrom', () => {
       },
     ]);
   });
+
+  // A Session Reflection is two scores and the pair is what makes it a reflection.
+  // Half of one is not "partly rated" - it is a session the athlete started
+  // rating and did not finish, and averaging or defaulting the missing half
+  // would put a number the athlete never gave in front of the Coach.
+  it('excludes a session rated on only one of the two scales', () => {
+    expect(
+      weekFeedbackFrom([
+        session({ id: 'body-only', feedbackBody: 4, feedbackMind: null }),
+        session({ id: 'mind-only', feedbackBody: null, feedbackMind: 4 }),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe('the propose_week_plan tool contract', () => {
+  // The name is not an internal identifier: Anthropic echoes it back on a tool
+  // call, and the service finds the call by matching it. Renaming the constant
+  // alone would keep every internal use consistent and silently stop matching
+  // what the API actually sends, so the literal is pinned here.
+  it('names the tool exactly propose_week_plan, on both the constant and the schema', () => {
+    expect(PROPOSE_WEEK_PLAN_TOOL_NAME).toBe('propose_week_plan');
+    expect(PROPOSE_WEEK_PLAN_TOOL.name).toBe('propose_week_plan');
+  });
 });
 
 describe('skippedFrom', () => {
@@ -153,8 +178,8 @@ describe('skippedFrom', () => {
 describe('toWeeklyApiMessages', () => {
   it('opens with the user primer then alternates from the transcript', () => {
     const transcript: Message[] = [
-      { id: 'm0', role: 'coach_ai', content: 'Welcome.', seq: 0, createdAt: new Date() },
-      { id: 'm1', role: 'athlete', content: 'In rhythm.', seq: 1, createdAt: new Date() },
+      { id: 'm0', role: 'coach_ai', content: 'Welcome.', seq: 0, citations: [], createdAt: new Date() },
+      { id: 'm1', role: 'athlete', content: 'In rhythm.', seq: 1, citations: [], createdAt: new Date() },
     ];
     expect(toWeeklyApiMessages(transcript)).toEqual([
       { role: 'user', content: WEEKLY_OPENER },
@@ -164,32 +189,147 @@ describe('toWeeklyApiMessages', () => {
   });
 });
 
-describe('validateProposedPlan', () => {
+describe('validateProposedPlan — days the athlete ruled out', () => {
+  // 2026-07-29 is a Wednesday; its week runs Mon 2026-07-27 - Sun 2026-08-02.
   const TODAY = '2026-07-29';
 
-  it('accepts a well-formed proposal spanning two calendar weeks', () => {
+  function proposal(...dates: string[]) {
+    return {
+      sessions: dates.map((date) => ({
+        date,
+        type: 'Endurance',
+        durationMinutes: 60,
+        zone: 'Z2',
+        note: null,
+      })),
+    };
+  }
+
+  /**
+   * The window bounds which weeks; until 2026-09-09 nothing bounded which days
+   * inside them. `planningWindow` consumed the Fixed Constraints and Unavailable
+   * Dates to pick a range and then dropped them, so a proposal on a day the
+   * athlete had marked off validated and was written — the `NO TRAINING ON:`
+   * prompt line was the only thing standing in the way, and `showable-version/11`
+   * is the ticket that established a prompt line is a request, not a bound.
+   * Found by CodeRabbit on PR #57.
+   */
+  it('drops a session on an Unavailable Date inside the window', () => {
+    const window = planningWindow(TODAY, [], ['2026-07-31']);
+
+    const result = validateProposedPlan(proposal('2026-07-30', '2026-07-31'), window);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.sessions.map((s) => s.date)).toEqual(['2026-07-30']);
+  });
+
+  it('drops a session on a Fixed Constraint weekday', () => {
+    // Friday is off every week; 2026-07-31 is the Friday of this window.
+    const window = planningWindow(TODAY, ['Friday']);
+
+    const result = validateProposedPlan(proposal('2026-07-30', '2026-07-31'), window);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.sessions.map((s) => s.date)).toEqual(['2026-07-30']);
+  });
+
+  it('refuses the whole proposal when every day it named was ruled out', () => {
+    // Nothing survives, so this is `empty` — the same refusal as a proposal of
+    // rows that were all malformed. Nothing is staged either way.
+    const window = planningWindow(TODAY, [], ['2026-07-30']);
+
+    expect(validateProposedPlan(proposal('2026-07-30'), window)).toEqual({
+      ok: false,
+      reason: 'empty',
+    });
+  });
+});
+
+describe('validateProposedPlan', () => {
+  // 2026-07-29 is a Wednesday; its week runs Mon 2026-07-27 - Sun 2026-08-02.
+  const TODAY = '2026-07-29';
+  const WINDOW = planningWindow(TODAY);
+
+  it('accepts a well-formed proposal inside the window', () => {
     const result = validateProposedPlan(
       {
         sessions: [
           { date: '2026-07-29', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
-          { date: '2026-08-05', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: '' },
+          { date: '2026-08-01', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: '' },
         ],
       },
-      TODAY,
+      WINDOW,
     );
     expect(result).toEqual({
       ok: true,
       sessions: [
         { date: '2026-07-29', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy' },
         // An empty note normalises to null.
-        { date: '2026-08-05', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: null },
+        { date: '2026-08-01', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: null },
       ],
     });
   });
 
+  // Was 'accepts a well-formed proposal spanning two calendar weeks' until
+  // showable-version/11. The window is the remainder of THIS week, so a second
+  // week is no longer the Coach's to write - and this is the bound the ticket
+  // exists for, because the prompt could only ever ask.
+  it('drops a session beyond the end of the window', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: '2026-08-02', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+          { date: '2026-08-05', type: 'Intensity', durationMinutes: 45, zone: 'Z4', note: null },
+        ],
+      },
+      WINDOW,
+    );
+    expect(result).toEqual({
+      ok: true,
+      sessions: [
+        { date: '2026-08-02', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+      ],
+    });
+  });
+
+  it('is empty when every session lies outside the window', () => {
+    expect(
+      validateProposedPlan(
+        {
+          sessions: [
+            { date: '2026-08-05', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+          ],
+        },
+        WINDOW,
+      ),
+    ).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  // On a fall-through the window starts NEXT Monday, so today is before it.
+  it('drops a session dated today when the window fell through to next week', () => {
+    const fellThrough = planningWindow(TODAY, [
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ]);
+    expect(fellThrough.fellThrough).toBe(true);
+    expect(
+      validateProposedPlan(
+        {
+          sessions: [
+            { date: TODAY, type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+          ],
+        },
+        fellThrough,
+      ),
+    ).toEqual({ ok: false, reason: 'empty' });
+  });
+
   it('is malformed when there is no sessions array', () => {
-    expect(validateProposedPlan(null, TODAY)).toEqual({ ok: false, reason: 'malformed' });
-    expect(validateProposedPlan({ sessions: 'nope' }, TODAY)).toEqual({
+    expect(validateProposedPlan(null, WINDOW)).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateProposedPlan({ sessions: 'nope' }, WINDOW)).toEqual({
       ok: false,
       reason: 'malformed',
     });
@@ -205,7 +345,7 @@ describe('validateProposedPlan', () => {
           { date: '2026-07-31', type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: 'ok' }, // valid
         ],
       },
-      TODAY,
+      WINDOW,
     );
     expect(result).toEqual({
       ok: true,
@@ -216,9 +356,107 @@ describe('validateProposedPlan', () => {
   it('is empty when nothing valid survives', () => {
     const result = validateProposedPlan(
       { sessions: [{ date: '2020-01-01', type: 'Endurance', durationMinutes: 60, zone: '', note: '' }] },
-      TODAY,
+      WINDOW,
     );
     expect(result).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  // The untrusted-input edges of the proposal parser. `strict` tool use makes
+  // these unlikely rather than impossible, and the parser is the server-authority
+  // gate (ADR 0003) - so what it refuses is asserted, not assumed.
+  it('is malformed when the input is not an object at all', () => {
+    expect(validateProposedPlan(7, WINDOW)).toEqual({ ok: false, reason: 'malformed' });
+    expect(validateProposedPlan('sessions', WINDOW)).toEqual({
+      ok: false,
+      reason: 'malformed',
+    });
+  });
+
+  it('drops an entry that is not an object, and one whose date is not a string', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          'Endurance on Thursday',
+          null,
+          { date: 20260731, type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: null },
+          { date: '2026-07-31', type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: 'ok' },
+        ],
+      },
+      WINDOW,
+    );
+    expect(result).toEqual({
+      ok: true,
+      sessions: [{ date: '2026-07-31', type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: 'ok' }],
+    });
+  });
+
+  // Lexically inside the window, but not a day that exists. Without the calendar
+  // check the range compare alone would let it through, and a session dated
+  // 2026-07-32 would be written.
+  it('drops an impossible date that sorts inside the window', () => {
+    expect(
+      validateProposedPlan(
+        {
+          sessions: [
+            { date: '2026-07-32', type: 'Tempo', durationMinutes: 50, zone: 'Z3', note: null },
+          ],
+        },
+        WINDOW,
+      ),
+    ).toEqual({ ok: false, reason: 'empty' });
+  });
+
+  it('accepts both ends of the window inclusively', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: WINDOW.start, type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+          { date: WINDOW.end, type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null },
+        ],
+      },
+      WINDOW,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.sessions.map((x) => x.date)).toEqual([WINDOW.start, WINDOW.end]);
+    }
+  });
+
+  // The duration and text fields are the last untrusted values on the path, and
+  // both normalise to null rather than to a plausible-looking substitute: a
+  // session with no duration says so, where a defaulted 60 would be a number
+  // nobody chose sitting in the athlete's week.
+  it('keeps a duration at the ceiling and rejects one past it, or fractional', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: '2026-07-29', type: 'Endurance', durationMinutes: 1440, zone: 'Z2', note: null },
+          { date: '2026-07-30', type: 'Endurance', durationMinutes: 1441, zone: 'Z2', note: null },
+          { date: '2026-07-31', type: 'Endurance', durationMinutes: 60.5, zone: 'Z2', note: null },
+          { date: '2026-08-01', type: 'Endurance', durationMinutes: -30, zone: 'Z2', note: null },
+        ],
+      },
+      WINDOW,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.sessions.map((x) => x.durationMinutes)).toEqual([1440, null, null, null]);
+    }
+  });
+
+  it('normalises a blank or whitespace-only zone and note to null', () => {
+    const result = validateProposedPlan(
+      {
+        sessions: [
+          { date: '2026-07-29', type: 'Endurance', durationMinutes: 60, zone: '   ', note: '	' },
+        ],
+      },
+      WINDOW,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.sessions[0]).toMatchObject({ zone: null, note: null });
+    }
   });
 
   it('rejects a non-positive or absurd duration to null', () => {
@@ -229,21 +467,10 @@ describe('validateProposedPlan', () => {
           { date: '2026-07-30', type: 'Endurance', durationMinutes: 100000, zone: 'Z2', note: '' },
         ],
       },
-      TODAY,
+      WINDOW,
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.sessions.map((s) => s.durationMinutes)).toEqual([null, null]);
-  });
-});
-
-describe('proposalDateRange', () => {
-  it('spans the earliest to the latest date, unsorted input', () => {
-    const sessions: ProposedSession[] = [
-      { date: '2026-08-02', type: 'Endurance', durationMinutes: null, zone: null, note: null },
-      { date: '2026-07-29', type: 'Intensity', durationMinutes: null, zone: null, note: null },
-      { date: '2026-07-31', type: 'Tempo', durationMinutes: null, zone: null, note: null },
-    ];
-    expect(proposalDateRange(sessions)).toEqual({ start: '2026-07-29', end: '2026-08-02' });
   });
 });
 

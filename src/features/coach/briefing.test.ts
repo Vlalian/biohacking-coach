@@ -135,8 +135,8 @@ describe('toBriefingReflection', () => {
 describe('toBriefingApiMessages', () => {
   it('opens with the fixed primer and maps roles to user/assistant', () => {
     const transcript: Message[] = [
-      { id: 'm0', role: 'coach_ai', content: 'Here is my read.', seq: 0, createdAt: new Date() },
-      { id: 'm1', role: 'head_coach', content: 'How is her sleep?', seq: 1, createdAt: new Date() },
+      { id: 'm0', role: 'coach_ai', content: 'Here is my read.', seq: 0, citations: [], createdAt: new Date() },
+      { id: 'm1', role: 'head_coach', content: 'How is her sleep?', seq: 1, citations: [], createdAt: new Date() },
     ];
     expect(toBriefingApiMessages(transcript)).toEqual([
       { role: 'user', content: BRIEFING_OPENER },

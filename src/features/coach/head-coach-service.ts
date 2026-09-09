@@ -9,6 +9,7 @@ import {
   HEAD_COACH_ORIGIN,
 } from './head-coach-authority';
 import { applyMove, type MoveResult } from '@/features/session/session-move';
+import { isFrozen } from '@/features/session/move-rules';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
 import type { SessionConflict } from '@/features/session/conflict';
 
@@ -52,7 +53,15 @@ export type HeadCoachActionResult =
   | { ok: true; sessionId: string }
   | {
       ok: false;
-      reason: 'not-linked' | 'invalid' | 'not-found' | 'wrong-athlete' | 'forbidden-origin';
+      reason:
+        | 'not-linked'
+        | 'invalid'
+        | 'not-found'
+        | 'wrong-athlete'
+        | 'forbidden-origin'
+        // The record is immutable for everyone. Content editing did not check this
+        // until 2026-09-04; Session Move always has.
+        | 'frozen';
     }
   // The athlete writes these rows too, so an edit can lose a race. The refusal
   // carries what won, because the Head Coach has no other way to find out.
@@ -88,15 +97,22 @@ function isValidPrescription(input: PrescriptionInput): boolean {
 async function loadEditableSession(
   athleteId: string,
   sessionId: string,
+  /** The server's clock, passed in like the move path's — never `new Date()`
+   *  here, or the rule stops being judged against the server. */
+  today: string,
 ): Promise<
   | { ok: true; origin: string; date: string; version: number }
-  | { ok: false; reason: 'not-found' | 'wrong-athlete' | 'forbidden-origin' }
+  | { ok: false; reason: 'not-found' | 'wrong-athlete' | 'forbidden-origin' | 'frozen' }
 > {
   const [row] = await getDb()
     .select({
       athleteId: sessions.athleteId,
       origin: sessions.origin,
       date: sessions.date,
+      // Added to the existing select rather than read separately: a value
+      // fetched fresh for its own check makes that check pass by construction,
+      // which is the trap the `expectedVersion` comment below describes.
+      status: sessions.status,
       version: sessions.version,
     })
     .from(sessions)
@@ -108,8 +124,45 @@ async function loadEditableSession(
   // cannot be paired with a foreign session id to reach across athletes.
   if (row.athleteId !== athleteId) return { ok: false, reason: 'wrong-athlete' };
   if (!canHeadCoachEditContent(row.origin)) return { ok: false, reason: 'forbidden-origin' };
+  // Origin first, deliberately: an Athlete Session is refused as "not yours"
+  // rather than "too late", because that is the more fundamental answer and it
+  // is the ordering `drawer-policy.ts` already gives the coach on screen.
+  //
+  // `isFrozen` rather than a second rule. It is what Session Move asks, so
+  // "a completed session is frozen" cannot mean one thing for placement and
+  // another for content — the same argument the move path makes in its own
+  // comment below.
+  if (isFrozen({ date: row.date, status: row.status }, today)) {
+    return { ok: false, reason: 'frozen' };
+  }
 
   return { ok: true, origin: row.origin, date: row.date, version: row.version };
+}
+
+/**
+ * Whether a day is in a week that is already closed, and so cannot receive a
+ * session — asked about the *destination*, where a session is being put.
+ *
+ * The counterpart to asking whether an existing row may be touched. Both
+ * callers need it: creating names a day directly, and editing can move one, so
+ * a session could otherwise be walked into a closed week and land frozen with
+ * nobody able to edit, delete or move it again.
+ *
+ * Each caller asks it for itself rather than `loadEditableSession` folding it
+ * in. Folding was tried and reverted: it moved the extra branch onto a function
+ * that was clean at CRAP 5 and pushed it over the ceiling, while the function
+ * it relieved was already over and already carried in `code-health/11`. That is
+ * moving a number, not improving anything.
+ *
+ * Asked of `isFrozen` rather than re-derived, so "this week is over" means one
+ * thing across creation, content and placement.
+ */
+function landsInAClosedWeek(date: string, today: string): boolean {
+  // Stryker disable next-line StringLiteral — equivalent. `isFrozen` reads
+  // status only as `=== 'completed'`, and the row this asks about is being
+  // written as `planned`, so every other string it could be mutated to yields
+  // the same verdict. The literal says what is being asked, not the answer.
+  return isFrozen({ date, status: 'planned' }, today);
 }
 
 /** Normalises the optional fields into the column set, shared by add and edit. */
@@ -127,17 +180,28 @@ function contentColumns(input: PrescriptionInput) {
 
 /**
  * Adds a Prescribed Session (`origin: 'head_coach'`) to a linked athlete's plan.
+ *
+ * `today` is the server's day, never the browser's — the same rule the edit and
+ * move paths follow, for the same reason: whether a week is closed must not be
+ * judged against a clock the client controls.
  */
 export async function prescribeSession(params: {
   headCoachId: string;
   athleteId: string;
   input: PrescriptionInput;
+  today: string;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, input } = params;
+  const { headCoachId, athleteId, input, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
   if (!isValidPrescription(input)) return { ok: false, reason: 'invalid' };
+  // Creating into a closed week is refused, like editing and deleting in one
+  // (`showable-version/22`, decided 2026-09-08). Asked of `isFrozen` rather
+  // than re-derived, so "this week is over" cannot mean one thing for creation
+  // and another for content. The row would be `planned`, so only the date can
+  // freeze it — but the question is still `isFrozen`'s to answer.
+  if (landsInAClosedWeek(input.date, today)) return { ok: false, reason: 'frozen' };
 
   const db = getDb();
   const id = crypto.randomUUID();
@@ -178,15 +242,27 @@ export async function editPrescribedSession(params: {
    * anything if the number comes from what the writer actually saw.
    */
   expectedVersion: number;
+  /** The server's clock. The record is immutable, and that is judged here
+   *  rather than in the browser (ADR 0006). */
+  today: string;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, sessionId, input, expectedVersion } = params;
+  const { headCoachId, athleteId, sessionId, input, expectedVersion, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
   if (!isValidPrescription(input)) return { ok: false, reason: 'invalid' };
 
-  const target = await loadEditableSession(athleteId, sessionId);
+  const target = await loadEditableSession(athleteId, sessionId, today);
   if (!target.ok) return target;
+  // The stored row being editable is not enough. The edit sets a new date, so
+  // a live current-week session could be walked into a closed week and land
+  // frozen — nobody able to edit, delete or move it again, the state the create
+  // guard exists to prevent, reached by another verb. CodeRabbit, PR #57.
+  //
+  // Deliberately here and not folded into `loadEditableSession`: folding it
+  // moved this branch onto a function that was clean at CRAP 5 and pushed it
+  // over the ceiling, which is moving a number rather than improving anything.
+  if (landsInAClosedWeek(input.date, today)) return { ok: false, reason: 'frozen' };
 
   const columns = contentColumns(input);
   const written = await casUpdateSession({
@@ -224,13 +300,16 @@ export async function deletePrescribedSession(params: {
   /** As for {@link editPrescribedSession}: the version the coach was shown, so
    *  a delete cannot discard an edit that landed while they were deciding. */
   expectedVersion: number;
+  /** The server's clock. The record is immutable, and that is judged here
+   *  rather than in the browser (ADR 0006). */
+  today: string;
 }): Promise<HeadCoachActionResult> {
-  const { headCoachId, athleteId, sessionId, expectedVersion } = params;
+  const { headCoachId, athleteId, sessionId, expectedVersion, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
   if (!link) return { ok: false, reason: 'not-linked' };
 
-  const target = await loadEditableSession(athleteId, sessionId);
+  const target = await loadEditableSession(athleteId, sessionId, today);
   if (!target.ok) return target;
 
   const written = await casDeleteSession({

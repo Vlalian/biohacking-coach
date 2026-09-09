@@ -20,3 +20,15 @@ export const DEFAULT_TYPE_COLOR = '#8a8a8a';
 
 /** The plannable Session Types the comparison picker filters on. */
 export const FILTERABLE_TYPES = ['Endurance', 'Intensity', 'Tempo', 'Recovery'];
+
+/**
+ * The Session Types a Head Coach may prescribe: the plannable four, plus Rest
+ * and Strength.
+ *
+ * One list, because the Head Coach reaches this choice from two places — the
+ * `PrescribePanel` when adding a session, and the Session Drawer when editing
+ * one — and a coach offered a type in one surface that the other does not know
+ * is a bug that only ever shows up as a confused user. It was written out
+ * separately in both until 2026-09-08.
+ */
+export const PRESCRIBABLE_TYPES = [...FILTERABLE_TYPES, 'Rest', 'Strength'];

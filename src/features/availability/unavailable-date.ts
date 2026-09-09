@@ -1,11 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, unavailableDates } from '@/db/schema';
-import {
-  sessionsToPark,
-  sessionsToRestore,
-  canMarkUnavailable,
-} from './displacement';
+import { canMarkUnavailable, canRestoreOnClear } from './displacement';
 
 /**
  * The result of marking or clearing an Unavailable Date. Marking can be refused
@@ -28,7 +24,22 @@ export type AvailabilityResult =
  * Marking parks the day's training in place (Displacement): the date row and the
  * `status = 'unavailable', parked = true` flips land in one batch — both or
  * neither. The session's day is never changed, so the Move rules are never
- * engaged. When no session is parkable, only the date row is written.
+ * engaged.
+ *
+ * **Which sessions park is decided by the statement, not by this process.** It
+ * used to read the day, filter in memory, and write the resulting id list; the
+ * read and the write were two round trips, and a concurrent `clear` landing
+ * between them left the date row standing over planned, unparked sessions — a
+ * day the Coach plans around while the calendar shows training on it. With the
+ * read gone each operation is a single batch, which neon-http runs in a
+ * transaction, so the two can no longer interleave *within* an operation. Run
+ * concurrently they now resolve to one winner, and either end state is
+ * internally consistent.
+ *
+ * An advisory lock was the alternative and is not available: it needs an
+ * interactive transaction the http driver does not offer. The cost of this one
+ * is that the selection rule lives in SQL rather than in a pure function — so it
+ * is asserted as rendered SQL instead, and the rule stays covered.
  */
 export async function markUnavailableDate(params: {
   athleteId: string;
@@ -40,35 +51,26 @@ export async function markUnavailableDate(params: {
 
   const db = getDb();
 
-  const dayRows = await db
-    .select({
-      id: sessions.id,
-      isTraining: sessions.isTraining,
-      status: sessions.status,
-    })
-    .from(sessions)
-    .where(and(eq(sessions.athleteId, athleteId), eq(sessions.date, date)));
-
-  const parkIds = sessionsToPark(dayRows);
-
-  // Idempotent: marking an already-unavailable day changes nothing. The composite
-  // primary key (athlete, date) makes the conflict a no-op rather than an error.
-  const markDate = db
-    .insert(unavailableDates)
-    .values({ athleteId, date })
-    .onConflictDoNothing();
-
-  if (parkIds.length === 0) {
-    await markDate;
-    return { ok: true };
-  }
-
   await db.batch([
-    markDate,
+    // Idempotent: marking an already-unavailable day changes nothing. The
+    // composite primary key (athlete, date) makes the conflict a no-op.
+    db.insert(unavailableDates).values({ athleteId, date }).onConflictDoNothing(),
     db
       .update(sessions)
       .set({ status: 'unavailable', parked: true, updatedAt: new Date() })
-      .where(inArray(sessions.id, parkIds)),
+      .where(
+        and(
+          eq(sessions.athleteId, athleteId),
+          eq(sessions.date, date),
+          // Only a *planned training* session is still-to-happen and so
+          // genuinely displaced. A completed or skipped session is a resolved
+          // record and is left alone — parking it would later restore it to
+          // `planned` and lose what the athlete recorded, the record mutation
+          // ADR 0002 forbids. Non-training sessions coexist with unavailability.
+          eq(sessions.isTraining, true),
+          eq(sessions.status, 'planned'),
+        ),
+      ),
   ]);
 
   return { ok: true };
@@ -81,8 +83,10 @@ export async function markUnavailableDate(params: {
  * (ADR 0002). The restore flips status in place and never changes a day, so the
  * Move rules are never engaged.
  *
- * Athlete-scoped like {@link markUnavailableDate}. The date row is always
- * removed; the restore is the guarded part.
+ * Athlete-scoped and single-statement for the same reasons as
+ * {@link markUnavailableDate}. The past-date rule is the one part that did *not*
+ * move into SQL: it depends on the date alone and not on any row, so it stays a
+ * plain guard in {@link canRestoreOnClear}, pure and unit-tested.
  */
 export async function clearUnavailableDate(params: {
   athleteId: string;
@@ -91,13 +95,6 @@ export async function clearUnavailableDate(params: {
 }): Promise<AvailabilityResult> {
   const { athleteId, date, today } = params;
   const db = getDb();
-
-  const dayRows = await db
-    .select({ id: sessions.id, parked: sessions.parked })
-    .from(sessions)
-    .where(and(eq(sessions.athleteId, athleteId), eq(sessions.date, date)));
-
-  const restoreIds = sessionsToRestore(dayRows, date, today);
 
   const clearDate = db
     .delete(unavailableDates)
@@ -108,7 +105,8 @@ export async function clearUnavailableDate(params: {
       ),
     );
 
-  if (restoreIds.length === 0) {
+  // The date row always goes; the restore is the guarded part.
+  if (!canRestoreOnClear(date, today)) {
     await clearDate;
     return { ok: true };
   }
@@ -118,7 +116,15 @@ export async function clearUnavailableDate(params: {
     db
       .update(sessions)
       .set({ status: 'planned', parked: false, updatedAt: new Date() })
-      .where(inArray(sessions.id, restoreIds)),
+      .where(
+        and(
+          eq(sessions.athleteId, athleteId),
+          eq(sessions.date, date),
+          // The exact inverse of the park above: this day's own parked
+          // sessions, and nothing else on it.
+          eq(sessions.parked, true),
+        ),
+      ),
   ]);
 
   return { ok: true };

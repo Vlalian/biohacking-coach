@@ -34,7 +34,7 @@ export default async function CoachAthletePlanPage({
         unavailableDates={view.unavailableDates}
         todayKey={todayKey}
       />
-      <PrescribePanel athleteId={athleteId} planSessions={view.planSessions} />
+      <PrescribePanel athleteId={athleteId} />
     </>
   );
 }

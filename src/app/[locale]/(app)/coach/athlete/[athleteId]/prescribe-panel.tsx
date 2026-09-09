@@ -3,28 +3,26 @@
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import type { PlanSession } from '@/features/coach/roster-service';
-import { FILTERABLE_TYPES } from '@/features/session/type-colors';
-import {
-  deletePrescribedSessionAction,
-  editPrescribedSessionAction,
-  prescribeSessionAction,
-  type PrescribeActionResult,
-} from './prescribe-actions';
+import { PRESCRIBABLE_TYPES } from '@/features/session/type-colors';
+import { prescribeSessionAction, type PrescribeActionResult } from './prescribe-actions';
 
 /**
- * The Head Coach's lean plan-editing surface (ticket 12: full rules, lean
- * surface — no approval-queue UI). A form to prescribe a session, and per-plan
- * controls to edit or delete the sessions the Head Coach authors. Edit/delete
- * appear only on `editable` sessions — the same content-authority guard the
- * server enforces, so the button never offers what the server would refuse.
+ * The Head Coach's form for prescribing a session (ticket 12: full rules, lean
+ * surface — no approval-queue UI).
+ *
+ * **Adding only, since showable-version/20.** It used to swap its own title
+ * between "add" and "edit" and carry a list of sessions with edit and delete
+ * beside them — so composing a new session and rewriting an existing one were
+ * one control in two moods, and editing happened in the place you were
+ * composing. Changing and deleting a session now live in the Session Drawer,
+ * beside the session they act on, where every session opens whether the coach
+ * may act on it or not (CONTEXT.md, Session Drawer).
  *
  * The server is still the authority: this component sends what to change, never
  * who is changing it, and every action re-resolves the Head Coach from the
  * session. A failed action surfaces its reason rather than pretending success.
  */
 
-const TYPES = [...FILTERABLE_TYPES, 'Rest', 'Strength'];
 
 type FormState = {
   date: string;
@@ -49,22 +47,11 @@ function toInput(form: FormState) {
   };
 }
 
-export function PrescribePanel({
-  athleteId,
-  planSessions,
-}: {
-  athleteId: string;
-  planSessions: PlanSession[];
-}) {
+export function PrescribePanel({ athleteId }: { athleteId: string }) {
   const t = useTranslations('Prescribe');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  // The version the row was rendered at, captured when editing starts. Sent
-  // with the edit so an athlete change that landed in between is refused
-  // rather than overwritten.
-  const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const run = (action: () => Promise<PrescribeActionResult>) =>
@@ -73,34 +60,9 @@ export function PrescribePanel({
       const result = await action();
       if (result.ok) {
         setForm(EMPTY);
-        setEditingId(null);
-        setEditingVersion(null);
         router.refresh();
       } else {
         setError(t('error', { reason: result.reason }));
-
-        // A conflict is the one refusal the coach can actually do something
-        // about, and it was the one left in a dead end: the editor kept the
-        // version it had already been refused for, so every retry resent the
-        // stale version and failed identically forever.
-        //
-        // Adopting the winner's version makes the next save a real attempt
-        // against the row as it now stands, and the refresh puts that row on
-        // screen so the coach sees what beat them before deciding. Their form
-        // keeps their own input — this reconciles the version, it does not
-        // decide for them.
-        if ('conflict' in result && result.conflict) {
-          const winner = result.conflict.current;
-          // Null means the winning write deleted the row. There is nothing left
-          // to re-send an edit against, so leave edit mode rather than offer a
-          // save that cannot succeed.
-          if (winner) setEditingVersion(winner.version);
-          else {
-            setEditingId(null);
-            setEditingVersion(null);
-          }
-          router.refresh();
-        }
       }
     });
 
@@ -109,26 +71,7 @@ export function PrescribePanel({
       setError(t('error', { reason: 'invalid' }));
       return;
     }
-    const input = toInput(form);
-    run(() =>
-      editingId && editingVersion !== null
-        ? editPrescribedSessionAction(athleteId, editingId, input, editingVersion)
-        : prescribeSessionAction(athleteId, input),
-    );
-  };
-
-  const startEdit = (s: PlanSession) => {
-    setEditingId(s.id);
-    setEditingVersion(s.version);
-    setError(null);
-    setForm({
-      date: s.date,
-      type: s.type,
-      duration: s.duration != null ? String(s.duration) : '',
-      zone: s.zone ?? '',
-      title: s.title ?? '',
-      note: s.note ?? '',
-    });
+    run(() => prescribeSessionAction(athleteId, toInput(form)));
   };
 
   const field = (key: keyof FormState) => ({
@@ -140,7 +83,7 @@ export function PrescribePanel({
   return (
     <section className="w-full max-w-3xl rounded-lg border p-4">
       <h2 className="mb-3 text-lg font-semibold">
-        {editingId ? t('editTitle') : t('addTitle')}
+        {t('addTitle')}
       </h2>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -151,7 +94,7 @@ export function PrescribePanel({
         <label className="flex flex-col gap-1 text-xs">
           {t('type')}
           <select className="rounded border bg-background px-2 py-1 text-sm" {...field('type')}>
-            {TYPES.map((ty) => (
+            {PRESCRIBABLE_TYPES.map((ty) => (
               <option key={ty} value={ty}>
                 {ty}
               </option>
@@ -185,55 +128,10 @@ export function PrescribePanel({
           onClick={submit}
           className="rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50"
         >
-          {editingId ? t('save') : t('add')}
+          {t('add')}
         </button>
-        {editingId && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => {
-              setEditingId(null);
-              setEditingVersion(null);
-              setForm(EMPTY);
-              setError(null);
-            }}
-            className="rounded border px-3 py-1 text-sm"
-          >
-            {t('cancel')}
-          </button>
-        )}
       </div>
 
-      <ul className="mt-4 flex flex-col divide-y border-t">
-        {planSessions.map((s) => (
-          <li key={s.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-            <span>
-              <span className="text-neutral-500">{s.date}</span> · {s.title ?? s.type}
-              {!s.editable && <span className="ml-2 text-xs text-neutral-400">{t('athletesOwn')}</span>}
-            </span>
-            {s.editable && (
-              <span className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => startEdit(s)}
-                  className="rounded border px-2 py-0.5 text-xs"
-                >
-                  {t('edit')}
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => run(() => deletePrescribedSessionAction(athleteId, s.id, s.version))}
-                  className="rounded border px-2 py-0.5 text-xs text-red-600"
-                >
-                  {t('delete')}
-                </button>
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

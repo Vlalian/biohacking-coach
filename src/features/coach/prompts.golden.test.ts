@@ -147,6 +147,66 @@ describe('golden — the Weekly Session prompt, per arc', () => {
     expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
   });
 
+  // showable-version/11. The PLANNING DAY line above is conditional on a
+  // preferred day being set, and 'Flexible' is one of four onboarding choices —
+  // so for a Flexible athlete the Coach used to be told nothing at all about
+  // which week it was planning. The window is told unconditionally.
+  it('tells a Flexible athlete which days the plan may cover', () => {
+    const ctx = buildWeeklyContext(
+      { ...BASE, weeklySessionNumber: 4, weeklySessionDay: 'Flexible' },
+      [],
+      [],
+      [],
+      [],
+      null,
+      TODAY,
+    );
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).not.toContain('PLANNING DAY');
+    // 2026-08-18 is a Tuesday; its week ends Sunday 2026-08-23.
+    expect(prompt).toContain('PLANNING WINDOW: 2026-08-18 to 2026-08-23');
+  });
+
+  it('says when training starts when the window falls through to next week', () => {
+    const ctx = buildWeeklyContext(
+      {
+        ...BASE,
+        weeklySessionNumber: 4,
+        // Every day left in the week of 2026-08-18 is a no-training day.
+        fixedConstraints: [
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+          'Sunday',
+        ],
+      },
+      [],
+      [],
+      [],
+      [],
+      null,
+      TODAY,
+    );
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).toContain('PLANNING WINDOW: 2026-08-24 to 2026-08-30');
+    expect(prompt).toContain('say when training starts');
+  });
+
+  it('narrows the window by the athlete Unavailable Dates', () => {
+    const ctx = buildWeeklyContext(
+      { ...BASE, weeklySessionNumber: 4 },
+      [],
+      [],
+      [],
+      ['2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23'],
+      null,
+      TODAY,
+    );
+    expect(renderWeeklyPrompt(ctx)).toContain('PLANNING WINDOW: 2026-08-24 to 2026-08-30');
+  });
+
   it('renders identically when the equipment nudge fires', () => {
     // Sessions 2-3 with no equipment: the one combination that emits the nudge.
     const ctx = buildWeeklyContext(

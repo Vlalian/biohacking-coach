@@ -183,6 +183,31 @@ foreach ($rel in $FileLinks.Keys) {
   Write-Host "  hardlink $rel -> $target" -ForegroundColor DarkGray
 }
 
+# 3b-bis. .env.local - COPIED, and deliberately not linked.
+#
+# Without it a worktree cannot run `npm run build`: page-data collection reaches
+# the db module, which throws on a missing DATABASE_URL, and the failure reads
+# like a broken build rather than a missing file. That cost a definition-of-done
+# check on 2026-09-03 before anyone noticed the cause.
+#
+# A copy rather than a hard link, and the difference matters: a session may
+# legitimately want to point at a scratch database, and a hard link would make
+# that edit reach the main checkout's env too - silently, with the live database
+# on the other end. A copy is also genuinely disposable, so it goes when
+# Remove-Session.ps1 takes the worktree with it.
+#
+# The cost of a copy is that it is a snapshot: rotate a key in the main folder and
+# a live worktree keeps the old one. That is the right trade for a file that is
+# hand-edited perhaps monthly, and the wrong one for the tracker - which is why
+# the tracker is junctioned and this is not.
+$envLocal = Join-Path $Main ".env.local"
+if (Test-Path $envLocal) {
+  Copy-Item $envLocal (Join-Path $Worktree ".env.local") -Force
+  Write-Host "  copied .env.local  (a snapshot - re-copy it if you rotate a key)" -ForegroundColor DarkGray
+} else {
+  Write-Host "  no .env.local in $Main - 'npm run build' will fail here until there is one" -ForegroundColor Yellow
+}
+
 # 3c. The files Claude Code rewrites for itself. Copied on purpose - see header.
 foreach ($rel in $FileCopies.Keys) {
   $target = $FileCopies[$rel]

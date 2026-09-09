@@ -306,7 +306,11 @@
     "bounceOtherWeek": "Sessions move within their own Mon–Sun week. Ask your Coach to reshape the week.",
     "bounceFrozen": "This session is already completed — the training record is immutable.",
     "bounceConflict": "Your Head Coach changed this session while it was open. Your move was not applied — refresh to see theirs.",
-    "minutes": "min"
+    "minutes": "min",
+    "bounceRefused": "That day doesn't work for this session.",
+    "bounceNotYours": "This is the athlete's own session — it stays where they put it.",
+    "bounceError": "That didn't work. Try again.",
+    "bounceParked": "This session is held by a rest day. Move the rest block first."
   },
   "SessionDrawer": {
     "close": "Close session",
@@ -349,7 +353,18 @@
     "error": "That didn't work. Try again.",
     "errorFuture": "This session is in the future — you can mark it complete on the day.",
     "errorFrozen": "This session is closed. Past weeks are part of your record and don't change.",
-    "errorConflict": "This session changed while you were looking at it. Close and reopen it."
+    "errorConflict": "This session changed while you were looking at it. Close and reopen it.",
+    "refusalAthletesOwn": "This is the athlete's own session. It stays theirs to change.",
+    "refusalImportedRecord": "This is an imported activity — the record of what happened.",
+    "refusalFrozenRecord": "This session is part of the training record and can no longer be changed.",
+    "refusalAuthorsContent": "This session belongs to whoever wrote it.",
+    "formDate": "Date",
+    "formType": "Type",
+    "formDuration": "Duration (minutes)",
+    "formZone": "Zone",
+    "formTitle": "Title",
+    "formNote": "Note",
+    "save": "Save"
   },
   "Garmin": {
     "upload": "Upload Garmin file",
@@ -489,7 +504,12 @@
     "consentRequired": "Your Coach is paused until you agree to how your data is processed.",
     "consentRequiredLink": "Open Privacy & consent",
     "error": "That didn't send. Try again.",
-    "unsafeContent": "A note or a piece of gear you have saved contains what looks like an email address or phone number. Your Coach cannot read that. Edit it out and try again."
+    "unsafeContent": "A note or a piece of gear you have saved contains what looks like an email address or phone number. Your Coach cannot read that. Edit it out and try again.",
+    "drewOn": "What I drew on",
+    "thumbUp": "This helped",
+    "thumbDown": "This was off",
+    "thumbComment": "Anything you want to add? (optional)",
+    "thumbSave": "Save"
   },
   "WeeklySession": {
     "title": "Weekly Session",
@@ -519,7 +539,12 @@
     "consentRequiredLink": "Open Privacy & consent",
     "error": "That didn't work. Try again.",
     "coachUnavailable": "Your Coach didn't answer that one. Nothing was lost — send it again.",
-    "unsafeContent": "Something saved in your training — a note or a piece of gear — looks like an email address or phone number. Your Coach can't read that. Edit it out and try again."
+    "unsafeContent": "Something saved in your training — a note or a piece of gear — looks like an email address or phone number. Your Coach can't read that. Edit it out and try again.",
+    "drewOn": "What I drew on",
+    "thumbUp": "This helped",
+    "thumbDown": "This was off",
+    "thumbComment": "Anything you want to add? (optional)",
+    "thumbSave": "Save"
   },
   "Messaging": {
     "title": "Coaching Channel",

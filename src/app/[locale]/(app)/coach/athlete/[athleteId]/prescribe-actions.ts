@@ -33,7 +33,14 @@ export async function prescribeSessionAction(
   const headCoachId = await resolveHeadCoachId();
   if (!headCoachId) return { ok: false, reason: 'not-a-coach' };
 
-  const result = await prescribeSession({ headCoachId, athleteId, input });
+  const result = await prescribeSession({
+    headCoachId,
+    athleteId,
+    input,
+    // The server's clock, like edit and move below: whether the target week is
+    // already closed must not be judged against a browser's idea of today.
+    today: dateKey(new Date()),
+  });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
@@ -53,6 +60,9 @@ export async function editPrescribedSessionAction(
     sessionId,
     input,
     expectedVersion,
+    // The server's clock, like the move action below: the record's
+    // immutability must not be judged against a browser's idea of today.
+    today: dateKey(new Date()),
   });
   // 'layout' is main's: the edited session shows on more than this page, so a
   // page-scoped revalidate left the other tabs stale.
@@ -73,6 +83,9 @@ export async function deletePrescribedSessionAction(
     athleteId,
     sessionId,
     expectedVersion,
+    // The server's clock, like the move action below: the record's
+    // immutability must not be judged against a browser's idea of today.
+    today: dateKey(new Date()),
   });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;

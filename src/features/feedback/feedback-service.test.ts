@@ -43,7 +43,7 @@ vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 const { getOpenInterview, sendFeedbackTurn } = await import('./feedback-service');
 
 function turn(role: Message['role'], seq: number, content = 'x'): Message {
-  return { id: `m${seq}`, role, content, seq, createdAt: new Date('2026-09-01T09:00:00Z') };
+  return { id: `m${seq}`, role, content, seq, citations: [], createdAt: new Date('2026-09-01T09:00:00Z') };
 }
 
 describe('getOpenInterview', () => {
