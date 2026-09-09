@@ -268,6 +268,17 @@ export async function replaceCoachPlanForDateRange(
       and(
         eq(sessions.athleteId, athleteId),
         eq(sessions.origin, 'coach'),
+        // Only a still-planned session. A Coach session the athlete has already
+        // completed or skipped is a record of what happened, and re-planning the
+        // week must not erase it — the record mutation ADR 0002 forbids.
+        //
+        // Missing until 2026-09-09. It was narrow before PR #57 — the write
+        // range was the proposal's own span — and PR #57 widened it to the
+        // planning window, which starts at *today*, so a session completed this
+        // morning is squarely in range. `knowledge-oracle/04` claimed this was
+        // already guaranteed; it was wrong about the code, and this function had
+        // no tests at all, which is why nobody noticed.
+        eq(sessions.status, 'planned'),
         gte(sessions.date, startKey),
         lte(sessions.date, endKey),
       ),
