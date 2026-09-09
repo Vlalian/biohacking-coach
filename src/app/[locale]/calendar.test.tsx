@@ -125,7 +125,7 @@ describe('Calendar — what a read-only calendar offers', () => {
  * day and another week. It explained none of the ones the *server* decides:
  * `handleDrop` matched `conflict` and let `not-owner`, `frozen`, `bounce` and
  * `not-authenticated` fall through to a bare `router.refresh()`, which snapped
- * the block back and looked exactly like a move that had worked.
+ * the chip back and looked exactly like a move that had worked.
  *
  * That is the defect showable-version/08 fixed one layer in, and the comment
  * above that very line says so — "A refused move used to look identical to a
@@ -243,12 +243,12 @@ describe('liftRefusal', () => {
 describe('Calendar — a session that cannot be lifted says why', () => {
   /**
    * The wiring half of `liftRefusal`. The rule is proven above; this proves the
-   * block asks it, and that the answer reaches the markup rather than being
+   * chip asks it, and that the answer reaches the markup rather than being
    * collapsed back into a boolean on the way.
    *
    * `t` is mocked to return its key, so the assertions below are message keys.
    * The current week is expanded on first render, so a session dated in it is a
-   * real `SessionBlock` here and not a collapsed chip.
+   * real `SessionChip` here and not a collapsed dot.
    */
   it('explains a completed session instead of being silently inert', () => {
     const markup = render({ sessions: [session({ status: 'completed' })] });
