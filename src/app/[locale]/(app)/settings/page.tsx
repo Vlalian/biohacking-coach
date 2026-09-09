@@ -3,6 +3,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
+import { getTargetRace } from '@/features/race/race-repository';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
@@ -13,7 +14,8 @@ import {
   removeFixedConstraintAction,
   severCoachingLinkAction,
   updateCommunicationStyleAction,
-  updateRaceTargetAction,
+  updateRaceDistanceAction,
+  updateTargetRaceAction,
   updateLanguageAction,
   updateLinkVisibilityAction,
   updateWeeklySessionDayAction,
@@ -59,6 +61,9 @@ export default async function SettingsPage({
     getUiPrefs(session!.user.id),
     getLinkForAthlete(athlete.id),
   ]);
+  // The horizon, read here rather than in the view: a Race is an entity, and the
+  // page is where server reads belong.
+  const targetRace = await getTargetRace(athlete.id);
 
   return (
     <SettingsView
@@ -66,7 +71,9 @@ export default async function SettingsPage({
         name: session!.user.name,
         email: session!.user.email,
         communicationStyle: athlete.communicationStyle ?? '',
-        raceTarget: athlete.raceTarget ?? '',
+        raceTarget: targetRace?.name ?? athlete.raceTarget ?? '',
+        raceDate: targetRace?.date ?? '',
+        raceDistance: athlete.raceDistance ?? '',
         weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
         fixedConstraints: athlete.profile?.fixedConstraints ?? [],
       }}
@@ -81,7 +88,8 @@ export default async function SettingsPage({
           : null
       }
       onUpdateCommunicationStyle={updateCommunicationStyleAction}
-      onUpdateRaceTarget={updateRaceTargetAction}
+      onUpdateTargetRace={updateTargetRaceAction}
+      onUpdateRaceDistance={updateRaceDistanceAction}
       onUpdateWeeklySessionDay={updateWeeklySessionDayAction}
       onAddFixedConstraint={addFixedConstraintAction}
       onRemoveFixedConstraint={removeFixedConstraintAction}

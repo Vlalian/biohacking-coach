@@ -29,6 +29,7 @@ function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
     experienceLevel: null,
     communicationStyle: null,
     raceTarget: null,
+    raceDistance: null,
     trainingSessionsPerWeek: null,
     profile: null,
     informationViewLayout: null,
@@ -56,6 +57,7 @@ describe('getAthleteByUserId', () => {
       experienceLevel: null,
       communicationStyle: null,
       raceTarget: null,
+      raceDistance: null,
       trainingSessionsPerWeek: null,
       profile: null,
     });
@@ -86,6 +88,7 @@ describe('getAthleteByUserId', () => {
         'experienceLevel',
         'id',
         'profile',
+        'raceDistance',
         'raceTarget',
         'syntheticLabel',
         'trainingPhase',

@@ -22,6 +22,7 @@ const {
   deleteOwnedConversation,
   getMessages,
   getOwnedConversation,
+  getTargetRace,
   getEquipmentItems,
   getSessionsForWeek,
   recordProposal,
@@ -40,6 +41,11 @@ const {
   deleteOwnedConversation: vi.fn(() => Promise.resolve()),
   getMessages: vi.fn(),
   getOwnedConversation: vi.fn(),
+  // No race booked by default: the ordinary state for most of these fixtures,
+  // and the one the prompt has to state plainly rather than omit.
+  getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
+    async () => null,
+  ),
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
   getSessionsForWeek: vi.fn(() => Promise.resolve([])),
   recordProposal: vi.fn(() => Promise.resolve()),
@@ -70,6 +76,7 @@ vi.mock('./plan-proposal-repository', () => ({
 }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
@@ -284,6 +291,28 @@ describe("the Coach is told the athlete's Unavailable Dates", () => {
     await startWeeklySession(ATHLETE, TODAY);
 
     expect(callCoach.mock.calls[0][0].system).not.toContain(UNAVAILABLE_BLOCK);
+  });
+
+  it("names the Target Race's date, read from the race repository", async () => {
+    // The horizon the whole plan is built backwards from. It comes from the
+    // Race row rather than an athlete column, so a date the repository returns
+    // and nothing else could have produced is what proves the wiring.
+    getTargetRace.mockResolvedValue({ name: 'Ironman Kalmar', date: '2029-08-18' });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('race=Ironman Kalmar on 2029-08-18');
+  });
+
+  it('tells the Coach plainly when the athlete has no Target Race', async () => {
+    // Omission is the failure mode: a prompt with no race line reads as one
+    // whose race line was forgotten, and the Coach invents a horizon.
+    getTargetRace.mockResolvedValue(null);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(callCoach.mock.calls[0][0].system).toContain('no race booked');
   });
 
   it('names the dates the repository returned, not a re-derivation', async () => {

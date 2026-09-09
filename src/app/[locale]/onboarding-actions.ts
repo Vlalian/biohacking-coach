@@ -10,6 +10,7 @@ import {
   type AnswerResult,
 } from '@/features/onboarding/onboarding-service';
 import { coachGreeting, type StepAnswer } from '@/features/onboarding/onboarding-flow';
+import { answerText } from '@/features/onboarding/onboarding-transcript';
 
 /**
  * Server action for MCQ onboarding.
@@ -29,42 +30,11 @@ type AuthFailure = { ok: false; reason: 'not-authenticated' };
 const STEP_QUESTION_KEY: Record<StepAnswer['step'], string> = {
   language: 'qLanguage',
   experience: 'qExperience',
+  distance: 'qDistance',
   race: 'qRace',
   adaptive: 'qAdaptive',
   constraints: 'qConstraints',
 };
-
-/** The athlete's answer as one human-readable transcript line. */
-function answerText(payload: StepAnswer): string {
-  switch (payload.step) {
-    case 'language':
-      return payload.language === 'da' ? 'Dansk' : 'English';
-    case 'experience':
-      return payload.experienceLevel;
-    case 'race':
-      return payload.raceTarget;
-    case 'adaptive': {
-      const parts = [
-        payload.availableHours,
-        payload.sportBackground?.join(', '),
-        payload.motivation,
-        payload.bestTime,
-        payload.weakestDiscipline?.join(', '),
-        payload.hasHumanCoach,
-        payload.targetTime,
-        payload.trackedMetrics?.join(', '),
-      ].filter(Boolean);
-      return parts.length > 0 ? parts.join(' · ') : '—';
-    }
-    case 'constraints': {
-      const days =
-        payload.fixedConstraints && payload.fixedConstraints.length > 0
-          ? payload.fixedConstraints.join(', ')
-          : '—';
-      return `${days} · ${payload.weeklySessionDay ?? 'Flexible'}`;
-    }
-  }
-}
 
 export type OnboardingActionResult =
   | (AnswerResult & { displayGreetingIntro?: string; displayGreetingBody?: string })
@@ -82,7 +52,7 @@ export async function answerOnboardingAction(
 
   const raceForGreeting =
     payload.step === 'race'
-      ? payload.raceTarget
+      ? ('noRaceYet' in payload ? '' : payload.raceTarget)
       : (athlete.profile?.onboardingAnswers?.raceTarget ?? '');
 
   // Two greetings on purpose: the persisted one is name-free, because messages

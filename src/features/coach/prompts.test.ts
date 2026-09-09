@@ -943,3 +943,62 @@ describe('the equipment nudge, exhaustively', () => {
     expect(at(0, [])).not.toContain(NUDGE);
   });
 });
+
+// ── The horizon: Race Distance and the Target Race (training-architecture/02) ──
+
+/**
+ * The Coach plans every week with no horizon and no idea what shape of race the
+ * athlete is training for. Race Distance decides the shape of a week whether or
+ * not a race is booked — the winter-base athlete of *Distancens Arkitektur* §14
+ * — so it is stated always, and its *absence* is stated too rather than left for
+ * the model to fill in.
+ */
+describe('the horizon reaches the prompt, including when there is none', () => {
+  const TUESDAY = '2026-08-18';
+
+  function weekly(overrides: Partial<CheckIn> = {}) {
+    return renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, ...overrides },
+        [],
+        [],
+        [],
+        [],
+        null,
+        TUESDAY,
+      ),
+    );
+  }
+
+  it('states the Race Distance the athlete trains for', () => {
+    expect(weekly({ raceDistance: 'Full' })).toContain('HORIZON:');
+    expect(weekly({ raceDistance: 'Full' })).toContain('distance=Full');
+  });
+
+  it('states the Target Race and its date', () => {
+    const prompt = weekly({
+      raceDistance: 'Full',
+      raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
+    });
+    expect(prompt).toContain('race=Ironman Copenhagen');
+    expect(prompt).toContain('2027-08-15');
+  });
+
+  it('says plainly that there is no race, rather than omitting the subject', () => {
+    // Omission is the failure mode this block exists to avoid: a prompt with no
+    // race line reads to the model as a prompt whose race line was forgotten,
+    // and it will invent a horizon to plan toward.
+    const prompt = weekly({ raceDistance: 'Half' });
+    expect(prompt).toContain('no race booked');
+    expect(prompt).toContain('distance=Half');
+  });
+
+  it('says the distance is unknown for an athlete who was never asked', () => {
+    // Every athlete who onboarded before the question existed. The migration
+    // deliberately backfills nothing — a distance is not derivable from a race
+    // name, and guessing one is the habit this slice removed.
+    const prompt = weekly({ raceDistance: undefined });
+    expect(prompt).toContain('distance unknown');
+  });
+});

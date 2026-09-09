@@ -34,6 +34,11 @@ vi.mock('./conversation-repository', () => ({
   getMessages,
   getLatestOpenConversation: vi.fn(),
 }));
+vi.mock('@/features/race/race-repository', () => ({
+  // No race booked: the ordinary state for most of these fixtures, and the one
+  // the prompt has to state plainly rather than omit.
+  getTargetRace: vi.fn(async () => null),
+}));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getOwnedSession,

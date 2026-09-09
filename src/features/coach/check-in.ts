@@ -129,6 +129,14 @@ export interface CheckIn {
   language?: string;
   equipment?: EquipmentItem[];
   raceTarget?: string | null;
+  /**
+   * The Race Distance the athlete trains for. `undefined` means never asked —
+   * every athlete who onboarded before the question existed — and the prompt
+   * says so, because a missing distance and a known one are different claims.
+   */
+  raceDistance?: string | null;
+  /** The Target Race's date, `YYYY-MM-DD`, or absent when there is no race. */
+  raceDate?: string | null;
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
   fixedConstraints?: string[];

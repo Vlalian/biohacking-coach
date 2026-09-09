@@ -42,8 +42,15 @@ vi.mock('./settings-actions', () => ({
   updateCommunicationStyleAction: vi.fn(),
   updateLanguageAction: vi.fn(),
   updateLinkVisibilityAction: vi.fn(),
-  updateRaceTargetAction: vi.fn(),
+  updateRaceDistanceAction: vi.fn(),
+  updateTargetRaceAction: vi.fn(),
   updateWeeklySessionDayAction: vi.fn(),
+}));
+
+vi.mock('@/features/race/race-repository', () => ({
+  // No Target Race: the state of every fixture here, and the one the page has to
+  // render without inventing a horizon.
+  getTargetRace: vi.fn(async () => null),
 }));
 
 const { default: SettingsPage } = await import('./page');
@@ -118,6 +125,10 @@ describe('SettingsPage', () => {
       email: 'mads@example.com',
       communicationStyle: '',
       raceTarget: '',
+      // No race and no distance: the state of an athlete who has not answered,
+      // passed through as empty rather than defaulted to a distance nobody chose.
+      raceDate: '',
+      raceDistance: '',
       weeklySessionDay: null,
       fixedConstraints: [],
     });

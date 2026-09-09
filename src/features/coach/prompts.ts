@@ -368,6 +368,38 @@ function tag(name: string, value: string | number | undefined): string | null {
  */
 const NO_CHECK_IN = `NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.`;
 
+/**
+ * The horizon: what shape of race the athlete trains for, and when the race is.
+ *
+ * Always rendered, in all four combinations, because **omission is the failure
+ * mode**. A prompt with no race line reads to the model as one whose race line
+ * was forgotten, and it will invent a horizon to plan toward — the same class of
+ * defect `NO_CHECK_IN` exists to prevent one block down.
+ *
+ * Race Distance is stated even when no race is booked: an athlete building
+ * toward an Ironman with nothing in the calendar still needs an Ironman-shaped
+ * week (*Distancens Arkitektur* §14). And an athlete who was never asked is
+ * reported as unknown rather than defaulted — the migration backfills nothing,
+ * because a distance is not derivable from a race name.
+ */
+function horizonBlock(
+  raceDistance?: string | null,
+  raceTarget?: string | null,
+  raceDate?: string | null,
+): string {
+  const distance = raceDistance ? `distance=${raceDistance}` : 'distance unknown — ask';
+  const race =
+    raceTarget && raceDate
+      ? `race=${raceTarget} on ${raceDate}`
+      // Not "the athlete said so": no race can mean they declared they have
+      // none *or* that every race they had has passed, and the prompt cannot
+      // tell which. Asserting the decision would be a claim about the athlete
+      // that nobody made — the fabrication `NO_CHECK_IN` exists to prevent, one
+      // block down.
+      : 'no race booked — do not assume one';
+  return `HORIZON: ${distance} · ${race}`;
+}
+
 /** The STATE line — coaching intelligence, never quoted back to the athlete. */
 function stateBlock(s: {
   phase?: string;
@@ -487,6 +519,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     equipment,
     weeklySessionNumber,
     raceTarget,
+    raceDistance,
+    raceDate,
     onboarding,
   } = ctx.checkIn;
 
@@ -504,6 +538,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     'POSTURE: Confident, evidence-led, direct. Hold position unless athlete gives real reason. No markdown, lists, platitudes.',
 
     arcBlock(weeklySessionNumber, raceTarget),
+
+    horizonBlock(raceDistance, raceTarget, raceDate),
 
     todayBlock(today, window, weeklySessionDay, fixedConstraints),
 

@@ -16,6 +16,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
+import { RACE_DISTANCES } from '@/lib/race-distances';
 import type { Citation } from '@/lib/citation';
 
 /**
@@ -69,6 +70,15 @@ export const athlete = pgTable(
     experienceLevel: text('experience_level'),
     communicationStyle: text('communication_style'),
     raceTarget: text('race_target'),
+    /**
+     * The Race Distance the athlete trains for, independent of whether they
+     * have a race booked (`training-architecture/02`). Nullable because every
+     * athlete who onboarded before this column existed was never asked — and the
+     * migration deliberately backfills nothing: a distance is not derivable from
+     * `race_target`'s free text, and guessing one from prose is exactly the
+     * habit this slice removed. The prompt says the distance is unknown instead.
+     */
+    raceDistance: text('race_distance'),
     trainingSessionsPerWeek: integer('training_sessions_per_week'),
     profile: jsonb('profile'),
     informationViewLayout: jsonb('information_view_layout'),
@@ -598,6 +608,65 @@ export const unavailableDates = pgTable(
 
 export type UnavailableDateRow = typeof unavailableDates.$inferSelect;
 export type NewUnavailableDateRow = typeof unavailableDates.$inferInsert;
+
+/**
+ * A Race — an entity from the start, not two columns on the athlete
+ * (`training-architecture/02`).
+ *
+ * An athlete has **zero or more**, and at most one is the current **Target
+ * Race**. Zero is a real state: "ready to start the next block" is as valid a
+ * goal as a start line, and onboarding stores that as a decision rather than as
+ * an absent answer. Managing several races is slice 09; this table is the shape
+ * that slice needs, landed now because building it as columns would have cost a
+ * migration later for something already decided.
+ *
+ * `date` is a real date column, never prose. The Training Phase used to be
+ * derived by running four regexes over the athlete's free-text race *name* — an
+ * ISO date, "Month YYYY", `dd/mm/yyyy`, and a bare year assumed to be mid-June —
+ * with a silent fallback when none matched, so an athlete who typed a race with
+ * no year has had a wrong phase since onboarding with nothing to show why.
+ *
+ * `distance` mirrors `RACE_DISTANCES` in `features/onboarding/onboarding-flow.ts`,
+ * checked at the database so a bad write fails here rather than silently
+ * downstream — the same treatment `consent.purpose` gets, and for the same
+ * reason. Note it is *also* on the athlete: the athlete's Race Distance is what
+ * shapes their week whether or not a race exists, and a race carries its own
+ * because a future race may be a different distance from the one being trained
+ * for today.
+ *
+ * The partial unique index allows at most one Target Race per athlete, so "which
+ * race are they pointed at?" has a single answer. Being the target is a property
+ * that rotates as races pass, not a permanent one.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const race = pgTable(
+  'race',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    distance: text('distance').notNull(),
+    isTarget: boolean('is_target').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'race_distance_known',
+      sql.raw(`distance IN (${quotedList(RACE_DISTANCES)})`),
+    ),
+    uniqueIndex('race_one_target_per_athlete')
+      .on(table.athleteId)
+      .where(sql`${table.isTarget}`),
+    index('race_athlete_date').on(table.athleteId, table.date),
+  ],
+);
+
+export type RaceRow = typeof race.$inferSelect;
+export type NewRaceRow = typeof race.$inferInsert;
 
 /**
  * A consent record — the athlete's explicit, unbundled, versioned grant for one

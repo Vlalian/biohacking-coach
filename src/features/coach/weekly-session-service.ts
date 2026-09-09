@@ -27,6 +27,7 @@ import {
   recordPlanDeclined,
   recordProposal,
 } from './plan-proposal-repository';
+import { getTargetRace } from '@/features/race/race-repository';
 import {
   buildWeeklyCheckIn,
   proposedToNewSessionRows,
@@ -114,9 +115,12 @@ async function renderSystem(
   language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
-  const [weekSessions, equipmentItems] = await Promise.all([
+  const [weekSessions, equipmentItems, targetRace] = await Promise.all([
     getSessionsForWeek(athlete.id, weekStart),
     getEquipmentItems(athlete.id),
+    // The horizon. Null is an ordinary answer — an athlete may have no race,
+    // and the prompt says so rather than omitting the subject.
+    getTargetRace(athlete.id),
   ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
@@ -124,6 +128,7 @@ async function renderSystem(
     weeklySessionNumber,
     language,
     equipmentItems,
+    targetRace ? { name: targetRace.name, date: targetRace.date } : null,
   );
   // The inputs with a real source: the week's Session Reflections (feedback),
   // its skips, and — since showable-version/15 — the athlete's Unavailable

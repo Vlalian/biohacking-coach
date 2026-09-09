@@ -218,7 +218,10 @@
     "deleteConfirmPlaceholder": "din e-mailadresse",
     "deleteConfirmButton": "Slet det hele",
     "deleteCancel": "Behold min konto",
-    "deleteError": "Det virkede ikke. Intet blev slettet."
+    "deleteError": "Det virkede ikke. Intet blev slettet.",
+    "raceDistanceLabel": "Distance",
+    "raceDistanceNote": "Formen på din træningsuge. Sæt den, også selvom du ikke har et løb booket.",
+    "raceDateLabel": "Løbsdato"
   },
   "Roster": {
     "title": "Atleter",
@@ -481,7 +484,16 @@
     "dayFriday": "Fredag",
     "daySaturday": "Lørdag",
     "daySunday": "Søndag",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "stepDistance": "Distance",
+    "qDistance": "Hvilken distance træner du mod?",
+    "qDistanceSub": "Ikke løbet — formen på træningen. Vælg den, også selvom du ikke har noget booket.",
+    "qRaceDate": "Løbsdato",
+    "noRaceYet": "Jeg har ikke et løb endnu",
+    "optSprint": "Sprint",
+    "optOlympic": "Olympisk",
+    "optHalf": "Half",
+    "optFull": "Full"
   },
   "CoachThread": {
     "title": "Coach",

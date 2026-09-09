@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Athlete } from '@/features/athlete/athlete';
 
 const {
+  createRace,
   mergeAthleteProfile,
   completeAthleteOnboarding,
   appendMessages,
@@ -24,12 +25,14 @@ const {
   endConversation: vi.fn(async () => true),
   getLatestOpenConversation: vi.fn(async () => null),
   getMessages: vi.fn(async () => []),
+  createRace: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/features/athlete/athlete-repository', () => ({
   mergeAthleteProfile,
   completeAthleteOnboarding,
 }));
+vi.mock('@/features/race/race-repository', () => ({ createRace }));
 vi.mock('@/features/coach/conversation-repository', () => ({
   appendMessages,
   createConversation,
@@ -52,6 +55,7 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     experienceLevel: null,
     communicationStyle: null,
     raceTarget: null,
+    raceDistance: null,
     trainingSessionsPerWeek: null,
     profile: null,
     ...overrides,
@@ -111,7 +115,9 @@ describe('answerOnboardingStep', () => {
         onboardingAnswers: {
           language: 'da',
           experienceLevel: 'intermediate',
-          raceTarget: 'Ironman Copenhagen, August 2026',
+          raceDistance: 'Full',
+          raceTarget: 'Ironman Copenhagen',
+          raceDate: '2026-08-30',
           hasHumanCoach: 'Yes',
         },
         onboardingSubmitted: { adaptive: true },
@@ -124,7 +130,7 @@ describe('answerOnboardingStep', () => {
       { question: 'Any days you can never train?', answer: 'Sunday · Monday' },
       // Name-free by contract: messages is a training-side table (ADR 0006);
       // the action persists coachGreeting('', race), never the personalized one.
-      "I'm your Coach. Ironman Copenhagen, August 2026 is your target. Let's get to work.",
+      "I'm your Coach. Ironman Copenhagen is your target. Let's get to work.",
       TODAY,
     );
 
@@ -139,7 +145,9 @@ describe('answerOnboardingStep', () => {
         trainingPhase: 'Taper',
         experienceLevel: 'intermediate',
         communicationStyle: expect.stringContaining('The athlete'),
-        raceTarget: 'Ironman Copenhagen, August 2026',
+        raceDistance: 'Full',
+        raceTarget: 'Ironman Copenhagen',
+        race: { name: 'Ironman Copenhagen', date: '2026-08-30', distance: 'Full' },
       },
       expect.objectContaining({
         onboarding: expect.objectContaining({ hasHumanCoach: 'Yes' }),
@@ -153,6 +161,46 @@ describe('answerOnboardingStep', () => {
       { role: 'coach_ai', content: expect.stringContaining("I'm your Coach") },
     ]);
     expect(endConversation).toHaveBeenCalled();
+    // The Race is a record of its own from the first one, and the first one is
+    // the Target Race — the athlete has exactly one horizon to plan toward.
+    expect(createRace).toHaveBeenCalledWith(
+      'athlete_1',
+      { name: 'Ironman Copenhagen', date: '2026-08-30', distance: 'Full' },
+      { asTarget: true },
+    );
+  });
+
+  it('completes an athlete who has no race, and creates none', async () => {
+    const nearlyDone = athlete({
+      profile: {
+        onboardingAnswers: {
+          language: 'en',
+          experienceLevel: 'beginner',
+          raceDistance: 'Olympic',
+          noRaceYet: true,
+        },
+        onboardingSubmitted: { adaptive: true },
+      },
+    });
+
+    const result = await answerOnboardingStep(
+      nearlyDone,
+      { step: 'constraints' },
+      { question: 'Any days you can never train?', answer: '—' },
+      "I'm your Coach. Let's get to work.",
+      TODAY,
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.step).toBe('done');
+    // Onboarding finishes. The distance still lands — it is what shapes the
+    // week — and the horizon is simply empty.
+    expect(completeAthleteOnboarding).toHaveBeenCalledWith(
+      'athlete_1',
+      expect.objectContaining({ raceDistance: 'Olympic', race: null, trainingPhase: 'Base Building' }),
+      expect.anything(),
+    );
+    expect(createRace).not.toHaveBeenCalled();
   });
 });
 
@@ -165,7 +213,7 @@ describe('getOnboardingState — resumption', () => {
       },
     });
     const state = await getOnboardingState(midway);
-    expect(state.step).toBe('race');
+    expect(state.step).toBe('distance');
     expect(state.answers.experienceLevel).toBe('veteran');
   });
 });

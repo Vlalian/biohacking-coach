@@ -11,6 +11,7 @@ import {
   getMessages,
 } from '@/features/coach/conversation-repository';
 import type { Message } from '@/features/coach/conversation';
+import { createRace } from '@/features/race/race-repository';
 import {
   applyAnswer,
   completeProfile,
@@ -118,6 +119,13 @@ export async function answerOnboardingStep(
       fixedConstraints: applied.answers.fixedConstraints ?? [],
       weeklySessionDay: applied.answers.weeklySessionDay,
     });
+    // The first Race, if there is one, and it is the Target Race — an athlete
+    // finishing onboarding has exactly one horizon to plan toward. An athlete
+    // who said they have no race yet gets none, which is a finished profile
+    // rather than a half-finished one.
+    if (completed.race) {
+      await createRace(athlete.id, completed.race, { asTarget: true });
+    }
     await appendMessages(athlete.id, conversation.id, [
       { role: 'coach_ai', content: greeting },
     ]);

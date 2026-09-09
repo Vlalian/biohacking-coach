@@ -1,5 +1,6 @@
 'use client';
 
+import { RACE_DISTANCES } from '@/lib/race-distances';
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useSave, useSaveStatus } from './use-save';
 import { useTranslations } from 'next-intl';
@@ -19,6 +20,8 @@ export interface SettingsProfile {
   email: string;
   communicationStyle: string;
   raceTarget: string;
+  raceDate: string;
+  raceDistance: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
 }
@@ -37,7 +40,8 @@ export interface SettingsViewProps {
   language: string;
   coachingLink: SettingsCoachingLink | null;
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onUpdateRaceTarget: (value: string) => Promise<SettingsActionResult>;
+  onUpdateTargetRace: (name: string, date: string) => Promise<SettingsActionResult>;
+  onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -80,7 +84,8 @@ export function SettingsView({
   language,
   coachingLink,
   onUpdateCommunicationStyle,
-  onUpdateRaceTarget,
+  onUpdateTargetRace,
+  onUpdateRaceDistance,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
@@ -113,10 +118,13 @@ export function SettingsView({
         <TrainingSection
           communicationStyle={profile.communicationStyle}
           raceTarget={profile.raceTarget}
+          raceDate={profile.raceDate}
+          raceDistance={profile.raceDistance}
           weeklySessionDay={profile.weeklySessionDay}
           fixedConstraints={profile.fixedConstraints}
           onUpdateCommunicationStyle={onUpdateCommunicationStyle}
-          onUpdateRaceTarget={onUpdateRaceTarget}
+          onUpdateTargetRace={onUpdateTargetRace}
+          onUpdateRaceDistance={onUpdateRaceDistance}
           onUpdateWeeklySessionDay={onUpdateWeeklySessionDay}
           onAddFixedConstraint={onAddFixedConstraint}
           onRemoveFixedConstraint={onRemoveFixedConstraint}
@@ -303,20 +311,26 @@ function ThemeTile({
 function TrainingSection({
   communicationStyle,
   raceTarget,
+  raceDate,
+  raceDistance,
   weeklySessionDay,
   fixedConstraints,
   onUpdateCommunicationStyle,
-  onUpdateRaceTarget,
+  onUpdateTargetRace,
+  onUpdateRaceDistance,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
 }: {
   communicationStyle: string;
   raceTarget: string;
+  raceDate: string;
+  raceDistance: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onUpdateRaceTarget: (value: string) => Promise<SettingsActionResult>;
+  onUpdateTargetRace: (name: string, date: string) => Promise<SettingsActionResult>;
+  onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -325,7 +339,8 @@ function TrainingSection({
 
   return (
     <Section label={t('sectionTraining')}>
-      <RaceTargetField value={raceTarget} onSave={onUpdateRaceTarget} />
+      <RaceDistanceField value={raceDistance} onSave={onUpdateRaceDistance} />
+      <RaceTargetField name={raceTarget} date={raceDate} onSave={onUpdateTargetRace} />
       <CommunicationStyleField
         value={communicationStyle}
         onSave={onUpdateCommunicationStyle}
@@ -341,11 +356,15 @@ function TrainingSection({
 }
 
 /**
- * The race target — the fixed point the whole plan is built backwards from, and
- * until now write-once at onboarding. Clearable: an athlete between races has
- * no target, and an empty value stores null rather than "".
+ * The Race Distance — asked of every athlete at onboarding, and changeable here.
+ *
+ * It is deliberately not a property of the race: an athlete building toward an
+ * Ironman with nothing booked still needs an Ironman-shaped week (*Distancens
+ * Arkitektur* §14), so it stands on its own above the race and has no cleared
+ * state. A closed set, because the per-distance rules are bands and a band
+ * cannot be looked up from prose.
  */
-function RaceTargetField({
+function RaceDistanceField({
   value,
   onSave,
 }: {
@@ -353,11 +372,63 @@ function RaceTargetField({
   onSave: (value: string) => Promise<SettingsActionResult>;
 }) {
   const t = useTranslations('Settings');
-  const [draft, setDraft] = useState(value);
-  const { status, reset, run } = useSaveStatus();
-  const dirty = draft.trim() !== value.trim();
+  const { status, run } = useSaveStatus();
 
-  const save = () => run(() => onSave(draft));
+  return (
+    <div>
+      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        {t('raceDistanceLabel')}
+      </span>
+      <p className="mt-1 font-body text-xs text-muted-foreground">{t('raceDistanceNote')}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {RACE_DISTANCES.map((distance) => (
+          <button
+            key={distance}
+            type="button"
+            disabled={status === 'saving'}
+            onClick={() => run(() => onSave(distance))}
+            className={`border px-3 py-1.5 font-body text-sm transition-colors disabled:opacity-50 ${
+              distance === value
+                ? 'border-signal text-foreground'
+                : 'border-border text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {distance}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2">
+        <SaveStatus status={status} t={t} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Target Race — the fixed point the whole plan is built backwards from, and
+ * until now write-once at onboarding.
+ *
+ * Name and date together, because a race with no date is what the old free-text
+ * field allowed and what four regexes then guessed at. Clearing both is a real
+ * state: an athlete between races has no target, and the races they have run
+ * are kept as a record.
+ */
+function RaceTargetField({
+  name,
+  date,
+  onSave,
+}: {
+  name: string;
+  date: string;
+  onSave: (name: string, date: string) => Promise<SettingsActionResult>;
+}) {
+  const t = useTranslations('Settings');
+  const [draftName, setDraftName] = useState(name);
+  const [draftDate, setDraftDate] = useState(date);
+  const { status, reset, run } = useSaveStatus();
+  const dirty = draftName.trim() !== name.trim() || draftDate !== date;
+
+  const save = () => run(() => onSave(draftName, draftDate));
 
   return (
     <div>
@@ -368,14 +439,26 @@ function RaceTargetField({
         <p className="mt-1 font-body text-xs text-muted-foreground">{t('raceTargetNote')}</p>
         <input
           type="text"
-          value={draft}
+          value={draftName}
           onChange={(e) => {
-            setDraft(e.target.value);
+            setDraftName(e.target.value);
             reset();
           }}
           placeholder={t('raceTargetPlaceholder')}
           maxLength={120}
           className="mt-2 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+        />
+      </label>
+      <label className="mt-2 block">
+        <span className="sr-only">{t('raceDateLabel')}</span>
+        <input
+          type="date"
+          value={draftDate}
+          onChange={(e) => {
+            setDraftDate(e.target.value);
+            reset();
+          }}
+          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
         />
       </label>
       <div className="mt-2 flex items-center gap-3">

@@ -54,12 +54,24 @@ export function buildWeeklyCheckIn(
   weeklySessionNumber: number,
   language?: string,
   equipmentItems: EquipmentItem[] = [],
+  /**
+   * The Target Race, or null when the athlete has none.
+   *
+   * A parameter rather than an athlete column because a Race is an entity — the
+   * caller reads it through the race repository, the same way `language` comes
+   * through the user seam. Both halves come from here so the prompt never
+   * reports a name from one source beside a date from another: `athlete.raceTarget`
+   * is kept in step by every writer, but "kept in step" is a promise, and the
+   * Race row is the fact.
+   */
+  targetRace: { name: string; date: string } | null = null,
 ): CheckIn {
   const checkIn: CheckIn = {
     // Omitted entirely when absent, rather than set to undefined: nothing can
     // then interpolate "undefined" into a prompt.
     ...(readiness ? { readiness } : {}),
     ...coachingFactsFrom(athlete),
+    ...(targetRace ? { raceTarget: targetRace.name, raceDate: targetRace.date } : {}),
     ...constraintFactsFrom(athlete),
     // The STATE line's `sessions=` is coaching-relationship depth — how many
     // Weekly Sessions have come before, not the athlete's weekly frequency.
@@ -90,6 +102,7 @@ function coachingFactsFrom(athlete: Athlete) {
     experienceLevel: orUndefined(athlete.experienceLevel),
     commStyle: orUndefined(athlete.communicationStyle),
     raceTarget: orUndefined(athlete.raceTarget),
+    raceDistance: orUndefined(athlete.raceDistance),
   };
 }
 

@@ -48,6 +48,12 @@ export type Athlete = {
   experienceLevel: string | null;
   communicationStyle: string | null;
   raceTarget: string | null;
+  /**
+   * The Race Distance this athlete trains for, or null for anyone who onboarded
+   * before the question existed. Null is not "no distance" — it is "never
+   * asked", and the prompt says so rather than assuming one.
+   */
+  raceDistance: string | null;
   trainingSessionsPerWeek: number | null;
   profile: AthleteProfile | null;
 };
@@ -61,6 +67,7 @@ export function toAthlete(row: AthleteRow): Athlete {
     experienceLevel: row.experienceLevel,
     communicationStyle: row.communicationStyle,
     raceTarget: row.raceTarget,
+    raceDistance: row.raceDistance,
     trainingSessionsPerWeek: row.trainingSessionsPerWeek,
     profile: (row.profile as AthleteProfile | null) ?? null,
   };

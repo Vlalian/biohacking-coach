@@ -70,7 +70,7 @@ describe('message catalogues', () => {
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.
     const cognates =
-      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing|Interviewer)\b/g;
+      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing|Interviewer|Sprint|Half|Full)\b/g;
     const cognateScope = (path: string) =>
       path.startsWith('Information.') ||
       path.startsWith('SessionDrawer.') ||
@@ -98,7 +98,18 @@ describe('message catalogues', () => {
       // deliberately not a character (`showable-version/07`). A one-word speaker
       // label has nowhere to hide a forgotten translation, which is what the
       // guard is for.
-      path === 'FeedbackInterview.interviewerLabel';
+      path === 'FeedbackInterview.interviewerLabel' ||
+      // The Race Distances and their step label (`training-architecture/02`).
+      // "Distance" is an ordinary Danish noun, and Danish triathletes name the
+      // distances in English — a Half is a Half and a Full is a Full, the same
+      // way this catalogue already keeps "briefing". Only "Olympic" has a
+      // Danish form ("Olympisk"), and it is translated. One-word labels like
+      // these have nowhere to hide a forgotten translation, which is what the
+      // guard is for.
+      path === 'Onboarding.stepDistance' ||
+      path === 'Onboarding.optSprint' ||
+      path === 'Onboarding.optHalf' ||
+      path === 'Onboarding.optFull';
     // Simple ICU placeholders are not words — "• {clause}" is structure, and is
     // identical in every language by definition. Deliberately narrow twice
     // over. First in shape: `\w+` inside the braces, so plural forms like

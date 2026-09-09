@@ -48,11 +48,19 @@ type UiState = {
   greeting: { intro: string; body: string } | null;
 };
 
-const STEPS: OnboardingStepId[] = ['language', 'experience', 'race', 'adaptive', 'constraints'];
+const STEPS: OnboardingStepId[] = [
+  'language',
+  'experience',
+  'distance',
+  'race',
+  'adaptive',
+  'constraints',
+];
 
 const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   language: 'stepLanguage',
   experience: 'stepExperience',
+  distance: 'stepDistance',
   race: 'stepRace',
   adaptive: 'stepAdaptive',
   constraints: 'stepConstraints',
@@ -89,6 +97,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
 
   // Local drafts for the in-progress step.
   const [race, setRace] = useState('');
+  const [raceDate, setRaceDate] = useState('');
   const [sportBackground, setSportBackground] = useState<string[]>([]);
   const [availableHours, setAvailableHours] = useState('');
   const [motivation, setMotivation] = useState('');
@@ -223,12 +232,34 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 ))}
               </div>
             </div>
+          ) : state.step === 'distance' ? (
+            <div className="space-y-4">
+              {/*
+                Asked of every athlete, before the race and independently of it:
+                an athlete building toward an Ironman with nothing booked still
+                needs an Ironman-shaped week (*Distancens Arkitektur* §14). A
+                closed set because the per-distance rules are bands, and a band
+                cannot be looked up from prose.
+              */}
+              <StepHeading title={t('qDistance')} help={t('qDistanceSub')} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                {ONBOARDING_OPTIONS.raceDistance.map((value) => (
+                  <OptionTile
+                    key={value}
+                    label={t(OPTION_MESSAGE_KEY[value])}
+                    selected={false}
+                    onClick={() => submit({ step: 'distance', raceDistance: value })}
+                  />
+                ))}
+              </div>
+            </div>
           ) : state.step === 'race' ? (
             <form
               className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (race.trim()) submit({ step: 'race', raceTarget: race.trim() });
+                if (race.trim() && raceDate)
+                  submit({ step: 'race', raceTarget: race.trim(), raceDate });
               }}
             >
               <StepHeading title={t('qRace')} help={t('qRaceSub')} />
@@ -243,9 +274,39 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 disabled={pending}
                 className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
               />
-              <PrimaryButton type="submit" disabled={pending || !race.trim()} pending={pending}>
+              <label htmlFor="onboarding-race-date" className="sr-only">
+                {t('qRaceDate')}
+              </label>
+              <input
+                id="onboarding-race-date"
+                type="date"
+                value={raceDate}
+                onChange={(e) => setRaceDate(e.target.value)}
+                disabled={pending}
+                className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors focus:border-signal"
+              />
+              <PrimaryButton
+                type="submit"
+                disabled={pending || !race.trim() || !raceDate}
+                pending={pending}
+              >
                 {t('continue')}
               </PrimaryButton>
+              {/*
+                The way out, and it has to be a real one. This step used to
+                require a non-empty race name, so an athlete with nothing booked
+                could not pass it without inventing a race — and "ready to start
+                the next block" is as valid a goal as a start line. Saying so is
+                stored as a decision, not as an unanswered question.
+              */}
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => submit({ step: 'race', noRaceYet: true })}
+                className="font-body text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                {t('noRaceYet')}
+              </button>
             </form>
           ) : state.step === 'adaptive' ? (
             <div className="space-y-8">

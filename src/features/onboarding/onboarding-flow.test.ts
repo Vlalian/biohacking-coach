@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   ONBOARDING_OPTIONS,
+  ONBOARDING_STEPS,
+  RACE_DISTANCES,
   OPTION_MESSAGE_KEY,
   applyAnswer,
   buildCommStyle,
@@ -59,13 +61,38 @@ describe('coachGreeting — neither name nor race', () => {
 
 // ── nextStep — the resume point ───────────────────────────────────────────────
 
+describe('the questionnaire shape', () => {
+  it('asks its questions in a fixed order, distance before the race', () => {
+    // The order is the contract the progress rail and the resume point both
+    // read. Distance sits before the race because it is asked of everyone,
+    // including the athlete who has no race to describe.
+    expect(ONBOARDING_STEPS).toEqual([
+      'language',
+      'experience',
+      'distance',
+      'race',
+      'adaptive',
+      'constraints',
+    ]);
+  });
+});
+
 describe('nextStep', () => {
   it('walks the steps in order as answers arrive', () => {
     expect(nextStep({})).toBe('language');
     expect(nextStep({ language: 'da' })).toBe('experience');
-    expect(nextStep({ language: 'da', experienceLevel: 'beginner' })).toBe('race');
+    expect(nextStep({ language: 'da', experienceLevel: 'beginner' })).toBe('distance');
     expect(
-      nextStep({ language: 'da', experienceLevel: 'beginner', raceTarget: 'IM CPH' }),
+      nextStep({ language: 'da', experienceLevel: 'beginner', raceDistance: 'Full' }),
+    ).toBe('race');
+    expect(
+      nextStep({
+        language: 'da',
+        experienceLevel: 'beginner',
+        raceDistance: 'Full',
+        raceTarget: 'IM CPH',
+        raceDate: '2027-08-15',
+      }),
     ).toBe('adaptive');
   });
 
@@ -73,15 +100,17 @@ describe('nextStep', () => {
     const answers = {
       language: 'da',
       experienceLevel: 'beginner' as const,
+      raceDistance: 'Full' as const,
       raceTarget: 'IM CPH',
+      raceDate: '2027-08-15',
     };
     expect(nextStep(answers, { adaptive: true })).toBe('constraints');
     expect(nextStep(answers, { adaptive: true, constraints: true })).toBe('done');
   });
 
   it('is the resume point: an interrupted flow restarts at the first unanswered step', () => {
-    // The athlete answered language + experience, refreshed mid-race-question.
-    expect(nextStep({ language: 'en', experienceLevel: 'veteran' })).toBe('race');
+    // The athlete answered language + experience, refreshed mid-distance-question.
+    expect(nextStep({ language: 'en', experienceLevel: 'veteran' })).toBe('distance');
   });
 });
 
@@ -148,9 +177,18 @@ describe('applyAnswer', () => {
   });
 
   it('refuses empty or oversized free text', () => {
-    expect(applyAnswer({}, {}, { step: 'race', raceTarget: '   ' })).toBeNull();
+    const date = '2027-08-15';
+    expect(applyAnswer({}, {}, { step: 'race', raceTarget: '   ', raceDate: date })).toBeNull();
     expect(
-      applyAnswer({}, {}, { step: 'race', raceTarget: 'x'.repeat(300) }),
+      applyAnswer({}, {}, { step: 'race', raceTarget: 'x'.repeat(300), raceDate: date }),
+    ).toBeNull();
+    // The cap itself, on both sides: a name of exactly the limit is a legal
+    // name, and only the one after it is not.
+    expect(
+      applyAnswer({}, {}, { step: 'race', raceTarget: 'x'.repeat(200), raceDate: date }),
+    ).not.toBeNull();
+    expect(
+      applyAnswer({}, {}, { step: 'race', raceTarget: 'x'.repeat(201), raceDate: date }),
     ).toBeNull();
   });
 
@@ -201,28 +239,149 @@ describe('applyAnswer', () => {
   });
 });
 
-// ── computePhase — deterministic with an injected clock ──────────────────────
+// ── Race Distance and the Race — training-architecture/02 ────────────────────
 
+describe('Race Distance is asked of every athlete, from a closed set', () => {
+  it('accepts each of the four distances', () => {
+    for (const distance of RACE_DISTANCES) {
+      expect(
+        applyAnswer({}, {}, { step: 'distance', raceDistance: distance })?.answers
+          .raceDistance,
+      ).toBe(distance);
+    }
+  });
+
+  it('refuses anything outside the set', () => {
+    // Closed rather than free text because §04's rules are per-distance bands —
+    // session frequency, when race-pace language becomes meaningful, how late
+    // bricks can wait — and a band cannot be looked up from prose. "Other"
+    // (duathlon, aquabike, a marathon used as a build race) is deliberately
+    // deferred to post-test rather than smuggled in as free text.
+    for (const bad of ['Ironman', 'other', '', 70.3, null, undefined]) {
+      expect(
+        applyAnswer({}, {}, {
+          step: 'distance',
+          raceDistance: bad,
+        } as unknown as Parameters<typeof applyAnswer>[2]),
+      ).toBeNull();
+    }
+  });
+
+  it('is asked before the race itself, and of an athlete who has no race', () => {
+    // Deliberately not a property of the race: an athlete building toward an
+    // Ironman with nothing booked still needs an Ironman-shaped week — the
+    // winter-base athlete of *Distancens Arkitektur* §14.
+    expect(nextStep({ language: 'en', experienceLevel: 'veteran' })).toBe('distance');
+    expect(
+      nextStep({ language: 'en', experienceLevel: 'veteran', raceDistance: 'Full' }),
+    ).toBe('race');
+  });
+});
+
+describe('a Race is optional, and saying so is an answer', () => {
+  it('takes a name and a date', () => {
+    const after = applyAnswer({}, {}, {
+      step: 'race',
+      raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
+    });
+    expect(after?.answers.raceTarget).toBe('Ironman Copenhagen');
+    expect(after?.answers.raceDate).toBe('2027-08-15');
+    expect(after?.answers.noRaceYet).toBeUndefined();
+  });
+
+  it('records "I do not have one yet" as a decision, not an absence', () => {
+    // The distinction the acceptance criterion turns on: an athlete who said
+    // they have no race is not the same as one who was never asked, and only
+    // the first should be allowed past this step.
+    const after = applyAnswer({}, {}, { step: 'race', noRaceYet: true });
+    expect(after?.answers.noRaceYet).toBe(true);
+    expect(after?.answers.raceTarget).toBeUndefined();
+    expect(after?.answers.raceDate).toBeUndefined();
+
+    const unasked = {};
+    expect(nextStep({ language: 'en', experienceLevel: 'veteran', raceDistance: 'Half' }))
+      .toBe('race');
+    expect(
+      nextStep({
+        language: 'en',
+        experienceLevel: 'veteran',
+        raceDistance: 'Half',
+        ...after?.answers,
+        ...unasked,
+      }),
+    ).toBe('adaptive');
+  });
+
+  it('refuses a race without a date, and a date that is not one', () => {
+    // A name with no date is what the old free-text field allowed, and it is
+    // what the four regexes then guessed at. There is no guessing now, so the
+    // date has to be given.
+    expect(applyAnswer({}, {}, { step: 'race', raceTarget: 'Ironman Copenhagen' } as unknown as Parameters<typeof applyAnswer>[2])).toBeNull();
+    for (const bad of ['2027-02-30', 'August 2027', '15/08/2027', '2027', '']) {
+      expect(
+        applyAnswer({}, {}, {
+          step: 'race',
+          raceTarget: 'Ironman Copenhagen',
+          raceDate: bad,
+        } as unknown as Parameters<typeof applyAnswer>[2]),
+      ).toBeNull();
+    }
+  });
+});
+
+// ── computePhase — a real race date, never a guess at one ────────────────────
+
+/**
+ * `training-architecture/02`. This used to take the athlete's free-text race
+ * name and run four heuristics over it — an ISO date, "Month YYYY" against a
+ * month-name table, `dd/mm/yyyy`, and a bare four-digit year *assumed to be
+ * mid-June* — falling silently through to `Base Building` when none matched.
+ *
+ * An athlete who typed a race with no year has had a wrong Training Phase since
+ * onboarding, with nothing anywhere to show why. The bands below are unchanged;
+ * what changed is that the date is now a field the athlete gave rather than
+ * something parsed out of prose.
+ */
 describe('computePhase', () => {
   const TODAY = new Date(2026, 6, 24); // 2026-07-24
 
   it('maps months-to-race onto phases', () => {
-    expect(computePhase('Race 2026-08-30', TODAY)).toBe('Taper'); // ~1.2 months
-    expect(computePhase('Race 2026-10-24', TODAY)).toBe('Peak Phase'); // ~3 months
-    expect(computePhase('Race 2026-12-20', TODAY)).toBe('Build Phase'); // ~5 months
-    expect(computePhase('Ironman June 2027', TODAY)).toBe('Base Building'); // ~11 months
-    expect(computePhase('Race 2026-01-01', TODAY)).toBe('Recovery'); // past
+    expect(computePhase(new Date(2026, 7, 30), TODAY)).toBe('Taper'); // ~1.2 months
+    expect(computePhase(new Date(2026, 9, 24), TODAY)).toBe('Peak Phase'); // ~3 months
+    expect(computePhase(new Date(2026, 11, 20), TODAY)).toBe('Build Phase'); // ~5 months
+    expect(computePhase(new Date(2027, 5, 15), TODAY)).toBe('Base Building'); // ~11 months
+    expect(computePhase(new Date(2026, 0, 1), TODAY)).toBe('Recovery'); // past
   });
 
-  it('reads "Month YYYY", slash dates and bare years', () => {
-    expect(computePhase('Ironman Copenhagen, August 2026', TODAY)).toBe('Taper');
-    expect(computePhase('30/08/2026', TODAY)).toBe('Taper');
-    expect(computePhase('sometime in 2027', TODAY)).toBe('Base Building');
+  it('puts each band boundary on the later side', () => {
+    // `months < 2` and not `<=`: an athlete exactly two months out is in Peak
+    // Phase, not Taper. The bands are computed against a 30.5-day month, so
+    // these are constructed from that arithmetic rather than from calendar
+    // dates — nothing else lands exactly on a boundary, and a boundary that is
+    // never tested is a boundary that can move without anyone noticing.
+    const MONTH_MS = 1000 * 60 * 60 * 24 * 30.5;
+    const EPOCH = new Date(0);
+    const out = (months: number) => computePhase(new Date(months * MONTH_MS), EPOCH);
+
+    expect(out(0)).toBe('Taper'); // exactly today is not yet Recovery
+    expect(out(2)).toBe('Peak Phase');
+    expect(out(4)).toBe('Build Phase');
+    expect(out(6)).toBe('Base Building');
   });
 
-  it('defaults to Base Building when nothing parses', () => {
-    expect(computePhase('my local sprint tri', TODAY)).toBe('Base Building');
-    expect(computePhase(undefined, TODAY)).toBe('Base Building');
+  it('is Base Building for a date that is not one', () => {
+    // The guard exists because `new Date(...)` returns an Invalid Date rather
+    // than throwing, and arithmetic on it yields NaN — which compares false
+    // against every band and would fall out of the function as Base Building
+    // by accident rather than by decision.
+    expect(computePhase(new Date('not-a-date'), new Date(2026, 6, 24))).toBe('Base Building');
+  });
+
+  it('is Base Building when the athlete has no race date', () => {
+    // The same answer the old fallback gave, but now because there is genuinely
+    // no horizon rather than because a regex missed.
+    expect(computePhase(null, TODAY)).toBe('Base Building');
   });
 });
 
@@ -295,7 +454,9 @@ describe('completeProfile', () => {
       {
         language: 'da',
         experienceLevel: 'intermediate',
-        raceTarget: 'Ironman Copenhagen, August 2026',
+        raceDistance: 'Full',
+        raceTarget: 'Ironman Copenhagen',
+        raceDate: '2026-08-30',
         hasHumanCoach: 'Yes',
       },
       TODAY,
@@ -304,10 +465,74 @@ describe('completeProfile', () => {
       trainingPhase: 'Taper',
       experienceLevel: 'intermediate',
       communicationStyle: expect.stringContaining('works with a human coach'),
-      raceTarget: 'Ironman Copenhagen, August 2026',
+      raceDistance: 'Full',
+      raceTarget: 'Ironman Copenhagen',
+      race: { name: 'Ironman Copenhagen', date: '2026-08-30', distance: 'Full' },
     });
     // The columns carry no name (ADR 0006 — training tables never carry one).
     expect(JSON.stringify(profile)).not.toContain('Mads');
+  });
+
+  it('completes for an athlete with no race, and gives them no Race', () => {
+    // "Ready to start the next block" is as valid a goal as a start line. The
+    // profile is finished, the horizon is simply empty — and the phase says so
+    // rather than being guessed at.
+    const profile = completeProfile(
+      {
+        language: 'en',
+        experienceLevel: 'beginner',
+        raceDistance: 'Olympic',
+        noRaceYet: true,
+      },
+      TODAY,
+    );
+    expect(profile?.race).toBeNull();
+    expect(profile?.raceDistance).toBe('Olympic');
+    expect(profile?.trainingPhase).toBe('Base Building');
+    // Empty, not a stand-in: this column reaches the Coach's session-1 arc and
+    // the onboarding greeting, both of which read "no race" from emptiness.
+    expect(profile?.raceTarget).toBe('');
+  });
+
+  it('needs a date beside the name before it counts as a race', () => {
+    // A name with no date is not half a race, it is no race — and an athlete
+    // in that state has not answered the question either way, so completion is
+    // refused rather than a race being invented from the name alone.
+    expect(
+      completeProfile(
+        {
+          experienceLevel: 'beginner',
+          raceDistance: 'Half',
+          raceTarget: 'Ironman Copenhagen',
+          noRaceYet: true,
+        },
+        TODAY,
+      )?.race,
+    ).toBeNull();
+    expect(
+      completeProfile(
+        { experienceLevel: 'beginner', raceDistance: 'Half', raceTarget: 'Ironman Copenhagen' },
+        TODAY,
+      ),
+    ).toBeNull();
+  });
+
+  it('refuses to complete while the race question is simply unanswered', () => {
+    // Distance answered, race neither given nor declined: the flow has not
+    // reached its end, and a profile written now would be missing a decision
+    // nobody made.
+    expect(
+      completeProfile({ experienceLevel: 'beginner', raceDistance: 'Half' }, TODAY),
+    ).toBeNull();
+  });
+
+  it('refuses to complete without a Race Distance, which everyone answers', () => {
+    expect(
+      completeProfile(
+        { experienceLevel: 'beginner', raceTarget: 'IM CPH', raceDate: '2027-08-15' },
+        TODAY,
+      ),
+    ).toBeNull();
   });
 
   it('returns null while required answers are missing', () => {
