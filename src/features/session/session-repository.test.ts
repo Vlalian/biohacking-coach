@@ -12,14 +12,22 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 
 const orderBy = vi.fn();
 const where = vi.fn(() => ({ orderBy }));
+const deleteWhere = vi.fn(() => ({}));
+const insertValues = vi.fn(() => ({}));
+const batch = vi.fn((_statements?: unknown[]) => Promise.resolve());
 
 vi.mock('@/db', () => ({
   getDb: () => ({
     select: () => ({ from: () => ({ where }) }),
+    delete: () => ({ where: deleteWhere }),
+    insert: () => ({ values: insertValues }),
+    batch,
   }),
 }));
 
-const { getSessionsForAthlete } = await import('./session-repository');
+const { getSessionsForAthlete, replaceCoachPlanForDateRange } = await import(
+  './session-repository'
+);
 
 function row(overrides: Partial<SessionRow> = {}): SessionRow {
   return {
@@ -113,5 +121,65 @@ describe('getSessionsForAthlete', () => {
         'zone',
       ].sort(),
     );
+  });
+});
+
+
+/**
+ * What re-planning a week is allowed to delete.
+ *
+ * Both the Weekly Session and automatic generation (`knowledge-oracle/04a`)
+ * write a plan through this function, so its delete predicate decides what an
+ * athlete can lose by re-planning. It had no test until 04a, and it was missing
+ * a clause.
+ *
+ * The `eq` spy above makes the assertions column-precise, which is the point: a
+ * bag of bound values cannot tell `eq(sessions.origin, 'coach')` from a clause
+ * that narrows the wrong column to the same string.
+ */
+describe('replaceCoachPlanForDateRange', () => {
+  beforeEach(() => {
+    vi.mocked(eq).mockClear();
+    deleteWhere.mockClear();
+    insertValues.mockClear();
+    batch.mockClear();
+  });
+
+  it('spares a Coach session the athlete already completed', async () => {
+    // The clause that was missing. Without it, re-planning the week deletes a
+    // session the athlete completed today — a record of training that happened,
+    // erased by a plan, which is the record mutation ADR 0002 forbids. The
+    // ticket claimed this was already guaranteed; it was not.
+    await replaceCoachPlanForDateRange('athlete_1', '2026-08-17', '2026-08-23', []);
+
+    expect(eq).toHaveBeenCalledWith(sessions.status, 'planned');
+  });
+
+  it('deletes only this athlete’s own Coach-authored sessions', async () => {
+    await replaceCoachPlanForDateRange('athlete_1', '2026-08-17', '2026-08-23', []);
+
+    expect(eq).toHaveBeenCalledWith(sessions.athleteId, 'athlete_1');
+    // A Head Coach prescription is not the Coach's to replace, and this clause
+    // is the only thing protecting it.
+    expect(eq).toHaveBeenCalledWith(sessions.origin, 'coach');
+  });
+
+  it('clears the range without a batch when the new plan is empty', async () => {
+    // An empty plan is legitimate: it clears the range and inserts nothing.
+    // Batching a lone delete would wrap one statement in a transaction.
+    await replaceCoachPlanForDateRange('athlete_1', '2026-08-17', '2026-08-23', []);
+
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
+    expect(batch).not.toHaveBeenCalled();
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it('writes the delete and the insert together, so the range is never half-written', async () => {
+    await replaceCoachPlanForDateRange('athlete_1', '2026-08-17', '2026-08-23', [
+      row() as never,
+    ]);
+
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(2);
   });
 });
