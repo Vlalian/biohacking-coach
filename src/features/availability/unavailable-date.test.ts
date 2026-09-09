@@ -28,6 +28,50 @@ function boundValues(condition: unknown): unknown[] {
   walk(condition);
   return out;
 }
+/**
+ * The `[column, value]` pairs a drizzle condition binds, in source order.
+ *
+ * {@link boundValues} throws column identity away, so it cannot tell
+ * `eq(sessions.parked, true)` from `eq(sessions.isTraining, true)` — both are
+ * just `true` in the list, and a restore predicate swapped for the wrong column
+ * would still satisfy every assertion. That gap was CodeRabbit's finding on
+ * PR #57, and it matters here more than most places: these predicates *are* the
+ * park and restore rules, which moved out of a pure function into SQL, so the
+ * SQL is the only thing left to specify.
+ *
+ * Walks the chunk list in order and pairs each column with the parameter that
+ * follows it, which is the shape drizzle renders a binary comparison in.
+ */
+function boundPairs(condition: unknown): Array<[string, unknown]> {
+  type Node = { value?: unknown; name?: unknown; queryChunks?: unknown[] };
+  const flat: Node[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== 'object') return;
+    const n = node as Node;
+    if (n.queryChunks) {
+      for (const chunk of n.queryChunks) walk(chunk);
+      return;
+    }
+    flat.push(n);
+  };
+  walk(condition);
+
+  const pairs: Array<[string, unknown]> = [];
+  let column: string | null = null;
+  for (const node of flat) {
+    if (typeof node.name === 'string') {
+      column = node.name;
+    } else if ('value' in node && !Array.isArray(node.value) && column !== null) {
+      // drizzle's StringChunk carries `.value` too, as an array of SQL
+      // fragments — the ` = ` between a column and its parameter. Only a bound
+      // Param holds a scalar, and those are the ones being paired.
+      pairs.push([column, node.value]);
+      column = null;
+    }
+  }
+  return pairs;
+}
+
 const updateSet = vi.fn(() => ({ where: updateWhere }));
 const deleteWhere = vi.fn(() => ({}));
 
@@ -92,10 +136,17 @@ describe('markUnavailableDate', () => {
 
     const condition = updateWhere.mock.calls[0][0];
     expect(condition).toMatchObject({ queryChunks: expect.anything() });
-    // Completed, skipped and non-training sessions are excluded by these two
-    // clauses, exactly as `sessionsToPark` used to exclude them in memory.
-    expect(boundValues(condition)).toEqual(
-      expect.arrayContaining([OWNER, '2026-07-18', true, 'planned']),
+    // Asserted as column/value pairs, not a bag of values: `true` alone cannot
+    // tell `isTraining` from `parked`, and parking the wrong set is exactly the
+    // mistake worth catching. Completed, skipped and non-training sessions are
+    // excluded by these clauses, as `sessionsToPark` used to exclude them.
+    expect(boundPairs(condition)).toEqual(
+      expect.arrayContaining([
+        ['athlete_id', OWNER],
+        ['date', '2026-07-18'],
+        ['is_training', true],
+        ['status', 'planned'],
+      ]),
     );
   });
 

@@ -628,7 +628,15 @@ function HeadCoachSessionForm({
       </Field>
       <Field label={t('formType')}>
         <select value={type} onChange={(e) => setType(e.target.value)} className={FIELD}>
-          {PRESCRIBABLE_TYPES.map((x) => (
+          {/* The stored type leads when it is not one this form offers. The
+              server only trims the type, so a Prescribed Session can hold one
+              outside the list; without this the select showed the first option
+              while `type` still held the old value, and submitting unchanged
+              sent a type the coach never saw. CodeRabbit, PR #57. */}
+          {(PRESCRIBABLE_TYPES.includes(session.type)
+            ? PRESCRIBABLE_TYPES
+            : [session.type, ...PRESCRIBABLE_TYPES]
+          ).map((x) => (
             <option key={x} value={x}>
               {x}
             </option>

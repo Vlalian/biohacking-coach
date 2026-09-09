@@ -10,6 +10,20 @@ export interface PlanningWindow {
   start: string;
   end: string;
   /**
+   * The days inside `[start, end]` the athlete has ruled out — a Fixed
+   * Constraint's weekday and an Unavailable Date, both already resolved to
+   * concrete date keys and sorted.
+   *
+   * Resolved here so nothing downstream has to know that one is a weekday name
+   * and the other a day, and carried at all because the window used to consume
+   * these to pick a range and then drop them — leaving `validateProposedPlan`
+   * accepting any real date inside it. The `NO TRAINING ON:` prompt line was
+   * the only thing keeping the Coach off those days, and `showable-version/11`
+   * is the ticket that established a prompt line is a request rather than a
+   * bound. Found by CodeRabbit on PR #57, 2026-09-09.
+   */
+  excludedDates: string[];
+  /**
    * True when the current week held no plannable day and the window fell
    * through to the whole of next week.
    *
@@ -46,15 +60,46 @@ export function planningWindow(
   const endOfThisWeek = addDays(weekStartOf(today), 6);
 
   if (hasAPlannableDay(today, endOfThisWeek, fixedConstraints, unavailableDates)) {
-    return { start: today, end: endOfThisWeek, fellThrough: false };
+    return {
+      start: today,
+      end: endOfThisWeek,
+      excludedDates: excludedBetween(today, endOfThisWeek, fixedConstraints, unavailableDates),
+      fellThrough: false,
+    };
   }
 
   const nextWeekStart = addDays(weekStartOf(today), 7);
+  const nextWeekEnd = addDays(nextWeekStart, 6);
   return {
     start: nextWeekStart,
-    end: addDays(nextWeekStart, 6),
+    end: nextWeekEnd,
+    // Next week's exclusions, not the week that was given up on — a caller
+    // refusing days against the wrong week's list is worse than no list.
+    excludedDates: excludedBetween(nextWeekStart, nextWeekEnd, fixedConstraints, unavailableDates),
     fellThrough: true,
   };
+}
+
+/**
+ * The days in `[from, to]` the athlete has ruled out, ascending.
+ *
+ * The exact inverse of {@link hasAPlannableDay}'s test, walked over the whole
+ * range instead of stopping at the first day that survives. A day is listed
+ * once however many ways it is ruled out.
+ */
+function excludedBetween(
+  from: string,
+  to: string,
+  fixedConstraints: string[],
+  unavailableDates: string[],
+): string[] {
+  const out: string[] = [];
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    if (unavailableDates.includes(day) || fixedConstraints.includes(weekdayName(day))) {
+      out.push(day);
+    }
+  }
+  return out;
 }
 
 /**

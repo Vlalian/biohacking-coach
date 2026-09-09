@@ -337,7 +337,14 @@ function isPlannableDay(date: unknown, window: PlanningWindow): date is string {
   // here to narrow for TypeScript; at runtime isValidDateKey already rejects a
   // non-string, so no behavioural test can tell the two apart.
   if (typeof date !== 'string' || !isValidDateKey(date)) return false;
-  return date >= window.start && date <= window.end;
+  if (date < window.start || date > window.end) return false;
+  // Inside the range is not the same as plannable. A Fixed Constraint's weekday
+  // and an Unavailable Date both land here as concrete days, already resolved
+  // by the window. Until 2026-09-09 only the `NO TRAINING ON:` prompt line
+  // stood between the Coach and a day the athlete had ruled out, and
+  // `showable-version/11` is the ticket that established a prompt line is a
+  // request rather than a bound. This is that argument one level down.
+  return !window.excludedDates.includes(date);
 }
 
 /** Whether an untrusted value is one of the Session Types a plan may hold. */

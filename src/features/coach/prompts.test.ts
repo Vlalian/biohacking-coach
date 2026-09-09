@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   buildWeeklyContext,
   renderWeeklyPrompt,
@@ -653,12 +653,21 @@ describe('the week block inside the Coach Chat prompt', () => {
  * or a swallowed qualifier here is invisible in review and obvious to an
  * athlete.
  */
+afterEach(() => {
+  // Only the two default-date tests freeze it; restoring unconditionally is
+  // cheaper than remembering which ones did.
+  vi.useRealTimers();
+});
+
 describe('the prompt formatters, branch by branch', () => {
   it('defaults every optional input when only a check-in is given', () => {
     // Also the only exercise of the clock seam: `today` defaults to now.
+    // The clock is frozen rather than read twice — the assertion and the code
+    // under test each took their own `Date`, so a run straddling UTC midnight
+    // compared two different days and failed for no reason. CodeRabbit, PR #57.
+    vi.useFakeTimers().setSystemTime(new Date('2026-08-19T12:00:00Z'));
     const ctx = buildWeeklyContext(BASE);
-    expect(ctx.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(ctx.today).toBe(new Date().toISOString().slice(0, 10));
+    expect(ctx.today).toBe('2026-08-19');
     expect(ctx).toMatchObject({
       patterns: [],
       skippedSessions: [],
@@ -825,7 +834,9 @@ describe('buildChatPrompt — its own branches', () => {
   });
 
   it('defaults today to the real clock when it is not passed', () => {
-    expect(buildChatPrompt(BASE)).toContain(`TODAY: ${new Date().toISOString().slice(0, 10)}`);
+    // Frozen for the same reason as the weekly default above.
+    vi.useFakeTimers().setSystemTime(new Date('2026-08-19T12:00:00Z'));
+    expect(buildChatPrompt(BASE)).toContain('TODAY: 2026-08-19');
   });
 });
 

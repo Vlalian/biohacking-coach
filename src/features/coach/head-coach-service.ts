@@ -139,6 +139,32 @@ async function loadEditableSession(
   return { ok: true, origin: row.origin, date: row.date, version: row.version };
 }
 
+/**
+ * Whether a day is in a week that is already closed, and so cannot receive a
+ * session — asked about the *destination*, where a session is being put.
+ *
+ * The counterpart to asking whether an existing row may be touched. Both
+ * callers need it: creating names a day directly, and editing can move one, so
+ * a session could otherwise be walked into a closed week and land frozen with
+ * nobody able to edit, delete or move it again.
+ *
+ * Each caller asks it for itself rather than `loadEditableSession` folding it
+ * in. Folding was tried and reverted: it moved the extra branch onto a function
+ * that was clean at CRAP 5 and pushed it over the ceiling, while the function
+ * it relieved was already over and already carried in `code-health/11`. That is
+ * moving a number, not improving anything.
+ *
+ * Asked of `isFrozen` rather than re-derived, so "this week is over" means one
+ * thing across creation, content and placement.
+ */
+function landsInAClosedWeek(date: string, today: string): boolean {
+  // Stryker disable next-line StringLiteral — equivalent. `isFrozen` reads
+  // status only as `=== 'completed'`, and the row this asks about is being
+  // written as `planned`, so every other string it could be mutated to yields
+  // the same verdict. The literal says what is being asked, not the answer.
+  return isFrozen({ date, status: 'planned' }, today);
+}
+
 /** Normalises the optional fields into the column set, shared by add and edit. */
 function contentColumns(input: PrescriptionInput) {
   return {
@@ -175,13 +201,7 @@ export async function prescribeSession(params: {
   // than re-derived, so "this week is over" cannot mean one thing for creation
   // and another for content. The row would be `planned`, so only the date can
   // freeze it — but the question is still `isFrozen`'s to answer.
-  // Stryker disable next-line StringLiteral — equivalent. `isFrozen` reads
-  // status only as `=== 'completed'`, and a row being created is never that, so
-  // every other string it could be mutated to yields the same verdict. The
-  // literal is here to say what is being asked about, not to carry the answer.
-  if (isFrozen({ date: input.date, status: 'planned' }, today)) {
-    return { ok: false, reason: 'frozen' };
-  }
+  if (landsInAClosedWeek(input.date, today)) return { ok: false, reason: 'frozen' };
 
   const db = getDb();
   const id = crypto.randomUUID();
@@ -234,6 +254,15 @@ export async function editPrescribedSession(params: {
 
   const target = await loadEditableSession(athleteId, sessionId, today);
   if (!target.ok) return target;
+  // The stored row being editable is not enough. The edit sets a new date, so
+  // a live current-week session could be walked into a closed week and land
+  // frozen — nobody able to edit, delete or move it again, the state the create
+  // guard exists to prevent, reached by another verb. CodeRabbit, PR #57.
+  //
+  // Deliberately here and not folded into `loadEditableSession`: folding it
+  // moved this branch onto a function that was clean at CRAP 5 and pushed it
+  // over the ceiling, which is moving a number rather than improving anything.
+  if (landsInAClosedWeek(input.date, today)) return { ok: false, reason: 'frozen' };
 
   const columns = contentColumns(input);
   const written = await casUpdateSession({

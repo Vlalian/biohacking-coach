@@ -666,7 +666,14 @@ function WeekRow({
                     // It keeps its label so a screen reader still announces the
                     // session — what it loses is the focus stop and the pointer
                     // that promise something to click.
-                    readOnly ? (
+                    //
+                    // It asks `canOpenSession`, not `readOnly`, because those
+                    // are different questions and the Head Coach answers them
+                    // differently: their calendar is read-only *and* opens a
+                    // drawer. Reading `readOnly` here made a session openable in
+                    // an expanded week and dead in a collapsed one, while this
+                    // comment claimed both branches agreed. CodeRabbit, PR #57.
+                    !canOpenSession ? (
                       <span
                         key={s.id}
                         title={s.title ?? s.type}

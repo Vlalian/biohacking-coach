@@ -108,6 +108,34 @@ describe('prescribeSession — the Head Coach adds a Prescribed Session', () => 
    * cannot reach that state, because `createdStatusFor` records a past-dated
    * session as completed; they are logging reality, and a coach is not.
    */
+  /**
+   * The edit door into the same trap (CodeRabbit on PR #57, 2026-09-09).
+   *
+   * `loadEditableSession` judges the frozen rule against the *stored* row, and
+   * the write then sets a new date from the input. So the create guard below
+   * could be walked around: edit a live current-week session, set its date to a
+   * past week, and the row is frozen from that moment — its author can no
+   * longer edit, delete or move it. Same end state the create guard exists to
+   * prevent, reached through a different verb.
+   */
+  it('refuses to edit a session onto a past week, not just to edit a frozen one', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ origin: 'head_coach', date: '2026-07-16' })]);
+
+    const result = await editPrescribedSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      sessionId: 'sess_1',
+      // The stored row is in the current week and editable; the *target* is not.
+      input: { ...VALID, date: '2026-07-10' },
+      expectedVersion: 1,
+      today: TODAY,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'frozen' });
+    expect(updateSet).not.toHaveBeenCalled();
+  });
+
   it('refuses to prescribe into a past week, with the same reason edit and delete give', async () => {
     getActiveLink.mockResolvedValue(LINK);
 

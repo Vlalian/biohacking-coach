@@ -189,6 +189,62 @@ describe('toWeeklyApiMessages', () => {
   });
 });
 
+describe('validateProposedPlan — days the athlete ruled out', () => {
+  // 2026-07-29 is a Wednesday; its week runs Mon 2026-07-27 - Sun 2026-08-02.
+  const TODAY = '2026-07-29';
+
+  function proposal(...dates: string[]) {
+    return {
+      sessions: dates.map((date) => ({
+        date,
+        type: 'Endurance',
+        durationMinutes: 60,
+        zone: 'Z2',
+        note: null,
+      })),
+    };
+  }
+
+  /**
+   * The window bounds which weeks; until 2026-09-09 nothing bounded which days
+   * inside them. `planningWindow` consumed the Fixed Constraints and Unavailable
+   * Dates to pick a range and then dropped them, so a proposal on a day the
+   * athlete had marked off validated and was written — the `NO TRAINING ON:`
+   * prompt line was the only thing standing in the way, and `showable-version/11`
+   * is the ticket that established a prompt line is a request, not a bound.
+   * Found by CodeRabbit on PR #57.
+   */
+  it('drops a session on an Unavailable Date inside the window', () => {
+    const window = planningWindow(TODAY, [], ['2026-07-31']);
+
+    const result = validateProposedPlan(proposal('2026-07-30', '2026-07-31'), window);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.sessions.map((s) => s.date)).toEqual(['2026-07-30']);
+  });
+
+  it('drops a session on a Fixed Constraint weekday', () => {
+    // Friday is off every week; 2026-07-31 is the Friday of this window.
+    const window = planningWindow(TODAY, ['Friday']);
+
+    const result = validateProposedPlan(proposal('2026-07-30', '2026-07-31'), window);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.sessions.map((s) => s.date)).toEqual(['2026-07-30']);
+  });
+
+  it('refuses the whole proposal when every day it named was ruled out', () => {
+    // Nothing survives, so this is `empty` — the same refusal as a proposal of
+    // rows that were all malformed. Nothing is staged either way.
+    const window = planningWindow(TODAY, [], ['2026-07-30']);
+
+    expect(validateProposedPlan(proposal('2026-07-30'), window)).toEqual({
+      ok: false,
+      reason: 'empty',
+    });
+  });
+});
+
 describe('validateProposedPlan', () => {
   // 2026-07-29 is a Wednesday; its week runs Mon 2026-07-27 - Sun 2026-08-02.
   const TODAY = '2026-07-29';

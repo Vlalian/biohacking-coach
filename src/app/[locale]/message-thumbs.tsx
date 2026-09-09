@@ -38,20 +38,29 @@ export function MessageThumbs({
     // Tapping the same thumb again clears it: the tester changed their mind
     // about flagging at all, which is different from changing which way it points.
     const cleared = rating === next;
+    // Kept so a refused write can be undone. Both actions can come back
+    // `not-authenticated`, `not-flaggable` or `bad-rating` — an expired session
+    // being the realistic one — and without this the thumb stayed lit over
+    // nothing stored, then went blank on the next load. A mark that disappears
+    // is worse than one that never appeared: the tester has no way to know
+    // which of their flags survived. Found by CodeRabbit on PR #57.
+    const previous = rating;
     setRating(cleared ? null : next);
     startTransition(async () => {
-      if (cleared) {
-        await clearMessageRatingAction({ messageId });
-      } else {
-        await rateMessageAction({ messageId, rating: next, comment });
-      }
+      const result = cleared
+        ? await clearMessageRatingAction({ messageId })
+        : await rateMessageAction({ messageId, rating: next, comment });
+      if (!result.ok) setRating(previous);
     });
   }
 
   function saveComment() {
     if (!rating) return;
+    const previous = comment;
     startTransition(async () => {
-      await rateMessageAction({ messageId, rating, comment });
+      const result = await rateMessageAction({ messageId, rating, comment });
+      // Same rule as the thumb: an unsaved comment must not read as saved.
+      if (!result.ok) setComment(previous);
     });
   }
 
