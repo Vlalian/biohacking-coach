@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { useLocale } from 'next-intl';
 import { useRouter, Link } from '@/i18n/navigation';
 import {
-  CONSENT_PURPOSES,
+  ONBOARDING_CONSENT_PURPOSES,
   REQUIRED_CONSENT_PURPOSES,
   disclosureCopy,
   type ConsentPurpose,
@@ -102,7 +102,7 @@ export function ConsentScreen({
       </header>
 
       <ul className="flex flex-col gap-3">
-        {CONSENT_PURPOSES.map((purpose) => {
+        {ONBOARDING_CONSENT_PURPOSES.map((purpose) => {
           const p = copy.purposes[purpose];
           const required = isRequired(purpose);
           const isGranted = grantedSet.has(purpose);

@@ -19,6 +19,8 @@ Three existing decisions converge on this, and none of them survives the simpler
 - The human model in the calendar is a *view*, not a source of truth. It can ship whenever — the data underneath is already the right shape without it.
 - ~~**Still unresolved and blocking a real second user:** the consent wording for explicit injury data, and a purpose covering Head Coach visibility.~~ **Settled 2026-09-09/10 — see [ADR 0012](0012-two-consent-purposes-asked-at-their-point-of-use.md).** Both were pre-existing gaps this decision surfaced rather than created. Each now has a purpose of its own, asked at the moment it first matters rather than at onboarding, and `DISCLOSURE_VERSION` moved to `2026-09-10` while re-consent was still free.
 
+  **The decision is settled; the block is not lifted.** Neither purpose is asked by anything yet — the surfaces that would ask are unbuilt — so a real second user still has to wait. ADR 0012's Consequences carries the correction.
+
 ## Amendment, 2026-09-10 — the Check-in's free-text field
 
 `training-architecture/05` shipped a **notable signal** on the Check-in: free text, in the athlete's own words, and it reaches the Coach prompt verbatim. An athlete can type a clinical sentence into it — which is the thing this ADR keeps out of prompts, arriving by a path that did not exist when this was written.

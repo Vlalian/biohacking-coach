@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { assertNoDirectIdentifier, assertNoIdentity, type CheckIn } from './check-in';
+import {
+  assertNoDirectIdentifier,
+  assertNoIdentity,
+  notableSignalFrom,
+  type CheckIn,
+} from './check-in';
 
 /**
  * The runtime backstop behind GDPR decision 1.
@@ -103,5 +108,33 @@ describe('assertNoIdentity — the check-in seam', () => {
     expect(() =>
       assertNoIdentity({ ...BASE, raceTarget: 'email me at coach@example.com' }),
     ).toThrow(/email/i);
+  });
+});
+
+
+/**
+ * `training-architecture/05`, corrected by the 2026-09-10 review.
+ *
+ * The field was stored and read by nothing: the athlete wrote a sentence about
+ * their week, the Coach never saw it, and three docstrings plus a user-facing
+ * label said otherwise. These pin the half that was missing.
+ */
+describe('notableSignalFrom — the athlete\'s own sentence', () => {
+  it('carries what they wrote', () => {
+    expect(notableSignalFrom({ notableSignal: 'calf tight since Tuesday' })).toBe(
+      'calf tight since Tuesday',
+    );
+  });
+
+  it('is null when they wrote nothing, and when they wrote only spaces', () => {
+    // A blank line in a prompt reads to the model as a signal the athlete gave
+    // and left empty, which is a different claim from having said nothing.
+    expect(notableSignalFrom({ notableSignal: null })).toBeNull();
+    expect(notableSignalFrom({ notableSignal: '   ' })).toBeNull();
+    expect(notableSignalFrom(null)).toBeNull();
+  });
+
+  it('trims, so the prompt carries the sentence and not the whitespace', () => {
+    expect(notableSignalFrom({ notableSignal: '  legs heavy  ' })).toBe('legs heavy');
   });
 });

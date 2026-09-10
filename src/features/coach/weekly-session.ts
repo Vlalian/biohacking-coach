@@ -82,6 +82,8 @@ export function buildWeeklyCheckIn(
    * and nothing from here on is holding a detail thread it could leak.
    */
   capacity: string | null = null,
+  /** The athlete's own sentence from this week's Check-in, or null. */
+  notableSignal: string | null = null,
 ): CheckIn {
   const checkIn: CheckIn = {
     // Omitted entirely when absent, rather than set to undefined: nothing can
@@ -90,6 +92,7 @@ export function buildWeeklyCheckIn(
     ...coachingFactsFrom(athlete),
     ...horizonFactsFrom(today, targetRace),
     ...(capacity ? { capacity } : {}),
+    ...(notableSignal ? { notableSignal } : {}),
     ...constraintFactsFrom(athlete),
     // The STATE line's `sessions=` is coaching-relationship depth — how many
     // Weekly Sessions have come before, not the athlete's weekly frequency.

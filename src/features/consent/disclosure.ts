@@ -87,6 +87,22 @@ export const POINT_OF_USE_PURPOSES: readonly ConsentPurpose[] = [
 ];
 
 /**
+ * The purposes the onboarding consent screen actually renders.
+ *
+ * Everything except {@link POINT_OF_USE_PURPOSES}. **Derived, not a third
+ * hand-written list** — the review that added this found the screen mapping
+ * `CONSENT_PURPOSES` directly, which put both point-of-use purposes in front of
+ * every athlete at onboarding: precisely the noise the ruling rejected, and the
+ * opposite of what ADR 0012 says the code does.
+ *
+ * Deriving it means a purpose added to either list above lands on the right
+ * screen without anyone remembering to update a third one.
+ */
+export const ONBOARDING_CONSENT_PURPOSES: readonly ConsentPurpose[] = CONSENT_PURPOSES.filter(
+  (purpose) => !POINT_OF_USE_PURPOSES.includes(purpose),
+);
+
+/**
  * The disclosure version. A grant is valid only while its stored version equals
  * this string, so bumping it on any wording change below invalidates every prior
  * grant and forces re-consent. Dated for legibility; the value is opaque to the

@@ -80,10 +80,15 @@ export async function saveCheckInAction(report: {
       ...report,
       notableSignal: report.notableSignal?.trim() ? report.notableSignal.trim().slice(0, 500) : null,
     });
-  } catch {
-    // A malformed payload, or a score outside 1-10. The athlete sees a refusal
-    // rather than a 500, and nothing is stored.
-    return { ok: false, reason: 'invalid' };
+  } catch (error) {
+    // A malformed payload or a score outside 1-10 is the athlete's to fix, and
+    // they get told so. Anything else - the database being down, a constraint
+    // nobody predicted - is not, and reporting it as "your Check-in was
+    // malformed" sends them to re-answer a form that was fine.
+    if (error instanceof Error && /not complete/i.test(error.message)) {
+      return { ok: false, reason: 'invalid' };
+    }
+    throw error;
   }
   return { ok: true };
 }

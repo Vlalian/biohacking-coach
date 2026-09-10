@@ -76,8 +76,7 @@ export type AnswerResult =
  * `messages` is a training-side table (ADR 0006). There is no clock parameter:
  * the Training Phase used to be computed here and stored, and
  * `training-architecture/03` made it derived, so nothing this writes depends on
- * what day it is
- * computation.
+ * what day it is.
  */
 export async function answerOnboardingStep(
   athlete: Athlete,

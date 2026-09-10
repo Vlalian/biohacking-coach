@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { capacityStatement } from '@/features/health/capacity';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 /**
@@ -22,8 +23,7 @@ const {
   deleteOwnedConversation,
   getMessages,
   getOwnedConversation,
-  getOpenInjuries,
-  getOpenIllnesses,
+  capacityFor,
   getTargetRace,
   // No Check-in filed by default: the ordinary week, and the one the prompt has
   // to say it has nothing for rather than inventing scores.
@@ -53,12 +53,14 @@ const {
   ),
   // Nothing wrong by default: the ordinary state, and the one where the prompt
   // carries no capacity block at all rather than "nothing is restricted".
-  getOpenInjuries: vi.fn<
-    () => Promise<{ swim: string; bike: string; run: string }[]>
-  >(async () => []),
-  getOpenIllnesses: vi.fn<() => Promise<unknown[]>>(async () => []),
+  capacityFor: vi.fn<() => Promise<string | null>>(async () => null),
   getCheckInForWeek: vi.fn<
-    () => Promise<{ energy: number; body: number; sleepQuality: number } | null>
+    () => Promise<{
+      energy: number;
+      body: number;
+      sleepQuality: number;
+      notableSignal?: string | null;
+    } | null>
   >(async () => null),
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
   getSessionsForWeek: vi.fn(() => Promise.resolve([])),
@@ -90,7 +92,7 @@ vi.mock('./plan-proposal-repository', () => ({
 }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
-vi.mock('@/features/health/health-repository', () => ({ getOpenInjuries, getOpenIllnesses }));
+vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
@@ -871,7 +873,9 @@ describe('the Check-in reaches the Coach, and its absence is stated', () => {
 
 describe('what the athlete\'s body allows reaches the Coach', () => {
   it('states the capacity, and that it is not a diagnosis', async () => {
-    getOpenInjuries.mockResolvedValue([{ swim: 'full', bike: 'easy', run: 'none' }]);
+    capacityFor.mockResolvedValue(
+      capacityStatement([{ capacity: { swim: 'full', bike: 'easy', run: 'none' } }], false),
+    );
 
     await startWeeklySession(ATHLETE, TODAY);
 
@@ -883,8 +887,9 @@ describe('what the athlete\'s body allows reaches the Coach', () => {
   });
 
   it('lets an illness remove everything, whatever an injury said', async () => {
-    getOpenInjuries.mockResolvedValue([{ swim: 'full', bike: 'easy', run: 'none' }]);
-    getOpenIllnesses.mockResolvedValue([{ id: 'illness_1' }]);
+    capacityFor.mockResolvedValue(
+      capacityStatement([{ capacity: { swim: 'full', bike: 'easy', run: 'none' } }], true),
+    );
 
     await startWeeklySession(ATHLETE, TODAY);
 
@@ -898,11 +903,41 @@ describe('what the athlete\'s body allows reaches the Coach', () => {
     // Not "nothing is restricted". A block on every prompt for every healthy
     // athlete is noise the model learns to skip, and this one has to be read on
     // the week it appears.
-    getOpenInjuries.mockResolvedValue([]);
-    getOpenIllnesses.mockResolvedValue([]);
+    capacityFor.mockResolvedValue(null);
 
     await startWeeklySession(ATHLETE, TODAY);
 
     expect(callCoach.mock.calls[0][0].system).not.toContain('CAPACITY:');
+  });
+});
+
+
+describe("the athlete's own sentence survives the whole path", () => {
+  it('reaches the prompt from the stored Check-in row', async () => {
+    // The gap the review found: the form wrote it, the repository stored it,
+    // and nothing read it. This is the end-to-end pin.
+    getCheckInForWeek.mockResolvedValue({
+      energy: 4,
+      body: 6,
+      sleepQuality: 3,
+      notableSignal: 'calf tight since Tuesday',
+    });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(callCoach.mock.calls[0][0].system).toContain('"calf tight since Tuesday"');
+  });
+
+  it('is absent when the athlete left it blank', async () => {
+    getCheckInForWeek.mockResolvedValue({
+      energy: 4,
+      body: 6,
+      sleepQuality: 3,
+      notableSignal: null,
+    });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(callCoach.mock.calls[0][0].system).not.toContain('ATHLETE SAID');
   });
 });

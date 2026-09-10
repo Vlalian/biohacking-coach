@@ -18,7 +18,7 @@ Two gaps, both pre-dating this effort, which `training-architecture/04` and `/06
 
 ## Consequences
 
-- Slices 04 and 06 are **cleared to reach a second real person** once this lands. That was the open item ADR 0011 recorded, and it is now closed.
+- ~~Slices 04 and 06 are **cleared to reach a second real person** once this lands.~~ **Not yet, and this sentence was wrong when written** (corrected by the 2026-09-10 review). The two purposes exist and are declarable, but **nothing asks for either one**: the declaration and link-acceptance surfaces they are asked at do not exist, so no athlete can grant them and no code gates on them. The *decision* ADR 0011 was waiting on is made; the *clearing* waits on those surfaces. Slices 04 and 06 must not reach a second real person until then.
 - The `consent.purpose` check constraint is **rendered from `CONSENT_PURPOSES`** rather than retyped in `db/schema.ts`. It used to be a hand-written list beside a docstring asking the reader to keep the two in step — this change is exactly the one that would have broken that promise, so the promise was replaced with a single list.
 - Two purposes now have no consent screen of their own to be granted from. The gates that ask for them live at the declaration and link-acceptance surfaces, and until those surfaces exist the purposes are declarable but unasked.
 - The disclosure text remains **the product's honest description of processing, not lawyer-drafted final text**. The legal/privacy review the `gdpr-decisions` document calls for is still owed, and whether any of this warrants advice beyond the team is still open — the one part of `training-architecture/12` Mads did not settle.

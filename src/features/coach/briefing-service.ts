@@ -10,8 +10,7 @@ import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
 import { getTargetRace } from '@/features/race/race-repository';
-import { getOpenIllnesses, getOpenInjuries } from '@/features/health/health-repository';
-import { capacityStatement, type Capacity } from '@/features/health/capacity';
+import { capacityFor } from '@/features/health/health-repository';
 import { currentPhase, trainingBlocks } from './training-blocks';
 import {
   appendBriefingMessages,
@@ -79,7 +78,7 @@ async function buildBriefingSystem(
 
   let reports: BriefingReports | null = null;
   if (canSeeAthleteReports(link.visibility)) {
-    const [athlete, reflectionRows, targetRace, openInjuries, openIllnesses] = await Promise.all([
+    const [athlete, reflectionRows, targetRace, capacity] = await Promise.all([
       getAthleteById(athleteId),
       getBriefingReflections(athleteId),
       getTargetRace(athleteId),
@@ -88,8 +87,7 @@ async function buildBriefingSystem(
       // Reflections and Check-ins — the same flag, not a third one. Read inside
       // this branch, so when the flag is off it is never fetched at all rather
       // than fetched and hidden (ticket 11).
-      getOpenInjuries(athleteId),
-      getOpenIllnesses(athleteId),
+      capacityFor(athleteId),
     ]);
     reports = {
       profile: {
@@ -104,12 +102,7 @@ async function buildBriefingSystem(
         // The capacity half only. A Head Coach reads the detail thread on the
         // athlete's own page, not through a briefing that is assembled into a
         // model prompt (ADR 0011).
-        capacity: capacityStatement(
-          openInjuries.map((injury) => ({
-            capacity: { swim: injury.swim, bike: injury.bike, run: injury.run } as Capacity,
-          })),
-          openIllnesses.length > 0,
-        ),
+        capacity,
       },
       reflections: reflectionRows.map(toBriefingReflection),
     };

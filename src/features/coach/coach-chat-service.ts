@@ -11,7 +11,7 @@ import { getLatestOpenConversation, getMessages } from './conversation-repositor
 import type { Message } from './conversation';
 import { getTargetRace } from '@/features/race/race-repository';
 import { getCheckInForWeek } from './check-in-repository';
-import { readinessFrom } from './check-in';
+import { notableSignalFrom, readinessFrom } from './check-in';
 import { buildWeeklyCheckIn } from './weekly-session';
 
 /**
@@ -96,6 +96,12 @@ async function renderSystem(
     language,
     equipmentItems,
     targetRace ? { name: targetRace.name, date: targetRace.date } : null,
+    // No capacity block in Chat yet — that is the Weekly Session's surface.
+    null,
+    // The athlete's own sentence, for the same reason Chat reads the Check-in at
+    // all: someone who wrote "calf tight since Tuesday" on Monday should not
+    // have to say it again on Wednesday.
+    notableSignalFrom(checkInRow),
   );
 
   // The Reference is matched against the week by id here, where ids still

@@ -154,6 +154,21 @@ export function readinessFrom(
 }
 
 /**
+ * The athlete's own sentence about their week, trimmed to nothing-or-something.
+ *
+ * Deliberately **not** part of {@link readinessFrom}: `Readiness` is scores, and
+ * a sentence is not a score. Keeping them apart is what stops the free text
+ * being rendered as a number or averaged into one.
+ *
+ * An empty string becomes null, because a blank line in a prompt reads to the
+ * model as a signal the athlete gave and left empty.
+ */
+export function notableSignalFrom(row: { notableSignal: string | null } | null): string | null {
+  const signal = row?.notableSignal?.trim();
+  return signal ? signal : null;
+}
+
+/**
  * Everything a check-in carries into a prompt.
  *
  * `readiness` is optional because the Weekly Session is not a gate (ADR 0007):
@@ -204,6 +219,17 @@ export interface CheckIn {
    * without deleting this comment.
    */
   capacity?: string | null;
+  /**
+   * The one part of a Check-in the athlete writes in their own words, or absent
+   * when they wrote nothing.
+   *
+   * It reaches the Coach verbatim, and that is deliberate: the three scores say
+   * how the week feels in numbers, and this says the thing a number cannot.
+   * Because it is free text it passes {@link assertNoDirectIdentifier} with
+   * every other free-text leaf, and the field's own label tells the athlete the
+   * Coach reads it (ADR 0011's 2026-09-10 amendment).
+   */
+  notableSignal?: string | null;
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
   fixedConstraints?: string[];

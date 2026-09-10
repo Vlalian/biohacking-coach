@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { capacityStatement } from '@/features/health/capacity';
 
 const {
-  getOpenInjuries,
-  getOpenIllnesses,
+  capacityFor,
   getActiveLink,
   getSharedTranscripts,
   getAthleteById,
@@ -15,10 +15,7 @@ const {
   appendBriefingMessages,
   getMessages,
 } = vi.hoisted(() => ({
-  getOpenInjuries: vi.fn<() => Promise<{ swim: string; bike: string; run: string }[]>>(
-    async () => [],
-  ),
-  getOpenIllnesses: vi.fn<() => Promise<unknown[]>>(async () => []),
+  capacityFor: vi.fn<() => Promise<string | null>>(async () => null),
   getActiveLink: vi.fn(),
   getSharedTranscripts: vi.fn((): Promise<unknown[] | null> => Promise.resolve(null)),
   getAthleteById: vi.fn(),
@@ -38,7 +35,7 @@ const {
 }));
 
 vi.mock('./coach-repository', () => ({ getActiveLink, getSharedTranscripts }));
-vi.mock('@/features/health/health-repository', () => ({ getOpenInjuries, getOpenIllnesses }));
+vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('@/features/race/race-repository', () => ({
   // No Target Race: the Head Coach's briefing has to render an athlete with no
   // horizon, and the Training Phase is derived from it rather than stored.
@@ -293,14 +290,17 @@ describe('continueBriefing — the gates', () => {
 
 
 describe('an open Injury is athlete-reported data, gated by the same flag', () => {
-  const OPEN_INJURY = [{ swim: 'full', bike: 'easy', run: 'none' }];
+  const OPEN_INJURY = capacityStatement(
+    [{ capacity: { swim: 'full', bike: 'easy', run: 'none' } }],
+    false,
+  );
 
   it("reaches a Head Coach who may see the athlete's reports", async () => {
     // `training-architecture/04`: visible "within existing Link Visibility
     // rules". It belongs to `shareAthleteReports` alongside Session Reflections
     // and Check-ins — the same flag, deliberately not a third one.
     getActiveLink.mockResolvedValue(activeLink(true, false));
-    getOpenInjuries.mockResolvedValue(OPEN_INJURY);
+    capacityFor.mockResolvedValue(OPEN_INJURY);
 
     await startBriefing('coach_1', 'a1', TODAY);
 
@@ -314,11 +314,11 @@ describe('an open Injury is athlete-reported data, gated by the same flag', () =
     // Visibility is enforced at the network layer (ticket 11), so the data must
     // not cross to the client in the first place.
     getActiveLink.mockResolvedValue(activeLink(false, false));
-    getOpenInjuries.mockResolvedValue(OPEN_INJURY);
+    capacityFor.mockResolvedValue(OPEN_INJURY);
 
     await startBriefing('coach_1', 'a1', TODAY);
 
-    expect(getOpenInjuries).not.toHaveBeenCalled();
+    expect(capacityFor).not.toHaveBeenCalled();
     expect(callCoach.mock.calls[0][0].system).not.toContain('no run');
   });
 });

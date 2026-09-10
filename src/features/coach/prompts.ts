@@ -401,6 +401,27 @@ const NO_CHECK_IN = `NO CHECK-IN DATA: The athlete has not checked in this week 
 const NO_DEVICE_DATA = `NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.`;
 
 /**
+ * Which absence to declare, judged on the fields themselves.
+ *
+ * It used to key on whether a `Readiness` existed at all, which was right only
+ * for as long as no device fed anything: the day a Garmin feed lands, that
+ * version would render `sleep=7h pulse=50bpm` and then assert, one block later,
+ * that the Coach has no measured sleep duration or resting heart rate. A false
+ * claim beside the true numbers contradicting it — which is the exact defect
+ * splitting these two messages was meant to prevent, so it is now judged on the
+ * device fields rather than on their container.
+ *
+ * Saying nothing is not an option here. Silence about what the Coach cannot see
+ * is what `code-health/07` removed.
+ */
+function noDataBlock(readiness?: Readiness): string {
+  if (!readiness) return NO_CHECK_IN;
+  const hasDeviceData =
+    readiness.sleepHours !== undefined || readiness.restingPulse !== undefined;
+  return hasDeviceData ? '' : NO_DEVICE_DATA;
+}
+
+/**
  * The horizon: what shape of race the athlete trains for, and when the race is.
  *
  * Always rendered, in all four combinations, because **omission is the failure
@@ -560,6 +581,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     raceDate,
     blockWeek,
     capacity,
+    notableSignal,
     onboarding,
   } = ctx.checkIn;
 
@@ -585,13 +607,18 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     // never sees an injury record, only what one permits.
     capacity ?? null,
 
+    // The athlete's own words about their week. Quoted rather than paraphrased,
+    // and labelled as theirs, so the Coach cannot mistake it for an app-derived
+    // signal or repeat it back as its own observation.
+    notableSignal ? `ATHLETE SAID (their words, this week): "${notableSignal}"` : null,
+
     todayBlock(today, window, weeklySessionDay, fixedConstraints),
 
     equipmentBlock(equipmentLines),
 
     stateBlock({ phase, sessionCount, experienceLevel, readiness }),
 
-    readiness ? NO_DEVICE_DATA : NO_CHECK_IN,
+    noDataBlock(readiness),
 
     onboardingBlock(onboarding),
 
@@ -736,7 +763,7 @@ ${[
   .filter((part): part is string => part !== null)
   .join(' ')}${readinessFragment(readiness)}${race}${noTrain}`,
 
-    readiness ? NO_DEVICE_DATA : NO_CHECK_IN,
+    noDataBlock(readiness),
 
     weekBlock(week),
 

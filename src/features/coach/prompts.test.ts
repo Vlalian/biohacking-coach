@@ -1068,3 +1068,79 @@ describe('the current Training Block and the week within it reach the Coach', ()
     expect(prompt).not.toContain('week 2 of');
   });
 });
+
+
+describe("the athlete's own words reach the Coach", () => {
+  const TUESDAY = '2026-08-18';
+
+  function weekly(overrides: Partial<CheckIn> = {}) {
+    return renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, ...overrides },
+        [], [], [], [], null, TUESDAY,
+      ),
+    );
+  }
+
+  it('quotes the sentence and says whose it is', () => {
+    // Attributed on purpose. Unlabelled, the Coach can mistake it for something
+    // the app derived and repeat it back as its own observation - which is the
+    // one thing an athlete's own words must never become.
+    const prompt = weekly({ notableSignal: 'calf tight since Tuesday' });
+
+    expect(prompt).toContain('ATHLETE SAID');
+    expect(prompt).toContain('"calf tight since Tuesday"');
+  });
+
+  it('says nothing at all when the athlete wrote nothing', () => {
+    expect(weekly({ notableSignal: null })).not.toContain('ATHLETE SAID');
+    expect(weekly()).not.toContain('ATHLETE SAID');
+  });
+});
+
+// ── Which absence the Coach is told about ────────────────────────────────────
+// The 2026-09-10 review changed `noDataBlock` to judge the device fields rather
+// than their container. The cases below are the ones that distinguish the two
+// versions; without them the fix is a claim the suite cannot check.
+describe('which absence the Coach is told about', () => {
+  const BARE: CheckIn = {
+    phase: 'Base Building',
+    commStyle: '',
+    experienceLevel: 'intermediate',
+    sessionCount: 5,
+    language: 'English',
+  };
+
+  const chat = (readiness?: CheckIn['readiness']) =>
+    buildChatPrompt({ ...BARE, readiness }, '2026-08-18');
+
+  it('says neither once a device has fed both fields', () => {
+    // The defect the review found: keyed on the container, this would render
+    // `sleep=7h pulse=50bpm` and then assert, one block later, that the Coach
+    // has no measured sleep duration — a false claim standing beside the true
+    // numbers contradicting it.
+    const fed = chat({ body: 6, energy: 5, sleepQuality: 4, sleepHours: 7, restingPulse: 50 });
+
+    expect(fed).toContain('sleep=7h');
+    expect(fed).toContain('pulse=50bpm');
+    expect(fed).not.toContain('NO DEVICE DATA');
+    expect(fed).not.toContain('NO CHECK-IN DATA');
+  });
+
+  it('treats a sleep duration alone as a feed', () => {
+    // Either field on its own is data the Coach can see, so the blanket "you
+    // have no measured sleep duration and no resting heart rate" is already
+    // false. Both halves of the condition are load-bearing, one each here.
+    const fed = chat({ body: 6, energy: 5, sleepQuality: 4, sleepHours: 7 });
+
+    expect(fed).toContain('sleep=7h');
+    expect(fed).not.toContain('NO DEVICE DATA');
+  });
+
+  it('treats a resting pulse alone as a feed', () => {
+    const fed = chat({ body: 6, energy: 5, sleepQuality: 4, restingPulse: 50 });
+
+    expect(fed).toContain('pulse=50bpm');
+    expect(fed).not.toContain('NO DEVICE DATA');
+  });
+});
