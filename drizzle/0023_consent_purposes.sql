@@ -1,0 +1,32 @@
+-- training-architecture/12 - two consent purposes, and a disclosure version bump.
+--
+-- `injury_health_data` covers an injury or illness the athlete states outright.
+-- The existing `health_data` wording is an enumerated list of TRAINING SIGNALS -
+-- sleep, energy, how a session felt, resting pulse - hedged as signals that
+-- "can reveal" health information by inference. "Left Achilles, physio says
+-- tendinopathy" is health information stated directly, which is a materially
+-- larger claim than what was consented to.
+--
+-- `head_coach_visibility` covers a second HUMAN reading the athlete's data.
+-- ADR 0003's own 2026-08-11 amendment listed this as an unmet pre-launch item:
+-- the consent system that shipped covers AI processing and nothing else.
+--
+-- NEITHER IS REQUIRED, and neither is asked at onboarding. Both are asked at the
+-- moment they first matter - declaring an injury, accepting a Coaching Link -
+-- for two different reasons. Unbundling: an athlete must be able to use the
+-- Coach and still decline to write injury notes, the same principle that keeps
+-- `product_improvement` optional. Legibility: most athletes never have a Head
+-- Coach, and asking everyone up front about something that may never happen adds
+-- noise to the one screen that most needs to be read.
+--
+-- THE CONSTRAINT IS NOW RENDERED FROM `CONSENT_PURPOSES` rather than retyped in
+-- `db/schema.ts`. It used to be a hand-written list beside a docstring asking the
+-- reader to keep the two in step. This migration is the change that would have
+-- broken that promise, so the promise was replaced with one list.
+--
+-- Applying this ALONE is safe: it only widens the accepted set, so every existing
+-- row still satisfies it. The re-consent comes from `DISCLOSURE_VERSION` moving
+-- to 2026-09-10, which is application state, not schema.
+
+ALTER TABLE "consent" DROP CONSTRAINT "consent_purpose_valid";--> statement-breakpoint
+ALTER TABLE "consent" ADD CONSTRAINT "consent_purpose_valid" CHECK (purpose IN ('ai_coaching', 'health_data', 'injury_health_data', 'head_coach_visibility', 'product_improvement'));

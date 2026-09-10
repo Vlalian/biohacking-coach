@@ -17,4 +17,12 @@ Three existing decisions converge on this, and none of them survives the simpler
 - A Head Coach's clinical knowledge does **not** automatically steer the AI. When they want it to, they write a **Coaching Directive** — "watch her Achilles this block" — which is that mechanism, already designed, already Head-Coach-authored, already deliberately not shown raw to the athlete.
 - The planner reads capacity per discipline, so it can substitute rather than cancel: a running injury reshapes a week rather than emptying it.
 - The human model in the calendar is a *view*, not a source of truth. It can ship whenever — the data underneath is already the right shape without it.
-- **Still unresolved and blocking a real second user:** the consent wording for explicit injury data, and a purpose covering Head Coach visibility. Both are pre-existing gaps this decision surfaces rather than creates; neither is settled here, and neither is an agent's to settle.
+- ~~**Still unresolved and blocking a real second user:** the consent wording for explicit injury data, and a purpose covering Head Coach visibility.~~ **Settled 2026-09-09/10 — see [ADR 0012](0012-two-consent-purposes-asked-at-their-point-of-use.md).** Both were pre-existing gaps this decision surfaced rather than created. Each now has a purpose of its own, asked at the moment it first matters rather than at onboarding, and `DISCLOSURE_VERSION` moved to `2026-09-10` while re-consent was still free.
+
+## Amendment, 2026-09-10 — the Check-in's free-text field
+
+`training-architecture/05` shipped a **notable signal** on the Check-in: free text, in the athlete's own words, and it reaches the Coach prompt verbatim. An athlete can type a clinical sentence into it — which is the thing this ADR keeps out of prompts, arriving by a path that did not exist when this was written.
+
+**Mads ruled on 2026-09-10 that the field stays.** The hazard this ADR names is the *durable detail thread* and the *Head Coach's* clinical note. An athlete's own passing sentence about their week is a different thing, and they already type freely into Coach Chat, whose transcript is replayed to the model on every later turn — closing the Check-in's field while that stays open would buy nothing.
+
+The steering is done by the label instead: *"Your AI Coach reads this. Keep it to how training felt — not medical detail."* The detail thread's rule is unchanged, and remains enforced structurally rather than by convention.

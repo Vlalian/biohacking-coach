@@ -7,6 +7,7 @@ import {
 } from './consent';
 import {
   CONSENT_PURPOSES,
+  POINT_OF_USE_PURPOSES,
   REQUIRED_CONSENT_PURPOSES,
   DISCLOSURE_VERSION,
 } from './disclosure';
@@ -27,11 +28,25 @@ describe('consent decision', () => {
       expect([...CONSENT_PURPOSES]).toEqual([
         'ai_coaching',
         'health_data',
+        'injury_health_data',
+        'head_coach_visibility',
         'product_improvement',
       ]);
-      // product_improvement is optional on purpose — consent must be unbundled
-      // and freely given, not a condition of using the Coach.
+      // Only two are required. The other three are optional on purpose — consent
+      // must be unbundled and freely given, not a condition of using the Coach.
       expect([...REQUIRED_CONSENT_PURPOSES]).toEqual(['ai_coaching', 'health_data']);
+      // And the two added by `training-architecture/12` are asked at the moment
+      // they first matter rather than on the consent screen: declaring an injury,
+      // and accepting a Coaching Link.
+      expect([...POINT_OF_USE_PURPOSES]).toEqual([
+        'injury_health_data',
+        'head_coach_visibility',
+      ]);
+      // No purpose is both required and asked later — that would be a gate the
+      // athlete cannot pass at the moment it is checked.
+      for (const purpose of POINT_OF_USE_PURPOSES) {
+        expect(REQUIRED_CONSENT_PURPOSES).not.toContain(purpose);
+      }
     });
   });
 

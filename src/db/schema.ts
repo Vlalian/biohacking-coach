@@ -18,6 +18,7 @@ import { user } from './auth-schema';
 import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
 import { RACE_DISTANCES } from '@/lib/race-distances';
 import { ALLOWANCES } from '@/features/health/capacity';
+import { CONSENT_PURPOSES } from '@/features/consent/disclosure';
 import type { Citation } from '@/lib/citation';
 
 /**
@@ -897,7 +898,12 @@ export const consent = pgTable(
     // Closed value set — the mirror of CONSENT_PURPOSES (see the docstring).
     check(
       'consent_purpose_valid',
-      sql`${table.purpose} IN ('ai_coaching', 'health_data', 'product_improvement')`,
+      // RENDERED from `CONSENT_PURPOSES` rather than retyped. It used to be a
+      // hand-written list beside a docstring asking the reader to keep the two
+      // in step — which is a promise, and `training-architecture/12` is the
+      // change that would have broken it: a purpose added in TypeScript and
+      // forgotten here fails at runtime for a real athlete, not in a test.
+      sql.raw(`purpose IN (${quotedList(CONSENT_PURPOSES)})`),
     ),
   ],
 );
