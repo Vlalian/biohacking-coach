@@ -29,6 +29,8 @@ import {
 } from './plan-proposal-repository';
 import { getTargetRace } from '@/features/race/race-repository';
 import { getCheckInForWeek } from './check-in-repository';
+import { getOpenIllnesses, getOpenInjuries } from '@/features/health/health-repository';
+import { capacityStatement, type Capacity } from '@/features/health/capacity';
 import { readinessFrom } from './check-in';
 import {
   buildWeeklyCheckIn,
@@ -108,7 +110,8 @@ async function renderSystem(
   language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
-  const [weekSessions, equipmentItems, targetRace, checkInRow] = await Promise.all([
+  const [weekSessions, equipmentItems, targetRace, checkInRow, openInjuries, openIllnesses] =
+    await Promise.all([
     getSessionsForWeek(athlete.id, weekStart),
     getEquipmentItems(athlete.id),
     // The horizon. Null is an ordinary answer — an athlete may have no race,
@@ -118,6 +121,10 @@ async function renderSystem(
     // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
     // rather than inventing scores, which is what it did before code-health/07.
     getCheckInForWeek(athlete.id, weekStart),
+    // What the athlete's body currently allows. Only the capacity half is read;
+    // the detail thread has no reader on this path at all (ADR 0011).
+    getOpenInjuries(athlete.id),
+    getOpenIllnesses(athlete.id),
   ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
@@ -127,6 +134,12 @@ async function renderSystem(
     language,
     equipmentItems,
     targetRace ? { name: targetRace.name, date: targetRace.date } : null,
+    capacityStatement(
+      openInjuries.map((injury) => ({
+        capacity: { swim: injury.swim, bike: injury.bike, run: injury.run } as Capacity,
+      })),
+      openIllnesses.length > 0,
+    ),
   );
   // The inputs with a real source: the week's Session Reflections (feedback),
   // its skips, and — since showable-version/15 — the athlete's Unavailable

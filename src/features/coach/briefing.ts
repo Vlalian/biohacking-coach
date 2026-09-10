@@ -1,4 +1,4 @@
-import type { Onboarding } from './check-in';
+﻿import type { Onboarding } from './check-in';
 import { assertNoDirectIdentifier } from './check-in';
 import {
   assemble,
@@ -12,9 +12,9 @@ import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
 
 /**
- * The Coach Briefing's pure orchestration and prompt rendering — the AI briefing
+ * The Coach Briefing's pure orchestration and prompt rendering â€” the AI briefing
  * the Head Coach about ONE linked athlete (CONTEXT.md: the upward half of Hyper
- * Intelligence; V1, one athlete at a time — the roster-wide Roster Briefing is
+ * Intelligence; V1, one athlete at a time â€” the roster-wide Roster Briefing is
  * V2 and out of scope, ADR 0004).
  *
  * Everything here is plain data in, prompt strings out: no DB, no HTTP, no
@@ -24,9 +24,9 @@ import { toApiMessages, type Message } from './conversation';
  * Link Visibility is the contract, and it is honoured *upstream* of this module:
  * the service fetches the athlete's reports and transcripts only when the flags
  * permit, so `reports`/`transcripts` are already null when withheld. This module
- * never re-derives the gate — it renders exactly the material it is handed, and a
+ * never re-derives the gate â€” it renders exactly the material it is handed, and a
  * null section simply omits its block. "A Briefing that quietly summarises what
- * the coach is not permitted to read defeats the toggle" — so the withheld data
+ * the coach is not permitted to read defeats the toggle" â€” so the withheld data
  * never reaches here to be summarised.
  *
  * GDPR decision 1 holds: no real identity is ever assembled into the prompt. The
@@ -37,7 +37,7 @@ import { toApiMessages, type Message } from './conversation';
 /** The coach's implicit opening turn (a prompt device, never persisted). */
 export const BRIEFING_OPENER = 'Brief me on this athlete.';
 
-/** One plan session as the briefing reports it — always visible (ADR 0003). */
+/** One plan session as the briefing reports it â€” always visible (ADR 0003). */
 export interface BriefingPlanEntry {
   date: string;
   type: string;
@@ -47,32 +47,41 @@ export interface BriefingPlanEntry {
   note: string | null;
 }
 
-/** One Session Reflection as the briefing reads it — gated by shareAthleteReports. */
+/** One Session Reflection as the briefing reads it â€” gated by shareAthleteReports. */
 export interface BriefingReflection {
   date: string;
   type: string;
-  /** Stored 1–5; carried on the 1–10 RPE axis for one consistent scale. */
+  /** Stored 1â€“5; carried on the 1â€“10 RPE axis for one consistent scale. */
   body: number;
   mind: number;
   comment: string | null;
 }
 
-/** The athlete's training-profile fields — gated by shareAthleteReports. */
+/** The athlete's training-profile fields â€” gated by shareAthleteReports. */
 export interface BriefingProfile {
   phase: string | null;
   experienceLevel: string | null;
   raceTarget: string | null;
   sessionsPerWeek: number | null;
   onboarding: Onboarding | null;
+  /**
+   * What an open Injury or Illness prevents, already rendered, or null when
+   * nothing is restricted (`training-architecture/04`).
+   *
+   * The capacity half only. A Head Coach reads the detail thread on the
+   * athlete's own page; a briefing is assembled into a model prompt, and ADR
+   * 0011 keeps that thread out of one.
+   */
+  capacity: string | null;
 }
 
-/** The self-reported half of the material — present only when reports are shared. */
+/** The self-reported half of the material â€” present only when reports are shared. */
 export interface BriefingReports {
   profile: BriefingProfile;
   reflections: BriefingReflection[];
 }
 
-/** One shared conversation excerpt — present only when transcripts are shared. */
+/** One shared conversation excerpt â€” present only when transcripts are shared. */
 export interface BriefingTranscript {
   kind: 'coach_chat' | 'weekly_session';
   lines: string[];
@@ -81,7 +90,7 @@ export interface BriefingTranscript {
 export interface BriefingContext {
   today: string;
   language?: string;
-  /** The plan — always visible, no flag (ADR 0003). */
+  /** The plan â€” always visible, no flag (ADR 0003). */
   plan: BriefingPlanEntry[];
   /** Self-reported data, or null when `shareAthleteReports` is off. */
   reports: BriefingReports | null;
@@ -96,7 +105,7 @@ export interface BriefingContext {
  * The gate that decides *whether* reports/transcripts are fetched lives in the
  * service; here they arrive already null when withheld. The identity assertion
  * walks only the app-assembled structured material (plan + profile + reflection
- * scores) — not the transcript free-text, which is the athlete's own words
+ * scores) â€” not the transcript free-text, which is the athlete's own words
  * reaching the model exactly as it already does in Coach Chat, not an identifier
  * the app injected.
  */
@@ -115,12 +124,12 @@ export function buildBriefingContext(input: {
     transcripts: input.transcripts,
   };
   // Guard the material the app assembled from the athlete's opaque record. The
-  // transcripts are deliberately excluded — see the doc comment.
+  // transcripts are deliberately excluded â€” see the doc comment.
   assertNoDirectIdentifier({ plan: ctx.plan, reports: ctx.reports });
   return ctx;
 }
 
-/** Maps a stored 1–5 reflection to the /10 axis the briefing speaks in. */
+/** Maps a stored 1â€“5 reflection to the /10 axis the briefing speaks in. */
 export function toBriefingReflection(r: {
   date: string;
   type: string;
@@ -152,13 +161,13 @@ function planLine(s: BriefingPlanEntry): string {
     s.zone,
     s.status !== 'planned' ? s.status : null,
   ].filter(Boolean);
-  const note = s.note ? ` — "${s.note}"` : '';
-  return `- ${bits.join(' · ')}${note}`;
+  const note = s.note ? ` â€” "${s.note}"` : '';
+  return `- ${bits.join(' Â· ')}${note}`;
 }
 
 function reflectionLine(r: BriefingReflection): string {
-  const comment = r.comment ? ` · "${r.comment}"` : '';
-  return `- ${weekdayShort(r.date)} ${r.date} · ${r.type} · Body ${r.body}/10 · Mind ${r.mind}/10${comment}`;
+  const comment = r.comment ? ` Â· "${r.comment}"` : '';
+  return `- ${weekdayShort(r.date)} ${r.date} Â· ${r.type} Â· Body ${r.body}/10 Â· Mind ${r.mind}/10${comment}`;
 }
 
 function profileLines(p: BriefingProfile): string[] {
@@ -168,6 +177,10 @@ function profileLines(p: BriefingProfile): string[] {
   if (p.raceTarget) lines.push(`Race target: ${p.raceTarget}`);
   if (p.sessionsPerWeek != null)
     lines.push(`Training sessions per week: ${p.sessionsPerWeek}`);
+  // What the athlete's body currently allows. Last, because it is the line that
+  // changes how everything above it should be read — and absent entirely when
+  // nothing is restricted, rather than saying so.
+  if (p.capacity) lines.push(p.capacity);
   lines.push(...buildOnboardingLines(p.onboarding));
   return lines;
 }
@@ -178,20 +191,20 @@ function profileLines(p: BriefingProfile): string[] {
  */
 function planBlock(plan: BriefingPlanEntry[]): string {
   if (plan.length === 0) return "PLAN: No sessions on this athlete's calendar yet.";
-  return `PLAN (always visible — the calendar and its sessions):\n${plan.map(planLine).join('\n')}`;
+  return `PLAN (always visible â€” the calendar and its sessions):\n${plan.map(planLine).join('\n')}`;
 }
 
 /**
  * The athlete's self-reported material, or the sentence that says it is withheld.
  *
- * `reports` is null when `shareAthleteReports` is off — and the service never
+ * `reports` is null when `shareAthleteReports` is off â€” and the service never
  * fetched it, so this is not "fetched then hidden". The withheld branch tells the
  * Coach plainly what it does not have, which is what stops it speculating.
  */
 function reportsBlocks(reports: BriefingReports | null): PromptBlock[] {
   if (!reports) {
     return [
-      "SELF-REPORTED DATA: withheld. This athlete has not shared their reflections, check-ins, or profile stats with the coach. You have the plan only. Do not speculate about how they felt or their private stats — say plainly you don't have it if asked.",
+      "SELF-REPORTED DATA: withheld. This athlete has not shared their reflections, check-ins, or profile stats with the coach. You have the plan only. Do not speculate about how they felt or their private stats â€” say plainly you don't have it if asked.",
     ];
   }
   const profile = profileLines(reports.profile);
@@ -224,16 +237,16 @@ function transcriptsBlock(transcripts: BriefingTranscript[] | null): string {
 
 const BRIEFING_POSTURE = `You are talking TO the human coach, ABOUT their athlete. Report and analyse; never coach the athlete here and never address the athlete directly. Refer to the athlete in the third person; never use a real name.
 
-POSTURE: Confident, evidence-led, direct — a peer to the coach. State your read, back it with the material below, and invite the coach to interrogate it (patterns, a week summary, "how has their sleep trended?"). No markdown, no lists unless the coach asks for a breakdown. Concise.
+POSTURE: Confident, evidence-led, direct â€” a peer to the coach. State your read, back it with the material below, and invite the coach to interrogate it (patterns, a week summary, "how has their sleep trended?"). No markdown, no lists unless the coach asks for a breakdown. Concise.
 
 BOUNDARIES:
-- Draw ONLY on the material below. If the coach asks about something not here, say plainly you don't have it — never invent sessions, feelings, or numbers.
+- Draw ONLY on the material below. If the coach asks about something not here, say plainly you don't have it â€” never invent sessions, feelings, or numbers.
 - This is one athlete. You do not analyse the coach's other athletes or compare across a roster.`;
 
 /**
  * Serialises a BriefingContext into the coach-facing system prompt. Pure.
  *
- * Assembled from blocks, like the athlete-facing prompts — same helper, so the
+ * Assembled from blocks, like the athlete-facing prompts â€” same helper, so the
  * upward and downward halves of Hyper Intelligence cannot drift in how they are
  * built even though what they say is deliberately different.
  */
@@ -241,7 +254,7 @@ export function renderBriefingPrompt(ctx: BriefingContext): string {
   const { today, language, plan, reports, transcripts } = ctx;
 
   return assemble([
-    `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
+    `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach â€” a human coach â€” about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
     BRIEFING_POSTURE,
     `TODAY: ${today}`,
     planBlock(plan),

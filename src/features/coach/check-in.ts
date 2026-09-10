@@ -192,6 +192,18 @@ export interface CheckIn {
    * different sessions.
    */
   blockWeek?: string | null;
+  /**
+   * What an open Injury or Illness prevents, already rendered as a sentence by
+   * `features/health/capacity.ts`. Absent when nothing is restricted.
+   *
+   * A **string**, not a structure, and deliberately so: this is the only half of
+   * a health record that may reach a prompt (ADR 0011), and passing the rendered
+   * sentence rather than the records means nothing downstream of here is holding
+   * anything it could accidentally serialize. There is no field on this type for
+   * a detail thread, a body location, or a diagnosis — and no way to add one
+   * without deleting this comment.
+   */
+  capacity?: string | null;
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
   fixedConstraints?: string[];

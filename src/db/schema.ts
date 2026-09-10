@@ -17,6 +17,7 @@ import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
 import { RACE_DISTANCES } from '@/lib/race-distances';
+import { ALLOWANCES } from '@/features/health/capacity';
 import type { Citation } from '@/lib/citation';
 
 /**
@@ -726,6 +727,121 @@ export const checkIns = pgTable(
 
 export type CheckInRow = typeof checkIns.$inferSelect;
 export type NewCheckInRow = typeof checkIns.$inferInsert;
+
+/**
+ * An Injury — the app's first model of the athlete's body
+ * (`training-architecture/04`, [ADR 0011](../../docs/adr/0011-an-injury-is-split-by-who-reads-it.md)).
+ *
+ * **No scheduled end.** An injury cannot be planned to finish, so `closedAt` is
+ * nullable and stays null until the athlete says it is over. There is
+ * deliberately no `expectedEnd` column for anyone to fill in: the plan reacts to
+ * an injury, it does not plan around one.
+ *
+ * **What it prevents lives here; what it *is* does not.** The three allowance
+ * columns are the athlete's own statement of capacity — "can't run", "can ride
+ * easy, not hard" — and they are the **only** part of a health record that ever
+ * reaches a Coach prompt. There is no body-location column, and that absence is
+ * load-bearing: "left knee" does not imply running is out, and making that leap
+ * is a clinical inference on the OUT side of the posture ruling. Anything a
+ * human needs to know goes in `health_note`, which the prompt path cannot read.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const injuries = pgTable(
+  'injury',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    swim: text('swim').notNull().default('full'),
+    bike: text('bike').notNull().default('full'),
+    run: text('run').notNull().default('full'),
+    openedAt: timestamp('opened_at').notNull().defaultNow(),
+    closedAt: timestamp('closed_at'),
+  },
+  (table) => [
+    check(
+      'injury_allowances_known',
+      sql.raw(
+        `swim IN (${quotedList(ALLOWANCES)}) AND bike IN (${quotedList(ALLOWANCES)}) AND run IN (${quotedList(ALLOWANCES)})`,
+      ),
+    ),
+    index('injury_athlete_open').on(table.athleteId, table.closedAt),
+  ],
+);
+
+export type InjuryRow = typeof injuries.$inferSelect;
+export type NewInjuryRow = typeof injuries.$inferInsert;
+
+/**
+ * An Illness — systemic, and so carries **no per-discipline capacity**.
+ *
+ * A separate table rather than a flag on `injury`, because it is a different
+ * concept and not a severity dial: an Injury is worked around, an Illness
+ * removes every discipline together. Giving them one table would mean a
+ * nullable capacity that means "all of it" for half the rows, and the first
+ * reader to forget that would plan an ill athlete a swim.
+ *
+ * Like an Injury it has no scheduled end.
+ */
+export const illnesses = pgTable(
+  'illness',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    openedAt: timestamp('opened_at').notNull().defaultNow(),
+    closedAt: timestamp('closed_at'),
+  },
+  (table) => [index('illness_athlete_open').on(table.athleteId, table.closedAt)],
+);
+
+export type IllnessRow = typeof illnesses.$inferSelect;
+export type NewIllnessRow = typeof illnesses.$inferInsert;
+
+/**
+ * The detail thread — free text, written by the athlete **and** the Head Coach,
+ * and it **never enters a prompt, ever** (ADR 0011).
+ *
+ * This is where body location, what a physio said, and how it is going belong.
+ * It is documentation for humans, and the guarantee is kept structurally rather
+ * than by discipline: nothing on the prompt path reads this table, and
+ * `features/health/capacity.ts` — the module that produces the prompt-facing
+ * value — has no field for it in its input type.
+ *
+ * The hazard being avoided is precise. `narration.ts` already refuses to send a
+ * Head Coach's session note to the model, because the sentence lands in the
+ * Coach Chat transcript and `toApiMessages` replays that transcript on every
+ * later turn — so one note sits in front of the model for the rest of that
+ * athlete's history. This is that same hazard carrying special-category data.
+ *
+ * Exactly one of `injuryId` / `illnessId` is set, checked at the database.
+ */
+export const healthNotes = pgTable(
+  'health_note',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    injuryId: uuid('injury_id').references(() => injuries.id, { onDelete: 'cascade' }),
+    illnessId: uuid('illness_id').references(() => illnesses.id, { onDelete: 'cascade' }),
+    authorRole: text('author_role').notNull(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'health_note_one_subject',
+      sql`(${table.injuryId} IS NULL) <> (${table.illnessId} IS NULL)`,
+    ),
+    check('health_note_author_known', sql.raw(`author_role IN ('athlete', 'head_coach')`)),
+    index('health_note_injury').on(table.injuryId),
+    index('health_note_illness').on(table.illnessId),
+  ],
+);
+
+export type HealthNoteRow = typeof healthNotes.$inferSelect;
+export type NewHealthNoteRow = typeof healthNotes.$inferInsert;
 
 /**
  * A consent record — the athlete's explicit, unbundled, versioned grant for one

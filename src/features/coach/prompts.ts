@@ -559,6 +559,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     raceDistance,
     raceDate,
     blockWeek,
+    capacity,
     onboarding,
   } = ctx.checkIn;
 
@@ -578,6 +579,11 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     arcBlock(weeklySessionNumber, raceTarget),
 
     horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+
+    // What the athlete's body currently allows, or nothing at all when nothing
+    // is restricted (ADR 0011). Already a sentence when it arrives — this file
+    // never sees an injury record, only what one permits.
+    capacity ?? null,
 
     todayBlock(today, window, weeklySessionDay, fixedConstraints),
 

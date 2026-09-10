@@ -73,6 +73,15 @@ export function buildWeeklyCheckIn(
    * Race row is the fact.
    */
   targetRace: { name: string; date: string } | null = null,
+  /**
+   * What an open Injury or Illness prevents, already rendered
+   * (`features/health/capacity.ts`), or null when nothing is restricted.
+   *
+   * A sentence rather than the records, because this is the only half of a
+   * health record that may reach a prompt (ADR 0011) — the caller resolves it,
+   * and nothing from here on is holding a detail thread it could leak.
+   */
+  capacity: string | null = null,
 ): CheckIn {
   const checkIn: CheckIn = {
     // Omitted entirely when absent, rather than set to undefined: nothing can
@@ -80,6 +89,7 @@ export function buildWeeklyCheckIn(
     ...(readiness ? { readiness } : {}),
     ...coachingFactsFrom(athlete),
     ...horizonFactsFrom(today, targetRace),
+    ...(capacity ? { capacity } : {}),
     ...constraintFactsFrom(athlete),
     // The STATE line's `sessions=` is coaching-relationship depth — how many
     // Weekly Sessions have come before, not the athlete's weekly frequency.

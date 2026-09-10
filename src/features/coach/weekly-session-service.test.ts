@@ -22,6 +22,8 @@ const {
   deleteOwnedConversation,
   getMessages,
   getOwnedConversation,
+  getOpenInjuries,
+  getOpenIllnesses,
   getTargetRace,
   // No Check-in filed by default: the ordinary week, and the one the prompt has
   // to say it has nothing for rather than inventing scores.
@@ -49,6 +51,12 @@ const {
   getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
     async () => null,
   ),
+  // Nothing wrong by default: the ordinary state, and the one where the prompt
+  // carries no capacity block at all rather than "nothing is restricted".
+  getOpenInjuries: vi.fn<
+    () => Promise<{ swim: string; bike: string; run: string }[]>
+  >(async () => []),
+  getOpenIllnesses: vi.fn<() => Promise<unknown[]>>(async () => []),
   getCheckInForWeek: vi.fn<
     () => Promise<{ energy: number; body: number; sleepQuality: number } | null>
   >(async () => null),
@@ -82,6 +90,7 @@ vi.mock('./plan-proposal-repository', () => ({
 }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+vi.mock('@/features/health/health-repository', () => ({ getOpenInjuries, getOpenIllnesses }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
@@ -856,5 +865,44 @@ describe('the Check-in reaches the Coach, and its absence is stated', () => {
     await startWeeklySession(ATHLETE, '2026-08-13'); // a Thursday
 
     expect(getCheckInForWeek).toHaveBeenCalledWith('athlete_1', '2026-08-10');
+  });
+});
+
+
+describe('what the athlete\'s body allows reaches the Coach', () => {
+  it('states the capacity, and that it is not a diagnosis', async () => {
+    getOpenInjuries.mockResolvedValue([{ swim: 'full', bike: 'easy', run: 'none' }]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('no run');
+    expect(system).toContain('bike easy only');
+    expect(system).toContain('not a diagnosis');
+    expect(system).toContain('substitute rather than cancel');
+  });
+
+  it('lets an illness remove everything, whatever an injury said', async () => {
+    getOpenInjuries.mockResolvedValue([{ swim: 'full', bike: 'easy', run: 'none' }]);
+    getOpenIllnesses.mockResolvedValue([{ id: 'illness_1' }]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('no swim');
+    expect(system).toContain('no bike');
+    expect(system).toContain('no run');
+  });
+
+  it('says nothing at all about a body with nothing wrong', async () => {
+    // Not "nothing is restricted". A block on every prompt for every healthy
+    // athlete is noise the model learns to skip, and this one has to be read on
+    // the week it appears.
+    getOpenInjuries.mockResolvedValue([]);
+    getOpenIllnesses.mockResolvedValue([]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(callCoach.mock.calls[0][0].system).not.toContain('CAPACITY:');
   });
 });
