@@ -89,7 +89,6 @@ const { startWeeklySession, continueWeeklySession, commitWeeklyPlan, declineWeek
 const ATHLETE = {
   id: 'athlete_1',
   syntheticLabel: null,
-  trainingPhase: 'Base Building',
   experienceLevel: 'intermediate',
   communicationStyle: null,
   raceTarget: 'Ironman Copenhagen',
@@ -351,8 +350,21 @@ describe('the system prompt carries no invented readiness', () => {
     await startWeeklySession(ATHLETE, TODAY);
 
     const { system } = callCoach.mock.calls[0][0];
-    expect(system).toContain('phase=Base Building');
     expect(system).toContain('xp=intermediate');
+  });
+
+  it('sends a phase derived from the horizon, and none without one', async () => {
+    // The Training Phase is no longer a column written once at onboarding and
+    // never recomputed — it is the block today falls inside. An athlete with no
+    // Target Race has no blocks, and the prompt omits the phase rather than
+    // naming one nobody derived.
+    await startWeeklySession(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('phase=');
+
+    getTargetRace.mockResolvedValue({ name: 'Ironman Kalmar', date: '2027-08-18' });
+    callCoach.mockClear();
+    await startWeeklySession(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).toContain('phase=Block 1 of 6');
   });
 });
 

@@ -386,33 +386,6 @@ export function applyAnswer(
 }
 
 /**
- * The Training Phase for a horizon, with the clock passed in (`today`) so the
- * same race computes the same phase in tests and on any machine.
- *
- * `raceDate` is the Target Race's date, or `null` when the athlete has no race.
- * It used to be the athlete's free-text race *name*, out of which this function
- * guessed a date with four heuristics — an ISO date, "Month YYYY" against a
- * month-name table, `dd/mm/yyyy`, and a bare four-digit year assumed to be
- * mid-June — and fell silently through to `Base Building` when none matched. So
- * an athlete who typed "Ironman Copenhagen" got a wrong phase permanently, with
- * nothing anywhere recording that the parse had failed. `training-architecture/02`
- * gave the date a field of its own, and the guessing went with it.
- *
- * No race is still `Base Building`, but for an honest reason now: there is no
- * horizon to place them in rather than a horizon this function could not read.
- */
-export function computePhase(raceDate: Date | null, today: Date): string {
-  if (!raceDate || isNaN(raceDate.getTime())) return 'Base Building';
-  const months =
-    (raceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.5);
-  if (months < 0) return 'Recovery';
-  if (months < 2) return 'Taper';
-  if (months < 4) return 'Peak Phase';
-  if (months < 6) return 'Build Phase';
-  return 'Base Building';
-}
-
-/**
  * The Communication Style directive the Coach reads on every prompt. The POC's
  * text with one deliberate change: never the athlete's name — this string lands
  * in a training-table column and in prompts (GDPR decision 1), so the subject is
@@ -480,7 +453,6 @@ export function coachGreeting(
 
 /** What completing onboarding writes to the athlete's profile columns. */
 export interface CompletedProfile {
-  trainingPhase: string;
   experienceLevel: ExperienceLevel;
   communicationStyle: string;
   raceDistance: RaceDistance;
@@ -498,19 +470,16 @@ export interface CompletedProfile {
  * Experience and **Race Distance** are required; the race itself is not. An
  * athlete who answered "no race yet" completes onboarding with `race: null`,
  * which is a finished profile rather than a half-finished one.
+ *
+ * No clock: the Training Phase used to be computed here and written to a column
+ * (`training-architecture/03` retired it), and nothing else this assembles
+ * depends on what day it is.
  */
-export function completeProfile(
-  answers: OnboardingAnswers,
-  today: Date,
-): CompletedProfile | null {
+export function completeProfile(answers: OnboardingAnswers): CompletedProfile | null {
   if (!answers.experienceLevel || !answers.raceDistance) return null;
   const hasRace = Boolean(answers.raceTarget && answers.raceDate);
   if (!hasRace && !answers.noRaceYet) return null;
   return {
-    trainingPhase: computePhase(
-      answers.raceDate ? new Date(`${answers.raceDate}T00:00:00Z`) : null,
-      today,
-    ),
     experienceLevel: answers.experienceLevel,
     communicationStyle: buildCommStyle(answers),
     raceDistance: answers.raceDistance,

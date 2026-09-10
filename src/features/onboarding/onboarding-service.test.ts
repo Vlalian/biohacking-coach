@@ -45,13 +45,10 @@ const { answerOnboardingStep, getOnboardingState } = await import(
   './onboarding-service'
 );
 
-const TODAY = new Date(2026, 6, 24);
-
 function athlete(overrides: Partial<Athlete> = {}): Athlete {
   return {
     id: 'athlete_1',
     syntheticLabel: null,
-    trainingPhase: null,
     experienceLevel: null,
     communicationStyle: null,
     raceTarget: null,
@@ -73,7 +70,6 @@ describe('answerOnboardingStep', () => {
       { step: 'language', language: 'fr' },
       { question: 'q', answer: 'a' },
       'greeting',
-      TODAY,
     );
     expect(result).toEqual({ ok: false, reason: 'invalid' });
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
@@ -86,7 +82,6 @@ describe('answerOnboardingStep', () => {
       { step: 'language', language: 'da' },
       { question: 'Which language?', answer: 'Dansk' },
       'greeting',
-      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -131,7 +126,6 @@ describe('answerOnboardingStep', () => {
       // Name-free by contract: messages is a training-side table (ADR 0006);
       // the action persists coachGreeting('', race), never the personalized one.
       "I'm your Coach. Ironman Copenhagen is your target. Let's get to work.",
-      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -142,7 +136,6 @@ describe('answerOnboardingStep', () => {
     expect(completeAthleteOnboarding).toHaveBeenCalledWith(
       'athlete_1',
       {
-        trainingPhase: 'Taper',
         experienceLevel: 'intermediate',
         communicationStyle: expect.stringContaining('The athlete'),
         raceDistance: 'Full',
@@ -188,7 +181,6 @@ describe('answerOnboardingStep', () => {
       { step: 'constraints' },
       { question: 'Any days you can never train?', answer: '—' },
       "I'm your Coach. Let's get to work.",
-      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -197,7 +189,7 @@ describe('answerOnboardingStep', () => {
     // week — and the horizon is simply empty.
     expect(completeAthleteOnboarding).toHaveBeenCalledWith(
       'athlete_1',
-      expect.objectContaining({ raceDistance: 'Olympic', race: null, trainingPhase: 'Base Building' }),
+      expect.objectContaining({ raceDistance: 'Olympic', race: null }),
       expect.anything(),
     );
     expect(createRace).not.toHaveBeenCalled();

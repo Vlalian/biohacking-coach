@@ -54,9 +54,16 @@ function quotedList(values: readonly string[]): string {
  * neither — so every name left in this table is fabricated, and ADR 0006's
  * promise holds by construction, not by convention.
  *
- * Column names follow the glossary exactly (route 07): `training_phase`, not
- * `phase`; `training_sessions_per_week`, not the misleading `weekly_session_count`
- * (a "Weekly Session" is the once-a-week Coach ritual — there is only ever one).
+ * Column names follow the glossary exactly (route 07): `training_sessions_per_week`,
+ * not the misleading `weekly_session_count` (a "Weekly Session" is the once-a-week
+ * Coach ritual — there is only ever one).
+ *
+ * There is deliberately **no stored Training Phase column**. The phase is the
+ * name of the Training Block today falls inside, derived on every read from the
+ * Target Race (`training-architecture/03`). It used to be a string written once
+ * at onboarding and never recomputed, so an athlete who onboarded eleven months
+ * out was still `Base Building` in race week — and every Coach prompt read that
+ * as fact. `race/no-date-guessing.test.ts` is the guard that keeps it derived.
  */
 export const athlete = pgTable(
   'athlete',
@@ -66,7 +73,6 @@ export const athlete = pgTable(
       .unique()
       .references(() => user.id),
     syntheticLabel: text('synthetic_label'),
-    trainingPhase: text('training_phase'),
     experienceLevel: text('experience_level'),
     communicationStyle: text('communication_style'),
     raceTarget: text('race_target'),

@@ -1,3 +1,4 @@
+import type { RaceDistance } from '@/lib/race-distances';
 import type { SessionHistoryItem } from '@/features/coach/check-in';
 import type { PlanType } from '@/features/coach/weekly-session';
 
@@ -49,8 +50,16 @@ export interface SyntheticProfile {
   id: string;
   syntheticLabel: string;
   experienceLevel: 'beginner' | 'intermediate' | 'veteran';
-  trainingPhase: string;
   raceTarget: string;
+  /**
+   * The Target Race, as a real date and distance rather than prose
+   * (`training-architecture/02`). These are what the seeded Race row carries,
+   * and what the Training Phase is derived from now that it is not stored —
+   * without them these two athletes would have no horizon at all, and the
+   * Roster would show two athletes the Coach plans identically.
+   */
+  raceDate: string;
+  raceDistance: RaceDistance;
   communicationStyle: string;
   /** Sessions per week, before skips. The first-timer trains fewer days. */
   sessionsPerWeek: number;
@@ -94,8 +103,9 @@ export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
     id: 'b1e7c0d2-3f4a-4b5c-8d6e-7f8a9b0c1d2e',
     syntheticLabel: 'Alex Rivera',
     experienceLevel: 'beginner',
-    trainingPhase: 'Base Building',
-    raceTarget: 'First Ironman 70.3, June 2027',
+    raceTarget: 'First Ironman 70.3',
+    raceDate: '2027-06-19',
+    raceDistance: 'Half',
     communicationStyle:
       'The athlete is a first-time Ironman athlete. Keep coaching encouraging and process-focused. Avoid jargon. Celebrate effort and consistency.',
     sessionsPerWeek: 4,
@@ -106,8 +116,9 @@ export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
     id: 'c2f8d1e3-4a5b-4c6d-9e7f-8a9b0c1d2e3f',
     syntheticLabel: 'Sam Chen',
     experienceLevel: 'veteran',
-    trainingPhase: 'Build Phase',
-    raceTarget: 'Ironman Copenhagen, August 2027 — sub 10:30',
+    raceTarget: 'Ironman Copenhagen — sub 10:30',
+    raceDate: '2027-08-21',
+    raceDistance: 'Full',
     communicationStyle:
       'The athlete is a veteran Ironman athlete. Tracks Heart Rate, Power. Use data-aware language. Be direct and performance-focused. Skip beginner explanations entirely.',
     sessionsPerWeek: 6,
@@ -334,9 +345,9 @@ export function toAthleteRow(profile: SyntheticProfile) {
     id: profile.id,
     syntheticLabel: profile.syntheticLabel,
     experienceLevel: profile.experienceLevel,
-    trainingPhase: profile.trainingPhase,
     communicationStyle: profile.communicationStyle,
     raceTarget: profile.raceTarget,
+    raceDistance: profile.raceDistance,
   };
 }
 

@@ -8,7 +8,6 @@ import {
   buildCommStyle,
   coachGreeting,
   completeProfile,
-  computePhase,
   nextStep,
   toCoachOnboarding,
 } from './onboarding-flow';
@@ -330,61 +329,6 @@ describe('a Race is optional, and saying so is an answer', () => {
   });
 });
 
-// ── computePhase — a real race date, never a guess at one ────────────────────
-
-/**
- * `training-architecture/02`. This used to take the athlete's free-text race
- * name and run four heuristics over it — an ISO date, "Month YYYY" against a
- * month-name table, `dd/mm/yyyy`, and a bare four-digit year *assumed to be
- * mid-June* — falling silently through to `Base Building` when none matched.
- *
- * An athlete who typed a race with no year has had a wrong Training Phase since
- * onboarding, with nothing anywhere to show why. The bands below are unchanged;
- * what changed is that the date is now a field the athlete gave rather than
- * something parsed out of prose.
- */
-describe('computePhase', () => {
-  const TODAY = new Date(2026, 6, 24); // 2026-07-24
-
-  it('maps months-to-race onto phases', () => {
-    expect(computePhase(new Date(2026, 7, 30), TODAY)).toBe('Taper'); // ~1.2 months
-    expect(computePhase(new Date(2026, 9, 24), TODAY)).toBe('Peak Phase'); // ~3 months
-    expect(computePhase(new Date(2026, 11, 20), TODAY)).toBe('Build Phase'); // ~5 months
-    expect(computePhase(new Date(2027, 5, 15), TODAY)).toBe('Base Building'); // ~11 months
-    expect(computePhase(new Date(2026, 0, 1), TODAY)).toBe('Recovery'); // past
-  });
-
-  it('puts each band boundary on the later side', () => {
-    // `months < 2` and not `<=`: an athlete exactly two months out is in Peak
-    // Phase, not Taper. The bands are computed against a 30.5-day month, so
-    // these are constructed from that arithmetic rather than from calendar
-    // dates — nothing else lands exactly on a boundary, and a boundary that is
-    // never tested is a boundary that can move without anyone noticing.
-    const MONTH_MS = 1000 * 60 * 60 * 24 * 30.5;
-    const EPOCH = new Date(0);
-    const out = (months: number) => computePhase(new Date(months * MONTH_MS), EPOCH);
-
-    expect(out(0)).toBe('Taper'); // exactly today is not yet Recovery
-    expect(out(2)).toBe('Peak Phase');
-    expect(out(4)).toBe('Build Phase');
-    expect(out(6)).toBe('Base Building');
-  });
-
-  it('is Base Building for a date that is not one', () => {
-    // The guard exists because `new Date(...)` returns an Invalid Date rather
-    // than throwing, and arithmetic on it yields NaN — which compares false
-    // against every band and would fall out of the function as Base Building
-    // by accident rather than by decision.
-    expect(computePhase(new Date('not-a-date'), new Date(2026, 6, 24))).toBe('Base Building');
-  });
-
-  it('is Base Building when the athlete has no race date', () => {
-    // The same answer the old fallback gave, but now because there is genuinely
-    // no horizon rather than because a regex missed.
-    expect(computePhase(null, TODAY)).toBe('Base Building');
-  });
-});
-
 // ── buildCommStyle — never the athlete's name ─────────────────────────────────
 
 describe('buildCommStyle', () => {
@@ -447,7 +391,6 @@ describe('toCoachOnboarding', () => {
 });
 
 describe('completeProfile', () => {
-  const TODAY = new Date(2026, 6, 24);
 
   it('assembles the profile columns from a finished answer set', () => {
     const profile = completeProfile(
@@ -459,10 +402,8 @@ describe('completeProfile', () => {
         raceDate: '2026-08-30',
         hasHumanCoach: 'Yes',
       },
-      TODAY,
     );
     expect(profile).toEqual({
-      trainingPhase: 'Taper',
       experienceLevel: 'intermediate',
       communicationStyle: expect.stringContaining('works with a human coach'),
       raceDistance: 'Full',
@@ -484,11 +425,9 @@ describe('completeProfile', () => {
         raceDistance: 'Olympic',
         noRaceYet: true,
       },
-      TODAY,
     );
     expect(profile?.race).toBeNull();
     expect(profile?.raceDistance).toBe('Olympic');
-    expect(profile?.trainingPhase).toBe('Base Building');
     // Empty, not a stand-in: this column reaches the Coach's session-1 arc and
     // the onboarding greeting, both of which read "no race" from emptiness.
     expect(profile?.raceTarget).toBe('');
@@ -506,13 +445,11 @@ describe('completeProfile', () => {
           raceTarget: 'Ironman Copenhagen',
           noRaceYet: true,
         },
-        TODAY,
       )?.race,
     ).toBeNull();
     expect(
       completeProfile(
         { experienceLevel: 'beginner', raceDistance: 'Half', raceTarget: 'Ironman Copenhagen' },
-        TODAY,
       ),
     ).toBeNull();
   });
@@ -522,7 +459,7 @@ describe('completeProfile', () => {
     // reached its end, and a profile written now would be missing a decision
     // nobody made.
     expect(
-      completeProfile({ experienceLevel: 'beginner', raceDistance: 'Half' }, TODAY),
+      completeProfile({ experienceLevel: 'beginner', raceDistance: 'Half' }),
     ).toBeNull();
   });
 
@@ -530,14 +467,13 @@ describe('completeProfile', () => {
     expect(
       completeProfile(
         { experienceLevel: 'beginner', raceTarget: 'IM CPH', raceDate: '2027-08-15' },
-        TODAY,
       ),
     ).toBeNull();
   });
 
   it('returns null while required answers are missing', () => {
-    expect(completeProfile({ language: 'da' }, TODAY)).toBeNull();
-    expect(completeProfile({ experienceLevel: 'beginner' }, TODAY)).toBeNull();
+    expect(completeProfile({ language: 'da' })).toBeNull();
+    expect(completeProfile({ experienceLevel: 'beginner' })).toBeNull();
   });
 });
 

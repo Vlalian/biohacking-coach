@@ -240,7 +240,11 @@ describe('the two shipped profiles', () => {
     // The product's claim is that the Coach adapts, and that claim is only
     // demonstrable against two athletes who genuinely differ.
     expect(first.experienceLevel).not.toBe(second.experienceLevel);
-    expect(first.trainingPhase).not.toBe(second.trainingPhase);
+    // They differ by horizon now rather than by a stored phase string: the
+    // Training Phase is derived from the Target Race, so two athletes pointed
+    // at different races on different dates genuinely sit in different blocks.
+    expect(first.raceDistance).not.toBe(second.raceDistance);
+    expect(first.raceDate).not.toBe(second.raceDate);
     expect(first.raceTarget).not.toBe(second.raceTarget);
     expect(first.id).not.toBe(second.id);
   });

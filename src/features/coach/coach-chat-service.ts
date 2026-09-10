@@ -9,6 +9,7 @@ import { buildChatPrompt } from './prompts';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
+import { getTargetRace } from '@/features/race/race-repository';
 import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
 
 /**
@@ -71,17 +72,30 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<string> {
-  const [equipmentItems, weekSessions, reference] = await Promise.all([
+  const [equipmentItems, weekSessions, reference, targetRace] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
     referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
+    // The same horizon the Weekly Session reads. Chat is where "should I do
+    // tomorrow's intervals?" gets asked, and the answer depends on how far out
+    // the race is — a Coach with no horizon here would contradict the one the
+    // athlete just planned a week with.
+    getTargetRace(athlete.id),
   ]);
 
   // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
   // the Weekly Session's — how many Weekly Sessions have come before. Passing 1
   // yields 0, the honest value for an athlete the Coach has not yet planned a
   // week with.
-  const checkIn = buildWeeklyCheckIn(athlete, NO_CHECK_IN, 1, language, equipmentItems);
+  const checkIn = buildWeeklyCheckIn(
+    athlete,
+    today,
+    NO_CHECK_IN,
+    1,
+    language,
+    equipmentItems,
+    targetRace ? { name: targetRace.name, date: targetRace.date } : null,
+  );
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.

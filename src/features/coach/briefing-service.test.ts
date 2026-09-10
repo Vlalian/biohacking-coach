@@ -32,6 +32,11 @@ const {
 }));
 
 vi.mock('./coach-repository', () => ({ getActiveLink, getSharedTranscripts }));
+vi.mock('@/features/race/race-repository', () => ({
+  // No Target Race: the Head Coach's briefing has to render an athlete with no
+  // horizon, and the Training Phase is derived from it rather than stored.
+  getTargetRace: vi.fn(async () => null),
+}));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
@@ -97,7 +102,6 @@ describe('startBriefing — reports gated on shareAthleteReports (prompt materia
   it('reports ON: the athlete profile and reflections feed the prompt', async () => {
     getActiveLink.mockResolvedValue(activeLink(true, false));
     getAthleteById.mockResolvedValue({
-      trainingPhase: 'Build',
       experienceLevel: 'intermediate',
       raceTarget: 'IM Copenhagen',
       trainingSessionsPerWeek: 6,

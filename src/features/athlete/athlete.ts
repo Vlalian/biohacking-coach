@@ -44,7 +44,6 @@ export interface AthleteProfile {
 export type Athlete = {
   id: string;
   syntheticLabel: string | null;
-  trainingPhase: string | null;
   experienceLevel: string | null;
   communicationStyle: string | null;
   raceTarget: string | null;
@@ -63,7 +62,6 @@ export function toAthlete(row: AthleteRow): Athlete {
   return {
     id: row.id,
     syntheticLabel: row.syntheticLabel,
-    trainingPhase: row.trainingPhase,
     experienceLevel: row.experienceLevel,
     communicationStyle: row.communicationStyle,
     raceTarget: row.raceTarget,

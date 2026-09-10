@@ -17,13 +17,20 @@ import {
 } from './weekly-session';
 import { planningWindow } from './planning-window';
 
+// The Training Phase is derived from the horizon now rather than stored on the
+// athlete, so these fixtures need a day and a race for one to exist at all.
+const TODAY_KEY = '2026-09-09';
+
+// Far enough out to divide into five blocks, so the derived phase is a real
+// answer rather than an edge case.
+const TARGET_RACE = { name: 'Ironman Copenhagen', date: '2027-06-01' };
+
 const READINESS: Readiness = { body: 7, mental: 6, energy: 8, sleep: 7.5, pulse: 52 };
 
 function athlete(overrides: Partial<Athlete> = {}): Athlete {
   return {
     id: 'athlete_1',
     syntheticLabel: null,
-    trainingPhase: 'Base Building',
     experienceLevel: 'intermediate',
     communicationStyle: 'direct',
     raceTarget: 'Ironman Copenhagen',
@@ -64,10 +71,12 @@ function session(overrides: Partial<Session> = {}): Session {
 
 describe('buildWeeklyCheckIn', () => {
   it('maps the opaque profile and readiness, with no identity', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 3, 'da');
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 3, 'da', [], TARGET_RACE);
     expect(checkIn).toMatchObject({
       readiness: READINESS,
-      phase: 'Base Building',
+      // Derived from the horizon, not read from a column: the Training Phase is
+      // the name of the Training Block today falls inside.
+      phase: 'Block 1 of 5',
       experienceLevel: 'intermediate',
       commStyle: 'direct',
       raceTarget: 'Ironman Copenhagen',
@@ -82,26 +91,26 @@ describe('buildWeeklyCheckIn', () => {
   });
 
   it('defaults language to English when the user has not chosen one', () => {
-    const checkIn = buildWeeklyCheckIn(athlete({ profile: null }), READINESS, 1);
+    const checkIn = buildWeeklyCheckIn(athlete({ profile: null }), TODAY_KEY, READINESS, 1);
     expect(checkIn.language).toBe('en');
     expect(checkIn.onboarding).toBeUndefined();
   });
 
   it('carries the equipment items passed in, defaulting to none', () => {
-    expect(buildWeeklyCheckIn(athlete(), READINESS, 1).equipment).toEqual([]);
+    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1).equipment).toEqual([]);
 
     const items = [
       { id: 'e1', category: 'bike' as const, name: 'Canyon Speedmax', details: null, addedDate: '2026-08-01' },
     ];
-    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 1, undefined, items);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1, undefined, items);
     expect(checkIn.equipment).toEqual(items);
   });
 
   it('sets sessionCount to coaching-relationship depth, not weekly frequency', () => {
     // trainingSessionsPerWeek is 6 in the fixture; `sessions=` must be the count
     // of prior Weekly Sessions, never the 6-a-week cadence.
-    expect(buildWeeklyCheckIn(athlete(), READINESS, 1).sessionCount).toBe(0);
-    expect(buildWeeklyCheckIn(athlete(), READINESS, 4).sessionCount).toBe(3);
+    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1).sessionCount).toBe(0);
+    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 4).sessionCount).toBe(3);
   });
 
   it('fails closed when an identifier would reach a prompt', () => {
@@ -111,7 +120,7 @@ describe('buildWeeklyCheckIn', () => {
         onboarding: { motivation: 'reach me at mads@example.com' },
       },
     });
-    expect(() => buildWeeklyCheckIn(leaky, READINESS, 1)).toThrow(/identifier/i);
+    expect(() => buildWeeklyCheckIn(leaky, TODAY_KEY, READINESS, 1)).toThrow(/identifier/i);
   });
 });
 
@@ -529,7 +538,7 @@ describe('proposedToNewSessionRows', () => {
 // otherwise in words.
 describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
   it('carries no readiness at all when there is no Check-in', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), null, 1);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 1);
 
     expect(checkIn.readiness).toBeUndefined();
     // Absent, not present-and-undefined: an explicit `readiness: undefined`
@@ -538,9 +547,9 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
   });
 
   it('keeps the facts that are real', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), null, 3);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 3, undefined, [], TARGET_RACE);
 
-    expect(checkIn.phase).toBe('Base Building');
+    expect(checkIn.phase).toBe('Block 1 of 5');
     expect(checkIn.experienceLevel).toBe('intermediate');
     expect(checkIn.sessionCount).toBe(2);
   });
@@ -550,7 +559,7 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
     // no test for a partial readiness: `Readiness` requires all five, so a
     // half-filled one does not compile — which is the point of nesting it rather
     // than hanging five optional fields off CheckIn.
-    const checkIn = buildWeeklyCheckIn(athlete(), READINESS, 1);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1);
 
     expect(checkIn.readiness).toEqual(READINESS);
   });

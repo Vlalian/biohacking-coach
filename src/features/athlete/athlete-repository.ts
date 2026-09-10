@@ -252,7 +252,6 @@ export async function completeAthleteOnboarding(
   await getDb()
     .update(athlete)
     .set({
-      trainingPhase: completed.trainingPhase,
       experienceLevel: completed.experienceLevel,
       communicationStyle: completed.communicationStyle,
       raceTarget: completed.raceTarget,

@@ -9,6 +9,8 @@ import { callCoach, type CoachReply } from './coach-client';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
+import { getTargetRace } from '@/features/race/race-repository';
+import { currentPhase, trainingBlocks } from './training-blocks';
 import {
   appendBriefingMessages,
   createBriefing,
@@ -75,13 +77,17 @@ async function buildBriefingSystem(
 
   let reports: BriefingReports | null = null;
   if (canSeeAthleteReports(link.visibility)) {
-    const [athlete, reflectionRows] = await Promise.all([
+    const [athlete, reflectionRows, targetRace] = await Promise.all([
       getAthleteById(athleteId),
       getBriefingReflections(athleteId),
+      getTargetRace(athleteId),
     ]);
     reports = {
       profile: {
-        phase: athlete?.trainingPhase ?? null,
+        // Derived, never stored (`training-architecture/03`): the Training Phase
+        // is the name of the Training Block today falls inside. Null for an
+        // athlete with no race, which the briefing renders as no phase.
+        phase: currentPhase(today, trainingBlocks(today, targetRace?.date ?? null)),
         experienceLevel: athlete?.experienceLevel ?? null,
         raceTarget: athlete?.raceTarget ?? null,
         sessionsPerWeek: athlete?.trainingSessionsPerWeek ?? null,

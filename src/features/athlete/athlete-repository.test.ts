@@ -25,7 +25,6 @@ function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
     id: 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213',
     userId: 'user_abc',
     syntheticLabel: null,
-    trainingPhase: null,
     experienceLevel: null,
     communicationStyle: null,
     raceTarget: null,
@@ -53,7 +52,6 @@ describe('getAthleteByUserId', () => {
     expect(athlete).toEqual({
       id: 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213',
       syntheticLabel: null,
-      trainingPhase: null,
       experienceLevel: null,
       communicationStyle: null,
       raceTarget: null,
@@ -91,7 +89,6 @@ describe('getAthleteByUserId', () => {
         'raceDistance',
         'raceTarget',
         'syntheticLabel',
-        'trainingPhase',
         'trainingSessionsPerWeek',
       ].sort(),
     );

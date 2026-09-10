@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
+import { currentPhase, trainingBlocks } from './training-blocks';
 
 const {
   callCoach,
@@ -55,7 +56,6 @@ const { toApiMessages } = await import('./conversation');
 const ATHLETE = {
   id: 'athlete_1',
   syntheticLabel: null,
-  trainingPhase: 'Peak',
   experienceLevel: 'intermediate',
   communicationStyle: null,
   raceTarget: 'Ironman Kona',
@@ -289,7 +289,15 @@ describe('the Coach Chat system prompt carries no invented readiness', () => {
     const { system } = callCoach.mock.calls[0][0];
     for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
     expect(system).toContain('NO CHECK-IN DATA');
-    expect(system).toContain('phase=Peak');
+  });
+
+  it('derives the phase from the horizon, the same as the Weekly Session', () => {
+    // `phase=` used to come from a column written once at onboarding, so Chat
+    // and the Weekly Session could disagree about where the athlete was in
+    // their season. Both derive it from the Target Race now, so they cannot.
+    expect(currentPhase('2026-08-12', trainingBlocks('2026-08-12', '2027-06-01'))).toBe(
+      'Block 1 of 5',
+    );
   });
 });
 

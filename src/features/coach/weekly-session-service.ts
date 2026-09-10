@@ -124,6 +124,7 @@ async function renderSystem(
   ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
+    today,
     NO_CHECK_IN,
     weeklySessionNumber,
     language,

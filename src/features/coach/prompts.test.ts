@@ -1002,3 +1002,43 @@ describe('the horizon reaches the prompt, including when there is none', () => {
     expect(prompt).toContain('distance unknown');
   });
 });
+
+describe('the current Training Block and the week within it reach the Coach', () => {
+  const TUESDAY = '2026-08-18';
+
+  it('names the block and the position, together', () => {
+    // `training-architecture/03`: "The Coach prompt carries the current block
+    // and the athlete's position within it." Which block alone says the same
+    // thing for every week of that block.
+    const prompt = renderWeeklyPrompt(
+      buildWeeklyContext(
+        {
+          ...BASE,
+          weeklySessionNumber: 4,
+          raceDistance: 'Full',
+          raceTarget: 'Ironman Copenhagen',
+          raceDate: '2027-06-01',
+          phase: 'Block 1 of 5',
+          blockWeek: 'week 2 of 8',
+        },
+        [], [], [], [], null, TUESDAY,
+      ),
+    );
+
+    expect(prompt).toContain('Block 1 of 5, week 2 of 8');
+  });
+
+  it('says nothing about a block for an athlete with no horizon', () => {
+    // Half a position is worse than none: "week 2 of 8" with no block, or a
+    // block with no week, is a number the model reasons from and nobody meant.
+    const prompt = renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, raceDistance: 'Full', phase: undefined },
+        [], [], [], [], null, TUESDAY,
+      ),
+    );
+
+    expect(prompt).toContain('no race booked');
+    expect(prompt).not.toContain('week 2 of');
+  });
+});

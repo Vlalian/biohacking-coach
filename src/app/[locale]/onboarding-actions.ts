@@ -70,7 +70,6 @@ export async function answerOnboardingAction(
     payload,
     { question: t(STEP_QUESTION_KEY[payload.step]), answer: answerText(payload) },
     `${stored.intro} ${stored.body}`,
-    new Date(),
   );
 
   if (!result.ok) return result;

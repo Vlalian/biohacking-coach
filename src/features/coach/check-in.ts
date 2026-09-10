@@ -137,6 +137,13 @@ export interface CheckIn {
   raceDistance?: string | null;
   /** The Target Race's date, `YYYY-MM-DD`, or absent when there is no race. */
   raceDate?: string | null;
+  /**
+   * Where in the current Training Block the athlete is standing, already
+   * rendered ("week 2 of 8"). Absent when there is no horizon to be inside.
+   * Which block is not enough on its own — its first week and its last call for
+   * different sessions.
+   */
+  blockWeek?: string | null;
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
   fixedConstraints?: string[];

@@ -386,6 +386,8 @@ function horizonBlock(
   raceDistance?: string | null,
   raceTarget?: string | null,
   raceDate?: string | null,
+  phase?: string | null,
+  blockWeek?: string | null,
 ): string {
   const distance = raceDistance ? `distance=${raceDistance}` : 'distance unknown — ask';
   const race =
@@ -397,7 +399,10 @@ function horizonBlock(
       // that nobody made — the fabrication `NO_CHECK_IN` exists to prevent, one
       // block down.
       : 'no race booked — do not assume one';
-  return `HORIZON: ${distance} · ${race}`;
+  // The block and the position inside it, when there is a horizon to be inside.
+  // Omitted together, because half of it says less than nothing.
+  const block = phase && blockWeek ? ` · ${phase}, ${blockWeek}` : '';
+  return `HORIZON: ${distance} · ${race}${block}`;
 }
 
 /** The STATE line — coaching intelligence, never quoted back to the athlete. */
@@ -521,6 +526,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     raceTarget,
     raceDistance,
     raceDate,
+    blockWeek,
     onboarding,
   } = ctx.checkIn;
 
@@ -539,7 +545,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     arcBlock(weeklySessionNumber, raceTarget),
 
-    horizonBlock(raceDistance, raceTarget, raceDate),
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
 
     todayBlock(today, window, weeklySessionDay, fixedConstraints),
 

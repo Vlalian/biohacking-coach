@@ -73,7 +73,10 @@ export type AnswerResult =
  * Coach asked it, and the answer as canonical option values (not the localized
  * labels) — stable, parseable, and identical whichever language the athlete
  * answered in. `greeting` is appended only on completion and must be name-free:
- * `messages` is a training-side table (ADR 0006). `today` anchors the phase
+ * `messages` is a training-side table (ADR 0006). There is no clock parameter:
+ * the Training Phase used to be computed here and stored, and
+ * `training-architecture/03` made it derived, so nothing this writes depends on
+ * what day it is
  * computation.
  */
 export async function answerOnboardingStep(
@@ -81,7 +84,6 @@ export async function answerOnboardingStep(
   payload: StepAnswer,
   transcript: { question: string; answer: string },
   greeting: string,
-  today: Date,
 ): Promise<AnswerResult> {
   const currentAnswers = athlete.profile?.onboardingAnswers ?? {};
   const currentSubmitted = athlete.profile?.onboardingSubmitted ?? {};
@@ -102,7 +104,7 @@ export async function answerOnboardingStep(
   const step = nextStep(applied.answers, applied.submitted);
 
   if (step === 'done') {
-    const completed = completeProfile(applied.answers, today);
+    const completed = completeProfile(applied.answers);
     // nextStep === 'done' guarantees the required answers exist; this guard is
     // for the type system, not a reachable branch.
     if (!completed) return { ok: false, reason: 'invalid' };
