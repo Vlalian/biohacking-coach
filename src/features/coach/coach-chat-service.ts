@@ -10,7 +10,9 @@ import { takeConversationTurn, type ConversationTurnResult } from './conversatio
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
 import { getTargetRace } from '@/features/race/race-repository';
-import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
+import { getCheckInForWeek } from './check-in-repository';
+import { readinessFrom } from './check-in';
+import { buildWeeklyCheckIn } from './weekly-session';
 
 /**
  * Coach Chat — the Coach Overlay's *baseline* mode (ADR 0007): the open-ended,
@@ -30,11 +32,6 @@ import { buildWeeklyCheckIn, type Readiness } from './weekly-session';
  * Unlike the Weekly Session, a Coach Chat is never "ended" by the app — it is
  * the resting conversation, so it stays open and is resumed on every visit.
  */
-
-// The same absence the Weekly Session carries: no Check-in feature exists, so
-// there is no readiness to send, and the prompt says so rather than inventing one
-// (code-health/07). Coach Chat asks in words what no number can tell it.
-const NO_CHECK_IN: Readiness | null = null;
 
 const CHAT_MAX_TOKENS = 1200;
 
@@ -72,7 +69,7 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<string> {
-  const [equipmentItems, weekSessions, reference, targetRace] = await Promise.all([
+  const [equipmentItems, weekSessions, reference, targetRace, checkInRow] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
     referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
@@ -81,6 +78,10 @@ async function renderSystem(
     // the race is — a Coach with no horizon here would contradict the one the
     // athlete just planned a week with.
     getTargetRace(athlete.id),
+    // The same Check-in the Weekly Session reads. Chat is where "should I do
+    // tomorrow's intervals?" gets asked, and an athlete who reported low energy
+    // on Monday should not have to say it again on Wednesday.
+    getCheckInForWeek(athlete.id, weekStartOf(today)),
   ]);
 
   // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
@@ -90,7 +91,7 @@ async function renderSystem(
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
-    NO_CHECK_IN,
+    readinessFrom(checkInRow),
     1,
     language,
     equipmentItems,

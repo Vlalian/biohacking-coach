@@ -23,6 +23,9 @@ const {
   getMessages,
   getOwnedConversation,
   getTargetRace,
+  // No Check-in filed by default: the ordinary week, and the one the prompt has
+  // to say it has nothing for rather than inventing scores.
+  getCheckInForWeek,
   getEquipmentItems,
   getSessionsForWeek,
   recordProposal,
@@ -46,6 +49,9 @@ const {
   getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
     async () => null,
   ),
+  getCheckInForWeek: vi.fn<
+    () => Promise<{ energy: number; body: number; sleepQuality: number } | null>
+  >(async () => null),
   getEquipmentItems: vi.fn(() => Promise.resolve([])),
   getSessionsForWeek: vi.fn(() => Promise.resolve([])),
   recordProposal: vi.fn(() => Promise.resolve()),
@@ -76,6 +82,7 @@ vi.mock('./plan-proposal-repository', () => ({
 }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
@@ -811,5 +818,43 @@ describe('the last details the Coach path depends on', () => {
     expect(callCoach.mock.calls.at(-1)?.[0].system).not.toContain(
       "no sessions, don't mention unless athlete raises it",
     );
+  });
+});
+
+describe('the Check-in reaches the Coach, and its absence is stated', () => {
+  it("sends the athlete's own scores when they checked in this week", async () => {
+    getCheckInForWeek.mockResolvedValue({ energy: 4, body: 6, sleepQuality: 3 });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('body=6/10 energy=4/10 sleep-quality=3/10');
+    expect(system).not.toContain('NO CHECK-IN DATA');
+    // Still no wearable feed, and the Coach is told so rather than left to
+    // assume the check-in is everything it can see.
+    expect(system).toContain('NO DEVICE DATA');
+  });
+
+  it('says plainly that the athlete did not check in, and plans anyway', async () => {
+    // ADR 0007: the Weekly Session is not a gate. Skipping the Check-in must
+    // still produce a week.
+    getCheckInForWeek.mockResolvedValue(null);
+
+    const result = await startWeeklySession(ATHLETE, TODAY);
+
+    expect(result.ok).toBe(true);
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('NO CHECK-IN DATA');
+    for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
+  });
+
+  it('reads the Check-in for the Monday of today, not for today', async () => {
+    // Once per week, not daily (CONTEXT.md). A Thursday session reads Monday's
+    // report; asking for Thursday's would find nothing every time.
+    getCheckInForWeek.mockResolvedValue(null);
+
+    await startWeeklySession(ATHLETE, '2026-08-13'); // a Thursday
+
+    expect(getCheckInForWeek).toHaveBeenCalledWith('athlete_1', '2026-08-10');
   });
 });

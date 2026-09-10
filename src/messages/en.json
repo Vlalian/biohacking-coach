@@ -556,7 +556,16 @@
     "thumbUp": "This helped",
     "thumbDown": "This was off",
     "thumbComment": "Anything you want to add? (optional)",
-    "thumbSave": "Save"
+    "thumbSave": "Save",
+    "checkInIntro": "Before we plan — how are you arriving at this week? Answer against your own normal, not anyone else's.",
+    "checkInEnergy": "Energy",
+    "checkInBody": "Physical condition",
+    "checkInSleep": "Sleep quality",
+    "checkInSignal": "Anything the Coach should know about this week?",
+    "checkInSignalPlaceholder": "Optional — e.g. legs heavy after Tuesday",
+    "checkInSubmit": "Continue",
+    "checkInSkip": "Skip this week",
+    "checkInSignalHint": "Your AI Coach reads this. Keep it to how training felt — not medical detail."
   },
   "Messaging": {
     "title": "Coaching Channel",

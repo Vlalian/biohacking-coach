@@ -32,7 +32,8 @@ export const WEEKLY_OPENER = "Let's do our weekly session.";
  * Assembles the check-in the Weekly Session prompt reasons about, from the
  * athlete's opaque profile and today's reported readiness.
  *
- * `readiness` is nullable because until a Check-in feature exists the athlete
+ * `readiness` is nullable because the athlete may skip the Check-in (ADR 0007),
+ * and until a device feed exists the athlete
  * has never reported one. Null means the five scores are *left out entirely* —
  * not defaulted — so the prompt renders a STATE line without them and tells the
  * Coach to ask instead. Inventing a neutral baseline made every athlete read as

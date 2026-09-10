@@ -28,6 +28,8 @@ import {
   recordProposal,
 } from './plan-proposal-repository';
 import { getTargetRace } from '@/features/race/race-repository';
+import { getCheckInForWeek } from './check-in-repository';
+import { readinessFrom } from './check-in';
 import {
   buildWeeklyCheckIn,
   proposedToNewSessionRows,
@@ -39,7 +41,6 @@ import {
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   WEEKLY_OPENER,
   type ProposedSession,
-  type Readiness,
 } from './weekly-session';
 
 /**
@@ -59,15 +60,7 @@ import {
  * lands ({@link commitWeeklyPlan}), and it replaces only coach-planned days.
  */
 
-// No daily Check-in feature exists yet, so the athlete has never reported a
-// readiness — and `null` says exactly that. The prompt then renders a STATE line
-// without scores and tells the Coach to ask, which the conversational P1 ("where
-// are you physically?") already does. This was a hardcoded 7/7/7/7.5/55 until
-// code-health/07: honestly commented, but the prompt presented it to the Coach as
-// coaching intelligence, so every athlete read as equally, mildly fine and one
-// who said otherwise in words was contradicted by data nobody had gathered.
-// Passing a real Readiness here is the one-line change once that data exists.
-const NO_CHECK_IN: Readiness | null = null;
+
 
 const WEEKLY_MAX_TOKENS = 1400;
 
@@ -115,17 +108,21 @@ async function renderSystem(
   language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
-  const [weekSessions, equipmentItems, targetRace] = await Promise.all([
+  const [weekSessions, equipmentItems, targetRace, checkInRow] = await Promise.all([
     getSessionsForWeek(athlete.id, weekStart),
     getEquipmentItems(athlete.id),
     // The horizon. Null is an ordinary answer — an athlete may have no race,
     // and the prompt says so rather than omitting the subject.
     getTargetRace(athlete.id),
+    // The athlete's own report of how they arrive at this week. Null most weeks
+    // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
+    // rather than inventing scores, which is what it did before code-health/07.
+    getCheckInForWeek(athlete.id, weekStart),
   ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
-    NO_CHECK_IN,
+    readinessFrom(checkInRow),
     weeklySessionNumber,
     language,
     equipmentItems,
@@ -138,11 +135,11 @@ async function renderSystem(
   // athlete's own Coach was not, so the `UNAVAILABLE:` line had never rendered
   // and the Coach planned onto days the athlete had marked off.
   //
-  // The two still-empty inputs are empty because their sources do not exist:
-  // sessionHistory (Silent Pattern Insight) needs multi-week check-in history
-  // and no Check-in feature exists, and weekActivity has no producer anywhere in
-  // `src/`. The prompt renders each block conditionally, so an empty input
-  // simply omits it.
+  // The two still-empty inputs are empty because their sources do not exist yet:
+  // sessionHistory (Silent Pattern Insight) needs *multi-week* Check-in history,
+  // and this week's is the first one there has ever been; weekActivity has no
+  // producer anywhere in `src/`. The prompt renders each block conditionally, so
+  // an empty input simply omits it.
   const ctx = buildWeeklyContext(
     checkIn,
     weekFeedbackFrom(weekSessions),

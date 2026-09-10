@@ -14,7 +14,7 @@ import { assertNoDirectIdentifier, assertNoIdentity, type CheckIn } from './chec
  */
 
 const BASE: CheckIn = {
-  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
+  readiness: { body: 7, energy: 7, sleepQuality: 7, mental: 7, sleepHours: 7, restingPulse: 50 },
 };
 
 describe('assertNoDirectIdentifier — what it catches', () => {
@@ -84,6 +84,15 @@ describe('assertNoDirectIdentifier — what it must not flag', () => {
 describe('assertNoIdentity — the check-in seam', () => {
   it('refuses a check-in carrying personaName at all', () => {
     expect(() => assertNoIdentity({ ...BASE, personaName: 'Mads' })).toThrow(/personaName/);
+  });
+
+  it('says why, not just what', () => {
+    // The reason is the load-bearing half. This guard is the app-path end of
+    // GDPR decision 1, and whoever trips it needs to learn they are holding a
+    // real identity — not merely that a field was unexpected.
+    expect(() => assertNoIdentity({ ...BASE, personaName: 'Mads' })).toThrow(
+      /a real identity must never reach a prompt \(GDPR decision 1\)/,
+    );
   });
 
   it('accepts a check-in with no identity', () => {

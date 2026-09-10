@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
-import { dateKey } from '@/lib/date';
+import { saveCheckIn } from '@/features/coach/check-in-repository';
+import { dateKey, weekStartOf } from '@/lib/date';
 import {
   resolveAthleteWithLanguage as currentAthlete,
   type AuthFailure,
@@ -48,6 +49,43 @@ type ConsentFailure = { ok: false; reason: 'consent-required' };
 async function aiConsentOk(athleteId: string): Promise<boolean> {
   const gate = await assertAiCoachingConsent(athleteId);
   return gate.ok;
+}
+
+export type CheckInResult = { ok: true } | AuthFailure | { ok: false; reason: 'invalid' };
+
+/**
+ * Files the athlete's Check-in for this week.
+ *
+ * Deliberately **not** gated on AI consent: nothing is sent anywhere by filing
+ * one. It reaches a prompt only when a Weekly Session is started, and that path
+ * has its own gate. Refusing to let an athlete record how they feel because a
+ * consent they have not yet given covers a thing they have not yet done would be
+ * the gate doing something other than its job.
+ *
+ * The scores are validated again in the repository, which is what actually
+ * refuses a partial one — this action's job is to say who is asking and which
+ * week it is.
+ */
+export async function saveCheckInAction(report: {
+  energy: number;
+  body: number;
+  sleepQuality: number;
+  notableSignal: string | null;
+}): Promise<CheckInResult> {
+  const resolved = await currentAthlete();
+  if (!resolved.ok) return resolved;
+
+  try {
+    await saveCheckIn(resolved.athlete.id, weekStartOf(dateKey(new Date())), {
+      ...report,
+      notableSignal: report.notableSignal?.trim() ? report.notableSignal.trim().slice(0, 500) : null,
+    });
+  } catch {
+    // A malformed payload, or a score outside 1-10. The athlete sees a refusal
+    // rather than a 500, and nothing is stored.
+    return { ok: false, reason: 'invalid' };
+  }
+  return { ok: true };
 }
 
 export type StartWeeklyResult =

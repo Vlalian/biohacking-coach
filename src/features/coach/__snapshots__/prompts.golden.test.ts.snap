@@ -10,7 +10,7 @@ TODAY: 2026-08-18
 CONTEXT (use silently — never cite scores/numbers):
 phase=Base Building xp=intermediate sessions=0 race=Ironman Copenhagen 2027
 
-NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
+NO CHECK-IN DATA: The athlete has not checked in this week — you have no energy, physical-condition or sleep-quality figures from them, and no sleep duration or resting pulse. Do not infer any of it, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
 
 EQUIPMENT:
 Bike: Canyon Speedmax — CF SLX
@@ -61,7 +61,7 @@ Bike: Canyon Speedmax — CF SLX
 
 STATE: phase=Base Building sessions=0 xp=intermediate
 
-NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
+NO CHECK-IN DATA: The athlete has not checked in this week — you have no energy, physical-condition or sleep-quality figures from them, and no sleep duration or resting pulse. Do not infer any of it, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
 
 ONBOARDING PROFILE (athlete already answered these at onboarding — build on them, NEVER ask for this information again):
 - Sport background: running
@@ -121,7 +121,7 @@ Bike: Canyon Speedmax — CF SLX
 
 STATE: phase=Base Building sessions=3 xp=intermediate
 
-NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
+NO CHECK-IN DATA: The athlete has not checked in this week — you have no energy, physical-condition or sleep-quality figures from them, and no sleep duration or resting pulse. Do not infer any of it, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
 
 ONBOARDING PROFILE (athlete already answered these at onboarding — build on them, NEVER ask for this information again):
 - Sport background: running
@@ -155,7 +155,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=Base Building xp=intermediate sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm
+phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 THIS WEEK (Mon-Sun, every session on the athlete's calendar this week — refer to a session by its day and type, never by a number or id):
 - Tue 2026-08-18: Tempo · 60 min · Zone 3 — planned (you planned this)
@@ -180,7 +182,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=Base Building xp=intermediate sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm race=Ironman Copenhagen 2027 no-train=Thursday, Sunday
+phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm race=Ironman Copenhagen 2027 no-train=Thursday, Sunday
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 EQUIPMENT:
 Shoes: Vaporfly 3
@@ -217,7 +221,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=Base Building xp=intermediate sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm
+phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 CONSTRAINT SIGNALS (append on last line, stripped by app):
 Specific date blocked → [UNAVAILABLE:YYYY-MM-DD]
@@ -237,7 +243,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=Base Building xp=intermediate sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm
+phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 THIS WEEK (Mon-Sun, every session on the athlete's calendar this week — refer to a session by its day and type, never by a number or id):
 - Mon 2026-08-17: 1st Endurance · 90 min · Zone 2 — completed (you planned this) · "steady, hold the low end"
@@ -288,7 +296,9 @@ TODAY: 2026-08-18
 PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.
 PLANNING DAY: Preferred Monday, today Tuesday. Ask: "Plan rest of this week or from next Monday?"
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -336,7 +346,9 @@ TODAY: 2026-08-18
 PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.
 PLANNING DAY: Preferred Monday, today Tuesday. Ask: "Plan rest of this week or from next Monday?"
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -379,7 +391,9 @@ TODAY: 2026-08-18
 PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.
 PLANNING DAY: Preferred Monday, today Tuesday. Ask: "Plan rest of this week or from next Monday?"
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -422,7 +436,9 @@ TODAY: 2026-08-18
 PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.
 PLANNING DAY: Preferred Monday, today Tuesday. Ask: "Plan rest of this week or from next Monday?"
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -462,7 +478,9 @@ HORIZON: distance unknown — ask · no race booked — do not assume one
 TODAY: 2026-08-18
 PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -503,7 +521,9 @@ TODAY: 2026-08-18
 PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.
 PLANNING DAY: Preferred Monday, today Tuesday. Ask: "Plan rest of this week or from next Monday?"
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -545,7 +565,9 @@ HORIZON: distance unknown — ask · no race booked — do not assume one
 TODAY: 2026-08-17
 PLANNING WINDOW: 2026-08-17 to 2026-08-23. Plan these days only; a later week is not yours to write.
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 No feedback this week — use check-in signals and self-assessment.
 
@@ -593,7 +615,9 @@ EQUIPMENT:
 Bike: Canyon Speedmax — CF SLX
 Watch: Garmin Fenix 8
 
-STATE: phase=Base Building sessions=5 body=7/10 mental=7/10 energy=7/10 sleep=7h pulse=50bpm xp=intermediate
+STATE: phase=Base Building sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm xp=intermediate
+
+NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.
 
 ONBOARDING PROFILE (athlete already answered these at onboarding — build on them, NEVER ask for this information again):
 - Sport background: running, swimming

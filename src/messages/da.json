@@ -556,7 +556,16 @@
     "thumbUp": "Det her hjalp",
     "thumbDown": "Det her ramte forkert",
     "thumbComment": "Vil du tilføje noget? (valgfrit)",
-    "thumbSave": "Gem"
+    "thumbSave": "Gem",
+    "checkInIntro": "Før vi planlægger — hvordan møder du ugen? Svar ud fra dit eget normale, ikke andres.",
+    "checkInEnergy": "Energi",
+    "checkInBody": "Fysisk tilstand",
+    "checkInSleep": "Søvnkvalitet",
+    "checkInSignal": "Noget din Coach bør vide om ugen?",
+    "checkInSignalPlaceholder": "Valgfrit — fx tunge ben efter tirsdag",
+    "checkInSubmit": "Fortsæt",
+    "checkInSkip": "Spring over i denne uge",
+    "checkInSignalHint": "Din AI Coach læser dette. Hold dig til hvordan træningen føltes — ikke helbredsoplysninger."
   },
   "Messaging": {
     "title": "Coaching Channel",

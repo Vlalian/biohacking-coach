@@ -331,11 +331,27 @@ function todayBlock(
   return lines.join('\n');
 }
 
-/** The readiness scores as prompt tokens, or '' when the athlete never gave any. */
+/**
+ * The readiness scores as prompt tokens, or '' when the athlete never gave any.
+ *
+ * The three the athlete reports are always present; the three that need a device
+ * or a rated session are appended only when they exist. An absent token is
+ * absence the model can act on — a defaulted one is a number nobody gave, which
+ * is the defect `code-health/07` removed.
+ */
 function readinessTokens(readiness?: Readiness): string {
   if (!readiness) return '';
-  const { body, mental, energy, sleep, pulse } = readiness;
-  return `body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm`;
+  const { body, energy, sleepQuality, mental, sleepHours, restingPulse } = readiness;
+  return [
+    `body=${body}/10`,
+    `energy=${energy}/10`,
+    `sleep-quality=${sleepQuality}/10`,
+    mental === undefined ? null : `mental=${mental}/10`,
+    sleepHours === undefined ? null : `sleep=${sleepHours}h`,
+    restingPulse === undefined ? null : `pulse=${restingPulse}bpm`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** The same, space-prefixed for the templates that append it mid-line. */
@@ -366,7 +382,23 @@ function tag(name: string, value: string | number | undefined): string | null {
  * to infer a state from silence, which is the same failure the invented baseline
  * caused, arrived at differently (code-health/07).
  */
-const NO_CHECK_IN = `NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.`;
+/**
+ * What the Coach cannot see, said plainly.
+ *
+ * Two versions, because after `training-architecture/05` there are two different
+ * gaps and telling them apart matters. With **no Check-in** the Coach has
+ * nothing the athlete reported this week. With one, it has their own report and
+ * still has **no device data** — sleep duration and resting heart rate are
+ * expected from Garmin or similar and there is no feed yet (Mads, 2026-09-09).
+ *
+ * Deleting the second when the Check-in shipped was the tempting move and would
+ * have been a false claim by omission: the Coach would stop being told it cannot
+ * see a resting pulse while it still cannot. That is the same defect
+ * `code-health/07` fixed, pointing the other way.
+ */
+const NO_CHECK_IN = `NO CHECK-IN DATA: The athlete has not checked in this week — you have no energy, physical-condition or sleep-quality figures from them, and no sleep duration or resting pulse. Do not infer any of it, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.`;
+
+const NO_DEVICE_DATA = `NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.`;
 
 /**
  * The horizon: what shape of race the athlete trains for, and when the race is.
@@ -553,7 +585,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     stateBlock({ phase, sessionCount, experienceLevel, readiness }),
 
-    readiness ? null : NO_CHECK_IN,
+    readiness ? NO_DEVICE_DATA : NO_CHECK_IN,
 
     onboardingBlock(onboarding),
 
@@ -698,7 +730,7 @@ ${[
   .filter((part): part is string => part !== null)
   .join(' ')}${readinessFragment(readiness)}${race}${noTrain}`,
 
-    readiness ? null : NO_CHECK_IN,
+    readiness ? NO_DEVICE_DATA : NO_CHECK_IN,
 
     weekBlock(week),
 

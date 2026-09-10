@@ -35,6 +35,11 @@ vi.mock('./conversation-repository', () => ({
   getMessages,
   getLatestOpenConversation: vi.fn(),
 }));
+vi.mock('./check-in-repository', () => ({
+  // No Check-in filed: the ordinary week, and the one the prompt has to say it
+  // has nothing for rather than inventing scores.
+  getCheckInForWeek: vi.fn(async () => null),
+}));
 vi.mock('@/features/race/race-repository', () => ({
   // No race booked: the ordinary state for most of these fixtures, and the one
   // the prompt has to state plainly rather than omit.

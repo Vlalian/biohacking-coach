@@ -13,7 +13,7 @@ import type { WeekSession } from './week';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 const BASE: CheckIn = {
-  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
+  readiness: { body: 7, energy: 7, sleepQuality: 7, mental: 7, sleepHours: 7, restingPulse: 50 },
   phase: 'Base Building',
   personaName: 'Mads',
   commStyle: '',
@@ -448,13 +448,39 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
 
   // The path stays live for when a Check-in feature lands: given real numbers,
   // the block renders exactly as it does today.
-  it('renders the scores when a real Check-in supplied them', () => {
+  it('renders only what the athlete gave, when a device fed nothing', () => {
+    // The state this slice actually ships in: three scores from the Check-in and
+    // nothing from a wearable. The absent tokens are absent, not zeroed — and
+    // the Coach is told separately that it cannot see them.
     const prompt = buildChatPrompt(
-      { ...NO_READINESS, readiness: { body: 4, mental: 5, energy: 3, sleep: 5.5, pulse: 68 } },
+      { ...NO_READINESS, readiness: { body: 4, energy: 3, sleepQuality: 5 } },
       '2026-08-18',
     );
 
-    expect(prompt).toContain('body=4/10 mental=5/10 energy=3/10 sleep=5.5h pulse=68bpm');
+    expect(prompt).toContain('body=4/10 energy=3/10 sleep-quality=5/10');
+    expect(prompt).not.toContain('sleep=');
+    expect(prompt).not.toContain('pulse=');
+    expect(prompt).not.toContain('mental=');
+    // Single-spaced: the absent tokens are dropped, not joined as blanks. A run
+    // of spaces where a number should be is a hole, and the STATE line is read
+    // by the model as a list of facts rather than as prose that can have gaps.
+    expect(prompt).not.toMatch(/sleep-quality=5\/10 {2}/);
+    expect(prompt).not.toContain('NO CHECK-IN DATA');
+    expect(prompt).toContain('NO DEVICE DATA');
+  });
+
+  it('renders the scores when a real Check-in supplied them', () => {
+    const prompt = buildChatPrompt(
+      { ...NO_READINESS, readiness: { body: 4, energy: 3, sleepQuality: 5, mental: 5, sleepHours: 5.5, restingPulse: 68 } },
+      '2026-08-18',
+    );
+
+    // The athlete's own three first, then the ones a device or a rated session
+    // supplied. Order matters only in that it is stable; what matters is that
+    // every token present is a number somebody actually gave.
+    expect(prompt).toContain(
+      'body=4/10 energy=3/10 sleep-quality=5/10 mental=5/10 sleep=5.5h pulse=68bpm',
+    );
     expect(prompt).not.toContain('NO CHECK-IN DATA');
   });
 

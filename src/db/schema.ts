@@ -675,6 +675,59 @@ export type RaceRow = typeof race.$inferSelect;
 export type NewRaceRow = typeof race.$inferInsert;
 
 /**
+ * A Check-in — how the athlete arrives at the week
+ * (`training-architecture/05`, CONTEXT.md).
+ *
+ * **Once per week, not daily.** `weekStart` is the Monday the Check-in belongs
+ * to, and the unique index on (athlete, week) is what makes "once" a database
+ * rule rather than a convention. A second Check-in for the same week replaces
+ * the first: an athlete correcting Monday's answer on Tuesday is editing one
+ * report, not filing two.
+ *
+ * **All three scores are NOT NULL, together.** Half a Check-in is not a
+ * Check-in — a partial one would render as no readiness at all *and* have the
+ * prompt tell the model there is none, a false claim in the opposite direction
+ * (`code-health/07`). The database refuses it rather than trusting the form.
+ *
+ * `notableSignal` is free text and deliberately **not** a score: "tweaked my
+ * calf on Thursday" is not a number, and forcing it into one would lose the only
+ * part of a Check-in the athlete writes in their own words. It reaches a prompt,
+ * so it passes the same identifier assertion every other free-text leaf does.
+ *
+ * Sleep *duration* and resting heart rate are absent on purpose. They are
+ * expected from a device rather than a weekly question (Mads, 2026-09-09), and
+ * until there is a feed the Coach is told it cannot see them.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const checkIns = pgTable(
+  'check_in',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    weekStart: date('week_start', { mode: 'string' }).notNull(),
+    energy: integer('energy').notNull(),
+    body: integer('body').notNull(),
+    sleepQuality: integer('sleep_quality').notNull(),
+    notableSignal: text('notable_signal'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('check_in_once_per_week').on(table.athleteId, table.weekStart),
+    check(
+      'check_in_scores_in_range',
+      sql`${table.energy} BETWEEN 1 AND 10 AND ${table.body} BETWEEN 1 AND 10 AND ${table.sleepQuality} BETWEEN 1 AND 10`,
+    ),
+  ],
+);
+
+export type CheckInRow = typeof checkIns.$inferSelect;
+export type NewCheckInRow = typeof checkIns.$inferInsert;
+
+/**
  * A consent record — the athlete's explicit, unbundled, versioned grant for one
  * processing purpose (the lawful basis GDPR requires; gdpr-decisions item A).
  *

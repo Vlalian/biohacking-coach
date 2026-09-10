@@ -25,7 +25,7 @@ const TODAY_KEY = '2026-09-09';
 // answer rather than an edge case.
 const TARGET_RACE = { name: 'Ironman Copenhagen', date: '2027-06-01' };
 
-const READINESS: Readiness = { body: 7, mental: 6, energy: 8, sleep: 7.5, pulse: 52 };
+const READINESS: Readiness = { body: 7, energy: 8, sleepQuality: 6, mental: 6, sleepHours: 7.5, restingPulse: 52 };
 
 function athlete(overrides: Partial<Athlete> = {}): Athlete {
   return {
