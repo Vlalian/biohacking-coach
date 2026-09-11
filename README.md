@@ -36,6 +36,14 @@ checkout use `vercel-dev` or cut your own (`neon branches create --parent
 seed-template`). Never cut a branch from `production`. See `.env.example` and GDPR
 decision 8 in the tracker.
 
+Migrations are applied by hand (`npm run db:migrate` reads `DATABASE_URL`), to
+`seed-template` first — its children inherit the change — and to `production`
+separately, **before** the code that needs the new columns is deployed. Gotcha: a
+schema-only branch copies the `drizzle.__drizzle_migrations` table but not its
+rows, so `db:migrate` on a fresh one tries migration 0000 and fails on the first
+`CREATE TABLE`; copy the ledger rows from the parent first (done once for
+`seed-template` on 2026-09-11 — children inherit them).
+
 ## Run
 
 ```bash
