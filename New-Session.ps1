@@ -78,9 +78,23 @@ param(
   [Parameter(Mandatory)] [string]$Branch,
   [string]$Base = "origin/main",
   # The canonical private-docs repo. The tracker lives here and NOWHERE else.
-  [string]$Docs = "C:\Users\madsk\bc-docs"
+  [string]$Docs = "C:\Users\madsk\bc-docs",
+  # Escape hatch for step 3b-ter: a DATABASE_URL to write instead of creating a
+  # per-session Neon branch. Use it offline or when the Neon CLI is not logged
+  # in. It must NOT be the production branch - see GDPR decision 8.
+  [string]$DatabaseUrl,
+  # Days until the per-session Neon branch expires on its own. Neon deletes it
+  # then even if Remove-Session.ps1 was never run.
+  [int]$BranchDays = 14
 )
 $ErrorActionPreference = "Stop"
+
+# The Neon project. Ids, not secrets - the CLI needs them to skip its org prompt.
+$NeonProject = "plain-sky-06454855"
+$NeonOrg     = "org-patient-wave-37211297"
+# Every non-production branch is cut from this schema-only, seeded branch and
+# never from `production` (GDPR decision 8, 2026-09-11; .env.example explains).
+$NeonParent  = "seed-template"
 
 # The main folder = wherever this script lives.
 $Main     = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -201,12 +215,52 @@ foreach ($rel in $FileLinks.Keys) {
 # hand-edited perhaps monthly, and the wrong one for the tracker - which is why
 # the tracker is junctioned and this is not.
 $envLocal = Join-Path $Main ".env.local"
+$wtEnv    = Join-Path $Worktree ".env.local"
 if (Test-Path $envLocal) {
-  Copy-Item $envLocal (Join-Path $Worktree ".env.local") -Force
+  Copy-Item $envLocal $wtEnv -Force
   Write-Host "  copied .env.local  (a snapshot - re-copy it if you rotate a key)" -ForegroundColor DarkGray
 } else {
   Write-Host "  no .env.local in $Main - 'npm run build' will fail here until there is one" -ForegroundColor Yellow
 }
+
+# 3b-ter. DATABASE_URL - REPLACED with a per-session Neon branch.
+#
+# The copied file carries whatever the main folder points at, and on 2026-09-11
+# that was production: every worktree session had been running seeds, migrations
+# and live tests against the real athlete data. GDPR decision 8 ended that - no
+# branch is cut from production, and production is reached only by the Vercel
+# production environment. So each session gets its own branch `dev/<Name>`, a
+# copy-on-write child of the seeded schema-only template, with an expiry so a
+# forgotten one dies on its own (the Free plan allows 10 branches per project).
+# Remove-Session.ps1 deletes it eagerly.
+#
+# Fatal when it cannot be done, for the same reason a failed junction is fatal:
+# a worktree that silently kept the production URL is worse than no worktree.
+# Pass -DatabaseUrl to supply a branch by hand (offline, CLI not logged in).
+$SessionBranch = "dev/$Name"
+if (-not $DatabaseUrl) {
+  if (-not (Get-Command neon -ErrorAction SilentlyContinue)) {
+    throw "Neon CLI not found ('npm i -g neon', then 'neon login'). Or pass -DatabaseUrl <non-production url>."
+  }
+  $created = neon branches create --name $SessionBranch --parent $NeonParent --project-id $NeonProject --org-id $NeonOrg --no-secrets -o json 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not create Neon branch $SessionBranch (is 'neon login' done? is the 10-branch limit hit?):`n$created"
+  }
+  $expires = (Get-Date).ToUniversalTime().AddDays($BranchDays).ToString("yyyy-MM-ddTHH:mm:ssZ")
+  neon branches set-expiration $SessionBranch --expires-at $expires --project-id $NeonProject --org-id $NeonOrg -o json 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { Write-Host "  could not set expiry on $SessionBranch - delete it by hand if the session is abandoned" -ForegroundColor Yellow }
+  $DatabaseUrl = (neon connection-string $SessionBranch --pooled --project-id $NeonProject --org-id $NeonOrg 2>&1 | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or $DatabaseUrl -notlike "postgresql://*") {
+    throw "Could not read the connection string for ${SessionBranch}:`n$DatabaseUrl"
+  }
+  Write-Host "  neon branch $SessionBranch  <- $NeonParent, expires $expires" -ForegroundColor DarkGray
+}
+$envText = if (Test-Path $wtEnv) { [System.IO.File]::ReadAllText($wtEnv) } else { "" }
+$envText = ($envText -split "`r?`n" | Where-Object { $_ -notmatch '^\s*DATABASE_URL=' }) -join "`n"
+$envText = $envText.TrimEnd() + "`nDATABASE_URL=`"$DatabaseUrl`"`n"
+[System.IO.File]::WriteAllText($wtEnv, $envText)
+$shownUrl = ($DatabaseUrl -replace '://[^@]*@', '://<creds>@') -replace '\?.*$', ''
+Write-Host "  DATABASE_URL -> $shownUrl" -ForegroundColor DarkGray
 
 # 3c. The files Claude Code rewrites for itself. Copied on purpose - see header.
 foreach ($rel in $FileCopies.Keys) {
@@ -234,4 +288,5 @@ $claudeMd = @"
 Write-Host ""
 Write-Host "Session ready: $Worktree  (branch $Branch)" -ForegroundColor Green
 Write-Host "The tracker is shared from $Docs - it is the same directory, not a copy."
+Write-Host "Database: Neon branch $SessionBranch (seed data only - never production)."
 Write-Host "Tear down with:  .\Remove-Session.ps1 -Name $Name"

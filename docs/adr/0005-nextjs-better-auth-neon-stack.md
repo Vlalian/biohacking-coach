@@ -1,6 +1,6 @@
 # The app moves to Next.js + React, with better-auth and Neon Postgres
 
-Status: accepted (2026-07-16) · amended 2026-09-02
+Status: accepted (2026-07-16) · amended 2026-09-02, 2026-09-11
 
 The POC (Express server, vanilla-JS frontend, localStorage persistence) needs a real backend: a database for athlete data, authentication in front of it, and vector search for the planned RAG (Knowledge Oracle). The deciding criterion was not technical taste but Mads's stated learning goal (2026-07-16): get good at directing LLM tools and agentic workflows, not at hand-coding. That inverts the old trade-off — "you'd write it yourself and learn" stops being a benefit, and AI-legibility becomes the dominant axis. React/TypeScript/Next.js is the most convention-heavy, best-documented, most AI-tool-supported stack available (it is what Lovable and v0 generate toward), so the React rewrite the POC frontend requires is done *by* agents rather than being a cost Mads pays by hand. better-auth is the consolidated open-source auth choice (Lucia retired, Passport dormant, Auth.js's maintainers joined better-auth and point new projects there); users live in our own Postgres. Neon provides that Postgres free at this scale, with pgvector included on every plan — the RAG store comes with the database. Everything is MIT-licensed and exportable; no vendor owns the users or the data.
 
@@ -35,3 +35,19 @@ Checked in `poc/` while sequencing the rebuild (2026-07-16, [coach-eval route 08
 **Why the correction was worth making.** The likely failure was never confusion — it was invention. An agent that trusts this ADR goes looking for the calc module, finds `rules.js` or `infodata.js`, and ports one of them under that name. The second would be the worse outcome by far: a synthetic data generator adopted as the app's calculation layer would produce numbers that look like training load and are not.
 
 **Unchanged by this amendment:** the stack decision itself, every alternative weighed, the hosting ruling, and the Option B supersession. This corrects one factual claim inside a consequence — it is not a change of decision.
+
+## Amendment 2026-09-11 — Neon branch topology: production is reached only by production
+
+The stack decision assumed one database. Neon's branching makes that false in a way that matters for health-adjacent data: a branch is a copy-on-write clone of its parent, and both the Neon↔Vercel integration's `vercel-dev` branch and its per-preview `preview/<git-branch>` branches were, by default, full copies of the `production` branch — so every preview URL and every agent worktree had been running against real athlete data. Verified 2026-09-11 with the Neon and Vercel CLIs; the two data-copy branches created that day were deleted the same day.
+
+**Decision** (recorded as GDPR decision 8 in the tracker's `mvp/gdpr-decisions.md`; researched in `research/neon-vercel-platform-features.md`):
+
+- `production` holds real data and is reached **only** by Vercel's Production environment, through a manually set `DATABASE_URL`.
+- `seed-template` is a **schema-only** branch (structure, no rows) seeded once with `npm run seed`, and is the Neon **default branch**. The Neon-managed Vercel integration cuts every `preview/*` branch from the default branch, so previews get the seed accounts, never production rows. Proven with a git-triggered preview: parent `seed-template`, branch-scoped `DATABASE_URL` injected by the integration, build READY.
+- `vercel-dev` (Vercel's Development env) and every worktree session's `dev/<name>` branch (`New-Session.ps1`, with a 14-day expiry; `Remove-Session.ps1` deletes eagerly) are children of `seed-template`.
+- No branch is ever cut from `production`. Anonymized branches (Neon's `anon` extension) were considered and rejected: more setup for no gain at two users, and under an Art. 9 reading the training rows are the sensitive part, not only the name column.
+- Erasure: a delete completes when Neon's history window has elapsed (6 h on the Free plan); the window is never raised above 7 days.
+
+**Why it is an amendment here rather than a new ADR:** it changes no technology and adds none — it states how the already-chosen database is *laid out* so that the residency and minimisation reasons this ADR gave for choosing Neon actually hold in every environment, not just production.
+
+**Enforced where:** in Neon (default branch = `seed-template`), the Vercel env vars (Production-only `DATABASE_URL`), and the session scripts. Not enforced: a human running `neon branches create --parent production` by hand. Branch-policy-as-code (`neon.ts` TTLs) is a follow-up.

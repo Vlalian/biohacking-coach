@@ -27,6 +27,15 @@ npm run db:migrate           # apply the schema
 npm run seed                 # optional: seed sample data
 ```
 
+`DATABASE_URL` must point at a **non-production** Neon branch. The project keeps real
+athlete data on the `production` branch, reached only by Vercel's production
+environment; everything else — local dev, agent worktrees, preview deployments —
+runs on children of `seed-template`, a schema-only branch seeded once with the
+sample accounts. `New-Session.ps1` creates such a branch per worktree; for a plain
+checkout use `vercel-dev` or cut your own (`neon branches create --parent
+seed-template`). Never cut a branch from `production`. See `.env.example` and GDPR
+decision 8 in the tracker.
+
 ## Run
 
 ```bash
