@@ -9,7 +9,8 @@ import { buildChatPrompt } from './prompts';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getRaces, getTargetRace } from '@/features/race/race-repository';
+import { getLatestPlanWrittenAt } from './plan-proposal-repository';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
 import { buildWeeklyCheckIn } from './weekly-session';
@@ -69,20 +70,26 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<string> {
-  const [equipmentItems, weekSessions, reference, targetRace, checkInRow] = await Promise.all([
-    getEquipmentItems(athlete.id),
-    getSessionsForWeek(athlete.id, weekStartOf(today)),
-    referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
-    // The same horizon the Weekly Session reads. Chat is where "should I do
-    // tomorrow's intervals?" gets asked, and the answer depends on how far out
-    // the race is — a Coach with no horizon here would contradict the one the
-    // athlete just planned a week with.
-    getTargetRace(athlete.id),
-    // The same Check-in the Weekly Session reads. Chat is where "should I do
-    // tomorrow's intervals?" gets asked, and an athlete who reported low energy
-    // on Monday should not have to say it again on Wednesday.
-    getCheckInForWeek(athlete.id, weekStartOf(today)),
-  ]);
+  const [equipmentItems, weekSessions, reference, targetRace, checkInRow, races, planWrittenAt] =
+    await Promise.all([
+      getEquipmentItems(athlete.id),
+      getSessionsForWeek(athlete.id, weekStartOf(today)),
+      referenceSessionId
+        ? getOwnedSession(athlete.id, referenceSessionId)
+        : Promise.resolve(undefined),
+      // The same horizon the Weekly Session reads. Chat is where "should I do
+      // tomorrow's intervals?" gets asked, and the answer depends on how far out
+      // the race is — a Coach with no horizon here would contradict the one the
+      // athlete just planned a week with.
+      getTargetRace(athlete.id),
+      // The same Check-in the Weekly Session reads. Chat is where "should I do
+      // tomorrow's intervals?" gets asked, and an athlete who reported low energy
+      // on Monday should not have to say it again on Wednesday.
+      getCheckInForWeek(athlete.id, weekStartOf(today)),
+      // Slice 09: the same tune-up and late-race lines the Weekly Session renders.
+      getRaces(athlete.id),
+      getLatestPlanWrittenAt(athlete.id, weekStartOf(today)),
+    ]);
 
   // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
   // the Weekly Session's — how many Weekly Sessions have come before. Passing 1
@@ -102,6 +109,8 @@ async function renderSystem(
     // all: someone who wrote "calf tight since Tuesday" on Monday should not
     // have to say it again on Wednesday.
     notableSignalFrom(checkInRow),
+    races,
+    planWrittenAt,
   );
 
   // The Reference is matched against the week by id here, where ids still
@@ -171,4 +180,3 @@ export async function sendCoachChatMessage(
     }),
   });
 }
-

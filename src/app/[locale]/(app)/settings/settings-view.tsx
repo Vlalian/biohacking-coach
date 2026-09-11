@@ -10,6 +10,7 @@ import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import type { SettingsActionResult } from './settings-actions';
+import { RacesSection, type SettingsRace } from './settings-races';
 import type { DeleteAccountResult } from './erasure-actions';
 
 /** The profile fields Settings reads and edits — a narrower shape than the
@@ -19,8 +20,8 @@ export interface SettingsProfile {
   name: string;
   email: string;
   communicationStyle: string;
-  raceTarget: string;
-  raceDate: string;
+  /** Every Race the athlete has, target flagged (`training-architecture/09`). */
+  races: SettingsRace[];
   raceDistance: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
@@ -40,7 +41,9 @@ export interface SettingsViewProps {
   language: string;
   coachingLink: SettingsCoachingLink | null;
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onUpdateTargetRace: (name: string, date: string) => Promise<SettingsActionResult>;
+  onAddRace: (name: string, date: string, distance: string) => Promise<SettingsActionResult>;
+  onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
+  onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -84,7 +87,9 @@ export function SettingsView({
   language,
   coachingLink,
   onUpdateCommunicationStyle,
-  onUpdateTargetRace,
+  onAddRace,
+  onSetTargetRace,
+  onRemoveRace,
   onUpdateRaceDistance,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
@@ -117,13 +122,14 @@ export function SettingsView({
 
         <TrainingSection
           communicationStyle={profile.communicationStyle}
-          raceTarget={profile.raceTarget}
-          raceDate={profile.raceDate}
+          races={profile.races}
           raceDistance={profile.raceDistance}
           weeklySessionDay={profile.weeklySessionDay}
           fixedConstraints={profile.fixedConstraints}
           onUpdateCommunicationStyle={onUpdateCommunicationStyle}
-          onUpdateTargetRace={onUpdateTargetRace}
+          onAddRace={onAddRace}
+          onSetTargetRace={onSetTargetRace}
+          onRemoveRace={onRemoveRace}
           onUpdateRaceDistance={onUpdateRaceDistance}
           onUpdateWeeklySessionDay={onUpdateWeeklySessionDay}
           onAddFixedConstraint={onAddFixedConstraint}
@@ -310,26 +316,28 @@ function ThemeTile({
 
 function TrainingSection({
   communicationStyle,
-  raceTarget,
-  raceDate,
+  races,
   raceDistance,
   weeklySessionDay,
   fixedConstraints,
   onUpdateCommunicationStyle,
-  onUpdateTargetRace,
+  onAddRace,
+  onSetTargetRace,
+  onRemoveRace,
   onUpdateRaceDistance,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
 }: {
   communicationStyle: string;
-  raceTarget: string;
-  raceDate: string;
+  races: SettingsRace[];
   raceDistance: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onUpdateTargetRace: (name: string, date: string) => Promise<SettingsActionResult>;
+  onAddRace: (name: string, date: string, distance: string) => Promise<SettingsActionResult>;
+  onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
+  onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -340,7 +348,7 @@ function TrainingSection({
   return (
     <Section label={t('sectionTraining')}>
       <RaceDistanceField value={raceDistance} onSave={onUpdateRaceDistance} />
-      <RaceTargetField name={raceTarget} date={raceDate} onSave={onUpdateTargetRace} />
+      <RacesSection races={races} onAdd={onAddRace} onSetTarget={onSetTargetRace} onRemove={onRemoveRace} />
       <CommunicationStyleField
         value={communicationStyle}
         onSave={onUpdateCommunicationStyle}
@@ -407,84 +415,6 @@ function RaceDistanceField({
         ))}
       </div>
       <div className="mt-2">
-        <SaveStatus status={status} t={t} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * The Target Race — the fixed point the whole plan is built backwards from, and
- * until now write-once at onboarding.
- *
- * Name and date together, because a race with no date is what the old free-text
- * field allowed and what four regexes then guessed at. Clearing both is a real
- * state: an athlete between races has no target, and the races they have run
- * are kept as a record.
- */
-function RaceTargetField({
-  name,
-  date,
-  onSave,
-}: {
-  name: string;
-  date: string;
-  onSave: (name: string, date: string) => Promise<SettingsActionResult>;
-}) {
-  const t = useTranslations('Settings');
-  const [draftName, setDraftName] = useState(name);
-  const [draftDate, setDraftDate] = useState(date);
-  // The baseline `dirty` is judged against moves on a successful save. Judged
-  // against the props, the Save button would stay enabled after saving, since
-  // the action does not revalidate the route.
-  const [saved, setSaved] = useState({ name, date });
-  const { status, reset, run } = useSaveStatus();
-  const dirty = draftName.trim() !== saved.name.trim() || draftDate !== saved.date;
-
-  async function save() {
-    if (await run(() => onSave(draftName, draftDate))) {
-      setSaved({ name: draftName, date: draftDate });
-    }
-  }
-
-  return (
-    <div>
-      <label className="block">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {t('raceTargetLabel')}
-        </span>
-        <p className="mt-1 font-body text-xs text-muted-foreground">{t('raceTargetNote')}</p>
-        <input
-          type="text"
-          value={draftName}
-          onChange={(e) => {
-            setDraftName(e.target.value);
-            reset();
-          }}
-          placeholder={t('raceTargetPlaceholder')}
-          maxLength={120}
-          className="mt-2 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
-        />
-      </label>
-      <label className="mt-2 block">
-        <span className="sr-only">{t('raceDateLabel')}</span>
-        <input
-          type="date"
-          value={draftDate}
-          onChange={(e) => {
-            setDraftDate(e.target.value);
-            reset();
-          }}
-          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
-        />
-      </label>
-      <div className="mt-2 flex items-center gap-3">
-        <SaveButton
-          onClick={save}
-          disabled={!dirty || status === 'saving'}
-          pending={status === 'saving'}
-          label={t('save')}
-        />
         <SaveStatus status={status} t={t} />
       </div>
     </div>

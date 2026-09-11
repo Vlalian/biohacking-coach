@@ -40,11 +40,15 @@ vi.mock('./check-in-repository', () => ({
   // has nothing for rather than inventing scores.
   getCheckInForWeek: vi.fn(async () => null),
 }));
-vi.mock('@/features/race/race-repository', () => ({
+const { getTargetRace, getRaces, getLatestPlanWrittenAt } = vi.hoisted(() => ({
   // No race booked: the ordinary state for most of these fixtures, and the one
   // the prompt has to state plainly rather than omit.
-  getTargetRace: vi.fn(async () => null),
+  getTargetRace: vi.fn<() => Promise<unknown>>(async () => null),
+  getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
+  getLatestPlanWrittenAt: vi.fn<() => Promise<Date | null>>(async () => null),
 }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
+vi.mock('./plan-proposal-repository', () => ({ getLatestPlanWrittenAt }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getOwnedSession,
@@ -294,6 +298,33 @@ describe('the Coach Chat system prompt carries no invented readiness', () => {
     const { system } = callCoach.mock.calls[0][0];
     for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
     expect(system).toContain('NO CHECK-IN DATA');
+  });
+
+  it('names tune-ups and late races the same way the Weekly Session does (slice 09)', async () => {
+    // CodeRabbit on PR #60: Chat knew less than the Weekly Session. Same rows,
+    // same lines.
+    const target = {
+      id: 't', athleteId: 'a', name: 'Ironman Kalmar', date: '2027-08-18', distance: 'Full',
+      isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+    };
+    const late = {
+      ...target, id: 'r3', name: 'Half Aarhus', date: '2026-08-30', distance: 'Half',
+      isTarget: false, createdAt: new Date('2026-08-11T12:00:00Z'),
+    };
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([target, late]);
+    getLatestPlanWrittenAt.mockResolvedValue(new Date('2026-08-10T08:00:00Z'));
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getOwnedConversation.mockReset();
+
+    await sendCoachChatMessage(ATHLETE, null, 'Should I race the half?', '2026-08-12');
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('TUNE-UPS: Half Aarhus on 2026-08-30 (Half)');
+    expect(system).toContain('LATE RACE: Half Aarhus on 2026-08-30 (Half)');
   });
 
   it('derives the phase from the horizon, the same as the Weekly Session', () => {

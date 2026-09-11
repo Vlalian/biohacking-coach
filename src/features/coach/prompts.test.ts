@@ -1023,6 +1023,77 @@ describe('the horizon reaches the prompt, including when there is none', () => {
     expect(prompt).toContain('distance=Half');
   });
 
+  // ── Races beyond the first (training-architecture/09) ──────────────────────
+  describe('tune-ups, late races and the tune-up window', () => {
+    const target = { raceDistance: 'Full', raceTarget: 'Ironman Copenhagen', raceDate: '2027-08-15' };
+    const olympic = { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' };
+
+    it('names each Tune-up Race as an ordinary training day that is not tapered for', () => {
+      const prompt = weekly({ ...target, tuneUps: [olympic] });
+      expect(prompt).toContain('TUNE-UPS: Olympic Odense on 2027-03-01 (Olympic)');
+      expect(prompt).toContain('ordinary training day, do not taper');
+    });
+
+    it('omits the TUNE-UPS line entirely when there are none', () => {
+      expect(weekly(target)).not.toContain('TUNE-UPS');
+      expect(weekly({ ...target, tuneUps: [] })).not.toContain('TUNE-UPS');
+    });
+
+    it('adds the eve-easy clause only when the interview option is on', () => {
+      // The option is built and its value is the Head Coach interview's. Both
+      // values render, so flipping the constant later changes one line. Exact
+      // lines, so nothing can be appended to the "off" case unnoticed.
+      expect(weekly({ ...target, tuneUps: [olympic], tuneUpEveEasy: false })).toContain(
+        '\nTUNE-UPS: Olympic Odense on 2027-03-01 (Olympic) — ordinary training day, do not taper\n',
+      );
+      expect(weekly({ ...target, tuneUps: [olympic], tuneUpEveEasy: true })).toContain(
+        '\nTUNE-UPS: Olympic Odense on 2027-03-01 (Olympic) — ordinary training day, do not taper — keep the day before easy\n',
+      );
+    });
+
+    it('lists several tune-ups or late races on one line each, separated by semicolons, beneath HORIZON', () => {
+      const half = { name: 'Half Aarhus', date: '2027-05-01', distance: 'Half' };
+      const prompt = weekly({ ...target, tuneUps: [olympic, half], lateRaces: [half, olympic] });
+      expect(prompt).toContain(
+        'HORIZON: distance=Full · race=Ironman Copenhagen on 2027-08-15\nTUNE-UPS: Olympic Odense on 2027-03-01 (Olympic); Half Aarhus on 2027-05-01 (Half) — ordinary',
+      );
+      expect(prompt).toContain('LATE RACE: Half Aarhus on 2027-05-01 (Half); Olympic Odense on 2027-03-01 (Olympic) — entered');
+    });
+
+    it('names a race entered after this week was planned, and tells the Coach to say so', () => {
+      const prompt = weekly({ ...target, lateRaces: [{ ...olympic, date: '2026-09-27' }] });
+      expect(prompt).toContain('LATE RACE: Olympic Odense on 2026-09-27 (Olympic)');
+      expect(prompt).toContain('entered after this week was planned');
+      expect(prompt).toContain('blocks were not built toward it');
+      expect(prompt).toContain('adjust the week only');
+    });
+
+    it('omits the LATE RACE line when nothing is late', () => {
+      expect(weekly(target)).not.toContain('LATE RACE');
+      expect(weekly({ ...target, lateRaces: [] })).not.toContain('LATE RACE');
+    });
+
+    it('carries the tune-up window only when the Check-in says today is inside it', () => {
+      // The service decides *whether* — `inTuneUpWindow` — and hands the prompt
+      // the span only then, so the prompt cannot nag outside the window.
+      const prompt = weekly({ ...target, tuneUpWindow: { from: '2026-12-01', to: '2027-02-10' } });
+      expect(prompt).toContain('TUNE-UP WINDOW: now (2026-12-01–2027-02-10)');
+      expect(prompt).toContain('may suggest');
+      expect(prompt).not.toContain('should have');
+      expect(prompt).toContain('never imply the plan is deficient');
+      expect(weekly(target)).not.toContain('TUNE-UP WINDOW');
+    });
+
+    it('renders the same lines in Coach Chat — Chat must not know less than the Weekly Session', () => {
+      const prompt = buildChatPrompt(
+        { ...BASE, ...target, tuneUps: [olympic], lateRaces: [{ ...olympic, date: '2026-09-27' }] },
+        TUESDAY,
+      );
+      expect(prompt).toContain('TUNE-UPS: Olympic Odense on 2027-03-01 (Olympic)');
+      expect(prompt).toContain('LATE RACE: Olympic Odense on 2026-09-27 (Olympic)');
+    });
+  });
+
   it('says the distance is unknown for an athlete who was never asked', () => {
     // Every athlete who onboarded before the question existed. The migration
     // deliberately backfills nothing — a distance is not derivable from a race

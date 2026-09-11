@@ -3,7 +3,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getRaces } from '@/features/race/race-repository';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
@@ -15,7 +15,9 @@ import {
   severCoachingLinkAction,
   updateCommunicationStyleAction,
   updateRaceDistanceAction,
-  updateTargetRaceAction,
+  addRaceAction,
+  setTargetRaceAction,
+  removeRaceAction,
   updateLanguageAction,
   updateLinkVisibilityAction,
   updateWeeklySessionDayAction,
@@ -61,9 +63,10 @@ export default async function SettingsPage({
     getUiPrefs(session!.user.id),
     getLinkForAthlete(athlete.id),
   ]);
-  // The horizon, read here rather than in the view: a Race is an entity, and the
-  // page is where server reads belong.
-  const targetRace = await getTargetRace(athlete.id);
+  // The races, read here rather than in the view: a Race is an entity, and the
+  // page is where server reads belong. All of them — the Target Race is the one
+  // flagged, and the view shows the rest beside it (`training-architecture/09`).
+  const races = await getRaces(athlete.id);
 
   return (
     <SettingsView
@@ -71,8 +74,13 @@ export default async function SettingsPage({
         name: session!.user.name,
         email: session!.user.email,
         communicationStyle: athlete.communicationStyle ?? '',
-        raceTarget: targetRace?.name ?? athlete.raceTarget ?? '',
-        raceDate: targetRace?.date ?? '',
+        races: races.map((r) => ({
+          id: r.id,
+          name: r.name,
+          date: r.date,
+          distance: r.distance,
+          isTarget: r.isTarget,
+        })),
         raceDistance: athlete.raceDistance ?? '',
         weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
         fixedConstraints: athlete.profile?.fixedConstraints ?? [],
@@ -88,7 +96,9 @@ export default async function SettingsPage({
           : null
       }
       onUpdateCommunicationStyle={updateCommunicationStyleAction}
-      onUpdateTargetRace={updateTargetRaceAction}
+      onAddRace={addRaceAction}
+      onSetTargetRace={setTargetRaceAction}
+      onRemoveRace={removeRaceAction}
       onUpdateRaceDistance={updateRaceDistanceAction}
       onUpdateWeeklySessionDay={updateWeeklySessionDayAction}
       onAddFixedConstraint={addFixedConstraintAction}

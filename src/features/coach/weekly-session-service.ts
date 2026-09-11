@@ -26,8 +26,9 @@ import {
   recordPlanCommitted,
   recordPlanDeclined,
   recordProposal,
+  getLatestPlanWrittenAt,
 } from './plan-proposal-repository';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getRaces, getTargetRace } from '@/features/race/race-repository';
 import { getCheckInForWeek } from './check-in-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
@@ -61,8 +62,6 @@ import {
  * lands ({@link commitWeeklyPlan}), and it replaces only coach-planned days.
  */
 
-
-
 const WEEKLY_MAX_TOKENS = 1400;
 
 // What the Coach is told after it proposes a plan: the plan is not saved, the
@@ -70,7 +69,6 @@ const WEEKLY_MAX_TOKENS = 1400;
 const PROPOSAL_ACK =
   'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
   'invite them to confirm when ready. Do not say it has been saved.';
-
 
 /**
  * The window this athlete's plan may be written into, today.
@@ -109,20 +107,25 @@ async function renderSystem(
   language?: string,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
-  const [weekSessions, equipmentItems, targetRace, checkInRow, capacity] = await Promise.all([
-    getSessionsForWeek(athlete.id, weekStart),
-    getEquipmentItems(athlete.id),
-    // The horizon. Null is an ordinary answer — an athlete may have no race,
-    // and the prompt says so rather than omitting the subject.
-    getTargetRace(athlete.id),
-    // The athlete's own report of how they arrive at this week. Null most weeks
-    // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
-    // rather than inventing scores, which is what it did before code-health/07.
-    getCheckInForWeek(athlete.id, weekStart),
-    // What the athlete's body currently allows. Only the capacity half is read;
-    // the detail thread has no reader on this path at all (ADR 0011).
-    capacityFor(athlete.id),
-  ]);
+  const [weekSessions, equipmentItems, targetRace, checkInRow, capacity, races, planWrittenAt] =
+    await Promise.all([
+      getSessionsForWeek(athlete.id, weekStart),
+      getEquipmentItems(athlete.id),
+      // The horizon. Null is an ordinary answer — an athlete may have no race,
+      // and the prompt says so rather than omitting the subject.
+      getTargetRace(athlete.id),
+      // The athlete's own report of how they arrive at this week. Null most weeks
+      // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
+      // rather than inventing scores, which is what it did before code-health/07.
+      getCheckInForWeek(athlete.id, weekStart),
+      // What the athlete's body currently allows. Only the capacity half is read;
+      // the detail thread has no reader on this path at all (ADR 0011).
+      capacityFor(athlete.id),
+      // Every race, and when this week's plan was written: together they say which
+      // races are tune-ups and which arrived too late for the blocks (slice 09).
+      getRaces(athlete.id),
+      getLatestPlanWrittenAt(athlete.id, weekStart),
+    ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
@@ -133,6 +136,8 @@ async function renderSystem(
     targetRace ? { name: targetRace.name, date: targetRace.date } : null,
     capacity,
     notableSignalFrom(checkInRow),
+    races,
+    planWrittenAt,
   );
   // The inputs with a real source: the week's Session Reflections (feedback),
   // its skips, and — since showable-version/15 — the athlete's Unavailable
@@ -287,7 +292,10 @@ async function stageProposal(
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (!call) return null;
 
-  const validated = validateProposedPlan(call.input, planningWindowFor(athlete, today, unavailableDates));
+  const validated = validateProposedPlan(
+    call.input,
+    planningWindowFor(athlete, today, unavailableDates),
+  );
   if (!validated.ok) return null;
 
   await recordProposal(athlete.id, conversationId, validated.sessions);
@@ -480,9 +488,7 @@ export async function commitWeeklyPlan(
   return { ok: true, sessionCount: rows.length, start, end };
 }
 
-export type DeclineResult =
-  | { ok: true }
-  | { ok: false; reason: 'not-owner' };
+export type DeclineResult = { ok: true } | { ok: false; reason: 'not-owner' };
 
 /**
  * Cancels the pending proposal — the athlete chose not to save. The proposal is

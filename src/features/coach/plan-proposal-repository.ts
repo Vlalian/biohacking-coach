@@ -3,6 +3,7 @@ import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { ProposedSession } from './weekly-session';
 import {
+  latestPlanWrittenAt,
   pendingProposal,
   PLAN_EVENT,
   type PlanProposalPayload,
@@ -90,4 +91,25 @@ export async function getPendingProposal(
     .orderBy(asc(events.createdAt));
 
   return pendingProposal(rows, conversationId);
+}
+
+/**
+ * When this athlete's plan for the week starting `weekStart` was last written,
+ * or null when no plan has been written for it (slice 09).
+ *
+ * Bounded in SQL to the athlete's `week_plan_written` events; which week a
+ * write belongs to is decided in memory by {@link latestPlanWrittenAt}, because
+ * the session dates live inside a jsonb array and a query over them would be
+ * harder to read than the handful of rows an athlete accumulates.
+ */
+export async function getLatestPlanWrittenAt(
+  athleteId: string,
+  weekStart: string,
+): Promise<Date | null> {
+  const rows = await getDb()
+    .select({ type: events.type, payload: events.payload, createdAt: events.createdAt })
+    .from(events)
+    .where(and(eq(events.athleteId, athleteId), eq(events.type, PLAN_EVENT.written)))
+    .orderBy(asc(events.createdAt));
+  return latestPlanWrittenAt(rows, weekStart);
 }

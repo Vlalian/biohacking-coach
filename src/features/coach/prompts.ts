@@ -15,6 +15,7 @@ import type { SessionOrigin } from '@/features/session/session';
 import type { WeekSession } from './week';
 import type {
   CheckIn,
+  RaceMention,
   Readiness,
   SessionContext,
   SessionHistoryItem,
@@ -436,11 +437,12 @@ function noDataBlock(readiness?: Readiness): string {
  * because a distance is not derivable from a race name.
  */
 function horizonBlock(
-  raceDistance?: string | null,
-  raceTarget?: string | null,
-  raceDate?: string | null,
-  phase?: string | null,
-  blockWeek?: string | null,
+  raceDistance: string | null | undefined,
+  raceTarget: string | null | undefined,
+  raceDate: string | null | undefined,
+  phase: string | null | undefined,
+  blockWeek: string | null | undefined,
+  races: RaceLinesInput,
 ): string {
   const distance = raceDistance ? `distance=${raceDistance}` : 'distance unknown — ask';
   const race =
@@ -455,7 +457,47 @@ function horizonBlock(
   // The block and the position inside it, when there is a horizon to be inside.
   // Omitted together, because half of it says less than nothing.
   const block = phase && blockWeek ? ` · ${phase}, ${blockWeek}` : '';
-  return `HORIZON: ${distance} · ${race}${block}`;
+  return [`HORIZON: ${distance} · ${race}${block}`, ...raceLines(races)].join('\n');
+}
+
+/** The slice-09 half of the horizon, as the Check-in carries it. */
+type RaceLinesInput = Pick<CheckIn, 'tuneUps' | 'lateRaces' | 'tuneUpWindow' | 'tuneUpEveEasy'>;
+
+const mention = (r: RaceMention) => `${r.name} on ${r.date} (${r.distance})`;
+
+/**
+ * The lines beneath HORIZON for the athlete's other races
+ * (`training-architecture/09`). Each is omitted when it has nothing to say —
+ * the same rule as the block line, because "TUNE-UPS: none" reads to the model
+ * as a deficiency and the glossary says a plan without one is not deficient.
+ *
+ * The window line is rendered whenever the Check-in carries a window, and the
+ * *service* only carries one while today is inside it (`inTuneUpWindow`). That
+ * split is what keeps this a pure renderer and the nag-prevention testable at
+ * the seam that decides it.
+ */
+function raceLines(races: RaceLinesInput): string[] {
+  return [
+    tuneUpsLine(races.tuneUps, races.tuneUpEveEasy),
+    lateRacesLine(races.lateRaces),
+    tuneUpWindowLine(races.tuneUpWindow),
+  ].filter((line): line is string => line !== null);
+}
+
+function tuneUpsLine(tuneUps: RaceMention[] | undefined, eveEasy: boolean | undefined): PromptBlock {
+  if (!tuneUps || tuneUps.length === 0) return null;
+  const eve = eveEasy ? ' — keep the day before easy' : '';
+  return `TUNE-UPS: ${tuneUps.map(mention).join('; ')} — ordinary training day, do not taper${eve}`;
+}
+
+function lateRacesLine(lateRaces: RaceMention[] | undefined): PromptBlock {
+  if (!lateRaces || lateRaces.length === 0) return null;
+  return `LATE RACE: ${lateRaces.map(mention).join('; ')} — entered after this week was planned; the blocks were not built toward it. Say so; adjust the week only`;
+}
+
+function tuneUpWindowLine(window: { from: string; to: string } | null | undefined): PromptBlock {
+  if (!window) return null;
+  return `TUNE-UP WINDOW: now (${window.from}–${window.to}) — you may suggest a tune-up race in this span, once and lightly; never imply the plan is deficient without one`;
 }
 
 /** The STATE line — coaching intelligence, never quoted back to the athlete. */
@@ -580,10 +622,15 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     raceDistance,
     raceDate,
     blockWeek,
+    tuneUps,
+    lateRaces,
+    tuneUpWindow,
+    tuneUpEveEasy,
     capacity,
     notableSignal,
     onboarding,
   } = ctx.checkIn;
+  const races = { tuneUps, lateRaces, tuneUpWindow, tuneUpEveEasy };
 
   const equipmentLines = buildEquipmentLines(equipment);
   const hasEquipment = equipmentLines.length > 0;
@@ -600,7 +647,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     arcBlock(weeklySessionNumber, raceTarget),
 
-    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
 
     // What the athlete's body currently allows, or nothing at all when nothing
     // is restricted (ADR 0011). Already a sentence when it arrives — this file
@@ -741,9 +788,14 @@ export function buildChatPrompt(
     raceDistance,
     raceDate,
     blockWeek,
+    tuneUps,
+    lateRaces,
+    tuneUpWindow,
+    tuneUpEveEasy,
     notableSignal,
     onboarding,
   } = checkIn;
+  const races = { tuneUps, lateRaces, tuneUpWindow, tuneUpEveEasy };
 
   const noTrain = noTrainFragment(fixedConstraints);
 
@@ -769,7 +821,7 @@ ${[
     // The same horizon the Weekly Session plans against. Chat used to carry
     // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
     // was answered by a Coach that did not know when the race was.
-    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
 
     // The athlete's own words from this week's Check-in, quoted and labelled as
     // theirs — the service reads the Check-in for exactly this, and until PR #60

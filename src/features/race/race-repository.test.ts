@@ -25,17 +25,31 @@ const set = vi.fn((v: unknown) => {
 
 const batch = vi.fn((statements: unknown[]) => Promise.all(statements));
 
+const deletes: unknown[] = [];
+const deleteWhere = vi.fn((w: unknown) => {
+  deletes.push(w);
+  return Promise.resolve();
+});
+
 vi.mock('@/db', () => ({
   getDb: () => ({
     select: () => ({ from: () => ({ where: selectWhere }) }),
     insert: () => ({ values: insertValues }),
     update: () => ({ set }),
+    delete: () => ({ where: deleteWhere }),
     batch,
   }),
 }));
 
-const { createRace, getRaces, getTargetRace, setTargetRace, upsertTargetRace, clearTargetRace } =
-  await import('./race-repository');
+const {
+  createRace,
+  deleteRace,
+  getRaces,
+  getTargetRace,
+  setTargetRace,
+  upsertTargetRace,
+  clearTargetRace,
+} = await import('./race-repository');
 
 function race(overrides: Partial<RaceRow> = {}): RaceRow {
   return {
@@ -54,6 +68,7 @@ beforeEach(() => {
   rows.length = 0;
   inserted.length = 0;
   updates.length = 0;
+  deletes.length = 0;
   batch.mockClear();
 });
 
@@ -181,5 +196,17 @@ describe('what a Race is created as by default', () => {
       { asTarget: false },
     );
     expect(inserted[0]).toMatchObject({ isTarget: false });
+  });
+});
+
+describe('removing a Race (slice 09)', () => {
+  it('deletes only the acting athlete’s race — the athlete id is in the WHERE, not just the race id', async () => {
+    // A race id alone would let anyone holding one delete another athlete's
+    // record (ADR 0006). Asserted against the clause drizzle builds, the same
+    // way the target read is.
+    await deleteRace('athlete_1', 'race_2');
+
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]).toEqual(and(eq(raceTable.athleteId, 'athlete_1'), eq(raceTable.id, 'race_2')));
   });
 });

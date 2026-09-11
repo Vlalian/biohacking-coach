@@ -3,7 +3,16 @@
 import { hasLocale } from 'next-intl';
 import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
 import { isCalendarDate } from '@/lib/calendar-date';
-import { clearTargetRace, upsertTargetRace } from '@/features/race/race-repository';
+import {
+  clearTargetRace,
+  createRace,
+  deleteRace,
+  getRaces,
+  getTargetRace,
+  setTargetRace,
+  upsertTargetRace,
+  type NewRace,
+} from '@/features/race/race-repository';
 import {
   addFixedConstraint,
   mergeAthleteProfile,
@@ -137,6 +146,83 @@ export async function updateTargetRaceAction(
     distance: distance as RaceDistance,
   });
   await updateRaceTarget(athlete.id, trimmedName);
+  return { ok: true };
+}
+
+/**
+ * Adds a Race (`training-architecture/09`).
+ *
+ * The first race an athlete adds becomes the Target Race — there is nothing
+ * else it could be — and its name goes to the mirror column for the same reason
+ * `updateTargetRaceAction` writes it. A race added beside an existing target is
+ * a non-target: a Tune-up Race if it falls before the target, or simply a later
+ * race. Each Race carries its own distance, because a tune-up is usually a
+ * different distance from the one being trained for.
+ */
+export async function addRaceAction(
+  name: string,
+  date: string,
+  distance: string,
+): Promise<SettingsActionResult> {
+  const newRace = parseNewRace(name, date, distance);
+  if (!newRace) return { ok: false, reason: 'invalid' };
+
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  const asTarget = (await getTargetRace(athlete.id)) === null;
+  await createRace(athlete.id, newRace, { asTarget });
+  if (asTarget) await updateRaceTarget(athlete.id, newRace.name);
+  return { ok: true };
+}
+
+/** A Race as the form typed it, or null when any part of it is not one. */
+function parseNewRace(name: string, date: string, distance: string): NewRace | null {
+  const trimmedName = name.trim();
+  const trimmedDate = date.trim();
+  const nameOk = trimmedName !== '' && trimmedName.length <= RACE_TARGET_MAX;
+  const distanceOk = (RACE_DISTANCES as readonly string[]).includes(distance);
+  if (!nameOk || !distanceOk || !isCalendarDate(trimmedDate)) return null;
+  return { name: trimmedName, date: trimmedDate, distance: distance as RaceDistance };
+}
+
+/**
+ * Points the athlete at a different Race as the Target Race.
+ *
+ * The target is *chosen*, never derived as "the next one" (CONTEXT.md): an
+ * athlete with an Olympic in May and an Ironman in August is building toward
+ * August. Training Blocks re-derive on the next read — nothing is stored for
+ * them — and the mirror column follows the flag so the greeting and the prompt
+ * never name different races.
+ */
+export async function setTargetRaceAction(raceId: string): Promise<SettingsActionResult> {
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  // Resolved through the athlete's own races, so an id that is not theirs is
+  // an invalid input here rather than a write the repository has to refuse.
+  const race = (await getRaces(athlete.id)).find((r) => r.id === raceId);
+  if (!race) return { ok: false, reason: 'invalid' };
+
+  await setTargetRace(athlete.id, race.id);
+  await updateRaceTarget(athlete.id, race.name);
+  return { ok: true };
+}
+
+/**
+ * Removes a Race the athlete entered. Removing the Target Race leaves them with
+ * none — a real state, "between races" — and clears the mirror column so no
+ * surface keeps naming a race that no longer exists.
+ */
+export async function removeRaceAction(raceId: string): Promise<SettingsActionResult> {
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  const race = (await getRaces(athlete.id)).find((r) => r.id === raceId);
+  if (!race) return { ok: false, reason: 'invalid' };
+
+  await deleteRace(athlete.id, race.id);
+  if (race.isTarget) await updateRaceTarget(athlete.id, null);
   return { ok: true };
 }
 

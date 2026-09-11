@@ -25,6 +25,8 @@ const {
   getOwnedConversation,
   capacityFor,
   getTargetRace,
+  getRaces,
+  getLatestPlanWrittenAt,
   // No Check-in filed by default: the ordinary week, and the one the prompt has
   // to say it has nothing for rather than inventing scores.
   getCheckInForWeek,
@@ -51,6 +53,10 @@ const {
   getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
     async () => null,
   ),
+  // No other races by default, and no plan written for the week: the ordinary
+  // fixture, where none of slice 09's lines render.
+  getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
+  getLatestPlanWrittenAt: vi.fn<() => Promise<Date | null>>(async () => null),
   // Nothing wrong by default: the ordinary state, and the one where the prompt
   // carries no capacity block at all rather than "nothing is restricted".
   capacityFor: vi.fn<() => Promise<string | null>>(async () => null),
@@ -85,6 +91,7 @@ vi.mock('./conversation-repository', () => ({
   getOwnedConversation,
 }));
 vi.mock('./plan-proposal-repository', () => ({
+  getLatestPlanWrittenAt,
   getPendingProposal,
   recordPlanCommitted,
   recordPlanDeclined,
@@ -94,7 +101,7 @@ vi.mock('@/features/availability/availability-repository', () => ({ getUnavailab
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
-vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
@@ -320,6 +327,53 @@ describe("the Coach is told the athlete's Unavailable Dates", () => {
 
     const { system } = callCoach.mock.calls[0][0];
     expect(system).toContain('race=Ironman Kalmar on 2029-08-18');
+  });
+
+  it('names a Tune-up Race and a race entered after the week was planned (slice 09)', async () => {
+    // The rows the repository returns are what prove the wiring: a tune-up the
+    // prompt could not have named without `getRaces`, and a "late" flag it could
+    // not have derived without `getLatestPlanWrittenAt`.
+    const target = {
+      id: 't', athleteId: 'a', name: 'Ironman Kalmar', date: '2027-08-18', distance: 'Full',
+      isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+    };
+    const tuneUp = {
+      ...target, id: 'r2', name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic',
+      isTarget: false, createdAt: new Date('2026-06-02T10:00:00Z'),
+    };
+    const late = {
+      ...target, id: 'r3', name: 'Half Aarhus', date: '2026-08-30', distance: 'Half',
+      isTarget: false, createdAt: new Date('2026-08-11T12:00:00Z'),
+    };
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([target, tuneUp, late]);
+    getLatestPlanWrittenAt.mockResolvedValue(new Date('2026-08-10T08:00:00Z'));
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('TUNE-UPS: Half Aarhus on 2026-08-30 (Half); Olympic Odense on 2027-03-01 (Olympic)');
+    expect(system).toContain('LATE RACE: Half Aarhus on 2026-08-30 (Half)');
+    expect(system).not.toContain('LATE RACE: Olympic');
+    expect(getLatestPlanWrittenAt).toHaveBeenCalledWith(ATHLETE.id, '2026-08-10');
+  });
+
+  it('carries the tune-up window only while today is inside it', async () => {
+    // Entered 2026-06-01 for 2027-08-18: 443 days, so the window is day 133–266
+    // (2026-10-12 – 2027-02-22). TODAY is 2026-08-12, before it opens.
+    const target = {
+      id: 't', athleteId: 'a', name: 'Ironman Kalmar', date: '2027-08-18', distance: 'Full',
+      isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+    };
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([target]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('TUNE-UP WINDOW');
+
+    callCoach.mockClear();
+    await startWeeklySession(ATHLETE, '2026-12-01');
+    expect(callCoach.mock.calls[0][0].system).toContain('TUNE-UP WINDOW: now (2026-10-12–2027-02-22)');
   });
 
   it('tells the Coach plainly when the athlete has no Target Race', async () => {
