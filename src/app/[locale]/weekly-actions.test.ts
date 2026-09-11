@@ -137,6 +137,21 @@ describe('the notable signal, on its way to a prompt', () => {
 
     expect(saveCheckIn.mock.calls[0][2].notableSignal).toHaveLength(500);
   });
+
+  it('refuses a signal that is not text, rather than throwing on it', async () => {
+    // CodeRabbit on PR #60. A server action's payload is typed only by
+    // assertion; a number here reached `.trim()` and threw a TypeError, which
+    // the catch below rethrew as "not the athlete's problem" — straight to the
+    // error boundary, form and all. It is the athlete's problem, and they get
+    // told so the same way a score outside 1-10 tells them.
+    const result = await saveCheckInAction({
+      ...REPORT,
+      notableSignal: 42 as unknown as string,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'invalid' });
+    expect(saveCheckIn).not.toHaveBeenCalled();
+  });
 });
 
 /**

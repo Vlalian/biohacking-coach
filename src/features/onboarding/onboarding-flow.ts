@@ -203,13 +203,25 @@ export function nextStep(
   if (!answers.language) return 'language';
   if (!answers.experienceLevel) return 'experience';
   if (!answers.raceDistance) return 'distance';
-  // Answered either way: a named race, or an explicit "not yet". A bare
-  // `!answers.raceTarget` would send the athlete who has no race back to this
-  // step forever, which is the defect the `noRaceYet` decision exists to fix.
-  if (!answers.raceTarget && !answers.noRaceYet) return 'race';
+  // Answered either way: a named race *with its date*, or an explicit "not
+  // yet". A bare `!answers.raceTarget` would send the athlete who has no race
+  // back to this step forever, which is the defect the `noRaceYet` decision
+  // exists to fix. And a name without a date is what the old free-text field
+  // left behind — `completeProfile` refuses it, so this must too, or a resumed
+  // record sails past every step and is stuck at the end (CodeRabbit, PR #60).
+  if (!hasNamedRace(answers) && !answers.noRaceYet) return 'race';
   if (!submitted.adaptive) return 'adaptive';
   if (!submitted.constraints) return 'constraints';
   return 'done';
+}
+
+/**
+ * A race is named only when it has a date. The one definition, because
+ * `nextStep` and `completeProfile` asking two different questions of the same
+ * fields is how an athlete gets past every step and then cannot finish.
+ */
+function hasNamedRace(answers: OnboardingAnswers): boolean {
+  return Boolean(answers.raceTarget && answers.raceDate);
 }
 
 /** What the client may submit for one step. Everything else is refused. */
@@ -477,7 +489,7 @@ export interface CompletedProfile {
  */
 export function completeProfile(answers: OnboardingAnswers): CompletedProfile | null {
   if (!answers.experienceLevel || !answers.raceDistance) return null;
-  const hasRace = Boolean(answers.raceTarget && answers.raceDate);
+  const hasRace = hasNamedRace(answers);
   if (!hasRace && !answers.noRaceYet) return null;
   return {
     experienceLevel: answers.experienceLevel,

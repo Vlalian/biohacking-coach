@@ -738,10 +738,13 @@ export function buildChatPrompt(
     fixedConstraints,
     equipment,
     raceTarget,
+    raceDistance,
+    raceDate,
+    blockWeek,
+    notableSignal,
     onboarding,
   } = checkIn;
 
-  const race = raceTarget ? ` race=${raceTarget}` : '';
   const noTrain = noTrainFragment(fixedConstraints);
 
   return assemble([
@@ -761,7 +764,17 @@ ${[
   tag('sessions', sessionCount),
 ]
   .filter((part): part is string => part !== null)
-  .join(' ')}${readinessFragment(readiness)}${race}${noTrain}`,
+  .join(' ')}${readinessFragment(readiness)}${noTrain}`,
+
+    // The same horizon the Weekly Session plans against. Chat used to carry
+    // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
+    // was answered by a Coach that did not know when the race was.
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+
+    // The athlete's own words from this week's Check-in, quoted and labelled as
+    // theirs — the service reads the Check-in for exactly this, and until PR #60
+    // the sentence reached this function and went no further.
+    notableSignal ? `ATHLETE SAID (their words, this week): "${notableSignal}"` : null,
 
     noDataBlock(readiness),
 

@@ -10,6 +10,7 @@ import {
   POINT_OF_USE_PURPOSES,
   REQUIRED_CONSENT_PURPOSES,
   DISCLOSURE_VERSION,
+  purposesToShow,
 } from './disclosure';
 
 const V = DISCLOSURE_VERSION;
@@ -47,6 +48,49 @@ describe('consent decision', () => {
       for (const purpose of POINT_OF_USE_PURPOSES) {
         expect(REQUIRED_CONSENT_PURPOSES).not.toContain(purpose);
       }
+    });
+  });
+
+  describe('which purposes a screen shows', () => {
+    // CodeRabbit on PR #60: the manage screen was mapping the onboarding list,
+    // so a point-of-use grant, once made, had nowhere to be withdrawn from.
+    // Withdrawal has to be as easy as granting (Art. 7(3)), and the athlete
+    // must not need to find an injury form to take back a consent about one.
+    it('shows the gate only the onboarding purposes', () => {
+      expect(purposesToShow('gate', ['injury_health_data'])).toEqual([
+        'ai_coaching',
+        'health_data',
+        'product_improvement',
+      ]);
+    });
+
+    it('shows the manage screen a point-of-use purpose once it is granted', () => {
+      expect(purposesToShow('manage', ['ai_coaching', 'head_coach_visibility'])).toEqual([
+        'ai_coaching',
+        'health_data',
+        'head_coach_visibility',
+        'product_improvement',
+      ]);
+    });
+
+    it('does not offer an ungranted point-of-use purpose on the manage screen', () => {
+      // Granting one there would be a third asking surface, with no injury and
+      // no named coach in front of the athlete — the noise ADR 0012 rejected.
+      expect(purposesToShow('manage', ['ai_coaching', 'health_data'])).toEqual([
+        'ai_coaching',
+        'health_data',
+        'product_improvement',
+      ]);
+    });
+
+    it('keeps the disclosure order, whatever order the grants arrive in', () => {
+      expect(purposesToShow('manage', ['head_coach_visibility', 'injury_health_data'])).toEqual([
+        'ai_coaching',
+        'health_data',
+        'injury_health_data',
+        'head_coach_visibility',
+        'product_improvement',
+      ]);
     });
   });
 

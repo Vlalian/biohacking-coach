@@ -8,7 +8,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=Base Building xp=intermediate sessions=0 race=Ironman Copenhagen 2027
+phase=Base Building xp=intermediate sessions=0
+
+HORIZON: distance unknown — ask · no race booked — do not assume one
 
 NO CHECK-IN DATA: The athlete has not checked in this week — you have no energy, physical-condition or sleep-quality figures from them, and no sleep duration or resting pulse. Do not infer any of it, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.
 
@@ -157,6 +159,8 @@ TODAY: 2026-08-18
 CONTEXT (use silently — never cite scores/numbers):
 phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm
 
+HORIZON: distance unknown — ask · no race booked — do not assume one
+
 THIS WEEK (Mon-Sun, every session on the athlete's calendar this week — refer to a session by its day and type, never by a number or id):
 - Tue 2026-08-18: Tempo · 60 min · Zone 3 — planned (you planned this)
 
@@ -180,7 +184,9 @@ POSTURE: Confident, evidence-led, direct. Real conversation — respond to what 
 TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
-phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm race=Ironman Copenhagen 2027 no-train=Thursday, Sunday
+phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm no-train=Thursday, Sunday
+
+HORIZON: distance unknown — ask · no race booked — do not assume one
 
 EQUIPMENT:
 Shoes: Vaporfly 3
@@ -219,6 +225,8 @@ TODAY: 2026-08-18
 CONTEXT (use silently — never cite scores/numbers):
 phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm
 
+HORIZON: distance unknown — ask · no race booked — do not assume one
+
 CONSTRAINT SIGNALS (append on last line, stripped by app):
 Specific date blocked → [UNAVAILABLE:YYYY-MM-DD]
 Ambiguous ("can't do Tuesdays") → ask "just this week or every week?" first
@@ -238,6 +246,8 @@ TODAY: 2026-08-18
 
 CONTEXT (use silently — never cite scores/numbers):
 phase=Base Building xp=intermediate sessions=5 body=7/10 energy=7/10 sleep-quality=7/10 mental=7/10 sleep=7h pulse=50bpm
+
+HORIZON: distance unknown — ask · no race booked — do not assume one
 
 THIS WEEK (Mon-Sun, every session on the athlete's calendar this week — refer to a session by its day and type, never by a number or id):
 - Mon 2026-08-17: 1st Endurance · 90 min · Zone 2 — completed (you planned this) · "steady, hold the low end"

@@ -8,6 +8,7 @@ import {
   resolveAthleteWithLanguage as currentAthlete,
   type AuthFailure,
 } from './current-actor';
+import { isAthleteFault, normaliseNotableSignal } from './check-in-input';
 import {
   commitWeeklyPlan,
   continueWeeklySession,
@@ -75,19 +76,19 @@ export async function saveCheckInAction(report: {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
 
+  // A signal that is not text is the athlete's problem in the same way an
+  // out-of-range score is - refused, not thrown at. What the judgement is lives
+  // in `check-in-input.ts`, where it can be tested without a server.
+  const notableSignal = normaliseNotableSignal(report.notableSignal);
+  if (notableSignal === undefined) return { ok: false, reason: 'invalid' };
+
   try {
     await saveCheckIn(resolved.athlete.id, weekStartOf(dateKey(new Date())), {
       ...report,
-      notableSignal: report.notableSignal?.trim() ? report.notableSignal.trim().slice(0, 500) : null,
+      notableSignal,
     });
   } catch (error) {
-    // A malformed payload or a score outside 1-10 is the athlete's to fix, and
-    // they get told so. Anything else - the database being down, a constraint
-    // nobody predicted - is not, and reporting it as "your Check-in was
-    // malformed" sends them to re-answer a form that was fine.
-    if (error instanceof Error && /not complete/i.test(error.message)) {
-      return { ok: false, reason: 'invalid' };
-    }
+    if (isAthleteFault(error)) return { ok: false, reason: 'invalid' };
     throw error;
   }
   return { ok: true };

@@ -328,9 +328,18 @@ export function WeeklySession({
             onSubmit={(report) => {
               setNotice({ kind: 'none' });
               startTransition(async () => {
-                const result = await saveCheckInAction(report);
-                if (result.ok) setCheckInDone(true);
-                else setNotice({ kind: 'error' });
+                // The action rethrows anything that is not the athlete's fault
+                // (a database error, say). Left uncaught, that reaches the
+                // locale error boundary, which replaces this form - and the
+                // four answers held in its local state - with a retry screen.
+                // The athlete keeps their answers and gets the notice instead.
+                try {
+                  const result = await saveCheckInAction(report);
+                  if (result.ok) setCheckInDone(true);
+                  else setNotice({ kind: 'error' });
+                } catch {
+                  setNotice({ kind: 'error' });
+                }
               });
             }}
           />

@@ -124,10 +124,20 @@ export function capacityStatement(
     ? 'The athlete is ill and is training none of it.'
     : 'The athlete has reported an injury.';
 
+  // "Substitute rather than cancel" is the whole point of per-discipline
+  // capacity — but only while there is a discipline left to substitute with. An
+  // Illness leaves none, and telling the Coach to swap a run for a swim the
+  // athlete has also been told they cannot do is an instruction it can only
+  // fail. What it plans while they are ill is rest; the calendar is still not
+  // its to edit.
+  const planning = hasOpenIllness
+    ? 'Plan rest until they say they are recovered'
+    : 'Plan around it: substitute rather than cancel';
+
   return (
     `CAPACITY: ${cause} ${clauses.join('; ')}. ` +
     'This is what they said they can do, not a diagnosis — you have not been told ' +
-    'what is wrong or where, and must not ask them to work it out. Plan around it: ' +
-    'substitute rather than cancel, and do not skip or move sessions on your own.'
+    `what is wrong or where, and must not ask them to work it out. ${planning}, ` +
+    'and do not skip or move sessions on your own.'
   );
 }

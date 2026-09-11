@@ -103,6 +103,34 @@ export const ONBOARDING_CONSENT_PURPOSES: readonly ConsentPurpose[] = CONSENT_PU
 );
 
 /**
+ * The purposes one consent screen lists, in disclosure order.
+ *
+ * The gate shows the onboarding set and nothing else. The manage screen shows
+ * that set **plus any point-of-use purpose the athlete has already granted** —
+ * granted, not merely existing. Two reasons pull in opposite directions and this
+ * is where they meet:
+ *
+ * - Withdrawal must be as easy as granting (Art. 7(3)). A grant made from an
+ *   injury form has to be withdrawable from the one place an athlete goes to
+ *   withdraw things, or it is a consent they can give but not take back.
+ *   CodeRabbit found the manage screen mapping the onboarding list (PR #60),
+ *   which made exactly that true.
+ * - An *ungranted* point-of-use purpose is still not offered here. Listing it
+ *   would make the manage screen a third asking surface, with no injury and no
+ *   named coach in front of the athlete — the noise ADR 0012 keeps off every
+ *   screen but the one where the question is concrete.
+ */
+export function purposesToShow(
+  mode: 'gate' | 'manage',
+  granted: readonly ConsentPurpose[],
+): ConsentPurpose[] {
+  if (mode === 'gate') return [...ONBOARDING_CONSENT_PURPOSES];
+  return CONSENT_PURPOSES.filter(
+    (purpose) => !POINT_OF_USE_PURPOSES.includes(purpose) || granted.includes(purpose),
+  );
+}
+
+/**
  * The disclosure version. A grant is valid only while its stored version equals
  * this string, so bumping it on any wording change below invalidates every prior
  * grant and forces re-consent. Dated for legibility; the value is opaque to the

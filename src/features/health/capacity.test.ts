@@ -92,6 +92,20 @@ describe('capacityStatement — the only half a prompt ever sees', () => {
     expect(capacityStatement([CANNOT_RUN], false)).toContain('injury');
   });
 
+  it('does not tell the Coach to substitute when there is nothing to substitute with', () => {
+    // CodeRabbit on PR #60. An Illness sets every discipline to none, and the
+    // shared sentence went on to say "substitute rather than cancel" — an
+    // instruction to swap a run for a swim the athlete has also been told they
+    // cannot do. The Coach still must not touch the calendar; what it plans
+    // while the athlete is ill is rest.
+    const ill = capacityStatement([CANNOT_RUN], true);
+
+    expect(ill).not.toContain('substitute');
+    expect(ill).toContain('do not skip or move sessions on your own');
+    expect(ill).toContain('not a diagnosis');
+    expect(ill).toMatch(/rest|no training/i);
+  });
+
   it('carries no body location, because it is given none', () => {
     // The structural guarantee, tested as one: this function's input has no
     // field for a location, so no statement it produces can contain one. "Left

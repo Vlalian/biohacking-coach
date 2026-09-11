@@ -312,6 +312,25 @@ describe('a Race is optional, and saying so is an answer', () => {
     ).toBe('adaptive');
   });
 
+  it('sends a name-only race back to the race step, the same as completion would', () => {
+    // CodeRabbit on PR #60. A record from before the date was asked carries a
+    // `raceTarget` and no `raceDate`. Treating that as answered let the athlete
+    // through every remaining step and then fail at `completeProfile`, which
+    // requires both — stuck on a finished questionnaire with nothing to fix.
+    // Both functions now ask the same question of the same two fields.
+    const nameOnly = {
+      language: 'en',
+      experienceLevel: 'veteran',
+      raceDistance: 'Half',
+      raceTarget: 'Ironman Copenhagen',
+    } as const;
+
+    expect(nextStep(nameOnly, { adaptive: true, constraints: true })).toBe('race');
+    expect(
+      nextStep({ ...nameOnly, raceDate: '2027-08-15' }, { adaptive: true, constraints: true }),
+    ).toBe('done');
+  });
+
   it('refuses a race without a date, and a date that is not one', () => {
     // A name with no date is what the old free-text field allowed, and it is
     // what the four regexes then guessed at. There is no guessing now, so the

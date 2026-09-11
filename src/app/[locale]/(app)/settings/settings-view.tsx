@@ -372,7 +372,16 @@ function RaceDistanceField({
   onSave: (value: string) => Promise<SettingsActionResult>;
 }) {
   const t = useTranslations('Settings');
+  // The selection the athlete sees is what has been saved, not the prop: the
+  // action does not revalidate the route, so the prop keeps the value the page
+  // loaded with and would show the old distance selected after a save.
+  const [current, setCurrent] = useState(value);
   const { status, run } = useSaveStatus();
+
+  async function choose(distance: string) {
+    if (distance === current) return;
+    if (await run(() => onSave(distance))) setCurrent(distance);
+  }
 
   return (
     <div>
@@ -386,9 +395,9 @@ function RaceDistanceField({
             key={distance}
             type="button"
             disabled={status === 'saving'}
-            onClick={() => run(() => onSave(distance))}
+            onClick={() => choose(distance)}
             className={`border px-3 py-1.5 font-body text-sm transition-colors disabled:opacity-50 ${
-              distance === value
+              distance === current
                 ? 'border-signal text-foreground'
                 : 'border-border text-muted-foreground hover:text-foreground'
             }`}
@@ -425,10 +434,18 @@ function RaceTargetField({
   const t = useTranslations('Settings');
   const [draftName, setDraftName] = useState(name);
   const [draftDate, setDraftDate] = useState(date);
+  // The baseline `dirty` is judged against moves on a successful save. Judged
+  // against the props, the Save button would stay enabled after saving, since
+  // the action does not revalidate the route.
+  const [saved, setSaved] = useState({ name, date });
   const { status, reset, run } = useSaveStatus();
-  const dirty = draftName.trim() !== name.trim() || draftDate !== date;
+  const dirty = draftName.trim() !== saved.name.trim() || draftDate !== saved.date;
 
-  const save = () => run(() => onSave(draftName, draftDate));
+  async function save() {
+    if (await run(() => onSave(draftName, draftDate))) {
+      setSaved({ name: draftName, date: draftDate });
+    }
+  }
 
   return (
     <div>
@@ -483,10 +500,15 @@ function CommunicationStyleField({
 }) {
   const t = useTranslations('Settings');
   const [draft, setDraft] = useState(value);
+  // Same baseline rule as the race fields: pre-existing here, fixed alongside
+  // them because it is the same one-line defect in the same file.
+  const [saved, setSaved] = useState(value);
   const { status, reset, run } = useSaveStatus();
-  const dirty = draft.trim() !== value.trim();
+  const dirty = draft.trim() !== saved.trim();
 
-  const save = () => run(() => onSave(draft));
+  async function save() {
+    if (await run(() => onSave(draft))) setSaved(draft);
+  }
 
   return (
     <div>

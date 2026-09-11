@@ -207,14 +207,17 @@ describe('onboarding answers reach every Coach prompt', () => {
   });
 
   it('chat prompt includes the answers, experience level and race', () => {
+    // Name and date together: Chat renders the same HORIZON line the Weekly
+    // Session does, and a race with no date is not a race on either surface.
     const prompt = buildChatPrompt({
       ...BASE,
       onboarding: ONBOARDING,
       raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
     });
     expect(prompt).toContain('ONBOARDING PROFILE');
     expect(prompt).toContain('xp=intermediate');
-    expect(prompt).toContain('race=Ironman Copenhagen');
+    expect(prompt).toContain('race=Ironman Copenhagen on 2027-08-15');
   });
 
   it('omits the block entirely when nothing was answered', () => {
@@ -1026,6 +1029,45 @@ describe('the horizon reaches the prompt, including when there is none', () => {
     // name, and guessing one is the habit this slice removed.
     const prompt = weekly({ raceDistance: undefined });
     expect(prompt).toContain('distance unknown');
+  });
+
+  // CodeRabbit on PR #60: Coach Chat was handed the same CheckIn as the Weekly
+  // Session — race, distance, block, the athlete's sentence — and rendered
+  // `race=name` and nothing else of it. "Should I do tomorrow's intervals?" is
+  // asked in Chat, and the answer depends on how far out the race is and what
+  // the athlete said on Monday. A Coach that knows less in Chat than it knew
+  // when it planned the week contradicts itself.
+  describe('and Coach Chat knows the same horizon', () => {
+    const chat = (overrides: Partial<CheckIn> = {}) =>
+      buildChatPrompt({ ...BASE, ...overrides }, TUESDAY);
+
+    it('states the Race Distance and the race date, not only the name', () => {
+      const prompt = chat({
+        raceDistance: 'Full',
+        raceTarget: 'Ironman Copenhagen',
+        raceDate: '2027-08-15',
+      });
+      expect(prompt).toContain('HORIZON:');
+      expect(prompt).toContain('distance=Full');
+      expect(prompt).toContain('race=Ironman Copenhagen on 2027-08-15');
+    });
+
+    it('says plainly there is no race, and states the block position when there is one', () => {
+      expect(chat({ raceDistance: 'Half' })).toContain('no race booked');
+      expect(chat({ phase: 'Block 2 of 4', blockWeek: 'week 3 of 6' })).toContain(
+        'Block 2 of 4, week 3 of 6',
+      );
+    });
+
+    it('carries what the athlete said this week, in their words', () => {
+      // The service already reads the Check-in for exactly this — "someone who
+      // wrote 'calf tight since Tuesday' on Monday should not have to say it
+      // again on Wednesday" — and until now the sentence went nowhere.
+      const prompt = chat({ notableSignal: 'calf tight since Tuesday' });
+      expect(prompt).toContain('ATHLETE SAID');
+      expect(prompt).toContain('"calf tight since Tuesday"');
+      expect(chat()).not.toContain('ATHLETE SAID');
+    });
   });
 });
 
