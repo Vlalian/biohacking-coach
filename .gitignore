@@ -65,3 +65,7 @@ coverage/
 # and candidate article XML fetched while licence-checking them. Regenerable,
 # and the same "is this text ours to commit?" question as .corpus-cache/.
 .corpus-scout/
+
+# neon link writes the branch pointer for this checkout here (neon.ts policy is
+# tracked; which branch a checkout is on is not).
+.neon
