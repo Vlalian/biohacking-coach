@@ -18,6 +18,14 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  // better-auth admin plugin (auth.ts, 2026-09-11). `role` is what makes someone
+  // an admin — the seed sets 'admin' on Mads only. The ban fields come with the
+  // plugin and are unused today. Added by hand, not by `@better-auth/cli
+  // generate`: the generator rewrites this file and drops ui_prefs above.
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
 });
 
 export const session = pgTable(
@@ -35,6 +43,9 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // Set by the admin plugin when this session was opened by `impersonateUser`:
+    // the admin's user id. This is the audit trail for a health-data access path.
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );

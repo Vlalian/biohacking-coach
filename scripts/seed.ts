@@ -92,6 +92,11 @@ async function seedMads(): Promise<string> {
     }
   }
 
+  // Mads is the operator: the one account the admin plugin (auth.ts) treats as
+  // an admin. Set on every run, not only on first creation, so a database that
+  // predates the plugin picks it up when re-seeded.
+  await getDb().update(user).set({ role: 'admin' }).where(eq(user.email, email));
+
   return madsAthleteId(email);
 }
 
