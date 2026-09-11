@@ -202,6 +202,22 @@ git -C $Main worktree remove $Worktree --force
 Write-Host ""
 Write-Host "Removed session worktree: $Worktree" -ForegroundColor Green
 
+# 3. The session's Neon branch (New-Session.ps1 step 3b-ter). It carries an
+#    expiry, so this is eager cleanup, not the only cleanup - and it must never
+#    be fatal: the worktree is already gone, and a branch that outlives it costs
+#    nothing but one of the ten slots until it expires.
+$SessionBranch = "dev/$Name"
+if (Get-Command neon -ErrorAction SilentlyContinue) {
+  $out = neon branches delete $SessionBranch --project-id "plain-sky-06454855" --org-id "org-patient-wave-37211297" -o json 2>&1
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Deleted Neon branch $SessionBranch." -ForegroundColor Green
+  } else {
+    Write-Host "Neon branch $SessionBranch not deleted (absent, or CLI not logged in) - it expires on its own." -ForegroundColor DarkGray
+  }
+} else {
+  Write-Host "Neon CLI not found - branch $SessionBranch (if any) expires on its own." -ForegroundColor DarkGray
+}
+
 if (-not $CheckBranch -or -not $Branch) {
   Write-Host "The branch still exists. To find out whether it is safe to delete:"
   Write-Host "    .\Remove-Session.ps1 -Name <name> -CheckBranch"
