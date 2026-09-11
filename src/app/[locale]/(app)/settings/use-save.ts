@@ -89,7 +89,12 @@ export interface SaveStatusState {
   status: SaveStatusValue;
   /** Back to idle — call when the draft changes so a stale "saved" clears. */
   reset: () => void;
-  run: (action: () => Promise<ActionResult>) => Promise<void>;
+  /**
+   * Whether the save landed — false on error, and false when a newer edit
+   * invalidated it in flight. A field moves its baseline on true and only on
+   * true, which is what keeps its Save button honest after the save.
+   */
+  run: (action: () => Promise<ActionResult>) => Promise<boolean>;
 }
 
 export function useSaveStatus(): SaveStatusState {
@@ -100,12 +105,13 @@ export function useSaveStatus(): SaveStatusState {
   // changed text this hook exists to prevent, arriving by a slower route.
   const generation = useRef(0);
 
-  async function run(action: () => Promise<ActionResult>): Promise<void> {
+  async function run(action: () => Promise<ActionResult>): Promise<boolean> {
     const mine = ++generation.current;
     setStatus('saving');
     const ok = await attempt(action);
-    if (generation.current !== mine) return;
+    if (generation.current !== mine) return false;
     setStatus(ok ? 'saved' : 'error');
+    return ok;
   }
 
   function reset() {

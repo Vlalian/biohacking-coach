@@ -331,11 +331,27 @@ function todayBlock(
   return lines.join('\n');
 }
 
-/** The readiness scores as prompt tokens, or '' when the athlete never gave any. */
+/**
+ * The readiness scores as prompt tokens, or '' when the athlete never gave any.
+ *
+ * The three the athlete reports are always present; the three that need a device
+ * or a rated session are appended only when they exist. An absent token is
+ * absence the model can act on — a defaulted one is a number nobody gave, which
+ * is the defect `code-health/07` removed.
+ */
 function readinessTokens(readiness?: Readiness): string {
   if (!readiness) return '';
-  const { body, mental, energy, sleep, pulse } = readiness;
-  return `body=${body}/10 mental=${mental}/10 energy=${energy}/10 sleep=${sleep}h pulse=${pulse}bpm`;
+  const { body, energy, sleepQuality, mental, sleepHours, restingPulse } = readiness;
+  return [
+    `body=${body}/10`,
+    `energy=${energy}/10`,
+    `sleep-quality=${sleepQuality}/10`,
+    mental === undefined ? null : `mental=${mental}/10`,
+    sleepHours === undefined ? null : `sleep=${sleepHours}h`,
+    restingPulse === undefined ? null : `pulse=${restingPulse}bpm`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** The same, space-prefixed for the templates that append it mid-line. */
@@ -366,7 +382,81 @@ function tag(name: string, value: string | number | undefined): string | null {
  * to infer a state from silence, which is the same failure the invented baseline
  * caused, arrived at differently (code-health/07).
  */
-const NO_CHECK_IN = `NO CHECK-IN DATA: You have no check-in scores for this athlete — no body, mental, energy, sleep or resting-pulse figures. Do not infer them, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.`;
+/**
+ * What the Coach cannot see, said plainly.
+ *
+ * Two versions, because after `training-architecture/05` there are two different
+ * gaps and telling them apart matters. With **no Check-in** the Coach has
+ * nothing the athlete reported this week. With one, it has their own report and
+ * still has **no device data** — sleep duration and resting heart rate are
+ * expected from Garmin or similar and there is no feed yet (Mads, 2026-09-09).
+ *
+ * Deleting the second when the Check-in shipped was the tempting move and would
+ * have been a false claim by omission: the Coach would stop being told it cannot
+ * see a resting pulse while it still cannot. That is the same defect
+ * `code-health/07` fixed, pointing the other way.
+ */
+const NO_CHECK_IN = `NO CHECK-IN DATA: The athlete has not checked in this week — you have no energy, physical-condition or sleep-quality figures from them, and no sleep duration or resting pulse. Do not infer any of it, and never imply you can see how they slept or recovered. Ask, and coach from what they tell you in words.`;
+
+const NO_DEVICE_DATA = `NO DEVICE DATA: The athlete's own check-in is above. You have no measured sleep duration and no resting heart rate — nothing wearable feeds this app yet. Reason from what they reported and from their session ratings; never imply you can see how long they actually slept.`;
+
+/**
+ * Which absence to declare, judged on the fields themselves.
+ *
+ * It used to key on whether a `Readiness` existed at all, which was right only
+ * for as long as no device fed anything: the day a Garmin feed lands, that
+ * version would render `sleep=7h pulse=50bpm` and then assert, one block later,
+ * that the Coach has no measured sleep duration or resting heart rate. A false
+ * claim beside the true numbers contradicting it — which is the exact defect
+ * splitting these two messages was meant to prevent, so it is now judged on the
+ * device fields rather than on their container.
+ *
+ * Saying nothing is not an option here. Silence about what the Coach cannot see
+ * is what `code-health/07` removed.
+ */
+function noDataBlock(readiness?: Readiness): string {
+  if (!readiness) return NO_CHECK_IN;
+  const hasDeviceData =
+    readiness.sleepHours !== undefined || readiness.restingPulse !== undefined;
+  return hasDeviceData ? '' : NO_DEVICE_DATA;
+}
+
+/**
+ * The horizon: what shape of race the athlete trains for, and when the race is.
+ *
+ * Always rendered, in all four combinations, because **omission is the failure
+ * mode**. A prompt with no race line reads to the model as one whose race line
+ * was forgotten, and it will invent a horizon to plan toward — the same class of
+ * defect `NO_CHECK_IN` exists to prevent one block down.
+ *
+ * Race Distance is stated even when no race is booked: an athlete building
+ * toward an Ironman with nothing in the calendar still needs an Ironman-shaped
+ * week (*Distancens Arkitektur* §14). And an athlete who was never asked is
+ * reported as unknown rather than defaulted — the migration backfills nothing,
+ * because a distance is not derivable from a race name.
+ */
+function horizonBlock(
+  raceDistance?: string | null,
+  raceTarget?: string | null,
+  raceDate?: string | null,
+  phase?: string | null,
+  blockWeek?: string | null,
+): string {
+  const distance = raceDistance ? `distance=${raceDistance}` : 'distance unknown — ask';
+  const race =
+    raceTarget && raceDate
+      ? `race=${raceTarget} on ${raceDate}`
+      // Not "the athlete said so": no race can mean they declared they have
+      // none *or* that every race they had has passed, and the prompt cannot
+      // tell which. Asserting the decision would be a claim about the athlete
+      // that nobody made — the fabrication `NO_CHECK_IN` exists to prevent, one
+      // block down.
+      : 'no race booked — do not assume one';
+  // The block and the position inside it, when there is a horizon to be inside.
+  // Omitted together, because half of it says less than nothing.
+  const block = phase && blockWeek ? ` · ${phase}, ${blockWeek}` : '';
+  return `HORIZON: ${distance} · ${race}${block}`;
+}
 
 /** The STATE line — coaching intelligence, never quoted back to the athlete. */
 function stateBlock(s: {
@@ -487,6 +577,11 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
     equipment,
     weeklySessionNumber,
     raceTarget,
+    raceDistance,
+    raceDate,
+    blockWeek,
+    capacity,
+    notableSignal,
     onboarding,
   } = ctx.checkIn;
 
@@ -505,13 +600,25 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     arcBlock(weeklySessionNumber, raceTarget),
 
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+
+    // What the athlete's body currently allows, or nothing at all when nothing
+    // is restricted (ADR 0011). Already a sentence when it arrives — this file
+    // never sees an injury record, only what one permits.
+    capacity ?? null,
+
+    // The athlete's own words about their week. Quoted rather than paraphrased,
+    // and labelled as theirs, so the Coach cannot mistake it for an app-derived
+    // signal or repeat it back as its own observation.
+    notableSignal ? `ATHLETE SAID (their words, this week): "${notableSignal}"` : null,
+
     todayBlock(today, window, weeklySessionDay, fixedConstraints),
 
     equipmentBlock(equipmentLines),
 
     stateBlock({ phase, sessionCount, experienceLevel, readiness }),
 
-    readiness ? null : NO_CHECK_IN,
+    noDataBlock(readiness),
 
     onboardingBlock(onboarding),
 
@@ -631,10 +738,13 @@ export function buildChatPrompt(
     fixedConstraints,
     equipment,
     raceTarget,
+    raceDistance,
+    raceDate,
+    blockWeek,
+    notableSignal,
     onboarding,
   } = checkIn;
 
-  const race = raceTarget ? ` race=${raceTarget}` : '';
   const noTrain = noTrainFragment(fixedConstraints);
 
   return assemble([
@@ -654,9 +764,19 @@ ${[
   tag('sessions', sessionCount),
 ]
   .filter((part): part is string => part !== null)
-  .join(' ')}${readinessFragment(readiness)}${race}${noTrain}`,
+  .join(' ')}${readinessFragment(readiness)}${noTrain}`,
 
-    readiness ? null : NO_CHECK_IN,
+    // The same horizon the Weekly Session plans against. Chat used to carry
+    // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
+    // was answered by a Coach that did not know when the race was.
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+
+    // The athlete's own words from this week's Check-in, quoted and labelled as
+    // theirs — the service reads the Check-in for exactly this, and until PR #60
+    // the sentence reached this function and went no further.
+    notableSignal ? `ATHLETE SAID (their words, this week): "${notableSignal}"` : null,
+
+    noDataBlock(readiness),
 
     weekBlock(week),
 

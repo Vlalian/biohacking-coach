@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
+import { currentPhase, trainingBlocks } from './training-blocks';
 
 const {
   callCoach,
@@ -34,6 +35,16 @@ vi.mock('./conversation-repository', () => ({
   getMessages,
   getLatestOpenConversation: vi.fn(),
 }));
+vi.mock('./check-in-repository', () => ({
+  // No Check-in filed: the ordinary week, and the one the prompt has to say it
+  // has nothing for rather than inventing scores.
+  getCheckInForWeek: vi.fn(async () => null),
+}));
+vi.mock('@/features/race/race-repository', () => ({
+  // No race booked: the ordinary state for most of these fixtures, and the one
+  // the prompt has to state plainly rather than omit.
+  getTargetRace: vi.fn(async () => null),
+}));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getOwnedSession,
@@ -50,7 +61,6 @@ const { toApiMessages } = await import('./conversation');
 const ATHLETE = {
   id: 'athlete_1',
   syntheticLabel: null,
-  trainingPhase: 'Peak',
   experienceLevel: 'intermediate',
   communicationStyle: null,
   raceTarget: 'Ironman Kona',
@@ -284,7 +294,15 @@ describe('the Coach Chat system prompt carries no invented readiness', () => {
     const { system } = callCoach.mock.calls[0][0];
     for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
     expect(system).toContain('NO CHECK-IN DATA');
-    expect(system).toContain('phase=Peak');
+  });
+
+  it('derives the phase from the horizon, the same as the Weekly Session', () => {
+    // `phase=` used to come from a column written once at onboarding, so Chat
+    // and the Weekly Session could disagree about where the athlete was in
+    // their season. Both derive it from the Target Race now, so they cannot.
+    expect(currentPhase('2026-08-12', trainingBlocks('2026-08-12', '2027-06-01'))).toBe(
+      'Block 1 of 5',
+    );
   });
 });
 

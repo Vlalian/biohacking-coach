@@ -33,7 +33,7 @@ import type { WeekSession } from './week';
  */
 
 const BASE: CheckIn = {
-  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
+  readiness: { body: 7, energy: 7, sleepQuality: 7, mental: 7, sleepHours: 7, restingPulse: 50 },
   phase: 'Base Building',
   commStyle: '',
   experienceLevel: 'intermediate',

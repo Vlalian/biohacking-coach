@@ -10,6 +10,10 @@ const {
   updateLinkVisibility,
   severLinkForAthlete,
   setUiLanguage,
+  updateRaceTarget,
+  updateRaceDistance,
+  upsertTargetRace,
+  clearTargetRace,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   getAthleteByUserId: vi.fn(),
@@ -20,6 +24,10 @@ const {
   updateLinkVisibility: vi.fn(() => Promise.resolve()),
   severLinkForAthlete: vi.fn(() => Promise.resolve()),
   setUiLanguage: vi.fn(() => Promise.resolve()),
+  updateRaceTarget: vi.fn(() => Promise.resolve()),
+  updateRaceDistance: vi.fn(() => Promise.resolve()),
+  upsertTargetRace: vi.fn(() => Promise.resolve()),
+  clearTargetRace: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
@@ -30,12 +38,15 @@ vi.mock('@/features/athlete/athlete-repository', () => ({
   addFixedConstraint,
   removeFixedConstraint,
   updateCommunicationStyle,
+  updateRaceTarget,
+  updateRaceDistance,
 }));
 vi.mock('@/features/coach/coach-repository', () => ({
   updateLinkVisibility,
   severLinkForAthlete,
 }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setUiLanguage }));
+vi.mock('@/features/race/race-repository', () => ({ upsertTargetRace, clearTargetRace }));
 
 const {
   updateCommunicationStyleAction,
@@ -43,6 +54,8 @@ const {
   addFixedConstraintAction,
   removeFixedConstraintAction,
   updateLanguageAction,
+  updateRaceDistanceAction,
+  updateTargetRaceAction,
   updateLinkVisibilityAction,
   severCoachingLinkAction,
 } = await import('./settings-actions');
@@ -221,5 +234,108 @@ describe('severCoachingLinkAction', () => {
     const result = await severCoachingLinkAction();
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(severLinkForAthlete).not.toHaveBeenCalled();
+  });
+});
+
+// ── The horizon, editable after onboarding (training-architecture/02) ─────────
+
+describe('Race Distance is editable, and stays a closed set', () => {
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Half' });
+  });
+
+  it('stores one of the four', async () => {
+    await expect(updateRaceDistanceAction('Full')).resolves.toEqual({ ok: true });
+    expect(updateRaceDistance).toHaveBeenCalledWith('athlete_1', 'Full');
+  });
+
+  it('refuses anything else, and stores nothing', async () => {
+    // The same gate onboarding applies. Settings is a second door onto the same
+    // column, and a door with a weaker lock is not a door.
+    for (const bad of ['Ironman', '', 'full']) {
+      await expect(updateRaceDistanceAction(bad)).resolves.toEqual({
+        ok: false,
+        reason: 'invalid',
+      });
+    }
+    expect(updateRaceDistance).not.toHaveBeenCalled();
+  });
+});
+
+describe('the Target Race is editable, name and date together', () => {
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
+  });
+
+  it('saves a name and a date', async () => {
+    await expect(
+      updateTargetRaceAction('Ironman Copenhagen', '2027-08-15'),
+    ).resolves.toEqual({ ok: true });
+    expect(upsertTargetRace).toHaveBeenCalledWith('athlete_1', {
+      name: 'Ironman Copenhagen',
+      date: '2027-08-15',
+      distance: 'Full',
+    });
+    // `athlete.raceTarget` stays in step: the Coach's session-1 arc and the
+    // onboarding greeting both read it, so a race edited here and not there
+    // would leave two answers to one question.
+    expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'Ironman Copenhagen');
+  });
+
+  it('refuses a name with no date, and a date that is not a real day', async () => {
+    await expect(updateTargetRaceAction('Ironman Copenhagen', '')).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    await expect(
+      updateTargetRaceAction('Ironman Copenhagen', '2027-02-30'),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' });
+    expect(upsertTargetRace).not.toHaveBeenCalled();
+  });
+
+  it('clears the target when both are emptied', async () => {
+    // An athlete between races has no target. Clearing is a real state, not a
+    // failed edit.
+    await expect(updateTargetRaceAction('', '')).resolves.toEqual({ ok: true });
+    expect(clearTargetRace).toHaveBeenCalledWith('athlete_1');
+    expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', null);
+  });
+
+  it('refuses to create a race for an athlete with no Race Distance', async () => {
+    // A Race carries a distance, and there is nowhere honest to get one from.
+    // Guessing it from the race name is the habit this slice removed.
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: null });
+    await expect(
+      updateTargetRaceAction('Ironman Copenhagen', '2027-08-15'),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' });
+    expect(upsertTargetRace).not.toHaveBeenCalled();
+  });
+});
+
+describe('the horizon actions refuse a caller they cannot identify', () => {
+  it('stores nothing when nobody is signed in', async () => {
+    getSession.mockResolvedValue(null);
+
+    await expect(updateRaceDistanceAction('Full')).resolves.toEqual({
+      ok: false,
+      reason: 'not-authenticated',
+    });
+    await expect(
+      updateTargetRaceAction('Ironman Copenhagen', '2027-08-15'),
+    ).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(updateRaceDistance).not.toHaveBeenCalled();
+    expect(upsertTargetRace).not.toHaveBeenCalled();
+  });
+
+  it('refuses a race name past the length cap before reading the athlete', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
+
+    await expect(
+      updateTargetRaceAction('x'.repeat(121), '2027-08-15'),
+    ).resolves.toEqual({ ok: false, reason: 'invalid' });
+    expect(upsertTargetRace).not.toHaveBeenCalled();
   });
 });

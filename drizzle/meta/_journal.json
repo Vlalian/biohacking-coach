@@ -134,6 +134,41 @@
       "when": 1788528314146,
       "tag": "0018_message_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788960915617,
+      "tag": "0019_race",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788991410536,
+      "tag": "0020_drop_training_phase",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789003385033,
+      "tag": "0021_check_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789030782403,
+      "tag": "0022_injury_illness",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789032288005,
+      "tag": "0023_consent_purposes",
+      "breakpoints": true
     }
   ]
 }

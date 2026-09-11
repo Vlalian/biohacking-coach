@@ -5,6 +5,7 @@ import type { NewSessionRow } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import type { PlanningWindow } from './planning-window';
 import { assertNoIdentity, type CheckIn, type Readiness, type SkippedSession, type WeekFeedbackEntry } from './check-in';
+import { blockPosition, currentBlock, trainingBlocks } from './training-blocks';
 import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
 
@@ -31,7 +32,8 @@ export const WEEKLY_OPENER = "Let's do our weekly session.";
  * Assembles the check-in the Weekly Session prompt reasons about, from the
  * athlete's opaque profile and today's reported readiness.
  *
- * `readiness` is nullable because until a Check-in feature exists the athlete
+ * `readiness` is nullable because the athlete may skip the Check-in (ADR 0007),
+ * and until a device feed exists the athlete
  * has never reported one. Null means the five scores are *left out entirely* —
  * not defaulted — so the prompt renders a STATE line without them and tells the
  * Coach to ask instead. Inventing a neutral baseline made every athlete read as
@@ -50,16 +52,47 @@ export const WEEKLY_OPENER = "Let's do our weekly session.";
  */
 export function buildWeeklyCheckIn(
   athlete: Athlete,
+  /**
+   * The day the prompt is being built for. Needed because the Training Phase is
+   * no longer a stored string — it is the name of the Training Block today falls
+   * inside, derived here on every read (`training-architecture/03`).
+   */
+  today: string,
   readiness: Readiness | null,
   weeklySessionNumber: number,
   language?: string,
   equipmentItems: EquipmentItem[] = [],
+  /**
+   * The Target Race, or null when the athlete has none.
+   *
+   * A parameter rather than an athlete column because a Race is an entity — the
+   * caller reads it through the race repository, the same way `language` comes
+   * through the user seam. Both halves come from here so the prompt never
+   * reports a name from one source beside a date from another: `athlete.raceTarget`
+   * is kept in step by every writer, but "kept in step" is a promise, and the
+   * Race row is the fact.
+   */
+  targetRace: { name: string; date: string } | null = null,
+  /**
+   * What an open Injury or Illness prevents, already rendered
+   * (`features/health/capacity.ts`), or null when nothing is restricted.
+   *
+   * A sentence rather than the records, because this is the only half of a
+   * health record that may reach a prompt (ADR 0011) — the caller resolves it,
+   * and nothing from here on is holding a detail thread it could leak.
+   */
+  capacity: string | null = null,
+  /** The athlete's own sentence from this week's Check-in, or null. */
+  notableSignal: string | null = null,
 ): CheckIn {
   const checkIn: CheckIn = {
     // Omitted entirely when absent, rather than set to undefined: nothing can
     // then interpolate "undefined" into a prompt.
     ...(readiness ? { readiness } : {}),
     ...coachingFactsFrom(athlete),
+    ...horizonFactsFrom(today, targetRace),
+    ...(capacity ? { capacity } : {}),
+    ...(notableSignal ? { notableSignal } : {}),
     ...constraintFactsFrom(athlete),
     // The STATE line's `sessions=` is coaching-relationship depth — how many
     // Weekly Sessions have come before, not the athlete's weekly frequency.
@@ -77,6 +110,33 @@ export function buildWeeklyCheckIn(
 }
 
 /**
+ * The athlete's horizon: the Target Race, the Training Block today falls inside,
+ * and where in that block they are standing.
+ *
+ * Its own function for the same reason {@link coachingFactsFrom} is — the
+ * check-in is a record of facts from several sources, and each source assembling
+ * itself keeps any one of them from turning the builder into a pile of
+ * conditionals. All of it is **derived, never stored**: an athlete with no race
+ * has no phase, which is a real state, and the prompt renders it as no phase
+ * rather than as a guess.
+ */
+function horizonFactsFrom(today: string, targetRace: { name: string; date: string } | null) {
+  if (!targetRace) return {};
+  const race = { raceTarget: targetRace.name, raceDate: targetRace.date };
+
+  // A race in the past leaves the athlete with a race but no blocks — nothing
+  // left to divide. They keep the race and lose the phase, which is the honest
+  // rendering of that state.
+  const block = currentBlock(today, trainingBlocks(today, targetRace.date));
+  if (!block) return race;
+
+  // Position is never checked separately: it is derived from the block, so a
+  // block without one cannot exist, and asking twice would suggest it could.
+  const { week, weeks } = blockPosition(today, block);
+  return { ...race, phase: block.name, blockWeek: `week ${week} of ${weeks}` };
+}
+
+/**
  * The athlete's coaching picture, as the prompt names it.
  *
  * Every column is nullable and every one becomes `undefined` rather than a
@@ -86,10 +146,10 @@ export function buildWeeklyCheckIn(
  */
 function coachingFactsFrom(athlete: Athlete) {
   return {
-    phase: orUndefined(athlete.trainingPhase),
     experienceLevel: orUndefined(athlete.experienceLevel),
     commStyle: orUndefined(athlete.communicationStyle),
     raceTarget: orUndefined(athlete.raceTarget),
+    raceDistance: orUndefined(athlete.raceDistance),
   };
 }
 

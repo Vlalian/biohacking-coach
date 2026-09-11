@@ -125,6 +125,23 @@ export async function updateRaceTarget(
 }
 
 /**
+ * The Race Distance, changed after onboarding.
+ *
+ * A closed set, checked by the caller against `RACE_DISTANCES` before it gets
+ * here — the same gate onboarding applies, because Settings is a second door
+ * onto the same column and a door with a weaker lock is not a door.
+ */
+export async function updateRaceDistance(
+  athleteId: string,
+  raceDistance: string,
+): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ raceDistance, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *
@@ -235,10 +252,10 @@ export async function completeAthleteOnboarding(
   await getDb()
     .update(athlete)
     .set({
-      trainingPhase: completed.trainingPhase,
       experienceLevel: completed.experienceLevel,
       communicationStyle: completed.communicationStyle,
       raceTarget: completed.raceTarget,
+      raceDistance: completed.raceDistance,
       profile: profileMergedWith(profileChanges),
       updatedAt: new Date(),
     })

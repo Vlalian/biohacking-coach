@@ -218,7 +218,10 @@
     "deleteConfirmPlaceholder": "din e-mailadresse",
     "deleteConfirmButton": "Slet det hele",
     "deleteCancel": "Behold min konto",
-    "deleteError": "Det virkede ikke. Intet blev slettet."
+    "deleteError": "Det virkede ikke. Intet blev slettet.",
+    "raceDistanceLabel": "Distance",
+    "raceDistanceNote": "Formen på din træningsuge. Sæt den, også selvom du ikke har et løb booket.",
+    "raceDateLabel": "Løbsdato"
   },
   "Roster": {
     "title": "Atleter",
@@ -481,7 +484,16 @@
     "dayFriday": "Fredag",
     "daySaturday": "Lørdag",
     "daySunday": "Søndag",
-    "error": "Det virkede ikke. Prøv igen."
+    "error": "Det virkede ikke. Prøv igen.",
+    "stepDistance": "Distance",
+    "qDistance": "Hvilken distance træner du mod?",
+    "qDistanceSub": "Ikke løbet — formen på træningen. Vælg den, også selvom du ikke har noget booket.",
+    "qRaceDate": "Løbsdato",
+    "noRaceYet": "Jeg har ikke et løb endnu",
+    "optSprint": "Sprint",
+    "optOlympic": "Olympisk",
+    "optHalf": "Half",
+    "optFull": "Full"
   },
   "CoachThread": {
     "title": "Coach",
@@ -544,7 +556,16 @@
     "thumbUp": "Det her hjalp",
     "thumbDown": "Det her ramte forkert",
     "thumbComment": "Vil du tilføje noget? (valgfrit)",
-    "thumbSave": "Gem"
+    "thumbSave": "Gem",
+    "checkInIntro": "Før vi planlægger — hvordan møder du ugen? Svar ud fra dit eget normale, ikke andres.",
+    "checkInEnergy": "Energi",
+    "checkInBody": "Fysisk tilstand",
+    "checkInSleep": "Søvnkvalitet",
+    "checkInSignal": "Noget din Coach bør vide om ugen?",
+    "checkInSignalPlaceholder": "Valgfrit — fx tunge ben efter tirsdag",
+    "checkInSubmit": "Fortsæt",
+    "checkInSkip": "Spring over i denne uge",
+    "checkInSignalHint": "Din AI Coach læser dette. Hold dig til hvordan træningen føltes — ikke helbredsoplysninger."
   },
   "Messaging": {
     "title": "Coaching Channel",

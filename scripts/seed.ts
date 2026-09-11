@@ -277,7 +277,7 @@ async function seedGeneratedAthletes() {
     console.log(
       `Seeded ${profile.syntheticLabel}: ${rows.length} sessions over ${WEEKS} weeks, ` +
         `${blocked.length} unavailable date(s), ` +
-        `${profile.experienceLevel} in ${profile.trainingPhase}.`,
+        `${profile.experienceLevel}, ${profile.raceDistance} on ${profile.raceDate}.`,
     );
   }
 }

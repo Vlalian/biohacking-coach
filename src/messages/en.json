@@ -218,7 +218,10 @@
     "deleteConfirmPlaceholder": "your email address",
     "deleteConfirmButton": "Delete everything",
     "deleteCancel": "Keep my account",
-    "deleteError": "That didn’t work. Nothing was deleted."
+    "deleteError": "That didn’t work. Nothing was deleted.",
+    "raceDistanceLabel": "Race distance",
+    "raceDistanceNote": "The shape of your training week. Set it even if you have no race booked.",
+    "raceDateLabel": "Race date"
   },
   "Roster": {
     "title": "Roster",
@@ -481,7 +484,16 @@
     "dayFriday": "Friday",
     "daySaturday": "Saturday",
     "daySunday": "Sunday",
-    "error": "That didn't work. Try again."
+    "error": "That didn't work. Try again.",
+    "stepDistance": "Distance",
+    "qDistance": "What distance are you training for?",
+    "qDistanceSub": "Not the race — the shape of the training. Pick this even if you have nothing booked.",
+    "qRaceDate": "Race date",
+    "noRaceYet": "I don't have a race yet",
+    "optSprint": "Sprint",
+    "optOlympic": "Olympic",
+    "optHalf": "Half",
+    "optFull": "Full"
   },
   "CoachThread": {
     "title": "Coach",
@@ -544,7 +556,16 @@
     "thumbUp": "This helped",
     "thumbDown": "This was off",
     "thumbComment": "Anything you want to add? (optional)",
-    "thumbSave": "Save"
+    "thumbSave": "Save",
+    "checkInIntro": "Before we plan — how are you arriving at this week? Answer against your own normal, not anyone else's.",
+    "checkInEnergy": "Energy",
+    "checkInBody": "Physical condition",
+    "checkInSleep": "Sleep quality",
+    "checkInSignal": "Anything the Coach should know about this week?",
+    "checkInSignalPlaceholder": "Optional — e.g. legs heavy after Tuesday",
+    "checkInSubmit": "Continue",
+    "checkInSkip": "Skip this week",
+    "checkInSignalHint": "Your AI Coach reads this. Keep it to how training felt — not medical detail."
   },
   "Messaging": {
     "title": "Coaching Channel",

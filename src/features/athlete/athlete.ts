@@ -44,10 +44,15 @@ export interface AthleteProfile {
 export type Athlete = {
   id: string;
   syntheticLabel: string | null;
-  trainingPhase: string | null;
   experienceLevel: string | null;
   communicationStyle: string | null;
   raceTarget: string | null;
+  /**
+   * The Race Distance this athlete trains for, or null for anyone who onboarded
+   * before the question existed. Null is not "no distance" — it is "never
+   * asked", and the prompt says so rather than assuming one.
+   */
+  raceDistance: string | null;
   trainingSessionsPerWeek: number | null;
   profile: AthleteProfile | null;
 };
@@ -57,10 +62,10 @@ export function toAthlete(row: AthleteRow): Athlete {
   return {
     id: row.id,
     syntheticLabel: row.syntheticLabel,
-    trainingPhase: row.trainingPhase,
     experienceLevel: row.experienceLevel,
     communicationStyle: row.communicationStyle,
     raceTarget: row.raceTarget,
+    raceDistance: row.raceDistance,
     trainingSessionsPerWeek: row.trainingSessionsPerWeek,
     profile: (row.profile as AthleteProfile | null) ?? null,
   };

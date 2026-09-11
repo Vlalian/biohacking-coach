@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { capacityStatement } from '@/features/health/capacity';
 
 const {
+  capacityFor,
   getActiveLink,
   getSharedTranscripts,
   getAthleteById,
@@ -13,6 +15,7 @@ const {
   appendBriefingMessages,
   getMessages,
 } = vi.hoisted(() => ({
+  capacityFor: vi.fn<() => Promise<string | null>>(async () => null),
   getActiveLink: vi.fn(),
   getSharedTranscripts: vi.fn((): Promise<unknown[] | null> => Promise.resolve(null)),
   getAthleteById: vi.fn(),
@@ -32,6 +35,12 @@ const {
 }));
 
 vi.mock('./coach-repository', () => ({ getActiveLink, getSharedTranscripts }));
+vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
+vi.mock('@/features/race/race-repository', () => ({
+  // No Target Race: the Head Coach's briefing has to render an athlete with no
+  // horizon, and the Training Phase is derived from it rather than stored.
+  getTargetRace: vi.fn(async () => null),
+}));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
@@ -97,7 +106,6 @@ describe('startBriefing — reports gated on shareAthleteReports (prompt materia
   it('reports ON: the athlete profile and reflections feed the prompt', async () => {
     getActiveLink.mockResolvedValue(activeLink(true, false));
     getAthleteById.mockResolvedValue({
-      trainingPhase: 'Build',
       experienceLevel: 'intermediate',
       raceTarget: 'IM Copenhagen',
       trainingSessionsPerWeek: 6,
@@ -277,5 +285,40 @@ describe('continueBriefing — the gates', () => {
 
     expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
     expect(appendBriefingMessages).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('an open Injury is athlete-reported data, gated by the same flag', () => {
+  const OPEN_INJURY = capacityStatement(
+    [{ capacity: { swim: 'full', bike: 'easy', run: 'none' } }],
+    false,
+  );
+
+  it("reaches a Head Coach who may see the athlete's reports", async () => {
+    // `training-architecture/04`: visible "within existing Link Visibility
+    // rules". It belongs to `shareAthleteReports` alongside Session Reflections
+    // and Check-ins — the same flag, deliberately not a third one.
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    capacityFor.mockResolvedValue(OPEN_INJURY);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('no run');
+    expect(system).toContain('bike easy only');
+  });
+
+  it('is never fetched at all when reports are not shared', async () => {
+    // Withheld by not reading it, not by reading it and hiding it — Link
+    // Visibility is enforced at the network layer (ticket 11), so the data must
+    // not cross to the client in the first place.
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    capacityFor.mockResolvedValue(OPEN_INJURY);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(capacityFor).not.toHaveBeenCalled();
+    expect(callCoach.mock.calls[0][0].system).not.toContain('no run');
   });
 });

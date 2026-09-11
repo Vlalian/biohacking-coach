@@ -47,6 +47,8 @@
 export const CONSENT_PURPOSES = [
   'ai_coaching',
   'health_data',
+  'injury_health_data',
+  'head_coach_visibility',
   'product_improvement',
 ] as const;
 
@@ -64,6 +66,71 @@ export const REQUIRED_CONSENT_PURPOSES: readonly ConsentPurpose[] = [
 ];
 
 /**
+ * Purposes asked at the moment they first matter, not on the consent screen.
+ *
+ * `injury_health_data` is asked the first time an athlete declares an Injury or
+ * an Illness; `head_coach_visibility` when a Coaching Link is accepted. Neither
+ * is required, and neither is put in front of every athlete at onboarding
+ * (Mads, 2026-09-09).
+ *
+ * Two reasons, and they are different. **Unbundling**: an athlete must be able
+ * to use the Coach and still decline to write injury notes — bundling those into
+ * one tick would make the consent a condition of use rather than freely given,
+ * which is the same principle that already keeps `product_improvement` out of
+ * the required set. **Legibility**: most athletes never have a Head Coach, so
+ * asking everyone up front to consent to something that may never happen adds
+ * noise to the one screen that most needs to be read.
+ */
+export const POINT_OF_USE_PURPOSES: readonly ConsentPurpose[] = [
+  'injury_health_data',
+  'head_coach_visibility',
+];
+
+/**
+ * The purposes the onboarding consent screen actually renders.
+ *
+ * Everything except {@link POINT_OF_USE_PURPOSES}. **Derived, not a third
+ * hand-written list** — the review that added this found the screen mapping
+ * `CONSENT_PURPOSES` directly, which put both point-of-use purposes in front of
+ * every athlete at onboarding: precisely the noise the ruling rejected, and the
+ * opposite of what ADR 0012 says the code does.
+ *
+ * Deriving it means a purpose added to either list above lands on the right
+ * screen without anyone remembering to update a third one.
+ */
+export const ONBOARDING_CONSENT_PURPOSES: readonly ConsentPurpose[] = CONSENT_PURPOSES.filter(
+  (purpose) => !POINT_OF_USE_PURPOSES.includes(purpose),
+);
+
+/**
+ * The purposes one consent screen lists, in disclosure order.
+ *
+ * The gate shows the onboarding set and nothing else. The manage screen shows
+ * that set **plus any point-of-use purpose the athlete has already granted** —
+ * granted, not merely existing. Two reasons pull in opposite directions and this
+ * is where they meet:
+ *
+ * - Withdrawal must be as easy as granting (Art. 7(3)). A grant made from an
+ *   injury form has to be withdrawable from the one place an athlete goes to
+ *   withdraw things, or it is a consent they can give but not take back.
+ *   CodeRabbit found the manage screen mapping the onboarding list (PR #60),
+ *   which made exactly that true.
+ * - An *ungranted* point-of-use purpose is still not offered here. Listing it
+ *   would make the manage screen a third asking surface, with no injury and no
+ *   named coach in front of the athlete — the noise ADR 0012 keeps off every
+ *   screen but the one where the question is concrete.
+ */
+export function purposesToShow(
+  mode: 'gate' | 'manage',
+  granted: readonly ConsentPurpose[],
+): ConsentPurpose[] {
+  if (mode === 'gate') return [...ONBOARDING_CONSENT_PURPOSES];
+  return CONSENT_PURPOSES.filter(
+    (purpose) => !POINT_OF_USE_PURPOSES.includes(purpose) || granted.includes(purpose),
+  );
+}
+
+/**
  * The disclosure version. A grant is valid only while its stored version equals
  * this string, so bumping it on any wording change below invalidates every prior
  * grant and forces re-consent. Dated for legibility; the value is opaque to the
@@ -76,8 +143,15 @@ export const REQUIRED_CONSENT_PURPOSES: readonly ConsentPurpose[] = [
  *
  * `2026-08-07` → `2026-09-01`: OpenAI named as a second processor. See the
  * amendment at the top of this file for why it lands before the processing does.
+ *
+ * `2026-09-01` → `2026-09-10`: two purposes added — `injury_health_data` and
+ * `head_coach_visibility` (`training-architecture/12`). Bumped **now, on
+ * purpose**, while the only grant it invalidates is Mads's own. Re-consent costs
+ * nothing today and becomes a wall of legal text in front of an invited tester's
+ * first impression the moment testers exist; the timing was chosen against that
+ * schedule rather than by accident (Mads, 2026-09-09).
  */
-export const DISCLOSURE_VERSION = '2026-09-01';
+export const DISCLOSURE_VERSION = '2026-09-10';
 
 /** Narrows an arbitrary string to a known purpose — untrusted input guard. */
 export function isConsentPurpose(value: string): value is ConsentPurpose {
@@ -148,6 +222,14 @@ const EN: DisclosureCopy = {
       title: 'Health-related signals',
       body: 'Let the app process the signals you report about your body — sleep, energy, how a session felt, resting pulse. These can reveal health information, which carries extra protection under GDPR (Article 9), so we ask for it explicitly.',
     },
+    injury_health_data: {
+      title: 'Injuries and illness you tell us about',
+      body: 'Let the app store an injury or illness you report — what it stops you doing, and any notes you or your coach add. This is health information stated outright rather than inferred from training, so we ask separately. Only what it prevents ("can\'t run") ever reaches the AI Coach; your notes never do.',
+    },
+    head_coach_visibility: {
+      title: 'Letting a human coach see your data',
+      body: 'If you link with a human Head Coach, let them see the data you choose to share with them — your plan, and whichever of your reports and conversations you leave switched on. A second person reading your training is different from an app processing it, so we ask for it separately, and only when you actually link with someone.',
+    },
     product_improvement: {
       title: 'Help improve the product',
       body: 'Allow your anonymised coaching interactions to be used to improve the app. This is entirely optional and never affects your coaching.',
@@ -184,6 +266,14 @@ const DA: DisclosureCopy = {
     health_data: {
       title: 'Helbredsrelaterede signaler',
       body: 'Lad appen behandle de signaler, du rapporterer om din krop — søvn, energi, hvordan en session føltes, hvilepuls. De kan afsløre helbredsoplysninger, som har ekstra beskyttelse under GDPR (artikel 9), og derfor spørger vi udtrykkeligt om det.',
+    },
+    injury_health_data: {
+      title: 'Skader og sygdom, du fortæller om',
+      body: 'Lad appen gemme en skade eller sygdom, du rapporterer — hvad den forhindrer dig i, og de noter du eller din træner tilføjer. Det er helbredsoplysninger sagt direkte og ikke udledt af træning, så vi spørger særskilt. Kun det, den forhindrer ("kan ikke løbe"), når frem til AI-Coachen; dine noter gør aldrig.',
+    },
+    head_coach_visibility: {
+      title: 'At lade en menneskelig træner se dine data',
+      body: 'Hvis du knytter dig til en menneskelig træner, så lad vedkommende se de data, du vælger at dele — din plan og de af dine rapporter og samtaler, du lader stå til. At et andet menneske læser din træning er noget andet end at en app behandler den, så vi spørger særskilt, og kun når du faktisk knytter dig til nogen.',
     },
     product_improvement: {
       title: 'Hjælp med at forbedre produktet',

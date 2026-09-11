@@ -1,4 +1,6 @@
 import type { Onboarding } from '@/features/coach/check-in';
+import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
+import { isCalendarDate } from '@/lib/calendar-date';
 
 /**
  * The MCQ onboarding flow as pure data and functions — ported from the POC's
@@ -22,6 +24,7 @@ import type { Onboarding } from '@/features/coach/check-in';
 export type OnboardingStepId =
   | 'language'
   | 'experience'
+  | 'distance'
   | 'race'
   | 'adaptive'
   | 'constraints';
@@ -29,12 +32,20 @@ export type OnboardingStepId =
 export const ONBOARDING_STEPS: OnboardingStepId[] = [
   'language',
   'experience',
+  'distance',
   'race',
   'adaptive',
   'constraints',
 ];
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'veteran';
+
+// Re-exported so the onboarding flow stays the one import site for callers that
+// only care about the questionnaire. The list itself lives in `lib/` because
+// `db/schema.ts` renders it into a CHECK constraint — see that module.
+export { RACE_DISTANCES };
+export type { RaceDistance };
+
 
 /**
  * Everything the questionnaire collects. Partial while in progress — the answer
@@ -45,7 +56,26 @@ export interface OnboardingAnswers {
   /** UI locale code — 'en' or 'da'. Chosen first, applied immediately. */
   language?: string;
   experienceLevel?: ExperienceLevel;
+  /**
+   * Asked of **every** athlete, always, and deliberately not a property of the
+   * race: an athlete building toward an Ironman with nothing yet booked still
+   * needs an Ironman-shaped week — the winter-base athlete of *Distancens
+   * Arkitektur* §14.
+   */
+  raceDistance?: RaceDistance;
+  /** The Target Race's name. Absent when {@link noRaceYet} is set. */
   raceTarget?: string;
+  /** The Target Race's date, `YYYY-MM-DD`. Always present alongside a name. */
+  raceDate?: string;
+  /**
+   * The athlete said they have no race yet — a **decision**, not an absent
+   * answer, and the difference matters: "ready to start the next block" is as
+   * valid a goal as a start line, and `nextStep` must be able to tell an athlete
+   * who declined from one who has not been asked. The race step used to require
+   * a non-empty name, so an athlete with nothing booked could not get past it
+   * without inventing one.
+   */
+  noRaceYet?: boolean;
   /**
    * Adaptive — asked of every level: how many hours a week the athlete *can*
    * train. A ceiling the plan plans within, not a description of what they do
@@ -79,6 +109,7 @@ export interface OnboardingAnswers {
 export const ONBOARDING_OPTIONS = {
   language: ['en', 'da'],
   experienceLevel: ['beginner', 'intermediate', 'veteran'],
+  raceDistance: RACE_DISTANCES,
   sportBackground: ['Runner', 'Cyclist', 'Swimmer', 'Gym', 'None'],
   availableHours: ['Under 3h', '3–6h', '6–10h', '10–13h', '13–16h', '16h+'],
   motivation: ['Completion', 'Personal challenge', 'Community', 'Performance'],
@@ -105,6 +136,7 @@ export const ONBOARDING_OPTIONS = {
  * enforced by the colocated test, not by the type.
  */
 type LabelledGroup =
+  | 'raceDistance'
   | 'sportBackground'
   | 'availableHours'
   | 'motivation'
@@ -118,6 +150,10 @@ type LabelledGroup =
 export type LabelledOption = (typeof ONBOARDING_OPTIONS)[LabelledGroup][number];
 
 export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
+  Sprint: 'optSprint',
+  Olympic: 'optOlympic',
+  Half: 'optHalf',
+  Full: 'optFull',
   Runner: 'optRunner',
   Cyclist: 'optCyclist',
   Swimmer: 'optSwimmer',
@@ -166,17 +202,35 @@ export function nextStep(
 ): OnboardingStepId | 'done' {
   if (!answers.language) return 'language';
   if (!answers.experienceLevel) return 'experience';
-  if (!answers.raceTarget) return 'race';
+  if (!answers.raceDistance) return 'distance';
+  // Answered either way: a named race *with its date*, or an explicit "not
+  // yet". A bare `!answers.raceTarget` would send the athlete who has no race
+  // back to this step forever, which is the defect the `noRaceYet` decision
+  // exists to fix. And a name without a date is what the old free-text field
+  // left behind — `completeProfile` refuses it, so this must too, or a resumed
+  // record sails past every step and is stuck at the end (CodeRabbit, PR #60).
+  if (!hasNamedRace(answers) && !answers.noRaceYet) return 'race';
   if (!submitted.adaptive) return 'adaptive';
   if (!submitted.constraints) return 'constraints';
   return 'done';
+}
+
+/**
+ * A race is named only when it has a date. The one definition, because
+ * `nextStep` and `completeProfile` asking two different questions of the same
+ * fields is how an athlete gets past every step and then cannot finish.
+ */
+function hasNamedRace(answers: OnboardingAnswers): boolean {
+  return Boolean(answers.raceTarget && answers.raceDate);
 }
 
 /** What the client may submit for one step. Everything else is refused. */
 export type StepAnswer =
   | { step: 'language'; language: string }
   | { step: 'experience'; experienceLevel: string }
-  | { step: 'race'; raceTarget: string }
+  | { step: 'distance'; raceDistance: string }
+  | { step: 'race'; raceTarget: string; raceDate: string }
+  | { step: 'race'; noRaceYet: true }
   | {
       step: 'adaptive';
       availableHours?: string;
@@ -243,13 +297,38 @@ export function applyAnswer(
         submitted,
       };
     }
+    case 'distance': {
+      if (!inSet(payload.raceDistance, ONBOARDING_OPTIONS.raceDistance)) return null;
+      return {
+        answers: { ...answers, raceDistance: payload.raceDistance as RaceDistance },
+        submitted,
+      };
+    }
     case 'race': {
+      // `=== true`, not truthy: a forged payload can send any value, and only
+      // the literal decision counts as one.
+      if ((payload as { noRaceYet?: unknown }).noRaceYet === true) {
+        // Stored as a decision, and stored *alone* — an athlete who changes their
+        // mind must not leave a stale race sitting behind the flag.
+        return {
+          answers: { ...answers, raceTarget: undefined, raceDate: undefined, noRaceYet: true },
+          submitted,
+        };
+      }
+      const named = payload as { raceTarget?: unknown; raceDate?: unknown };
       // Not `payload.raceTarget.trim()`: the field can be absent or a non-string
       // at runtime, which would throw instead of refusing.
-      if (typeof payload.raceTarget !== 'string') return null;
-      const race = payload.raceTarget.trim();
+      if (typeof named.raceTarget !== 'string') return null;
+      const race = named.raceTarget.trim();
       if (!race || race.length > FREE_TEXT_MAX) return null;
-      return { answers: { ...answers, raceTarget: race }, submitted };
+      // A name with no date is exactly what the old free-text field allowed, and
+      // what four regexes then guessed at. There is no guessing now, so a race
+      // without a date is refused rather than half-stored.
+      if (!isCalendarDate(named.raceDate)) return null;
+      return {
+        answers: { ...answers, raceTarget: race, raceDate: named.raceDate, noRaceYet: undefined },
+        submitted,
+      };
     }
     case 'adaptive': {
       if (!allInSet(payload.sportBackground, ONBOARDING_OPTIONS.sportBackground))
@@ -316,62 +395,6 @@ export function applyAnswer(
     default:
       return null;
   }
-}
-
-const MONTH_MAP: Record<string, number> = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
-  jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-};
-
-/**
- * Derives the Training Phase from the free-text race target — the POC's
- * heuristic, unchanged, but with the clock passed in (`today`) so the same
- * answer computes the same phase in tests and on any machine.
- */
-export function computePhase(raceTarget: string | undefined, today: Date): string {
-  if (!raceTarget) return 'Base Building';
-  const text = raceTarget.toLowerCase();
-  let raceDate: Date | null = null;
-
-  // ISO date: 2026-06-01
-  const iso = text.match(/(\d{4}-\d{2}-\d{2})/);
-  if (iso) {
-    const d = new Date(iso[1]);
-    if (!isNaN(d.getTime())) raceDate = d;
-  }
-
-  // "Month YYYY" or "Month, YYYY" — e.g. "June 2026", "jun 2026"
-  if (!raceDate) {
-    const my = text.match(/([a-z]+)[,\s]+(\d{4})/);
-    if (my && MONTH_MAP[my[1]] !== undefined) {
-      raceDate = new Date(parseInt(my[2]), MONTH_MAP[my[1]], 15);
-    }
-  }
-
-  // Slash date: 01/06/2026 (day/month/year)
-  if (!raceDate) {
-    const sl = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (sl) {
-      const d = new Date(`${sl[3]}-${sl[2].padStart(2, '0')}-${sl[1].padStart(2, '0')}`);
-      if (!isNaN(d.getTime())) raceDate = d;
-    }
-  }
-
-  // Year only — assume mid-year
-  if (!raceDate) {
-    const yr = text.match(/\b(20\d{2})\b/);
-    if (yr) raceDate = new Date(parseInt(yr[1]), 5, 15);
-  }
-
-  if (!raceDate || isNaN(raceDate.getTime())) return 'Base Building';
-  const months =
-    (raceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.5);
-  if (months < 0) return 'Recovery';
-  if (months < 2) return 'Taper';
-  if (months < 4) return 'Peak Phase';
-  if (months < 6) return 'Build Phase';
-  return 'Base Building';
 }
 
 /**
@@ -442,26 +465,43 @@ export function coachGreeting(
 
 /** What completing onboarding writes to the athlete's profile columns. */
 export interface CompletedProfile {
-  trainingPhase: string;
   experienceLevel: ExperienceLevel;
   communicationStyle: string;
+  raceDistance: RaceDistance;
+  /** The Target Race's name, or `''` for an athlete with no race booked. */
   raceTarget: string;
+  /** The Target Race, or null when the athlete said they have none yet. */
+  race: { name: string; date: string; distance: RaceDistance } | null;
 }
 
 /**
  * Assembles the profile columns from a finished answer set. Returns null while
- * required answers (experience, race) are missing — completion is impossible
- * until the flow reached its end.
+ * required answers are missing — completion is impossible until the flow
+ * reached its end.
+ *
+ * Experience and **Race Distance** are required; the race itself is not. An
+ * athlete who answered "no race yet" completes onboarding with `race: null`,
+ * which is a finished profile rather than a half-finished one.
+ *
+ * No clock: the Training Phase used to be computed here and written to a column
+ * (`training-architecture/03` retired it), and nothing else this assembles
+ * depends on what day it is.
  */
-export function completeProfile(
-  answers: OnboardingAnswers,
-  today: Date,
-): CompletedProfile | null {
-  if (!answers.experienceLevel || !answers.raceTarget) return null;
+export function completeProfile(answers: OnboardingAnswers): CompletedProfile | null {
+  if (!answers.experienceLevel || !answers.raceDistance) return null;
+  const hasRace = hasNamedRace(answers);
+  if (!hasRace && !answers.noRaceYet) return null;
   return {
-    trainingPhase: computePhase(answers.raceTarget, today),
     experienceLevel: answers.experienceLevel,
     communicationStyle: buildCommStyle(answers),
-    raceTarget: answers.raceTarget,
+    raceDistance: answers.raceDistance,
+    raceTarget: answers.raceTarget ?? '',
+    race: hasRace
+      ? {
+          name: answers.raceTarget as string,
+          date: answers.raceDate as string,
+          distance: answers.raceDistance,
+        }
+      : null,
   };
 }

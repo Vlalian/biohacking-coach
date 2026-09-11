@@ -23,6 +23,7 @@ const reports: BriefingReports = {
     raceTarget: 'IM Copenhagen',
     sessionsPerWeek: 6,
     onboarding: null,
+    capacity: null,
   },
   reflections: [
     { date: '2026-08-04', type: 'Endurance', body: 8, mind: 10, comment: 'strong ride' },

@@ -4,9 +4,9 @@ import { useMemo, useState, useTransition } from 'react';
 import { useLocale } from 'next-intl';
 import { useRouter, Link } from '@/i18n/navigation';
 import {
-  CONSENT_PURPOSES,
   REQUIRED_CONSENT_PURPOSES,
   disclosureCopy,
+  purposesToShow,
   type ConsentPurpose,
 } from '@/features/consent/disclosure';
 import { grantConsentsAction, withdrawConsentAction } from './consent-actions';
@@ -56,6 +56,9 @@ export function ConsentScreen({
   );
 
   const grantedSet = useMemo(() => new Set(granted), [granted]);
+  // What this screen lists: the onboarding set, plus — in manage mode only —
+  // any point-of-use purpose already granted, so it can be withdrawn here.
+  const purposes = useMemo(() => purposesToShow(mode, granted), [mode, granted]);
   const allRequiredChecked = REQUIRED_CONSENT_PURPOSES.every((p) =>
     checked.has(p),
   );
@@ -102,7 +105,7 @@ export function ConsentScreen({
       </header>
 
       <ul className="flex flex-col gap-3">
-        {CONSENT_PURPOSES.map((purpose) => {
+        {purposes.map((purpose) => {
           const p = copy.purposes[purpose];
           const required = isRequired(purpose);
           const isGranted = grantedSet.has(purpose);

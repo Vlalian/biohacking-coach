@@ -11,6 +11,7 @@ import {
   getMessages,
 } from '@/features/coach/conversation-repository';
 import type { Message } from '@/features/coach/conversation';
+import { createRace } from '@/features/race/race-repository';
 import {
   applyAnswer,
   completeProfile,
@@ -72,15 +73,16 @@ export type AnswerResult =
  * Coach asked it, and the answer as canonical option values (not the localized
  * labels) — stable, parseable, and identical whichever language the athlete
  * answered in. `greeting` is appended only on completion and must be name-free:
- * `messages` is a training-side table (ADR 0006). `today` anchors the phase
- * computation.
+ * `messages` is a training-side table (ADR 0006). There is no clock parameter:
+ * the Training Phase used to be computed here and stored, and
+ * `training-architecture/03` made it derived, so nothing this writes depends on
+ * what day it is.
  */
 export async function answerOnboardingStep(
   athlete: Athlete,
   payload: StepAnswer,
   transcript: { question: string; answer: string },
   greeting: string,
-  today: Date,
 ): Promise<AnswerResult> {
   const currentAnswers = athlete.profile?.onboardingAnswers ?? {};
   const currentSubmitted = athlete.profile?.onboardingSubmitted ?? {};
@@ -101,7 +103,7 @@ export async function answerOnboardingStep(
   const step = nextStep(applied.answers, applied.submitted);
 
   if (step === 'done') {
-    const completed = completeProfile(applied.answers, today);
+    const completed = completeProfile(applied.answers);
     // nextStep === 'done' guarantees the required answers exist; this guard is
     // for the type system, not a reachable branch.
     if (!completed) return { ok: false, reason: 'invalid' };
@@ -118,6 +120,13 @@ export async function answerOnboardingStep(
       fixedConstraints: applied.answers.fixedConstraints ?? [],
       weeklySessionDay: applied.answers.weeklySessionDay,
     });
+    // The first Race, if there is one, and it is the Target Race — an athlete
+    // finishing onboarding has exactly one horizon to plan toward. An athlete
+    // who said they have no race yet gets none, which is a finished profile
+    // rather than a half-finished one.
+    if (completed.race) {
+      await createRace(athlete.id, completed.race, { asTarget: true });
+    }
     await appendMessages(athlete.id, conversation.id, [
       { role: 'coach_ai', content: greeting },
     ]);

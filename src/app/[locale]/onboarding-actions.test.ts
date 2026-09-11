@@ -56,6 +56,7 @@ describe('answerOnboardingAction', () => {
     const result = await answerOnboardingAction({
       step: 'race',
       raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
     });
 
     expect(result.ok).toBe(true);
@@ -74,6 +75,7 @@ describe('answerOnboardingAction', () => {
     const result = await answerOnboardingAction({
       step: 'race',
       raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
     }) as { displayGreetingIntro?: string };
 
     expect(result.displayGreetingIntro).toContain('Mads');
@@ -119,3 +121,4 @@ describe('answerOnboardingAction', () => {
     expect(answerOnboardingStep).not.toHaveBeenCalled();
   });
 });
+

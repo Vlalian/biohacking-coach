@@ -1,0 +1,60 @@
+import type { StepAnswer } from './onboarding-flow';
+
+/**
+ * A list joined for the transcript, or nothing when it is not a list.
+ *
+ * This runs on the raw payload before the flow validates it, so a field typed
+ * as an array can arrive as anything. A string here used to throw from `.join`
+ * one call before validation would have refused the payload cleanly
+ * (CodeRabbit, PR #60). Rendering nothing is right: the line never lands,
+ * because the step is refused a moment later.
+ */
+function listed(value: unknown): string | undefined {
+  return Array.isArray(value) && value.length > 0 ? value.join(', ') : undefined;
+}
+
+/**
+ * The athlete's answer as one human-readable transcript line.
+ *
+ * Exported for its own test. It is a pure switch over every step, and reaching
+ * it only through the server action left two thirds of its branches uncovered —
+ * so a step whose line rendered wrongly would have shown up in an athlete's
+ * transcript rather than in a test.
+ */
+export function answerText(payload: StepAnswer): string {
+  switch (payload.step) {
+    case 'language':
+      return payload.language === 'da' ? 'Dansk' : 'English';
+    case 'experience':
+      return payload.experienceLevel;
+    case 'distance':
+      return payload.raceDistance;
+    case 'race':
+      // "No race yet" is an answer, so it gets a transcript line of its own
+      // rather than an empty one — the Coach's log should show the athlete
+      // said it, not that the question went by.
+      // `=== true`, not `in`: the flow treats only a true `noRaceYet` as the
+      // no-race answer and stores anything else as a named race. The transcript
+      // has to say the same thing the record does.
+      return 'noRaceYet' in payload && payload.noRaceYet === true
+        ? 'No race booked yet'
+        : (payload as { raceTarget: string }).raceTarget;
+    case 'adaptive': {
+      const parts = [
+        payload.availableHours,
+        listed(payload.sportBackground),
+        payload.motivation,
+        payload.bestTime,
+        listed(payload.weakestDiscipline),
+        payload.hasHumanCoach,
+        payload.targetTime,
+        listed(payload.trackedMetrics),
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(' · ') : '—';
+    }
+    case 'constraints': {
+      const days = listed(payload.fixedConstraints) ?? '—';
+      return `${days} · ${payload.weeklySessionDay ?? 'Flexible'}`;
+    }
+  }
+}

@@ -26,7 +26,7 @@ type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked'
  * The calendar decided two refusals for itself — a past day and another week —
  * and explained both. It explained none of the server's: `handleDrop` matched
  * `conflict` and let the rest fall through to a bare `router.refresh()`, which
- * put the block back and looked exactly like a move that had worked. The comment
+ * put the chip back and looked exactly like a move that had worked. The comment
  * on that line already said what it should do — *"A refused move used to look
  * identical to a successful one... Say so instead."* — and it was true of one
  * reason out of five.
@@ -47,14 +47,14 @@ type MoveRefusal =
   // The Head Coach's door refuses two more ways than the athlete's
   // (`moveSessionAsCoachAction`): the Coaching Link was severed under them, or
   // they hold no coach row at all. Both were invisible before this — the coach
-  // dragged, and the block went back.
+  // dragged, and the chip went back.
   | 'not-linked'
   | 'not-a-coach';
 
 /**
  * Why this session cannot be picked up at all, or null when it can.
  *
- * The block already knew this and threw the reason away: `draggable` is
+ * The chip already knew this and threw the reason away: `draggable` is
  * `canDrag && !frozen && !session.parked`, a boolean built from two quite
  * different refusals. So a completed session and a session parked behind a Rest
  * block were equally inert and equally silent, and `bounceFrozen` — written and
@@ -98,7 +98,7 @@ export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
   bounce: 'bounceRefused',
   // Reached by the Head Coach, not the athlete: `canHeadCoachMove` excludes
   // Athlete Sessions, so dragging one is refused server-side. Until now that
-  // refusal was the silent one — the coach dragged, and the block went back.
+  // refusal was the silent one — the coach dragged, and the chip went back.
   'not-owner': 'bounceNotYours',
   'not-found': 'bounceError',
   'not-authenticated': 'bounceError',
@@ -181,7 +181,7 @@ function dotStyle(session: Session): React.CSSProperties {
 /**
  * The Training Plan calendar (CONTEXT.md): a rolling monthly grid, weeks as
  * collapsed dot rows by default, tapping a week row expands it into
- * draggable Session Blocks — Session Move only works from there, which makes
+ * draggable Session Chips — Session Move only works from there, which makes
  * the Mon–Sun boundary the drag is legal within visually obvious (it used to
  * be a tiny always-on dot with no week framing, so an illegal cross-week drop
  * just silently did nothing). An illegal drop now bounces with a visible
@@ -479,7 +479,7 @@ function WeekRow({
   /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
    *  calendar is read-only and opens one (showable-version/20). */
   canOpenSession: boolean;
-  /** Whether session blocks may be dragged — not implied by `readOnly`. */
+  /** Whether Session Chips may be dragged — not implied by `readOnly`. */
   canDrag: boolean;
   todayKey: string;
   locale: string;
@@ -562,7 +562,7 @@ function WeekRow({
               key={day.date}
               // Read by the row's toggle handler to tell "clicked the week" from
               // "clicked inside a day". Without it the row would swallow the
-              // day's own controls — the ✕, the +, a session block, a drag.
+              // day's own controls — the ✕, the +, a Session Chip, a drag.
               data-day={day.date}
               onDragOver={(e) => {
                 if (dragging) {
@@ -637,7 +637,7 @@ function WeekRow({
               {expanded ? (
                 <div className="mt-1.5 space-y-1">
                   {day.sessions.map((s) => (
-                    <SessionBlock
+                    <SessionChip
                       key={s.id}
                       session={s}
                       t={t}
@@ -661,7 +661,7 @@ function WeekRow({
               ) : (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {day.sessions.map((s) =>
-                    // Same rule as the expanded block: with no drawer to open,
+                    // Same rule as the expanded chip: with no drawer to open,
                     // the marker is an image of a session rather than a control.
                     // It keeps its label so a screen reader still announces the
                     // session — what it loses is the focus stop and the pointer
@@ -718,7 +718,7 @@ function WeekRow({
   );
 }
 
-function SessionBlock({
+function SessionChip({
   session,
   t,
   canDrag,
@@ -732,7 +732,7 @@ function SessionBlock({
   canDrag: boolean;
   /**
    * Why this session cannot be lifted, or null when it can — the reason rather
-   * than the boolean it used to be. A block that simply will not move, and says
+   * than the boolean it used to be. A chip that simply will not move, and says
    * nothing about it, is the defect this replaced: `bounceFrozen` was written
    * and translated and could never be reached, because the drag that would have
    * raised it could not start.
@@ -752,7 +752,7 @@ function SessionBlock({
   const color = typeColor(session.type);
   const muted = session.status === 'skipped' || session.status === 'unavailable';
   const draggable = canDrag && refusal === null;
-  // Surfaced on the block itself, because the refusal happens *before* any drop:
+  // Surfaced on the chip itself, because the refusal happens *before* any drop:
   // there is no bounce to attach it to, and the athlete needs it at the moment
   // they try to pick the session up.
   const refusalText = refusal ? t(BOUNCE_KEY[refusal]) : undefined;

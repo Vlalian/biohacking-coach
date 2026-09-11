@@ -9,6 +9,9 @@ import { callCoach, type CoachReply } from './coach-client';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
+import { getTargetRace } from '@/features/race/race-repository';
+import { capacityFor } from '@/features/health/health-repository';
+import { currentPhase, trainingBlocks } from './training-blocks';
 import {
   appendBriefingMessages,
   createBriefing,
@@ -75,17 +78,31 @@ async function buildBriefingSystem(
 
   let reports: BriefingReports | null = null;
   if (canSeeAthleteReports(link.visibility)) {
-    const [athlete, reflectionRows] = await Promise.all([
+    const [athlete, reflectionRows, targetRace, capacity] = await Promise.all([
       getAthleteById(athleteId),
       getBriefingReflections(athleteId),
+      getTargetRace(athleteId),
+      // An open Injury or Illness is data the athlete reported about their own
+      // body, so it belongs to `shareAthleteReports` alongside their Session
+      // Reflections and Check-ins — the same flag, not a third one. Read inside
+      // this branch, so when the flag is off it is never fetched at all rather
+      // than fetched and hidden (ticket 11).
+      capacityFor(athleteId),
     ]);
     reports = {
       profile: {
-        phase: athlete?.trainingPhase ?? null,
+        // Derived, never stored (`training-architecture/03`): the Training Phase
+        // is the name of the Training Block today falls inside. Null for an
+        // athlete with no race, which the briefing renders as no phase.
+        phase: currentPhase(today, trainingBlocks(today, targetRace?.date ?? null)),
         experienceLevel: athlete?.experienceLevel ?? null,
         raceTarget: athlete?.raceTarget ?? null,
         sessionsPerWeek: athlete?.trainingSessionsPerWeek ?? null,
         onboarding: athlete?.profile?.onboarding ?? null,
+        // The capacity half only. A Head Coach reads the detail thread on the
+        // athlete's own page, not through a briefing that is assembled into a
+        // model prompt (ADR 0011).
+        capacity,
       },
       reflections: reflectionRows.map(toBriefingReflection),
     };

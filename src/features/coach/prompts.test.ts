@@ -13,7 +13,7 @@ import type { WeekSession } from './week';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
 
 const BASE: CheckIn = {
-  readiness: { body: 7, mental: 7, energy: 7, sleep: 7, pulse: 50 },
+  readiness: { body: 7, energy: 7, sleepQuality: 7, mental: 7, sleepHours: 7, restingPulse: 50 },
   phase: 'Base Building',
   personaName: 'Mads',
   commStyle: '',
@@ -207,14 +207,17 @@ describe('onboarding answers reach every Coach prompt', () => {
   });
 
   it('chat prompt includes the answers, experience level and race', () => {
+    // Name and date together: Chat renders the same HORIZON line the Weekly
+    // Session does, and a race with no date is not a race on either surface.
     const prompt = buildChatPrompt({
       ...BASE,
       onboarding: ONBOARDING,
       raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
     });
     expect(prompt).toContain('ONBOARDING PROFILE');
     expect(prompt).toContain('xp=intermediate');
-    expect(prompt).toContain('race=Ironman Copenhagen');
+    expect(prompt).toContain('race=Ironman Copenhagen on 2027-08-15');
   });
 
   it('omits the block entirely when nothing was answered', () => {
@@ -448,13 +451,39 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
 
   // The path stays live for when a Check-in feature lands: given real numbers,
   // the block renders exactly as it does today.
-  it('renders the scores when a real Check-in supplied them', () => {
+  it('renders only what the athlete gave, when a device fed nothing', () => {
+    // The state this slice actually ships in: three scores from the Check-in and
+    // nothing from a wearable. The absent tokens are absent, not zeroed — and
+    // the Coach is told separately that it cannot see them.
     const prompt = buildChatPrompt(
-      { ...NO_READINESS, readiness: { body: 4, mental: 5, energy: 3, sleep: 5.5, pulse: 68 } },
+      { ...NO_READINESS, readiness: { body: 4, energy: 3, sleepQuality: 5 } },
       '2026-08-18',
     );
 
-    expect(prompt).toContain('body=4/10 mental=5/10 energy=3/10 sleep=5.5h pulse=68bpm');
+    expect(prompt).toContain('body=4/10 energy=3/10 sleep-quality=5/10');
+    expect(prompt).not.toContain('sleep=');
+    expect(prompt).not.toContain('pulse=');
+    expect(prompt).not.toContain('mental=');
+    // Single-spaced: the absent tokens are dropped, not joined as blanks. A run
+    // of spaces where a number should be is a hole, and the STATE line is read
+    // by the model as a list of facts rather than as prose that can have gaps.
+    expect(prompt).not.toMatch(/sleep-quality=5\/10 {2}/);
+    expect(prompt).not.toContain('NO CHECK-IN DATA');
+    expect(prompt).toContain('NO DEVICE DATA');
+  });
+
+  it('renders the scores when a real Check-in supplied them', () => {
+    const prompt = buildChatPrompt(
+      { ...NO_READINESS, readiness: { body: 4, energy: 3, sleepQuality: 5, mental: 5, sleepHours: 5.5, restingPulse: 68 } },
+      '2026-08-18',
+    );
+
+    // The athlete's own three first, then the ones a device or a rated session
+    // supplied. Order matters only in that it is stable; what matters is that
+    // every token present is a number somebody actually gave.
+    expect(prompt).toContain(
+      'body=4/10 energy=3/10 sleep-quality=5/10 mental=5/10 sleep=5.5h pulse=68bpm',
+    );
     expect(prompt).not.toContain('NO CHECK-IN DATA');
   });
 
@@ -941,5 +970,219 @@ describe('the equipment nudge, exhaustively', () => {
   it('does not fire when the session number is unknown or below the range', () => {
     expect(at(undefined, [])).not.toContain(NUDGE);
     expect(at(0, [])).not.toContain(NUDGE);
+  });
+});
+
+// ── The horizon: Race Distance and the Target Race (training-architecture/02) ──
+
+/**
+ * The Coach plans every week with no horizon and no idea what shape of race the
+ * athlete is training for. Race Distance decides the shape of a week whether or
+ * not a race is booked — the winter-base athlete of *Distancens Arkitektur* §14
+ * — so it is stated always, and its *absence* is stated too rather than left for
+ * the model to fill in.
+ */
+describe('the horizon reaches the prompt, including when there is none', () => {
+  const TUESDAY = '2026-08-18';
+
+  function weekly(overrides: Partial<CheckIn> = {}) {
+    return renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, ...overrides },
+        [],
+        [],
+        [],
+        [],
+        null,
+        TUESDAY,
+      ),
+    );
+  }
+
+  it('states the Race Distance the athlete trains for', () => {
+    expect(weekly({ raceDistance: 'Full' })).toContain('HORIZON:');
+    expect(weekly({ raceDistance: 'Full' })).toContain('distance=Full');
+  });
+
+  it('states the Target Race and its date', () => {
+    const prompt = weekly({
+      raceDistance: 'Full',
+      raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
+    });
+    expect(prompt).toContain('race=Ironman Copenhagen');
+    expect(prompt).toContain('2027-08-15');
+  });
+
+  it('says plainly that there is no race, rather than omitting the subject', () => {
+    // Omission is the failure mode this block exists to avoid: a prompt with no
+    // race line reads to the model as a prompt whose race line was forgotten,
+    // and it will invent a horizon to plan toward.
+    const prompt = weekly({ raceDistance: 'Half' });
+    expect(prompt).toContain('no race booked');
+    expect(prompt).toContain('distance=Half');
+  });
+
+  it('says the distance is unknown for an athlete who was never asked', () => {
+    // Every athlete who onboarded before the question existed. The migration
+    // deliberately backfills nothing — a distance is not derivable from a race
+    // name, and guessing one is the habit this slice removed.
+    const prompt = weekly({ raceDistance: undefined });
+    expect(prompt).toContain('distance unknown');
+  });
+
+  // CodeRabbit on PR #60: Coach Chat was handed the same CheckIn as the Weekly
+  // Session — race, distance, block, the athlete's sentence — and rendered
+  // `race=name` and nothing else of it. "Should I do tomorrow's intervals?" is
+  // asked in Chat, and the answer depends on how far out the race is and what
+  // the athlete said on Monday. A Coach that knows less in Chat than it knew
+  // when it planned the week contradicts itself.
+  describe('and Coach Chat knows the same horizon', () => {
+    const chat = (overrides: Partial<CheckIn> = {}) =>
+      buildChatPrompt({ ...BASE, ...overrides }, TUESDAY);
+
+    it('states the Race Distance and the race date, not only the name', () => {
+      const prompt = chat({
+        raceDistance: 'Full',
+        raceTarget: 'Ironman Copenhagen',
+        raceDate: '2027-08-15',
+      });
+      expect(prompt).toContain('HORIZON:');
+      expect(prompt).toContain('distance=Full');
+      expect(prompt).toContain('race=Ironman Copenhagen on 2027-08-15');
+    });
+
+    it('says plainly there is no race, and states the block position when there is one', () => {
+      expect(chat({ raceDistance: 'Half' })).toContain('no race booked');
+      expect(chat({ phase: 'Block 2 of 4', blockWeek: 'week 3 of 6' })).toContain(
+        'Block 2 of 4, week 3 of 6',
+      );
+    });
+
+    it('carries what the athlete said this week, in their words', () => {
+      // The service already reads the Check-in for exactly this — "someone who
+      // wrote 'calf tight since Tuesday' on Monday should not have to say it
+      // again on Wednesday" — and until now the sentence went nowhere.
+      const prompt = chat({ notableSignal: 'calf tight since Tuesday' });
+      expect(prompt).toContain('ATHLETE SAID');
+      expect(prompt).toContain('"calf tight since Tuesday"');
+      expect(chat()).not.toContain('ATHLETE SAID');
+    });
+  });
+});
+
+describe('the current Training Block and the week within it reach the Coach', () => {
+  const TUESDAY = '2026-08-18';
+
+  it('names the block and the position, together', () => {
+    // `training-architecture/03`: "The Coach prompt carries the current block
+    // and the athlete's position within it." Which block alone says the same
+    // thing for every week of that block.
+    const prompt = renderWeeklyPrompt(
+      buildWeeklyContext(
+        {
+          ...BASE,
+          weeklySessionNumber: 4,
+          raceDistance: 'Full',
+          raceTarget: 'Ironman Copenhagen',
+          raceDate: '2027-06-01',
+          phase: 'Block 1 of 5',
+          blockWeek: 'week 2 of 8',
+        },
+        [], [], [], [], null, TUESDAY,
+      ),
+    );
+
+    expect(prompt).toContain('Block 1 of 5, week 2 of 8');
+  });
+
+  it('says nothing about a block for an athlete with no horizon', () => {
+    // Half a position is worse than none: "week 2 of 8" with no block, or a
+    // block with no week, is a number the model reasons from and nobody meant.
+    const prompt = renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, raceDistance: 'Full', phase: undefined },
+        [], [], [], [], null, TUESDAY,
+      ),
+    );
+
+    expect(prompt).toContain('no race booked');
+    expect(prompt).not.toContain('week 2 of');
+  });
+});
+
+
+describe("the athlete's own words reach the Coach", () => {
+  const TUESDAY = '2026-08-18';
+
+  function weekly(overrides: Partial<CheckIn> = {}) {
+    return renderWeeklyPrompt(
+      buildWeeklyContext(
+        { ...BASE, weeklySessionNumber: 4, ...overrides },
+        [], [], [], [], null, TUESDAY,
+      ),
+    );
+  }
+
+  it('quotes the sentence and says whose it is', () => {
+    // Attributed on purpose. Unlabelled, the Coach can mistake it for something
+    // the app derived and repeat it back as its own observation - which is the
+    // one thing an athlete's own words must never become.
+    const prompt = weekly({ notableSignal: 'calf tight since Tuesday' });
+
+    expect(prompt).toContain('ATHLETE SAID');
+    expect(prompt).toContain('"calf tight since Tuesday"');
+  });
+
+  it('says nothing at all when the athlete wrote nothing', () => {
+    expect(weekly({ notableSignal: null })).not.toContain('ATHLETE SAID');
+    expect(weekly()).not.toContain('ATHLETE SAID');
+  });
+});
+
+// ── Which absence the Coach is told about ────────────────────────────────────
+// The 2026-09-10 review changed `noDataBlock` to judge the device fields rather
+// than their container. The cases below are the ones that distinguish the two
+// versions; without them the fix is a claim the suite cannot check.
+describe('which absence the Coach is told about', () => {
+  const BARE: CheckIn = {
+    phase: 'Base Building',
+    commStyle: '',
+    experienceLevel: 'intermediate',
+    sessionCount: 5,
+    language: 'English',
+  };
+
+  const chat = (readiness?: CheckIn['readiness']) =>
+    buildChatPrompt({ ...BARE, readiness }, '2026-08-18');
+
+  it('says neither once a device has fed both fields', () => {
+    // The defect the review found: keyed on the container, this would render
+    // `sleep=7h pulse=50bpm` and then assert, one block later, that the Coach
+    // has no measured sleep duration — a false claim standing beside the true
+    // numbers contradicting it.
+    const fed = chat({ body: 6, energy: 5, sleepQuality: 4, sleepHours: 7, restingPulse: 50 });
+
+    expect(fed).toContain('sleep=7h');
+    expect(fed).toContain('pulse=50bpm');
+    expect(fed).not.toContain('NO DEVICE DATA');
+    expect(fed).not.toContain('NO CHECK-IN DATA');
+  });
+
+  it('treats a sleep duration alone as a feed', () => {
+    // Either field on its own is data the Coach can see, so the blanket "you
+    // have no measured sleep duration and no resting heart rate" is already
+    // false. Both halves of the condition are load-bearing, one each here.
+    const fed = chat({ body: 6, energy: 5, sleepQuality: 4, sleepHours: 7 });
+
+    expect(fed).toContain('sleep=7h');
+    expect(fed).not.toContain('NO DEVICE DATA');
+  });
+
+  it('treats a resting pulse alone as a feed', () => {
+    const fed = chat({ body: 6, energy: 5, sleepQuality: 4, restingPulse: 50 });
+
+    expect(fed).toContain('pulse=50bpm');
+    expect(fed).not.toContain('NO DEVICE DATA');
   });
 });

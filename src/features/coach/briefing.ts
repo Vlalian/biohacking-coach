@@ -64,6 +64,15 @@ export interface BriefingProfile {
   raceTarget: string | null;
   sessionsPerWeek: number | null;
   onboarding: Onboarding | null;
+  /**
+   * What an open Injury or Illness prevents, already rendered, or null when
+   * nothing is restricted (`training-architecture/04`).
+   *
+   * The capacity half only. A Head Coach reads the detail thread on the
+   * athlete's own page; a briefing is assembled into a model prompt, and ADR
+   * 0011 keeps that thread out of one.
+   */
+  capacity: string | null;
 }
 
 /** The self-reported half of the material — present only when reports are shared. */
@@ -168,6 +177,10 @@ function profileLines(p: BriefingProfile): string[] {
   if (p.raceTarget) lines.push(`Race target: ${p.raceTarget}`);
   if (p.sessionsPerWeek != null)
     lines.push(`Training sessions per week: ${p.sessionsPerWeek}`);
+  // What the athlete's body currently allows. Last, because it is the line that
+  // changes how everything above it should be read — and absent entirely when
+  // nothing is restricted, rather than saying so.
+  if (p.capacity) lines.push(p.capacity);
   lines.push(...buildOnboardingLines(p.onboarding));
   return lines;
 }

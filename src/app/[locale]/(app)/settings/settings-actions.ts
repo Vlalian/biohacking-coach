@@ -1,12 +1,16 @@
 'use server';
 
 import { hasLocale } from 'next-intl';
+import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
+import { isCalendarDate } from '@/lib/calendar-date';
+import { clearTargetRace, upsertTargetRace } from '@/features/race/race-repository';
 import {
   addFixedConstraint,
   mergeAthleteProfile,
   removeFixedConstraint,
   updateCommunicationStyle,
   updateRaceTarget,
+  updateRaceDistance,
 } from '@/features/athlete/athlete-repository';
 import { resolveAthlete, resolveUserId } from '../../current-actor';
 import {
@@ -67,23 +71,72 @@ export async function updateCommunicationStyleAction(
 }
 
 /**
- * The race target, changed after onboarding. Free text (a race name and date as
- * the athlete says it — "Ironman Copenhagen 2026-08-16"), so the only gate is a
- * length cap; an empty value clears the target rather than storing "".
+ * The Race Distance, changed after onboarding.
  *
- * Deliberately not an identity field: this is a public race, not a person, and
- * it already reaches the prompt from onboarding (`renderWeeklyPrompt`'s `race=`).
+ * Closed set (`training-architecture/02`), checked here with the same list
+ * onboarding uses. Settings is a second door onto the same column, and a door
+ * with a weaker lock is not a door. There is no "clear" — every athlete has a
+ * distance once they have answered, because it is what shapes their week
+ * whether or not a race is booked.
  */
-export async function updateRaceTargetAction(
+export async function updateRaceDistanceAction(
   value: string,
 ): Promise<SettingsActionResult> {
-  const trimmed = value.trim();
-  if (trimmed.length > RACE_TARGET_MAX) return { ok: false, reason: 'invalid' };
+  if (!(RACE_DISTANCES as readonly string[]).includes(value)) {
+    return { ok: false, reason: 'invalid' };
+  }
 
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  await updateRaceTarget(athlete.id, trimmed || null);
+  await updateRaceDistance(athlete.id, value);
+  return { ok: true };
+}
+
+/**
+ * The Target Race, changed after onboarding — name and date together.
+ *
+ * Together because a race with no date is what the free-text field used to
+ * allow, and what four regexes then guessed at. Emptying both is a real state
+ * (an athlete between races) and clears the target while keeping the races
+ * themselves, which are a record.
+ *
+ * `athlete.raceTarget` is written alongside the race row on purpose: the Coach's
+ * session-1 arc and the onboarding greeting both read that column, so a race
+ * edited in one place and not the other would leave two answers to one question.
+ */
+export async function updateTargetRaceAction(
+  name: string,
+  date: string,
+): Promise<SettingsActionResult> {
+  const trimmedName = name.trim();
+  const trimmedDate = date.trim();
+  if (trimmedName.length > RACE_TARGET_MAX) return { ok: false, reason: 'invalid' };
+
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  if (!trimmedName && !trimmedDate) {
+    await clearTargetRace(athlete.id);
+    await updateRaceTarget(athlete.id, null);
+    return { ok: true };
+  }
+
+  if (!trimmedName || !isCalendarDate(trimmedDate)) return { ok: false, reason: 'invalid' };
+  // A Race carries a distance and there is nowhere honest to get one from when
+  // the athlete has never answered the question. Deriving it from the race name
+  // is exactly the habit this slice removed.
+  const distance = athlete.raceDistance;
+  if (!distance || !(RACE_DISTANCES as readonly string[]).includes(distance)) {
+    return { ok: false, reason: 'invalid' };
+  }
+
+  await upsertTargetRace(athlete.id, {
+    name: trimmedName,
+    date: trimmedDate,
+    distance: distance as RaceDistance,
+  });
+  await updateRaceTarget(athlete.id, trimmedName);
   return { ok: true };
 }
 

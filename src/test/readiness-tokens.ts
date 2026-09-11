@@ -15,6 +15,7 @@ export const READINESS_SCORE_TOKENS = [
   /body=\d/,
   /mental=\d/,
   /energy=\d/,
+  /sleep-quality=\d/,
   /sleep=[\d.]+h/,
   /pulse=\d+bpm/,
 ] as const;

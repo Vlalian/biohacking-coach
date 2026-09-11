@@ -16,6 +16,9 @@ import {
 import { sql } from 'drizzle-orm';
 import { user } from './auth-schema';
 import { CONVERSATION_KINDS } from '@/lib/conversation-kinds';
+import { RACE_DISTANCES } from '@/lib/race-distances';
+import { ALLOWANCES } from '@/features/health/capacity';
+import { CONSENT_PURPOSES } from '@/features/consent/disclosure';
 import type { Citation } from '@/lib/citation';
 
 /**
@@ -53,9 +56,16 @@ function quotedList(values: readonly string[]): string {
  * neither — so every name left in this table is fabricated, and ADR 0006's
  * promise holds by construction, not by convention.
  *
- * Column names follow the glossary exactly (route 07): `training_phase`, not
- * `phase`; `training_sessions_per_week`, not the misleading `weekly_session_count`
- * (a "Weekly Session" is the once-a-week Coach ritual — there is only ever one).
+ * Column names follow the glossary exactly (route 07): `training_sessions_per_week`,
+ * not the misleading `weekly_session_count` (a "Weekly Session" is the once-a-week
+ * Coach ritual — there is only ever one).
+ *
+ * There is deliberately **no stored Training Phase column**. The phase is the
+ * name of the Training Block today falls inside, derived on every read from the
+ * Target Race (`training-architecture/03`). It used to be a string written once
+ * at onboarding and never recomputed, so an athlete who onboarded eleven months
+ * out was still `Base Building` in race week — and every Coach prompt read that
+ * as fact. `race/no-date-guessing.test.ts` is the guard that keeps it derived.
  */
 export const athlete = pgTable(
   'athlete',
@@ -65,10 +75,18 @@ export const athlete = pgTable(
       .unique()
       .references(() => user.id),
     syntheticLabel: text('synthetic_label'),
-    trainingPhase: text('training_phase'),
     experienceLevel: text('experience_level'),
     communicationStyle: text('communication_style'),
     raceTarget: text('race_target'),
+    /**
+     * The Race Distance the athlete trains for, independent of whether they
+     * have a race booked (`training-architecture/02`). Nullable because every
+     * athlete who onboarded before this column existed was never asked — and the
+     * migration deliberately backfills nothing: a distance is not derivable from
+     * `race_target`'s free text, and guessing one from prose is exactly the
+     * habit this slice removed. The prompt says the distance is unknown instead.
+     */
+    raceDistance: text('race_distance'),
     trainingSessionsPerWeek: integer('training_sessions_per_week'),
     profile: jsonb('profile'),
     informationViewLayout: jsonb('information_view_layout'),
@@ -600,6 +618,233 @@ export type UnavailableDateRow = typeof unavailableDates.$inferSelect;
 export type NewUnavailableDateRow = typeof unavailableDates.$inferInsert;
 
 /**
+ * A Race — an entity from the start, not two columns on the athlete
+ * (`training-architecture/02`).
+ *
+ * An athlete has **zero or more**, and at most one is the current **Target
+ * Race**. Zero is a real state: "ready to start the next block" is as valid a
+ * goal as a start line, and onboarding stores that as a decision rather than as
+ * an absent answer. Managing several races is slice 09; this table is the shape
+ * that slice needs, landed now because building it as columns would have cost a
+ * migration later for something already decided.
+ *
+ * `date` is a real date column, never prose. The Training Phase used to be
+ * derived by running four regexes over the athlete's free-text race *name* — an
+ * ISO date, "Month YYYY", `dd/mm/yyyy`, and a bare year assumed to be mid-June —
+ * with a silent fallback when none matched, so an athlete who typed a race with
+ * no year has had a wrong phase since onboarding with nothing to show why.
+ *
+ * `distance` mirrors `RACE_DISTANCES` in `features/onboarding/onboarding-flow.ts`,
+ * checked at the database so a bad write fails here rather than silently
+ * downstream — the same treatment `consent.purpose` gets, and for the same
+ * reason. Note it is *also* on the athlete: the athlete's Race Distance is what
+ * shapes their week whether or not a race exists, and a race carries its own
+ * because a future race may be a different distance from the one being trained
+ * for today.
+ *
+ * The partial unique index allows at most one Target Race per athlete, so "which
+ * race are they pointed at?" has a single answer. Being the target is a property
+ * that rotates as races pass, not a permanent one.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const race = pgTable(
+  'race',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    distance: text('distance').notNull(),
+    isTarget: boolean('is_target').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'race_distance_known',
+      sql.raw(`distance IN (${quotedList(RACE_DISTANCES)})`),
+    ),
+    uniqueIndex('race_one_target_per_athlete')
+      .on(table.athleteId)
+      .where(sql`${table.isTarget}`),
+    index('race_athlete_date').on(table.athleteId, table.date),
+  ],
+);
+
+export type RaceRow = typeof race.$inferSelect;
+export type NewRaceRow = typeof race.$inferInsert;
+
+/**
+ * A Check-in — how the athlete arrives at the week
+ * (`training-architecture/05`, CONTEXT.md).
+ *
+ * **Once per week, not daily.** `weekStart` is the Monday the Check-in belongs
+ * to, and the unique index on (athlete, week) is what makes "once" a database
+ * rule rather than a convention. A second Check-in for the same week replaces
+ * the first: an athlete correcting Monday's answer on Tuesday is editing one
+ * report, not filing two.
+ *
+ * **All three scores are NOT NULL, together.** Half a Check-in is not a
+ * Check-in — a partial one would render as no readiness at all *and* have the
+ * prompt tell the model there is none, a false claim in the opposite direction
+ * (`code-health/07`). The database refuses it rather than trusting the form.
+ *
+ * `notableSignal` is free text and deliberately **not** a score: "tweaked my
+ * calf on Thursday" is not a number, and forcing it into one would lose the only
+ * part of a Check-in the athlete writes in their own words. It reaches a prompt,
+ * so it passes the same identifier assertion every other free-text leaf does.
+ *
+ * Sleep *duration* and resting heart rate are absent on purpose. They are
+ * expected from a device rather than a weekly question (Mads, 2026-09-09), and
+ * until there is a feed the Coach is told it cannot see them.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const checkIns = pgTable(
+  'check_in',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    weekStart: date('week_start', { mode: 'string' }).notNull(),
+    energy: integer('energy').notNull(),
+    body: integer('body').notNull(),
+    sleepQuality: integer('sleep_quality').notNull(),
+    notableSignal: text('notable_signal'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('check_in_once_per_week').on(table.athleteId, table.weekStart),
+    check(
+      'check_in_scores_in_range',
+      sql`${table.energy} BETWEEN 1 AND 10 AND ${table.body} BETWEEN 1 AND 10 AND ${table.sleepQuality} BETWEEN 1 AND 10`,
+    ),
+  ],
+);
+
+export type CheckInRow = typeof checkIns.$inferSelect;
+export type NewCheckInRow = typeof checkIns.$inferInsert;
+
+/**
+ * An Injury — the app's first model of the athlete's body
+ * (`training-architecture/04`, [ADR 0011](../../docs/adr/0011-an-injury-is-split-by-who-reads-it.md)).
+ *
+ * **No scheduled end.** An injury cannot be planned to finish, so `closedAt` is
+ * nullable and stays null until the athlete says it is over. There is
+ * deliberately no `expectedEnd` column for anyone to fill in: the plan reacts to
+ * an injury, it does not plan around one.
+ *
+ * **What it prevents lives here; what it *is* does not.** The three allowance
+ * columns are the athlete's own statement of capacity — "can't run", "can ride
+ * easy, not hard" — and they are the **only** part of a health record that ever
+ * reaches a Coach prompt. There is no body-location column, and that absence is
+ * load-bearing: "left knee" does not imply running is out, and making that leap
+ * is a clinical inference on the OUT side of the posture ruling. Anything a
+ * human needs to know goes in `health_note`, which the prompt path cannot read.
+ *
+ * Keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const injuries = pgTable(
+  'injury',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    swim: text('swim').notNull().default('full'),
+    bike: text('bike').notNull().default('full'),
+    run: text('run').notNull().default('full'),
+    openedAt: timestamp('opened_at').notNull().defaultNow(),
+    closedAt: timestamp('closed_at'),
+  },
+  (table) => [
+    check(
+      'injury_allowances_known',
+      sql.raw(
+        `swim IN (${quotedList(ALLOWANCES)}) AND bike IN (${quotedList(ALLOWANCES)}) AND run IN (${quotedList(ALLOWANCES)})`,
+      ),
+    ),
+    index('injury_athlete_open').on(table.athleteId, table.closedAt),
+  ],
+);
+
+export type InjuryRow = typeof injuries.$inferSelect;
+export type NewInjuryRow = typeof injuries.$inferInsert;
+
+/**
+ * An Illness — systemic, and so carries **no per-discipline capacity**.
+ *
+ * A separate table rather than a flag on `injury`, because it is a different
+ * concept and not a severity dial: an Injury is worked around, an Illness
+ * removes every discipline together. Giving them one table would mean a
+ * nullable capacity that means "all of it" for half the rows, and the first
+ * reader to forget that would plan an ill athlete a swim.
+ *
+ * Like an Injury it has no scheduled end.
+ */
+export const illnesses = pgTable(
+  'illness',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    openedAt: timestamp('opened_at').notNull().defaultNow(),
+    closedAt: timestamp('closed_at'),
+  },
+  (table) => [index('illness_athlete_open').on(table.athleteId, table.closedAt)],
+);
+
+export type IllnessRow = typeof illnesses.$inferSelect;
+export type NewIllnessRow = typeof illnesses.$inferInsert;
+
+/**
+ * The detail thread — free text, written by the athlete **and** the Head Coach,
+ * and it **never enters a prompt, ever** (ADR 0011).
+ *
+ * This is where body location, what a physio said, and how it is going belong.
+ * It is documentation for humans, and the guarantee is kept structurally rather
+ * than by discipline: nothing on the prompt path reads this table, and
+ * `features/health/capacity.ts` — the module that produces the prompt-facing
+ * value — has no field for it in its input type.
+ *
+ * The hazard being avoided is precise. `narration.ts` already refuses to send a
+ * Head Coach's session note to the model, because the sentence lands in the
+ * Coach Chat transcript and `toApiMessages` replays that transcript on every
+ * later turn — so one note sits in front of the model for the rest of that
+ * athlete's history. This is that same hazard carrying special-category data.
+ *
+ * Exactly one of `injuryId` / `illnessId` is set, checked at the database.
+ */
+export const healthNotes = pgTable(
+  'health_note',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    injuryId: uuid('injury_id').references(() => injuries.id, { onDelete: 'cascade' }),
+    illnessId: uuid('illness_id').references(() => illnesses.id, { onDelete: 'cascade' }),
+    authorRole: text('author_role').notNull(),
+    body: text('body').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'health_note_one_subject',
+      sql`(${table.injuryId} IS NULL) <> (${table.illnessId} IS NULL)`,
+    ),
+    check('health_note_author_known', sql.raw(`author_role IN ('athlete', 'head_coach')`)),
+    index('health_note_injury').on(table.injuryId),
+    index('health_note_illness').on(table.illnessId),
+  ],
+);
+
+export type HealthNoteRow = typeof healthNotes.$inferSelect;
+export type NewHealthNoteRow = typeof healthNotes.$inferInsert;
+
+/**
  * A consent record — the athlete's explicit, unbundled, versioned grant for one
  * processing purpose (the lawful basis GDPR requires; gdpr-decisions item A).
  *
@@ -653,7 +898,12 @@ export const consent = pgTable(
     // Closed value set — the mirror of CONSENT_PURPOSES (see the docstring).
     check(
       'consent_purpose_valid',
-      sql`${table.purpose} IN ('ai_coaching', 'health_data', 'product_improvement')`,
+      // RENDERED from `CONSENT_PURPOSES` rather than retyped. It used to be a
+      // hand-written list beside a docstring asking the reader to keep the two
+      // in step — which is a promise, and `training-architecture/12` is the
+      // change that would have broken it: a purpose added in TypeScript and
+      // forgotten here fails at runtime for a real athlete, not in a test.
+      sql.raw(`purpose IN (${quotedList(CONSENT_PURPOSES)})`),
     ),
   ],
 );
