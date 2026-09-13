@@ -11,6 +11,7 @@ import { getLatestOpenConversation, getMessages } from './conversation-repositor
 import type { Message } from './conversation';
 import { getRaces, getTargetRace } from '@/features/race/race-repository';
 import { getLatestPlanWrittenAt } from './plan-proposal-repository';
+import { productionGrounding } from './grounding';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
 import { buildWeeklyCheckIn } from './weekly-session';
@@ -69,7 +70,7 @@ async function renderSystem(
   today: string,
   language?: string,
   referenceSessionId?: string | null,
-): Promise<string> {
+): Promise<{ system: string; phase: string | null; experienceLevel: string | null }> {
   const [equipmentItems, weekSessions, reference, targetRace, checkInRow, races, planWrittenAt] =
     await Promise.all([
       getEquipmentItems(athlete.id),
@@ -115,12 +116,18 @@ async function renderSystem(
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.
-  return buildChatPrompt(
-    checkIn,
-    today,
-    reference ? toSessionContext(reference) : null,
-    weekFrom(weekSessions, reference?.id),
-  );
+  return {
+    system: buildChatPrompt(
+      checkIn,
+      today,
+      reference ? toSessionContext(reference) : null,
+      weekFrom(weekSessions, reference?.id),
+    ),
+    // What the grounding folds into its query: where in the season the athlete
+    // is, and how experienced — the same facts the prompt just rendered.
+    phase: checkIn.phase ?? null,
+    experienceLevel: checkIn.experienceLevel ?? null,
+  };
 }
 
 export interface CoachChatState {
@@ -175,8 +182,28 @@ export async function sendCoachChatMessage(
     conversationId,
     content,
     maxTokens: CHAT_MAX_TOKENS,
-    prepare: async () => ({
-      system: await renderSystem(athlete, today, language, referenceSessionId),
-    }),
+    prepare: async (_transcript, conversationId) => {
+      const { system, phase, experienceLevel } = await renderSystem(
+        athlete,
+        today,
+        language,
+        referenceSessionId,
+      );
+      // One grounding per turn (`knowledge-oracle/05`): the lookup tool, its
+      // resolver, and — after the model has answered — the citations it earned.
+      const grounding = productionGrounding({
+        athleteId: athlete.id,
+        surface: 'coach_chat',
+        conversationId,
+        phase,
+        experienceLevel,
+      });
+      return {
+        system,
+        tools: [grounding.tool],
+        resolveTool: grounding.resolve,
+        citations: () => grounding.citations(),
+      };
+    },
   });
 }

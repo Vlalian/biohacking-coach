@@ -103,6 +103,22 @@ export function onboardingBlock(onboarding?: Onboarding | null): PromptBlock {
   );
 }
 
+/**
+ * The Knowledge Oracle's instruction (`knowledge-oracle/05`): look before you
+ * claim, answer from what came back, say so when nothing did, and stay silent
+ * about sources — the app renders the reference list from what retrieval
+ * supplied, so the reply must never carry a citation the model wrote (the
+ * 2026-08-18 decision, reaffirmed by Mads 2026-09-11). Same text in Coach Chat
+ * and the Weekly Session, which is the whole reason blocks exist.
+ */
+export function groundingBlock(): PromptBlock {
+  return (
+    'GROUNDING: Before stating a training-science fact, call look_up_training_science. ' +
+    'Answer from the passages it returns. If it returns none, say you do not have grounding for that claim and do not assert it. ' +
+    'Never write citations, footnotes or source names in your reply — the app lists your sources beneath it.'
+  );
+}
+
 export function equipmentBlock(equipmentLines: string[]): PromptBlock {
   return block('EQUIPMENT:', equipmentLines);
 }

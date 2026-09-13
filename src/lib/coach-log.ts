@@ -141,3 +141,34 @@ export function logNarrationFailure(athleteId: string, error: unknown): void {
     // Deliberately silent: see above.
   }
 }
+
+/**
+ * Writes one structured line when a Coach reply names a source in its own words
+ * (`knowledge-oracle/05`, decision 3: the reply stays silent about sources; the
+ * app lists them). **A check that logs, never a rewrite** — the reply is stored
+ * as the model wrote it, and this is how Mads sees whether the instruction is
+ * holding without reading transcripts. The pattern names, never the text.
+ */
+export interface CoachDrift {
+  surface: ModelSurface;
+  athleteId: string;
+  conversationId: string | null;
+  /** From `sourceMentions` — e.g. `bracket-marker`, `according-to-study`. */
+  patterns: string[];
+}
+
+export function logCoachDrift(drift: CoachDrift): void {
+  try {
+    console.warn(
+      JSON.stringify({
+        event: 'coach_source_mention',
+        surface: drift.surface,
+        athleteId: drift.athleteId,
+        conversationId: drift.conversationId,
+        patterns: drift.patterns,
+      }),
+    );
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}

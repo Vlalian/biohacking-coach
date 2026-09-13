@@ -27,7 +27,29 @@ const {
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
+
+// One grounding per turn (knowledge-oracle/05). Faked at the module seam so
+// these tests assert the wiring — which tools the Coach is offered, where the
+// citations land — without an embedder or a corpus.
+const GROUNDING_CITATION = {
+  sourceId: 's1', slug: 'seiler-2010', title: 'Training intensity distribution', authors: 'Seiler S',
+  year: 2010, url: null, licence: 'CC BY', licenceUrl: 'https://cc', attribution: 'Seiler 2010', ordinals: [3],
+};
+const { productionGrounding, groundingResolve } = vi.hoisted(() => {
+  const groundingResolve = vi.fn(async () => '[1] passage');
+  const productionGrounding = vi.fn(() => ({
+    tool: { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+    resolve: groundingResolve,
+    citations: () => [] as unknown[],
+  }));
+  return { productionGrounding, groundingResolve };
+});
+vi.mock('./grounding', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./grounding')>()),
+  productionGrounding,
+}));
 vi.mock('./conversation-repository', () => ({
   createConversation,
   getOwnedConversation,
@@ -218,7 +240,9 @@ describe('sendCoachChatMessage', () => {
     expect(appendMessages).toHaveBeenCalledTimes(1);
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
       { role: 'athlete', content: 'should I ride?' },
-      { role: 'coach_ai', content: 'Fuel early.' },
+      // Always a list, so a renderer asks one question rather than two
+      // (`citations.ts`); empty when the Coach looked nothing up.
+      { role: 'coach_ai', content: 'Fuel early.', citations: [] },
     ]);
   });
 
@@ -412,5 +436,74 @@ describe('Coach Chat sees the week', () => {
     const system = callCoach.mock.calls[0][0].system;
     expect(system).toContain('SESSION DISCUSSION');
     expect(system.match(/threshold set/g)).toHaveLength(1);
+  });
+});
+
+describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracle/05)', () => {
+  beforeEach(() => {
+    callCoach.mockReset().mockResolvedValue({ text: 'Keep Thursday easy.', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    productionGrounding.mockClear();
+    logCoachDrift.mockClear();
+  });
+
+  it('offers the lookup tool on every turn, with its resolver, built for this athlete and surface', async () => {
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why is Thursday easy?', '2026-08-12');
+
+    expect(productionGrounding).toHaveBeenCalledTimes(1);
+    expect(productionGrounding).toHaveBeenCalledWith(
+      expect.objectContaining({ athleteId: 'athlete_1', surface: 'coach_chat', conversationId: 'conv_1' }),
+    );
+    const params = callCoach.mock.calls[0][0];
+    expect(params.tools.map((t: { name: string }) => t.name)).toEqual(['look_up_training_science']);
+    expect(params.resolveTool).toBe(groundingResolve);
+  });
+
+  it('threads the phase and experience level from the Check-in into the grounding', async () => {
+    getTargetRace.mockResolvedValue({ name: 'IM', date: '2027-08-15' });
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'how much Z2?', '2026-08-12');
+    expect(productionGrounding).toHaveBeenCalledWith(
+      expect.objectContaining({ experienceLevel: 'intermediate', phase: expect.stringMatching(/^Block \d of \d$/) }),
+    );
+    getTargetRace.mockResolvedValue(null);
+  });
+
+  it('stores the citations the grounding supplied on the Coach reply, and none when there were none', async () => {
+    productionGrounding.mockReturnValueOnce({
+      tool: { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+      resolve: groundingResolve,
+      citations: () => [GROUNDING_CITATION],
+    });
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
+    expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
+      { role: 'athlete', content: 'why?' },
+      { role: 'coach_ai', content: 'Keep Thursday easy.', citations: [GROUNDING_CITATION] },
+    ]);
+
+    appendMessages.mockClear();
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'thanks', '2026-08-12');
+    expect(appendMessages.mock.calls[0][2][1]).toEqual({ role: 'coach_ai', content: 'Keep Thursday easy.', citations: [] });
+  });
+
+  it('logs a source mention in the reply and stores the reply untouched — never rewrites', async () => {
+    callCoach.mockResolvedValue({ text: 'Polarised works [1], according to the study.', toolCalls: [] });
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
+
+    expect(logCoachDrift).toHaveBeenCalledWith({
+      surface: 'coach_chat',
+      athleteId: 'athlete_1',
+      conversationId: 'conv_1',
+      patterns: ['bracket-marker', 'according-to-study'],
+    });
+    expect(appendMessages.mock.calls[0][2][1].content).toBe('Polarised works [1], according to the study.');
+  });
+
+  it('logs nothing about drift for an ordinary reply', async () => {
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
+    expect(logCoachDrift).not.toHaveBeenCalled();
   });
 });

@@ -973,6 +973,34 @@ describe('the equipment nudge, exhaustively', () => {
   });
 });
 
+// ── Grounding: the Coach cites its sources (knowledge-oracle/05) ──────────────
+
+describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
+  const TUESDAY = '2026-08-18';
+  const weekly = () =>
+    renderWeeklyPrompt(buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TUESDAY));
+  const chat = () => buildChatPrompt(BASE, TUESDAY);
+
+  it('names the tool and asks for it before a training-science fact', () => {
+    for (const prompt of [weekly(), chat()]) {
+      expect(prompt).toContain('GROUNDING:');
+      expect(prompt).toContain('look_up_training_science');
+      expect(prompt).toMatch(/before stating a training-science fact/i);
+    }
+  });
+
+  it('instructs Declared Uncertainty when nothing comes back, and silence about sources always', () => {
+    // Decision 3 (Mads, 2026-09-11): the reply never names a source — the app
+    // lists them beneath it. This is what makes the voice criterion testable.
+    for (const prompt of [weekly(), chat()]) {
+      expect(prompt).toContain('do not have grounding for that claim');
+      expect(prompt).toContain('do not assert it');
+      expect(prompt).toContain('Never write citations, footnotes or source names in your reply');
+      expect(prompt).toContain('the app lists your sources beneath it');
+    }
+  });
+});
+
 // ── The horizon: Race Distance and the Target Race (training-architecture/02) ──
 
 /**

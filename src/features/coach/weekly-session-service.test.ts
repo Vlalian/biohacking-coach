@@ -81,6 +81,27 @@ const {
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
+
+// One grounding per turn (knowledge-oracle/05), faked at the module seam: the
+// tests assert which tools the Coach is offered and where the citations land.
+const CITATION = {
+  sourceId: 's1', slug: 'seiler-2010', title: 'Training intensity distribution', authors: 'Seiler S',
+  year: 2010, url: null, licence: 'CC BY', licenceUrl: 'https://cc', attribution: 'Seiler 2010', ordinals: [3],
+};
+const { productionGrounding, groundingResolve, groundingCitations } = vi.hoisted(() => {
+  const groundingResolve = vi.fn(async () => '[1] passage');
+  const groundingCitations = vi.fn((): unknown[] => []);
+  const productionGrounding = vi.fn(() => ({
+    tool: { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+    resolve: groundingResolve,
+    citations: groundingCitations,
+  }));
+  return { productionGrounding, groundingResolve, groundingCitations };
+});
+vi.mock('./grounding', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./grounding')>()),
+  productionGrounding,
+}));
 vi.mock('./conversation-repository', () => ({
   appendMessages,
   countWeeklySessions,
@@ -150,7 +171,7 @@ describe('startWeeklySession', () => {
 
     expect(result).toMatchObject({ ok: true, conversationId: 'conv_new' });
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_new', [
-      { role: 'coach_ai', content: 'How did the week feel?' },
+      { role: 'coach_ai', content: 'How did the week feel?', citations: [] },
     ]);
   });
 
@@ -188,8 +209,66 @@ describe('continueWeeklySession', () => {
     expect(appendMessages).toHaveBeenCalledTimes(1);
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
       { role: 'athlete', content: 'felt strong' },
-      { role: 'coach_ai', content: 'How did the week feel?' },
+      { role: 'coach_ai', content: 'How did the week feel?', citations: [] },
     ]);
+  });
+
+  describe('the Coach can look things up mid-session (knowledge-oracle/05)', () => {
+    beforeEach(() => {
+      productionGrounding.mockClear();
+      groundingResolve.mockClear();
+      groundingCitations.mockReset().mockReturnValue([]);
+    });
+
+    it('offers both tools — the plan proposal and the lookup — with one resolver', async () => {
+      await continueWeeklySession(ATHLETE, 'conv_1', 'why is Thursday easy?', TODAY);
+
+      const params = callCoach.mock.calls[0][0];
+      expect(params.tools.map((t: { name: string }) => t.name)).toEqual([
+        'propose_week_plan',
+        'look_up_training_science',
+      ]);
+      expect(typeof params.resolveTool).toBe('function');
+      expect(productionGrounding).toHaveBeenCalledWith(
+        expect.objectContaining({ athleteId: 'athlete_1', surface: 'weekly_session', conversationId: 'conv_1' }),
+      );
+    });
+
+    it('routes a lookup call to the grounding and a plan call to the fixed acknowledgement', async () => {
+      await continueWeeklySession(ATHLETE, 'conv_1', 'why?', TODAY);
+      const { resolveTool } = callCoach.mock.calls[0][0];
+
+      expect(await resolveTool({ name: 'look_up_training_science', input: { question: 'why?' } })).toBe('[1] passage');
+      expect(groundingResolve).toHaveBeenCalledTimes(1);
+      // The Weekly Session keeps its own acknowledgement — the Coach must not
+      // tell the athlete the week is saved, because it is not, yet.
+      expect(await resolveTool({ name: 'propose_week_plan', input: {} })).toContain(
+        'Do not say it has been saved',
+      );
+      expect(await resolveTool({ name: 'something_else', input: {} })).toContain(
+        'Do not say it has been saved',
+      );
+      expect(groundingResolve).toHaveBeenCalledTimes(1);
+    });
+
+    it('stores the citations the lookup earned on the Coach reply', async () => {
+      groundingCitations.mockReturnValue([CITATION]);
+      await continueWeeklySession(ATHLETE, 'conv_1', 'why?', TODAY);
+      expect(appendMessages.mock.calls[0][2][1]).toEqual({
+        role: 'coach_ai',
+        content: 'How did the week feel?',
+        citations: [CITATION],
+      });
+    });
+
+    it('offers the lookup tool on the opening turn as well', async () => {
+      await startWeeklySession(ATHLETE, TODAY);
+      const params = callCoach.mock.calls[0][0];
+      expect(params.tools.map((t: { name: string }) => t.name)).toEqual(['look_up_training_science']);
+      expect(appendMessages.mock.calls[0][2]).toEqual([
+        { role: 'coach_ai', content: 'How did the week feel?', citations: [] },
+      ]);
+    });
   });
 
   it('writes nothing when the Coach turn fails — no question without an answer', async () => {
@@ -672,7 +751,11 @@ describe('what the service sends the Coach', () => {
     expect(args.maxTokens).toBe(1400);
     expect(args.tools?.[0]?.name).toBe('propose_week_plan');
     // The Coach must not tell the athlete the week is saved — it is not, yet.
-    expect(args.toolResult).toContain('Do not say it has been saved');
+    // Since knowledge-oracle/05 the acknowledgement comes through the per-call
+    // resolver (one round-trip may carry a lookup *and* a proposal).
+    expect(await args.resolveTool({ name: 'propose_week_plan', input: {} })).toContain(
+      'Do not say it has been saved',
+    );
     // The athlete's turn reaches the API even though it is not stored yet.
     expect(args.messages.at(-1)).toEqual({ role: 'user', content: 'plan my week' });
   });
@@ -781,7 +864,8 @@ describe('the last details the Coach path depends on', () => {
   it('tells the Coach exactly what a staged proposal means', async () => {
     await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
 
-    expect(callCoach.mock.calls.at(-1)?.[0].toolResult).toBe(
+    const { resolveTool } = callCoach.mock.calls.at(-1)?.[0];
+    expect(await resolveTool({ name: 'propose_week_plan', input: {} })).toBe(
       'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
         'invite them to confirm when ready. Do not say it has been saved.',
     );

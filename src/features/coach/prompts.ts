@@ -4,6 +4,7 @@ import {
   assemble,
   commStyleBlock,
   equipmentBlock,
+  groundingBlock,
   onboardingBlock,
   openingBlock,
   buildEquipmentLines,
@@ -645,6 +646,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     'POSTURE: Confident, evidence-led, direct. Hold position unless athlete gives real reason. No markdown, lists, platitudes.',
 
+    groundingBlock(),
+
     arcBlock(weeklySessionNumber, raceTarget),
 
     horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
@@ -806,6 +809,8 @@ export function buildChatPrompt(
     ),
 
     "POSTURE: Confident, evidence-led, direct. Real conversation — respond to what they're asking. One follow-up if needed. Concise. No markdown, no lists unless athlete asks for breakdown.",
+
+    groundingBlock(),
 
     `TODAY: ${today}`,
 
