@@ -176,6 +176,13 @@
       "when": 1789161931301,
       "tag": "0024_admin_plugin",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789381676959,
+      "tag": "0025_training_block_set",
+      "breakpoints": true
     }
   ]
 }

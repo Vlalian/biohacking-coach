@@ -1,0 +1,83 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderBlockAdjustmentPrompt — the briefing carries every listed fact > renders the same string for the same context — golden 1`] = `
+"You are Coach in a luxury Ironman training app. You are shaping the Training Blocks of one athlete's horizon toward their Target Race. This runs once, in the background: the athlete is not in this conversation and will read the result later in your own voice, so do not address them here — call the tool.
+
+HORIZON: distance=Ironman · race=Ironman Copenhagen on 2027-08-15 · 47 weeks from today (2026-09-14)
+
+ARITHMETIC DRAFT (the horizon divided evenly, with no purpose yet):
+- Block 1 of 6: 2026-09-14 to 2026-11-08 (8 weeks)
+- Block 2 of 6: 2026-11-09 to 2027-01-03 (8 weeks)
+- Block 3 of 6: 2027-01-04 to 2027-02-28 (8 weeks)
+- Block 4 of 6: 2027-03-01 to 2027-04-25 (8 weeks)
+- Block 5 of 6: 2027-04-26 to 2027-06-20 (8 weeks)
+- Block 6 of 6: 2027-06-21 to 2027-08-15 (8 weeks)
+
+ATHLETE:
+- Experience: intermediate
+- Currently unable to run; swimming and cycling are unrestricted.
+- This week's Check-in: body=7/10 energy=6/10 sleep-quality=5/10 · "calf tight since Tuesday"
+
+SESSION REFLECTIONS (last four weeks, Body/Mind the athlete reported):
+- Thu 10 Sept · Endurance · Body 🙂 (7/10) · Mind 🙂 (8/10) · "felt strong"
+- Sat 12 Sept · Intensity · Body 😕 (4/10) · Mind 😐 (5/10)
+
+RULES:
+- Keep two to six blocks, contiguous from today. The last block must end on race day, 2027-08-15; never move race day.
+- Name each block for what it achieves, in at most four words. Never a position such as "Block 2" or "Phase 3".
+- Move a boundary only with a reason you could say to the athlete; otherwise keep the draft's dates. Every block is at least seven days.
+- Saying the race is unrealistic is the heaviest sentence you can produce. Use it only when the horizon makes the distance genuinely unreachable, and expect to use it almost never.
+- Call adjust_training_blocks exactly once, with the whole set. Write no prose to the athlete."
+`;
+
+exports[`the adjust_training_blocks tool > is pinned word for word — the description is what the model reads 1`] = `
+{
+  "description": "Record the shaped Training Blocks for this athlete: every block, in order, named for what it achieves, with the date it ends. The last block must end on race day. Call it exactly once, with the whole set. Set \`unrealistic\` only in the rare case the race cannot be reached on this horizon.",
+  "input_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "blocks": {
+        "description": "Two to six blocks, in order, contiguous from today to race day.",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "endDate": {
+              "description": "The last day of the block, YYYY-MM-DD.",
+              "type": "string",
+            },
+            "name": {
+              "description": "What the block achieves, in at most four words. Never a position.",
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+            "endDate",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+      "unrealistic": {
+        "additionalProperties": false,
+        "description": "Only when the race is genuinely out of reach on this horizon. Almost never set.",
+        "properties": {
+          "reason": {
+            "description": "One plain sentence the athlete could be told.",
+            "type": "string",
+          },
+        },
+        "required": [
+          "reason",
+        ],
+        "type": "object",
+      },
+    },
+    "required": [
+      "blocks",
+    ],
+    "type": "object",
+  },
+  "name": "adjust_training_blocks",
+}
+`;

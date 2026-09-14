@@ -603,7 +603,12 @@
     "moved": "{coach} har flyttet din session fra {fromDay} til {day}",
     "movedNoFrom": "{coach} har flyttet en session til {day}",
     "yourHeadCoach": "Din Head Coach",
-    "recently": "for nylig"
+    "recently": "for nylig",
+    "blocksDrafted": "Jeg har formet din træning frem mod {race}: {blocks}",
+    "blocksDraftedNoDetail": "Jeg har formet blokkene i din træning frem mod dit løb",
+    "raceUnrealistic": "Helt ærligt: {race} ser ud til at være uden for rækkevidde på den her tidslinje — {reason}. Det bør vi tale om",
+    "yourRace": "dit løb",
+    "noReason": "horisonten er kort til distancen"
   },
   "Privacy": {
     "dataRightsTitle": "Dine data",
@@ -631,5 +636,9 @@
     "fallbackSend": "Send feedback",
     "fallbackSent": "Sendt. Tak — der er nogen, der læser det.",
     "fallbackError": "Det blev ikke gemt. Prøv igen."
+  },
+  "BlockStrip": {
+    "weekOf": "uge {week} af {weeks}",
+    "weeksToRace": "{weeks, plural, =1 {1 uge} other {# uger}} til {race}"
   }
 }

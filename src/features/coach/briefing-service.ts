@@ -9,9 +9,10 @@ import { callCoach, type CoachReply } from './coach-client';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
-import { getTargetRace } from '@/features/race/race-repository';
 import { capacityFor } from '@/features/health/health-repository';
-import { currentPhase, trainingBlocks } from './training-blocks';
+import { currentPhase } from './training-blocks';
+import { getLatestUnrealisticFlag } from './training-block-repository';
+import { getResolvedBlocks } from './training-block-service';
 import {
   appendBriefingMessages,
   createBriefing,
@@ -74,39 +75,24 @@ async function buildBriefingSystem(
 ): Promise<string> {
   const athleteId = link.athleteId;
 
-  const plan = await getBriefingPlan(athleteId);
+  // The plan and its structure are always read (the calendar has no flag, ADR
+  // 0003; the Training Blocks are the horizon that calendar is built toward).
+  // The Coach's own "unrealistic" verdict travels with the blocks for the same
+  // reason: it is the Coach's judgement, not the athlete's report.
+  const [plan, resolved, raceUnrealistic] = await Promise.all([
+    getBriefingPlan(athleteId),
+    getResolvedBlocks(athleteId, today),
+    getLatestUnrealisticFlag(athleteId),
+  ]);
+  const blocks = {
+    blocks: resolved.blocks.map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
+    raceUnrealistic,
+  };
 
-  let reports: BriefingReports | null = null;
-  if (canSeeAthleteReports(link.visibility)) {
-    const [athlete, reflectionRows, targetRace, capacity] = await Promise.all([
-      getAthleteById(athleteId),
-      getBriefingReflections(athleteId),
-      getTargetRace(athleteId),
-      // An open Injury or Illness is data the athlete reported about their own
-      // body, so it belongs to `shareAthleteReports` alongside their Session
-      // Reflections and Check-ins — the same flag, not a third one. Read inside
-      // this branch, so when the flag is off it is never fetched at all rather
-      // than fetched and hidden (ticket 11).
-      capacityFor(athleteId),
-    ]);
-    reports = {
-      profile: {
-        // Derived, never stored (`training-architecture/03`): the Training Phase
-        // is the name of the Training Block today falls inside. Null for an
-        // athlete with no race, which the briefing renders as no phase.
-        phase: currentPhase(today, trainingBlocks(today, targetRace?.date ?? null)),
-        experienceLevel: athlete?.experienceLevel ?? null,
-        raceTarget: athlete?.raceTarget ?? null,
-        sessionsPerWeek: athlete?.trainingSessionsPerWeek ?? null,
-        onboarding: athlete?.profile?.onboarding ?? null,
-        // The capacity half only. A Head Coach reads the detail thread on the
-        // athlete's own page, not through a briefing that is assembled into a
-        // model prompt (ADR 0011).
-        capacity,
-      },
-      reflections: reflectionRows.map(toBriefingReflection),
-    };
-  }
+  // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.
+  const reports = canSeeAthleteReports(link.visibility)
+    ? await readReports(athleteId, currentPhase(today, resolved.blocks))
+    : null;
 
   // Gated inside getSharedTranscripts: null (nothing fetched) when the flag is off.
   const shared = await getSharedTranscripts(link);
@@ -117,8 +103,50 @@ async function buildBriefingSystem(
       }))
     : null;
 
-  const ctx = buildBriefingContext({ today, plan, reports, transcripts, language });
+  const ctx = buildBriefingContext({ today, plan, blocks, reports, transcripts, language });
   return renderBriefingPrompt(ctx);
+}
+
+/**
+ * The athlete's self-reported material, read only once `shareAthleteReports`
+ * has been checked by the caller.
+ *
+ * `phase` arrives resolved: the Training Phase is the name of the Training
+ * Block today falls inside — the Coach-shaped one when a set exists
+ * (`training-architecture/07`) — and null for an athlete with no race, which
+ * the briefing renders as no phase.
+ */
+async function readReports(athleteId: string, phase: string | null): Promise<BriefingReports> {
+  const [athlete, reflectionRows, capacity] = await Promise.all([
+    getAthleteById(athleteId),
+    getBriefingReflections(athleteId),
+    // An open Injury or Illness is data the athlete reported about their own
+    // body, so it belongs to `shareAthleteReports` alongside their Session
+    // Reflections and Check-ins — the same flag, not a third one. Read inside
+    // this branch, so when the flag is off it is never fetched at all rather
+    // than fetched and hidden (ticket 11).
+    capacityFor(athleteId),
+  ]);
+  // A missing athlete row reads as an athlete who has said nothing: every
+  // column is nullable already, so the empty row is the honest stand-in.
+  // Stryker disable next-line ObjectLiteral: equivalent. Every profile field is
+  // rendered by presence, so an empty stand-in and an all-null one produce the
+  // same briefing; the explicit nulls are for the type, not the behaviour.
+  const a = athlete ?? { experienceLevel: null, raceTarget: null, trainingSessionsPerWeek: null, profile: null };
+  return {
+    profile: {
+      phase,
+      experienceLevel: a.experienceLevel,
+      raceTarget: a.raceTarget,
+      sessionsPerWeek: a.trainingSessionsPerWeek,
+      onboarding: a.profile?.onboarding ?? null,
+      // The capacity half only. A Head Coach reads the detail thread on the
+      // athlete's own page, not through a briefing that is assembled into a
+      // model prompt (ADR 0011).
+      capacity,
+    },
+    reflections: reflectionRows.map(toBriefingReflection),
+  };
 }
 
 function roleLabel(role: 'athlete' | 'coach_ai' | 'head_coach'): string {

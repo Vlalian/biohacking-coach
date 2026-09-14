@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { SEQ_RETRIES, isSeqConflict } from './seq-conflict';
 import { events, messages } from '@/db/schema';
@@ -38,12 +38,26 @@ const NARRATABLE_TYPES = [
 ] as const;
 
 /**
- * The athlete's un-narrated Head Coach actions, oldest first.
+ * The Coach's own actions on the plan's structure that the athlete is told
+ * about (`training-architecture/07`): the Training Blocks it shaped, and the
+ * rare flag that the race looks out of reach.
  *
- * Only `head_coach` events are pending: an athlete's own Session Moves are
- * silent by design (CONTEXT.md), and `system`/`coach_ai` events are not
- * somebody else's hand on the plan. Ordered oldest-first so a batch of pending
- * events narrates in the order they happened.
+ * Paired with `actor_type = 'coach_ai'` below, and only these two types. The
+ * Coach writes other `coach_ai` events — a proposed week, for instance — that
+ * are the conversation itself and must not be narrated back as if they were
+ * news. Admitting an actor is not the mechanism; admitting a (actor, type) pair
+ * is.
+ */
+const COACH_NARRATABLE_TYPES = ['blocks_drafted', 'race_flagged_unrealistic'] as const;
+
+/**
+ * The athlete's un-narrated plan changes by another hand, oldest first.
+ *
+ * Two hands: the Head Coach's session actions, and — since
+ * `training-architecture/07` — the Coach's own block shaping. An athlete's own
+ * Session Moves are silent by design (CONTEXT.md), and `system` events are
+ * nobody's hand on the plan. Ordered oldest-first so a batch of pending events
+ * narrates in the order they happened.
  */
 export async function getPendingNarrationEvents(
   athleteId: string,
@@ -60,9 +74,11 @@ export async function getPendingNarrationEvents(
     .where(
       and(
         eq(events.athleteId, athleteId),
-        eq(events.actorType, 'head_coach'),
         isNull(events.narratedAt),
-        inArray(events.type, [...NARRATABLE_TYPES]),
+        or(
+          and(eq(events.actorType, 'head_coach'), inArray(events.type, [...NARRATABLE_TYPES])),
+          and(eq(events.actorType, 'coach_ai'), inArray(events.type, [...COACH_NARRATABLE_TYPES])),
+        ),
       ),
     )
     .orderBy(asc(events.createdAt));

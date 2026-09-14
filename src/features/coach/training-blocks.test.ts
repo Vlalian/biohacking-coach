@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { addDays } from '@/lib/date';
-import { blockPosition, currentBlock, currentPhase, trainingBlocks } from './training-blocks';
+import {
+  blockPosition,
+  currentBlock,
+  currentPhase,
+  resolveBlocks,
+  trainingBlocks,
+  validateBlockSet,
+  type StoredBlockSet,
+  type TrainingBlockSpec,
+} from './training-blocks';
 
 /**
  * `training-architecture/03` — the arithmetic first draft.
@@ -148,5 +157,200 @@ describe('currentBlock — the one place the search lives', () => {
     expect(currentBlock(blocks[2].startDate, blocks)).toBe(blocks[2]);
     expect(currentBlock('2020-01-01', blocks)).toBeNull();
     expect(currentBlock('2026-09-09', [])).toBeNull();
+  });
+});
+
+/**
+ * `training-architecture/07` — the stored, adjusted set.
+ *
+ * Stage 2 stores what the Coach decided; these pin the shape a stored set must
+ * have to be trusted and how a stored set replaces the arithmetic on read.
+ */
+describe('validateBlockSet — what a stored set must look like', () => {
+  const START = '2026-09-14';
+  const RACE = '2027-03-14'; // 26 weeks out
+
+  const good: TrainingBlockSpec[] = [
+    { name: 'Build the Volume', endDate: '2026-11-15', authoredBy: 'coach_ai' },
+    { name: 'Sharpen the Bike', endDate: '2027-01-17', authoredBy: 'coach_ai' },
+    { name: 'Race Specific', endDate: '2027-02-28', authoredBy: 'coach_ai' },
+    { name: 'Taper', endDate: RACE, authoredBy: 'coach_ai' },
+  ];
+
+  it('accepts two to six blocks with increasing ends, ≥ 7 days each, ending on race day', () => {
+    expect(validateBlockSet(good, START, RACE)).toEqual({ ok: true });
+    expect(
+      validateBlockSet(
+        [
+          { name: 'Base', endDate: '2026-12-31', authoredBy: 'coach_ai' },
+          { name: 'Race Specific', endDate: RACE, authoredBy: 'coach_ai' },
+        ],
+        START,
+        RACE,
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it('rejects fewer than two or more than six blocks', () => {
+    expect(validateBlockSet([good[3]], START, RACE)).toEqual({ ok: false, reason: 'count' });
+    const seven = Array.from({ length: 7 }, (_, i) => ({
+      name: `Purpose ${'abcdefg'[i]}`,
+      endDate: i === 6 ? RACE : addDays(START, 14 * (i + 1)),
+      authoredBy: 'coach_ai' as const,
+    }));
+    expect(validateBlockSet(seven, START, RACE)).toEqual({ ok: false, reason: 'count' });
+  });
+
+  it('rejects a set whose last block does not end on race day', () => {
+    const drifted = [...good.slice(0, 3), { ...good[3], endDate: '2027-03-13' }];
+    expect(validateBlockSet(drifted, START, RACE)).toEqual({ ok: false, reason: 'end' });
+  });
+
+  it('rejects ends that do not strictly increase', () => {
+    const swapped = [good[0], { ...good[1], endDate: '2026-11-15' }, good[2], good[3]];
+    expect(validateBlockSet(swapped, START, RACE)).toEqual({ ok: false, reason: 'order' });
+  });
+
+  it('rejects a block shorter than seven days', () => {
+    const short = [good[0], { ...good[1], endDate: '2026-11-20' }, good[2], good[3]];
+    expect(validateBlockSet(short, START, RACE)).toEqual({ ok: false, reason: 'short' });
+  });
+
+  it('rejects an empty, blank or over-long name', () => {
+    for (const name of ['', '   ', 'x'.repeat(41)]) {
+      const bad = [{ ...good[0], name }, ...good.slice(1)];
+      expect(validateBlockSet(bad, START, RACE)).toEqual({ ok: false, reason: 'name' });
+    }
+  });
+
+  it('rejects a positional name — the arithmetic pretending to be coaching', () => {
+    for (const name of ['Block 2', 'block 2 of 4', 'Phase 3', 'Fase 1', 'PHASE1']) {
+      const bad = [{ ...good[0], name }, ...good.slice(1)];
+      expect(validateBlockSet(bad, START, RACE)).toEqual({ ok: false, reason: 'positional' });
+    }
+  });
+
+  it('rejects an end date that is not a calendar date', () => {
+    const bad = [{ ...good[0], endDate: 'soon' }, ...good.slice(1)];
+    expect(validateBlockSet(bad, START, RACE)).toEqual({ ok: false, reason: 'date' });
+  });
+});
+
+describe('resolveBlocks — the stored set replaces the arithmetic, when it still fits', () => {
+  const TODAY = '2026-10-01';
+  const RACE = { date: '2027-03-14' };
+  const stored: StoredBlockSet = {
+    startDate: '2026-09-14',
+    blocks: [
+      { name: 'Build the Volume', endDate: '2026-11-15', authoredBy: 'coach_ai' },
+      { name: 'Sharpen the Bike', endDate: '2027-01-17', authoredBy: 'head_coach' },
+      { name: 'Taper', endDate: '2027-03-14', authoredBy: 'coach_ai' },
+    ],
+  };
+
+  it('expands a stored set contiguously, carrying each author', () => {
+    const blocks = resolveBlocks(TODAY, RACE, stored);
+    expect(blocks.map((b) => [b.index, b.total, b.name, b.startDate, b.endDate, b.authoredBy])).toEqual([
+      [1, 3, 'Build the Volume', '2026-09-14', '2026-11-15', 'coach_ai'],
+      [2, 3, 'Sharpen the Bike', '2026-11-16', '2027-01-17', 'head_coach'],
+      [3, 3, 'Taper', '2027-01-18', '2027-03-14', 'coach_ai'],
+    ]);
+  });
+
+  it('falls back to the arithmetic draft when nothing is stored', () => {
+    const blocks = resolveBlocks(TODAY, RACE, null);
+    expect(blocks).toEqual(trainingBlocks(TODAY, RACE.date));
+    expect(blocks.every((b) => b.authoredBy === 'arithmetic')).toBe(true);
+  });
+
+  it('ignores a stored set whose last end is not the race date — a moved race invalidates it', () => {
+    const blocks = resolveBlocks(TODAY, { date: '2027-04-01' }, stored);
+    expect(blocks).toEqual(trainingBlocks(TODAY, '2027-04-01'));
+  });
+
+  it('returns no blocks for an athlete with no race, stored set or not', () => {
+    expect(resolveBlocks(TODAY, null, stored)).toEqual([]);
+    expect(resolveBlocks(TODAY, null, null)).toEqual([]);
+  });
+
+  it('yields the same boundaries on two different days — stored blocks do not drift', () => {
+    const monday = resolveBlocks('2026-10-05', RACE, stored);
+    const friday = resolveBlocks('2026-10-09', RACE, stored);
+    expect(friday).toEqual(monday);
+    // Where the arithmetic would have moved: the draft is measured from today.
+    expect(trainingBlocks('2026-10-09', RACE.date)).not.toEqual(trainingBlocks('2026-10-05', RACE.date));
+  });
+});
+
+describe('trainingBlocks — the count table at its boundaries', () => {
+  const TODAY = '2026-09-14';
+  const weeksOut = (w: number) => addDays(TODAY, w * 7);
+
+  it('steps up exactly at 8, 16, 28 and 44 weeks', () => {
+    // The table is a plain monotone step function, so each threshold is pinned
+    // on both sides: one day short of it stays on the lower count.
+    expect(trainingBlocks(TODAY, addDays(weeksOut(8), -1)).length).toBe(2);
+    expect(trainingBlocks(TODAY, weeksOut(8)).length).toBe(3);
+    expect(trainingBlocks(TODAY, addDays(weeksOut(16), -1)).length).toBe(3);
+    expect(trainingBlocks(TODAY, weeksOut(16)).length).toBe(4);
+    expect(trainingBlocks(TODAY, addDays(weeksOut(28), -1)).length).toBe(4);
+    expect(trainingBlocks(TODAY, weeksOut(28)).length).toBe(5);
+    expect(trainingBlocks(TODAY, addDays(weeksOut(44), -1)).length).toBe(5);
+    expect(trainingBlocks(TODAY, weeksOut(44)).length).toBe(6);
+  });
+
+  it('gives no blocks for a race today or in the past, and blocks for a race tomorrow', () => {
+    expect(trainingBlocks(TODAY, TODAY)).toEqual([]);
+    expect(trainingBlocks(TODAY, addDays(TODAY, -1))).toEqual([]);
+    expect(trainingBlocks(TODAY, addDays(TODAY, 1)).length).toBe(2);
+  });
+});
+
+describe('validateBlockSet — the edges of each rule', () => {
+  const START = '2026-09-14';
+  const RACE = '2027-03-14';
+  const set = (first: Partial<TrainingBlockSpec>): TrainingBlockSpec[] => [
+    { name: 'Build the Volume', endDate: '2026-12-13', authoredBy: 'coach_ai', ...first },
+    { name: 'Taper', endDate: RACE, authoredBy: 'coach_ai' },
+  ];
+
+  it('accepts a name of exactly forty characters and one that only needs trimming', () => {
+    expect(validateBlockSet(set({ name: 'x'.repeat(40) }), START, RACE)).toEqual({ ok: true });
+    expect(validateBlockSet(set({ name: '  Build  ' }), START, RACE)).toEqual({ ok: true });
+  });
+
+  it('accepts a first block of exactly seven days and refuses six', () => {
+    // Inclusive span: start and end both count, so six days after the start is
+    // the seventh day.
+    expect(validateBlockSet(set({ endDate: addDays(START, 6) }), START, RACE)).toEqual({ ok: true });
+    expect(validateBlockSet(set({ endDate: addDays(START, 5) }), START, RACE)).toEqual({
+      ok: false,
+      reason: 'short',
+    });
+  });
+
+  it('accepts exactly six blocks', () => {
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      name: `Purpose ${'abcdef'[i]}`,
+      endDate: i === 5 ? RACE : addDays(START, 20 * (i + 1)),
+      authoredBy: 'coach_ai' as const,
+    }));
+    expect(validateBlockSet(six, START, RACE)).toEqual({ ok: true });
+  });
+
+  it('lets a purpose-shaped name mention a number, and only refuses the positional shape', () => {
+    expect(validateBlockSet(set({ name: '2 x 20 Threshold' }), START, RACE)).toEqual({ ok: true });
+    expect(validateBlockSet(set({ name: 'Blockbuster Week' }), START, RACE)).toEqual({ ok: true });
+    expect(validateBlockSet(set({ name: 'block2' }), START, RACE)).toEqual({ ok: false, reason: 'positional' });
+    expect(validateBlockSet(set({ name: 'Block  3 of 4' }), START, RACE)).toEqual({ ok: false, reason: 'positional' });
+    expect(validateBlockSet(set({ name: 'Before Block 2' }), START, RACE)).toEqual({ ok: true });
+    expect(validateBlockSet(set({ name: 'Block two' }), START, RACE)).toEqual({ ok: true });
+  });
+});
+
+describe('resolveBlocks — an empty stored set', () => {
+  it('falls through to the arithmetic rather than throwing', () => {
+    const blocks = resolveBlocks('2026-10-01', { date: '2027-03-14' }, { startDate: '2026-09-14', blocks: [] });
+    expect(blocks).toEqual(trainingBlocks('2026-10-01', '2027-03-14'));
   });
 });

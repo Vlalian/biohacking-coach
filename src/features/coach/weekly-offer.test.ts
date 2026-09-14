@@ -21,10 +21,15 @@ describe('shouldOfferWeeklySession', () => {
     expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: true })).toBe(false);
   });
 
-  it('still offers when a plan exists but no session was held', () => {
+  it('still offers for a week the Coach drafted and the athlete has not discussed', () => {
     // The gate keys on the conversation, not the plan — otherwise automatic
     // generation would silence its own offer (coach-overlay issue 04,
     // decision 4). A drafted week is exactly the week worth discussing.
+    //
+    // Pinned by name for `training-architecture/07`, whose acceptance criteria
+    // ask for exactly this: the Coach now writes structure into the plan in the
+    // background, and an offer keyed on "does this week have a plan" would go
+    // silent the moment it did.
     expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: false })).toBe(true);
   });
 

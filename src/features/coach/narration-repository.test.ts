@@ -14,6 +14,7 @@ let batchCalls: unknown[][] = [];
 let updateSets: unknown[] = [];
 let insertValues: unknown[] = [];
 let executed: { sql: string; params: unknown[] }[] = [];
+let selectArgs: unknown[] = [];
 
 const CHAIN_METHODS = [
   'select',
@@ -29,6 +30,10 @@ function chain() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c: any = {};
   for (const m of CHAIN_METHODS) c[m] = () => c;
+  c.select = (projection?: unknown) => {
+    selectArgs.push(projection);
+    return c;
+  };
   c.where = (arg: unknown) => {
     whereArgs.push(arg);
     return c;
@@ -68,6 +73,7 @@ vi.mock('@/db', () => ({
 const { getPendingNarrationEvents, claimAndNarrate } = await import(
   './narration-repository'
 );
+const { SEQ_RETRIES } = await import('./seq-conflict');
 
 /**
  * Every primitive bound into a drizzle condition, flattened.
@@ -128,6 +134,7 @@ beforeEach(() => {
   whereArgs = [];
   batchCalls = [];
   executed = [];
+  selectArgs = [];
   updateSets = [];
   insertValues = [];
   batch.mockClear();
@@ -184,9 +191,38 @@ describe('getPendingNarrationEvents', () => {
     }
   });
 
+  it('also collects the Coach’s own two block announcements, and no other coach_ai event', async () => {
+    // `training-architecture/07`: the Coach adjusting the blocks is the first
+    // `coach_ai` event that is *somebody's hand on the plan* from the athlete's
+    // side. It is admitted by type, not by actor — a `coach_ai` event of any
+    // other kind (a proposed week, say) stays out, so the query must pair the
+    // actor with its own type list rather than widening the actor filter.
+    nextRows = [];
+
+    await getPendingNarrationEvents('a1');
+
+    const { sql, params } = new PgDialect().sqlToQuery(whereArgs[0] as SQL);
+    expect(params).toContain('coach_ai');
+    expect(params).toContain('blocks_drafted');
+    expect(params).toContain('race_flagged_unrealistic');
+    expect(params).not.toContain('week_plan_proposed');
+    // Two actor/type pairs, OR-ed — not one actor list beside one type list.
+    expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\) or \("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\)/);
+  });
+
   it('returns an empty list when nothing is pending', async () => {
     nextRows = [];
     expect(await getPendingNarrationEvents('a1')).toEqual([]);
+  });
+
+  it('selects exactly the columns the composer reads — the projection is not the whole row', async () => {
+    nextRows = [];
+
+    await getPendingNarrationEvents('a1');
+
+    expect(Object.keys(selectArgs[0] as object).sort()).toEqual(
+      ['actorId', 'createdAt', 'id', 'payload', 'type'].sort(),
+    );
   });
 });
 
@@ -208,6 +244,8 @@ describe('claimAndNarrate', () => {
     const { sql } = executed[0];
     expect(sql).toMatch(/UPDATE "events" SET "narrated_at" = now\(\)/);
     expect(sql).toMatch(/INSERT INTO "messages"/);
+    // Two ids, comma-joined, in every IN list — not concatenated into one token.
+    expect(sql).toMatch(/IN \(\$\d+::uuid, \$\d+::uuid\)/);
   });
 
   it('gates the INSERT on having claimed every event, so a losing render writes nothing', async () => {
@@ -287,6 +325,18 @@ describe('claimAndNarrate', () => {
     ).resolves.toBeUndefined();
 
     expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after SEQ_RETRIES retries when the collision never clears', async () => {
+    // Bounded, and bounded at the shared constant: a conflict that never
+    // clears must surface, not spin. One first attempt plus SEQ_RETRIES more.
+    execute.mockRejectedValue(Object.assign(new Error('duplicate key value'), { code: '23505' }));
+
+    await expect(
+      claimAndNarrate({ athleteId: 'a1', eventIds: ['ev_1'], conversationId: 'conv_1', content: 'x' }),
+    ).rejects.toThrow('duplicate key value');
+
+    expect(execute).toHaveBeenCalledTimes(SEQ_RETRIES + 1);
   });
 
   it('surfaces any other failure instead of retrying it away', async () => {
