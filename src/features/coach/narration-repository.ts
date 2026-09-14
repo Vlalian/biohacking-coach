@@ -35,6 +35,10 @@ const NARRATABLE_TYPES = [
   'session_edited',
   'session_deleted',
   'session_moved',
+  // A Head Coach renaming or re-bounding a Training Block
+  // (`training-architecture/08`): the plan's structure changed by a hand that
+  // is not the athlete's, which is exactly what the rule is for.
+  'block_edited',
 ] as const;
 
 /**

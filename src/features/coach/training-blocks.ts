@@ -217,13 +217,18 @@ const MAX_NAME_LENGTH = 40;
 /**
  * A name that is only a position — the arithmetic's own shape. Stage 2 exists to
  * replace these, so a Coach reply that hands one back has not done the job.
+ *
+ * Refused only where someone was meant to name the block. An `arithmetic` block
+ * keeps its positional name by definition: a Head Coach who renames one block
+ * of a materialised draft leaves the others as the formula made them, and that
+ * set is still valid (slice 08).
  */
 const POSITIONAL_NAME = /^(block|phase|fase)\s*\d/i;
 
-function nameProblemOf(name: string): BlockSetProblem | null {
-  const trimmed = name.trim();
+function nameProblemOf(block: TrainingBlockSpec): BlockSetProblem | null {
+  const trimmed = block.name.trim();
   if (trimmed === '' || trimmed.length > MAX_NAME_LENGTH) return 'name';
-  return POSITIONAL_NAME.test(trimmed) ? 'positional' : null;
+  return block.authoredBy !== 'arithmetic' && POSITIONAL_NAME.test(trimmed) ? 'positional' : null;
 }
 
 /**
@@ -268,7 +273,7 @@ export function validateBlockSet(
   const problem =
     shapeProblemOf(blocks, raceDate) ??
     spanProblemOf(blocks, startDate) ??
-    blocks.map((b) => nameProblemOf(b.name)).find((p) => p) ??
+    blocks.map(nameProblemOf).find((p) => p) ??
     null;
   return problem ? { ok: false, reason: problem } : { ok: true };
 }
@@ -315,4 +320,79 @@ export function resolveBlocks(
     return expandBlockSet(stored);
   }
   return trainingBlocks(today, race.date);
+}
+
+// ── The Head Coach's edit (slice 08) ──────────────────────────────────────────
+
+/** What a Head Coach may change on one block: its name, its end, or both. */
+export interface BlockEditInput {
+  name?: string;
+  endDate?: string;
+}
+
+/** Why an edit was refused before it reached the validator, or by it. */
+export type BlockEditProblem = 'position' | 'nothing' | 'last-block-end' | 'boundary' | BlockSetProblem;
+
+export type ApplyBlockEditResult =
+  | { ok: true; blocks: TrainingBlockSpec[] }
+  | { ok: false; reason: BlockEditProblem };
+
+/**
+ * Whether a new end date sits strictly between the neighbours' ends — the
+ * previous block keeps at least a day, the next block keeps at least a day.
+ * The seven-day floor is the validator's; this is only the ordering.
+ */
+function boundaryProblem(set: StoredBlockSet, index: number, endDate: string): BlockEditProblem | null {
+  const previousEnd = index === 0 ? addDays(set.startDate, -1) : set.blocks[index - 1].endDate;
+  const nextEnd = set.blocks[index + 1].endDate;
+  return endDate > previousEnd && endDate < nextEnd ? null : 'boundary';
+}
+
+/**
+ * One block renamed and/or re-bounded by the Head Coach, as the new set — or a
+ * refusal (`training-architecture/08`).
+ *
+ * Rename and re-boundary only: adding or removing a block is not the Head
+ * Coach's authority here, and the shape of this function makes that so. The
+ * edited block becomes `head_coach`-authored — the mark 07's gate reads to
+ * leave the set alone — and every other block's author is untouched, because a
+ * human editing one block did not author the others.
+ *
+ * The next block's start follows automatically: starts are derived, so moving
+ * an end moves exactly one boundary. The last block's end is race day and
+ * cannot move (the plan pins to the race, never the other way round).
+ */
+/** What can be wrong with a new end date, before the set validator sees the whole set. */
+function endDateProblemOf(set: StoredBlockSet, index: number, endDate: string): BlockEditProblem | null {
+  if (index === set.blocks.length - 1) return 'last-block-end';
+  if (!isValidDateKey(endDate)) return 'date';
+  return boundaryProblem(set, index, endDate);
+}
+
+/** The refusals an edit can earn before the set validator sees it. */
+function editProblemOf(set: StoredBlockSet, index: number, input: BlockEditInput): BlockEditProblem | null {
+  if (!set.blocks[index]) return 'position';
+  if (input.name === undefined && input.endDate === undefined) return 'nothing';
+  return input.endDate === undefined ? null : endDateProblemOf(set, index, input.endDate);
+}
+
+export function applyBlockEdit(
+  set: StoredBlockSet,
+  position: number,
+  input: BlockEditInput,
+  raceDate: string,
+): ApplyBlockEditResult {
+  const index = position - 1;
+  const problem = editProblemOf(set, index, input);
+  if (problem !== null) return { ok: false, reason: problem };
+  const current = set.blocks[index];
+
+  const edited: TrainingBlockSpec = {
+    name: (input.name ?? current.name).trim(),
+    endDate: input.endDate ?? current.endDate,
+    authoredBy: 'head_coach',
+  };
+  const blocks = set.blocks.map((b, i) => (i === index ? edited : b));
+  const verdict = validateBlockSet(blocks, set.startDate, raceDate);
+  return verdict.ok ? { ok: true, blocks } : { ok: false, reason: verdict.reason };
 }

@@ -1,4 +1,5 @@
 import { getAthleteById } from '@/features/athlete/athlete-repository';
+import { getActiveLink } from './coach-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { getTargetRace } from '@/features/race/race-repository';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
@@ -25,10 +26,14 @@ import {
   type BlockSetRecord,
 } from './training-block-repository';
 import {
+  applyBlockEdit,
   resolveBlocks,
   trainingBlocks,
   validateBlockSet,
+  type BlockEditInput,
+  type BlockEditProblem,
   type TrainingBlock,
+  type TrainingBlockSpec,
 } from './training-blocks';
 import { weekFeedbackFrom } from './weekly-session';
 
@@ -253,4 +258,153 @@ export async function ensureBlocksAdjusted(athleteId: string, today: string): Pr
   if (typeof asked === 'string') return asked;
 
   return writeAdjustment(athleteId, race, today, existing, asked);
+}
+
+// ── The Head Coach's edit (slice 08) ──────────────────────────────────────────
+
+/** What the panel needs to show what won when an edit is refused for conflict. */
+export interface BlockSetSnapshot {
+  version: number;
+  startDate: string;
+  blocks: TrainingBlockSpec[];
+}
+
+export type EditBlockResult =
+  | { ok: true; version: number }
+  | { ok: false; reason: 'not-linked' | 'no-race' }
+  | { ok: false; reason: 'invalid'; problem: BlockEditProblem }
+  // The set changed under the coach — 07's background draft, or another
+  // session. The refusal carries what won (ADR 0010).
+  | { ok: false; reason: 'conflict'; current: BlockSetSnapshot };
+
+function snapshotOf(set: BlockSetRecord): BlockSetSnapshot {
+  return { version: set.version, startDate: set.startDate, blocks: set.blocks };
+}
+
+/**
+ * The stored set the edit applies to, materialising the arithmetic draft when
+ * the athlete has none yet.
+ *
+ * Materialising writes every block `arithmetic` and announces nothing: nothing
+ * was adjusted, so there is nothing to tell the athlete. If the insert loses
+ * to 07's background draft racing on the same row, the re-read set is what the
+ * Coach wrote — positions the Head Coach never saw — so the honest answer is a
+ * conflict carrying it, never an edit applied blind on top.
+ */
+async function setToEdit(
+  athleteId: string,
+  race: RaceRow,
+  today: string,
+): Promise<{ set: BlockSetRecord; materialised: boolean } | { conflict: BlockSetSnapshot } | null> {
+  const existing = await getBlockSet(athleteId, race.id);
+  if (existing) return { set: existing, materialised: false };
+
+  const draft = trainingBlocks(today, race.date).map(({ name, endDate, authoredBy }) => ({
+    name,
+    endDate,
+    authoredBy,
+  }));
+  if (draft.length === 0) return null;
+  const outcome = await insertBlockSet({ athleteId, raceId: race.id, startDate: today, blocks: draft });
+  const stored = await getBlockSet(athleteId, race.id);
+  if (!stored) return null;
+  return outcome === 'inserted' ? { set: stored, materialised: true } : { conflict: snapshotOf(stored) };
+}
+
+/**
+ * A linked Head Coach renames a block or moves its end (`training-architecture/08`).
+ *
+ * Link gate, then content, then a compare-and-swap on the version the coach's
+ * panel was showing — never a version read here, or the check would pass by
+ * construction. The `block_edited` event rides in the CAS statement, so an edit
+ * that lost writes nothing and announces nothing. With no active link nothing
+ * below the first line runs: an absent Head Coach blocks nothing.
+ */
+export async function editBlockAsHeadCoach(params: {
+  headCoachId: string;
+  athleteId: string;
+  raceId: string;
+  position: number;
+  input: BlockEditInput;
+  /** The version the panel showed; ignored when the set had to be materialised first. */
+  expectedVersion: number;
+  today: string;
+}): Promise<EditBlockResult> {
+  const { headCoachId, athleteId, raceId, position, input, expectedVersion, today } = params;
+
+  const link = await getActiveLink(headCoachId, athleteId);
+  if (!link) return { ok: false, reason: 'not-linked' };
+
+  const target = await loadTarget(athleteId, raceId, today);
+  if ('ok' in target) return target;
+
+  const applied = applyBlockEdit(target.set, position, input, target.race.date);
+  if (!applied.ok) return { ok: false, reason: 'invalid', problem: applied.reason };
+
+  return writeEdit({
+    athleteId,
+    headCoachId,
+    raceId,
+    set: target.set,
+    // The panel's version is meaningless for a set that did not exist a moment
+    // ago; the materialised set is at version 1 and that is what must match.
+    expectedVersion: target.materialised ? target.set.version : expectedVersion,
+    position,
+    blocks: applied.blocks,
+  });
+}
+
+/**
+ * The race and the set an edit applies to, or the refusal that stops it: no
+ * Target Race, a race id that is not the target, a race already run, or a
+ * materialising insert lost to the Coach's draft (a conflict carrying what won).
+ */
+async function loadTarget(
+  athleteId: string,
+  raceId: string,
+  today: string,
+): Promise<{ race: RaceRow; set: BlockSetRecord; materialised: boolean } | EditBlockResult> {
+  const race = await getTargetRace(athleteId);
+  if (!race || race.id !== raceId) return { ok: false, reason: 'no-race' };
+
+  const target = await setToEdit(athleteId, race, today);
+  if (!target) return { ok: false, reason: 'no-race' };
+  if ('conflict' in target) return { ok: false, reason: 'conflict', current: target.conflict };
+  return { race, ...target };
+}
+
+/** The CAS and its event, and the re-read that tells a refused coach what won. */
+async function writeEdit(params: {
+  athleteId: string;
+  headCoachId: string;
+  raceId: string;
+  set: BlockSetRecord;
+  expectedVersion: number;
+  position: number;
+  blocks: TrainingBlockSpec[];
+}): Promise<EditBlockResult> {
+  const { athleteId, headCoachId, raceId, set, expectedVersion, position, blocks } = params;
+  const from = set.blocks[position - 1];
+  const to = blocks[position - 1];
+  const written = await casUpdateBlockSet({
+    athleteId,
+    setId: set.id,
+    expectedVersion,
+    blocks,
+    event: {
+      actorType: 'head_coach',
+      actorId: headCoachId,
+      type: 'block_edited',
+      payload: {
+        raceId,
+        position,
+        from: { name: from.name, endDate: from.endDate },
+        to: { name: to.name, endDate: to.endDate },
+      },
+    },
+  });
+  if (written.ok) return { ok: true, version: written.version };
+
+  const current = await getBlockSet(athleteId, raceId);
+  return { ok: false, reason: 'conflict', current: snapshotOf(current ?? set) };
 }

@@ -385,3 +385,67 @@ describe('composeNarration — the Coach’s own clauses at their edges', () => 
     expect(out).toBe('single(clause=raceUnrealistic(race=yourRace,reason=noReason))');
   });
 });
+
+describe('composeNarration — a Head Coach edits a block (training-architecture/08)', () => {
+  const at = new Date('2026-09-14T08:00:00Z');
+  const edited = (from: { name: string; endDate: string }, to: { name: string; endDate: string }): NarratableEvent => ({
+    id: 'ev_e',
+    actorId: 'coach_1',
+    type: 'block_edited',
+    payload: { raceId: 'r1', position: 2, from, to },
+    createdAt: at,
+  });
+
+  it('narrates a rename, attributed to the acting coach', () => {
+    const out = composeNarration(
+      [edited({ name: 'Sharpen the Bike', endDate: '2027-05-02' }, { name: 'Long Rides', endDate: '2027-05-02' })],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blockRenamed(coach=Lars,from=Sharpen the Bike,to=Long Rides))');
+  });
+
+  it('narrates a moved end with the new date, falling back to "your Head Coach"', () => {
+    const out = composeNarration(
+      [edited({ name: 'Sharpen the Bike', endDate: '2027-05-02' }, { name: 'Sharpen the Bike', endDate: '2027-04-25' })],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blockRebounded(coach=yourHeadCoach,name=Sharpen the Bike,day=2027-04-25))');
+  });
+
+  it('narrates both when both changed', () => {
+    const out = composeNarration(
+      [edited({ name: 'Sharpen the Bike', endDate: '2027-05-02' }, { name: 'Long Rides', endDate: '2027-04-25' })],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe(
+      'single(clause=blockRenamedAndRebounded(coach=yourHeadCoach,from=Sharpen the Bike,to=Long Rides,day=2027-04-25))',
+    );
+  });
+
+  it('degrades a malformed payload to the plain sentence', () => {
+    const side = { name: 'A', endDate: '2027-01-01' };
+    for (const payload of [
+      null,
+      {},
+      { from: { name: 'A' }, to: side },
+      { from: { endDate: '2027-01-01' }, to: side },
+      { from: side, to: { name: 'A' } },
+      { from: side, to: { endDate: '2027-01-01' } },
+      { from: side, to: side },
+    ]) {
+      const out = composeNarration(
+        [{ id: 'e', actorId: null, type: 'block_edited', payload, createdAt: at }],
+        {},
+        t,
+        weekday,
+      );
+      expect(out).toBe('single(clause=blockEditedNoDetail(coach=yourHeadCoach))');
+    }
+  });
+});

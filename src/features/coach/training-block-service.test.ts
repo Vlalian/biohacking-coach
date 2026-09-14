@@ -14,6 +14,7 @@ const getSessionsForAthlete = vi.fn();
 const callCoach = vi.fn();
 const logCoachFailure = vi.fn();
 const logBlockAdjustmentRefused = vi.fn();
+const getActiveLink = vi.fn();
 
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
 vi.mock('./training-block-repository', () => ({
@@ -28,8 +29,11 @@ vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
 vi.mock('./coach-client', () => ({ callCoach }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logBlockAdjustmentRefused }));
+vi.mock('./coach-repository', () => ({ getActiveLink }));
 
-const { ensureBlocksAdjusted, getResolvedBlocks } = await import('./training-block-service');
+const { ensureBlocksAdjusted, getResolvedBlocks, editBlockAsHeadCoach } = await import(
+  './training-block-service'
+);
 
 const TODAY = '2026-09-14';
 const ATHLETE = 'athlete-1';
@@ -351,5 +355,173 @@ describe('ensureBlocksAdjusted — the edges the gate and the briefing turn on',
     });
     expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('malformed');
     expect(logBlockAdjustmentRefused).toHaveBeenCalledWith(ATHLETE, 'malformed');
+  });
+});
+
+/**
+ * `training-architecture/08` — the Head Coach's edit through the service seam.
+ */
+describe('editBlockAsHeadCoach', () => {
+  const COACH = 'coach-1';
+  const edit = (over: Partial<Parameters<typeof editBlockAsHeadCoach>[0]> = {}) =>
+    editBlockAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      raceId: RACE.id,
+      position: 1,
+      input: { name: 'Long Rides' },
+      expectedVersion: 1,
+      today: TODAY,
+      ...over,
+    });
+
+  beforeEach(() => {
+    getActiveLink.mockResolvedValue({ id: 'l1', coachId: COACH, athleteId: ATHLETE, status: 'active' });
+    getBlockSet.mockResolvedValue(storedSet());
+    casUpdateBlockSet.mockResolvedValue({ ok: true, version: 2 });
+  });
+
+  it('refuses with not-linked and writes nothing — not even a read of the set', async () => {
+    getActiveLink.mockResolvedValue(undefined);
+
+    expect(await edit()).toEqual({ ok: false, reason: 'not-linked' });
+
+    expect(getBlockSet).not.toHaveBeenCalled();
+    expect(insertBlockSet).not.toHaveBeenCalled();
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('refuses with no-race when the athlete has no Target Race or the race id is not the target', async () => {
+    getTargetRace.mockResolvedValue(null);
+    expect(await edit()).toEqual({ ok: false, reason: 'no-race' });
+
+    getTargetRace.mockResolvedValue(RACE);
+    expect(await edit({ raceId: 'someone-elses-race' })).toEqual({ ok: false, reason: 'no-race' });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('materialises the arithmetic draft for an athlete with no set, then edits it — announcing only the edit', async () => {
+    getBlockSet
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        storedSet({
+          version: 1,
+          startDate: TODAY,
+          blocks: trainingBlocks(TODAY, RACE.date).map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
+        }),
+      );
+
+    const result = await edit({ expectedVersion: 99 });
+
+    expect(result).toEqual({ ok: true, version: 2 });
+    const inserted = insertBlockSet.mock.calls[0][0];
+    expect(inserted.event).toBeUndefined();
+    expect(inserted.startDate).toBe(TODAY);
+    expect(inserted.blocks.every((b: TrainingBlockSpec) => b.authoredBy === 'arithmetic')).toBe(true);
+    // The panel's version is meaningless for a set that did not exist; the
+    // materialised set is at version 1 and that is what the CAS expects.
+    const cas = casUpdateBlockSet.mock.calls[0][0];
+    expect(cas.expectedVersion).toBe(1);
+    expect(cas.event.type).toBe('block_edited');
+  });
+
+  it('returns conflict with what won when the materialising insert loses to the Coach draft', async () => {
+    getBlockSet.mockResolvedValueOnce(null).mockResolvedValueOnce(storedSet({ version: 1 }));
+    insertBlockSet.mockResolvedValue('exists');
+
+    const result = await edit();
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'conflict',
+      current: { version: 1, startDate: '2026-09-01', blocks: SHAPED },
+    });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('returns invalid with the problem, writing nothing, when the edit is refused', async () => {
+    expect(await edit({ input: { name: 'Block 1' } })).toEqual({ ok: false, reason: 'invalid', problem: 'positional' });
+    expect(await edit({ position: 4, input: { endDate: '2027-08-01' } })).toEqual({
+      ok: false,
+      reason: 'invalid',
+      problem: 'last-block-end',
+    });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('writes the new set by CAS at the panel version, with the head_coach event in the same call', async () => {
+    const result = await edit({ expectedVersion: 1, position: 2, input: { name: 'Long Rides', endDate: '2027-04-25' } });
+
+    expect(result).toEqual({ ok: true, version: 2 });
+    expect(casUpdateBlockSet).toHaveBeenCalledTimes(1);
+    const cas = casUpdateBlockSet.mock.calls[0][0];
+    expect(cas).toMatchObject({ athleteId: ATHLETE, setId: 'set-1', expectedVersion: 1 });
+    expect(cas.blocks[1]).toEqual({ name: 'Long Rides', endDate: '2027-04-25', authoredBy: 'head_coach' });
+    expect(cas.blocks[0]).toEqual(SHAPED[0]);
+    expect(cas.event).toEqual({
+      actorType: 'head_coach',
+      actorId: COACH,
+      type: 'block_edited',
+      payload: {
+        raceId: RACE.id,
+        position: 2,
+        from: { name: 'Sharpen the Bike', endDate: '2027-05-02' },
+        to: { name: 'Long Rides', endDate: '2027-04-25' },
+      },
+    });
+    expect(insertBlockEvent).not.toHaveBeenCalled();
+  });
+
+  it('returns conflict carrying the current set when the version had moved', async () => {
+    casUpdateBlockSet.mockResolvedValue({ ok: false, reason: 'conflict' });
+    getBlockSet.mockResolvedValueOnce(storedSet({ version: 3 })).mockResolvedValueOnce(storedSet({ version: 4 }));
+
+    expect(await edit({ expectedVersion: 3 })).toEqual({
+      ok: false,
+      reason: 'conflict',
+      current: { version: 4, startDate: '2026-09-01', blocks: SHAPED },
+    });
+  });
+
+  it('falls back to the set it read when the conflict re-read finds nothing', async () => {
+    casUpdateBlockSet.mockResolvedValue({ ok: false, reason: 'conflict' });
+    getBlockSet.mockResolvedValueOnce(storedSet({ version: 3 })).mockResolvedValueOnce(null);
+
+    expect(await edit({ expectedVersion: 3 })).toMatchObject({ ok: false, reason: 'conflict', current: { version: 3 } });
+  });
+
+  it('uses the panel version, not the stored one, when the set already existed', async () => {
+    getBlockSet.mockResolvedValue(storedSet({ version: 1 }));
+
+    await edit({ expectedVersion: 7 });
+
+    expect(casUpdateBlockSet.mock.calls[0][0].expectedVersion).toBe(7);
+  });
+
+  it('answers no-race for a race already run, and when the materialised set cannot be read back', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2026-09-01' });
+    getBlockSet.mockResolvedValue(null);
+    expect(await edit()).toEqual({ ok: false, reason: 'no-race' });
+    expect(insertBlockSet).not.toHaveBeenCalled();
+
+    getTargetRace.mockResolvedValue(RACE);
+    getBlockSet.mockResolvedValue(null);
+    expect(await edit()).toEqual({ ok: false, reason: 'no-race' });
+    expect(insertBlockSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('after a Head Coach edit, the Coach adjustment is a no-op for that race', async () => {
+    // 08's own guarantee, pinned here rather than left to 07's test: the set
+    // the edit produced is what the gate reads.
+    getBlockSet.mockResolvedValue(
+      storedSet({ blocks: [{ ...SHAPED[0], name: 'Long Rides', authoredBy: 'head_coach' }, ...SHAPED.slice(1)] }),
+    );
+
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('already-adjusted');
+    getBlockSet.mockResolvedValue(
+      storedSet({ blocks: [{ ...SHAPED[0], name: 'Long Rides', authoredBy: 'head_coach' }, { ...SHAPED[3], endDate: '2027-06-01' }] }),
+    );
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('head-coach-owned');
+    expect(callCoach).not.toHaveBeenCalled();
   });
 });

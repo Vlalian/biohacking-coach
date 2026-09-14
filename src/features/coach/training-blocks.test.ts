@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { addDays } from '@/lib/date';
 import {
+  applyBlockEdit,
   blockPosition,
   currentBlock,
   currentPhase,
+  expandBlockSet,
   resolveBlocks,
   trainingBlocks,
   validateBlockSet,
@@ -346,11 +348,114 @@ describe('validateBlockSet — the edges of each rule', () => {
     expect(validateBlockSet(set({ name: 'Before Block 2' }), START, RACE)).toEqual({ ok: true });
     expect(validateBlockSet(set({ name: 'Block two' }), START, RACE)).toEqual({ ok: true });
   });
+
+  it('lets an arithmetic block keep its positional name — only a named block must be named', () => {
+    // A Head Coach renaming one block of a materialised draft leaves the rest
+    // as the formula made them (slice 08); that set is valid.
+    expect(validateBlockSet(set({ name: 'Block 1 of 2', authoredBy: 'arithmetic' }), START, RACE)).toEqual({ ok: true });
+    expect(validateBlockSet(set({ name: 'Block 1 of 2', authoredBy: 'head_coach' }), START, RACE)).toEqual({
+      ok: false,
+      reason: 'positional',
+    });
+  });
 });
 
 describe('resolveBlocks — an empty stored set', () => {
   it('falls through to the arithmetic rather than throwing', () => {
     const blocks = resolveBlocks('2026-10-01', { date: '2027-03-14' }, { startDate: '2026-09-14', blocks: [] });
     expect(blocks).toEqual(trainingBlocks('2026-10-01', '2027-03-14'));
+  });
+});
+
+/**
+ * `training-architecture/08` — the Head Coach's rename and re-boundary, as a
+ * pure function over the stored set.
+ */
+describe('applyBlockEdit — rename and re-boundary, nothing more', () => {
+  const RACE = '2027-03-14';
+  const set: StoredBlockSet = {
+    startDate: '2026-09-14',
+    blocks: [
+      { name: 'Build the Volume', endDate: '2026-11-15', authoredBy: 'coach_ai' },
+      { name: 'Sharpen the Bike', endDate: '2027-01-17', authoredBy: 'coach_ai' },
+      { name: 'Taper', endDate: RACE, authoredBy: 'arithmetic' },
+    ],
+  };
+
+  it('renames a block and marks it head_coach; every other author is untouched', () => {
+    const result = applyBlockEdit(set, 2, { name: '  Long Rides ' }, RACE);
+    expect(result).toEqual({
+      ok: true,
+      blocks: [
+        set.blocks[0],
+        { name: 'Long Rides', endDate: '2027-01-17', authoredBy: 'head_coach' },
+        set.blocks[2],
+      ],
+    });
+  });
+
+  it('moves a middle block’s end, and the next block’s start follows when expanded', () => {
+    const result = applyBlockEdit(set, 1, { endDate: '2026-12-06' }, RACE);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.blocks[0]).toEqual({ name: 'Build the Volume', endDate: '2026-12-06', authoredBy: 'head_coach' });
+    const expanded = expandBlockSet({ ...set, blocks: result.blocks });
+    expect(expanded[1].startDate).toBe('2026-12-07');
+    expect(expanded[1].endDate).toBe('2027-01-17');
+  });
+
+  it('renames and re-bounds in one edit', () => {
+    const result = applyBlockEdit(set, 1, { name: 'Base', endDate: '2026-12-06' }, RACE);
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) expect(result.blocks[0]).toEqual({ name: 'Base', endDate: '2026-12-06', authoredBy: 'head_coach' });
+  });
+
+  it('refuses an end date not strictly between the neighbours’ ends', () => {
+    // On the previous end, on the next end, before the previous, after the next.
+    expect(applyBlockEdit(set, 2, { endDate: '2026-11-15' }, RACE)).toEqual({ ok: false, reason: 'boundary' });
+    expect(applyBlockEdit(set, 2, { endDate: RACE }, RACE)).toEqual({ ok: false, reason: 'boundary' });
+    expect(applyBlockEdit(set, 2, { endDate: '2026-10-01' }, RACE)).toEqual({ ok: false, reason: 'boundary' });
+    expect(applyBlockEdit(set, 1, { endDate: '2027-02-01' }, RACE)).toEqual({ ok: false, reason: 'boundary' });
+    // The first block's floor is the set's own start: the day before is out of
+    // order; the start day itself is in order but one day long, so too short.
+    expect(applyBlockEdit(set, 1, { endDate: '2026-09-13' }, RACE)).toEqual({ ok: false, reason: 'boundary' });
+    expect(applyBlockEdit(set, 1, { endDate: '2026-09-14' }, RACE)).toEqual({ ok: false, reason: 'short' });
+  });
+
+  it('refuses any end-date change on the last block — it is race day', () => {
+    expect(applyBlockEdit(set, 3, { endDate: '2027-03-07' }, RACE)).toEqual({ ok: false, reason: 'last-block-end' });
+    // Renaming the last block is fine.
+    expect(applyBlockEdit(set, 3, { name: 'Race Week' }, RACE)).toMatchObject({ ok: true });
+  });
+
+  it('hands the validator’s refusal through — a block squeezed under seven days, a positional name', () => {
+    expect(applyBlockEdit(set, 1, { endDate: '2026-09-18' }, RACE)).toEqual({ ok: false, reason: 'short' });
+    expect(applyBlockEdit(set, 1, { endDate: '2027-01-12' }, RACE)).toEqual({ ok: false, reason: 'short' });
+    expect(applyBlockEdit(set, 1, { name: 'Block 1' }, RACE)).toEqual({ ok: false, reason: 'positional' });
+    expect(applyBlockEdit(set, 1, { name: '' }, RACE)).toEqual({ ok: false, reason: 'name' });
+  });
+
+  it('refuses a position that does not exist, an edit that changes nothing, and a non-date', () => {
+    expect(applyBlockEdit(set, 0, { name: 'X' }, RACE)).toEqual({ ok: false, reason: 'position' });
+    expect(applyBlockEdit(set, 4, { name: 'X' }, RACE)).toEqual({ ok: false, reason: 'position' });
+    expect(applyBlockEdit(set, 1, {}, RACE)).toEqual({ ok: false, reason: 'nothing' });
+    expect(applyBlockEdit(set, 1, { endDate: 'soon' }, RACE)).toEqual({ ok: false, reason: 'date' });
+  });
+
+  it('cannot add or remove a block — the count is always the count it was given', () => {
+    const result = applyBlockEdit(set, 2, { name: 'Long Rides' }, RACE);
+    if (result.ok) expect(result.blocks).toHaveLength(set.blocks.length);
+  });
+});
+
+describe('an athlete with no Head Coach is untouched by slice 08', () => {
+  it('resolves to exactly the arithmetic draft, with no head_coach author anywhere', () => {
+    // 08 adds a write path only a linked Head Coach can reach. With no link
+    // nothing in it runs, so the resolved blocks are what 07 left: the stored
+    // set or the draft, and never a `head_coach` block. Pinned as a snapshot so
+    // a later change to the resolver has to say it meant to move this.
+    const blocks = resolveBlocks('2026-09-14', { date: '2027-03-14' }, null);
+    expect(blocks.some((b) => b.authoredBy === 'head_coach')).toBe(false);
+    expect(blocks).toMatchSnapshot();
   });
 });

@@ -608,7 +608,11 @@
     "blocksDraftedNoDetail": "Jeg har formet blokkene i din træning frem mod dit løb",
     "raceUnrealistic": "Helt ærligt: {race} ser ud til at være uden for rækkevidde på den her tidslinje — {reason}. Det bør vi tale om",
     "yourRace": "dit løb",
-    "noReason": "horisonten er kort til distancen"
+    "noReason": "horisonten er kort til distancen",
+    "blockRenamed": "{coach} omdøbte din blok \"{from}\" til \"{to}\"",
+    "blockRebounded": "{coach} flyttede slutningen af din blok \"{name}\" til {day}",
+    "blockRenamedAndRebounded": "{coach} omdøbte din blok \"{from}\" til \"{to}\" og flyttede dens slutning til {day}",
+    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke"
   },
   "Privacy": {
     "dataRightsTitle": "Dine data",
@@ -640,5 +644,18 @@
   "BlockStrip": {
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 uge} other {# uger}} til {race}"
+  },
+  "BlockPanel": {
+    "title": "Træningsblokke",
+    "toward": "frem mod {race} den {date}",
+    "name": "Navn",
+    "endsOn": "Slutter",
+    "endsOnRaceDay": "slutter på løbsdagen",
+    "authorDraft": "udkast",
+    "authorCoach": "Coach",
+    "authorYou": "Dig",
+    "save": "Gem",
+    "conflict": "Ændret af en anden — det her er det gældende sæt.",
+    "error": "Det virkede ikke ({reason})."
   }
 }

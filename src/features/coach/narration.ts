@@ -25,6 +25,9 @@ export type HeadCoachNarratableType =
   | 'session_deleted'
   | 'session_moved';
 
+/** A Head Coach's Training Block edit (`training-architecture/08`) — rendered by {@link blockClause}. */
+export type BlockNarratableType = 'block_edited';
+
 /** A plan change by another hand worth telling the athlete about. */
 export interface NarratableEvent {
   id: string;
@@ -33,7 +36,7 @@ export interface NarratableEvent {
    * which have no actor to name — and null for malformed Head Coach history.
    */
   actorId: string | null;
-  type: HeadCoachNarratableType | CoachNarratableType;
+  type: HeadCoachNarratableType | BlockNarratableType | CoachNarratableType;
   /** `jsonb`, so genuinely unknown until narrowed. */
   payload: unknown;
   createdAt: Date;
@@ -208,6 +211,53 @@ function clause(
 }
 
 /**
+ * A Head Coach's block edit as one sentence (`training-architecture/08`).
+ *
+ * Attributed like every other human clause — the acting coach's name, or "your
+ * Head Coach". The end date is rendered as the date key itself, not a weekday:
+ * a block ends months out, and its weekday says nothing. What changed decides
+ * the sentence: the name, the end, or both; a payload missing either side
+ * degrades to the plain "changed a block" rather than inventing a before.
+ */
+type BlockSide = { name: string; day: string };
+
+/** One side of a block edit, or undefined when the payload does not carry both halves. */
+function blockSide(payload: unknown, side: 'from' | 'to'): BlockSide | undefined {
+  const name = field(payload, side, 'name');
+  const day = field(payload, side, 'endDate');
+  return name && day ? { name, day } : undefined;
+}
+
+/** Which sentence a block edit is, from what actually changed — the key and exactly its values. */
+function blockEditSentence(
+  from: BlockSide,
+  to: BlockSide,
+): { key: string; values: Record<string, string> } {
+  const renamed = from.name !== to.name;
+  const rebounded = from.day !== to.day;
+  if (renamed && rebounded) {
+    return { key: 'blockRenamedAndRebounded', values: { from: from.name, to: to.name, day: to.day } };
+  }
+  if (renamed) return { key: 'blockRenamed', values: { from: from.name, to: to.name } };
+  return rebounded
+    ? { key: 'blockRebounded', values: { name: to.name, day: to.day } }
+    : { key: 'blockEditedNoDetail', values: {} };
+}
+
+function blockClause(
+  event: NarratableEvent,
+  coachFirstNames: Record<string, string>,
+  t: Translate,
+): string {
+  const coach = (event.actorId ? coachFirstNames[event.actorId] : undefined) ?? t('yourHeadCoach');
+  const from = blockSide(event.payload, 'from');
+  const to = blockSide(event.payload, 'to');
+  if (!from || !to) return t('blockEditedNoDetail', { coach });
+  const sentence = blockEditSentence(from, to);
+  return t(sentence.key, { coach, ...sentence.values });
+}
+
+/**
  * Everything the Head Coach has done since the athlete was last told, as **one**
  * message.
  *
@@ -228,11 +278,11 @@ export function composeNarration(
   // Clauses are composed unpunctuated so the catalogue decides how a sentence
   // and a list item are each finished — punctuation differs by language, and it
   // is copy, not logic.
-  const clauses = events.map((e) =>
-    isCoachEvent(e)
-      ? coachClause(e, t)
-      : clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf),
-  );
+  const clauses = events.map((e) => {
+    if (isCoachEvent(e)) return coachClause(e, t);
+    if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
+    return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
+  });
   if (clauses.length === 1) return t('single', { clause: clauses[0] });
 
   return [
