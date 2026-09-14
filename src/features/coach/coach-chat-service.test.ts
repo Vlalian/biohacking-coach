@@ -29,6 +29,8 @@ const {
 vi.mock('./coach-client', () => ({ callCoach }));
 const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
+const { capacityFor } = vi.hoisted(() => ({ capacityFor: vi.fn<() => Promise<string | null>>(async () => null) }));
+vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 
 // One grounding per turn (knowledge-oracle/05). Faked at the module seam so
 // these tests assert the wiring — which tools the Coach is offered, where the
@@ -505,5 +507,30 @@ describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracl
   it('logs nothing about drift for an ordinary reply', async () => {
     await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
     expect(logCoachDrift).not.toHaveBeenCalled();
+  });
+});
+
+describe('what the athlete’s body allows reaches Coach Chat too (training-architecture/06)', () => {
+  // CodeRabbit on PR #60: Chat received no capacity block at all, and Chat is
+  // where "should I do tomorrow's intervals?" gets asked. Same read, same
+  // sentence as the Weekly Session — only the capacity half, never the thread.
+  it('states the capacity when something is restricted, and nothing when not', async () => {
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getOwnedConversation.mockReset();
+
+    capacityFor.mockResolvedValue(
+      'CAPACITY (what the athlete can do right now — not a diagnosis): no run · bike easy only.',
+    );
+    await sendCoachChatMessage(ATHLETE, null, 'intervals tomorrow?', '2026-08-12');
+    expect(capacityFor).toHaveBeenCalledWith('athlete_1');
+    expect(callCoach.mock.calls[0][0].system).toContain('no run');
+
+    callCoach.mockClear();
+    capacityFor.mockResolvedValue(null);
+    await sendCoachChatMessage(ATHLETE, null, 'intervals tomorrow?', '2026-08-12');
+    expect(callCoach.mock.calls[0][0].system).not.toContain('CAPACITY');
   });
 });

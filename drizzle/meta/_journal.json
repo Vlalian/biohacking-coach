@@ -169,6 +169,13 @@
       "when": 1789032288005,
       "tag": "0023_consent_purposes",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789334463424,
+      "tag": "0024_bother_rating",
+      "breakpoints": true
     }
   ]
 }

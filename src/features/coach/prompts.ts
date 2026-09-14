@@ -795,6 +795,7 @@ export function buildChatPrompt(
     lateRaces,
     tuneUpWindow,
     tuneUpEveEasy,
+    capacity,
     notableSignal,
     onboarding,
   } = checkIn;
@@ -827,6 +828,13 @@ ${[
     // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
     // was answered by a Coach that did not know when the race was.
     horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
+
+    // What the athlete's body currently allows, or nothing at all when nothing
+    // is restricted (ADR 0011) — the same sentence the Weekly Session carries.
+    // Chat is where "should I do tomorrow's intervals?" gets asked, and until
+    // training-architecture/06 it was answered by a Coach that did not know the
+    // athlete could not run.
+    capacity ?? null,
 
     // The athlete's own words from this week's Check-in, quoted and labelled as
     // theirs — the service reads the Check-in for exactly this, and until PR #60

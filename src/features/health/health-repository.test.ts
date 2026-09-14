@@ -69,6 +69,8 @@ const {
   getHealthNotes,
   getOpenIllnesses,
   getOpenInjuries,
+  getHealthHistory,
+  setBother,
   capacityFor,
 } = await import('./health-repository');
 
@@ -89,7 +91,7 @@ describe('declaring, and closing', () => {
   it('opens an Injury with what the athlete says it prevents', async () => {
     await declareInjury('athlete_1', CANNOT_RUN);
 
-    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none' });
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null });
   });
 
   it('opens an Illness with no capacity at all', async () => {
@@ -98,7 +100,7 @@ describe('declaring, and closing', () => {
     // concepts exist to avoid.
     await declareIllness('athlete_1');
 
-    expect(inserted[0]).toEqual({ athleteId: 'athlete_1' });
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', bother: null });
   });
 
   it('takes no end date when opening either — there is no field for one', async () => {
@@ -382,5 +384,45 @@ describe('capacityFor — the one read both Coach surfaces share', () => {
     expect(statement).toContain('no run');
     expect(statement).not.toContain('injury_1');
     expect(statement).not.toContain('2026-09-01');
+  });
+});
+
+describe('the Bother Rating and the history (training-architecture/06)', () => {
+  it('declares an Injury or Illness carrying an optional bother rating', async () => {
+    await declareInjury('athlete_1', CANNOT_RUN, 3);
+    await declareIllness('athlete_1', 4);
+    await declareInjury('athlete_1', CANNOT_RUN);
+
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: 3 });
+    expect(inserted[1]).toEqual({ athleteId: 'athlete_1', bother: 4 });
+    // Not said is null, not zero — zero is a number the Head Coach would read.
+    expect(inserted[2]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null });
+  });
+
+  it('updates the bother on a record the athlete owns, athlete id in the WHERE', async () => {
+    await setBother('athlete_1', { injuryId: 'injury_1' }, 2);
+    await setBother('athlete_1', { illnessId: 'illness_1' }, null);
+
+    expect(updates[0]).toEqual({
+      set: { bother: 2 },
+      where: and(eq(injuries.athleteId, 'athlete_1'), eq(injuries.id, 'injury_1')),
+    });
+    expect(updates[1]).toEqual({
+      set: { bother: null },
+      where: and(eq(illnesses.athleteId, 'athlete_1'), eq(illnesses.id, 'illness_1')),
+    });
+  });
+
+  it('reads the whole history — open and closed — for one athlete only', async () => {
+    rows.push({ id: 'i1' });
+    illnessRows.push({ id: 'ill_1' });
+
+    const history = await getHealthHistory('athlete_1');
+
+    expect(history).toEqual({ injuries: [{ id: 'i1' }], illnesses: [{ id: 'ill_1' }] });
+    // Two listing reads, each scoped by athlete id and by nothing else — no
+    // `closedAt IS NULL`, because the closed ones are the history.
+    expect(selectWhere).toHaveBeenCalledWith(eq(injuries.athleteId, 'athlete_1'));
+    expect(selectWhere).toHaveBeenCalledWith(eq(illnesses.athleteId, 'athlete_1'));
   });
 });
