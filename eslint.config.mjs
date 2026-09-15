@@ -50,6 +50,40 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // What must not reach a commit (added 2026-09-15, from the ECC comparison in
+  // .scratch/research/ecc-workflow-comparison.md §3, where it was a pre-commit
+  // hook; here it is a lint rule, because lint is already one of the four
+  // Definition-of-Done checks and a rule is cheaper than a hook).
+  //
+  // `console.error` and `console.warn` stay allowed: `lib/coach-log.ts` is the
+  // Coach path's only logging and it writes structured lines to console.error.
+  // A stray `console.log` is a debugging leftover, and on the Coach path it is
+  // the one way an athlete's words could reach a log line unredacted.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    rules: {
+      "no-console": ["error", { allow: ["warn", "error"] }],
+      "no-debugger": "error",
+    },
+  },
+  // A focused test (`it.only`, `describe.only`, `test.only`) turns the whole
+  // suite green by running one file's worth of it. `npm test` would pass and
+  // the hardening gate would grade a suite that mostly did not run.
+  {
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name='only'][callee.object.name=/^(it|describe|test)$/]",
+          message:
+            "A focused test never leaves a branch: it makes the suite pass by not running it.",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;
