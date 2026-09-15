@@ -207,6 +207,10 @@ describe('getPendingNarrationEvents', () => {
     expect(params).toContain('coach_ai');
     expect(params).toContain('blocks_drafted');
     expect(params).toContain('race_flagged_unrealistic');
+    // The drafted week (`training-architecture/16`) joins the same (actor, type)
+    // allow-list; a `week_plan_proposed` — the conversation itself — still does not.
+    expect(params).toContain('week_drafted');
+    expect(params).not.toContain('week_plan_proposed');
     expect(params).not.toContain('week_plan_proposed');
     // Two actor/type pairs, OR-ed — not one actor list beside one type list.
     expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\) or \("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\)/);

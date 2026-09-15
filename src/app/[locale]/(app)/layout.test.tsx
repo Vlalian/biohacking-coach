@@ -39,6 +39,12 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
+// `after()` is captured, never run: the draft must be reachable only through
+// it, and a page test that ran it would be the render-path call this forbids.
+const afterCallbacks: Array<() => Promise<void>> = [];
+vi.mock('next/server', () => ({ after: (cb: () => Promise<void>) => afterCallbacks.push(cb) }));
+const ensureWeekDrafted = vi.fn(() => Promise.resolve('drafted'));
+vi.mock('@/features/coach/week-draft-service', () => ({ ensureWeekDrafted }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
@@ -277,5 +283,40 @@ describe('the weekly offer keys on the conversation, never on the plan', () => {
     hasHeldWeeklySessionInWeek.mockResolvedValue(true);
 
     expect(await weeklyOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasHeldWeeklySessionThisWeek: true });
+  });
+});
+
+describe('the silent week draft runs after the response, never in it (training-architecture/16)', () => {
+  beforeEach(() => {
+    afterCallbacks.length = 0;
+    ensureWeekDrafted.mockClear();
+  });
+
+  it('schedules ensureWeekDrafted through after() for a signed-in athlete, and does not call it during render', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    await render();
+    expect(ensureWeekDrafted).not.toHaveBeenCalled();
+    expect(afterCallbacks).toHaveLength(1);
+    await afterCallbacks[0]();
+    expect(ensureWeekDrafted).toHaveBeenCalledWith('athlete_1', expect.any(String));
+  });
+
+  it('a throw inside the deferred call is logged, not rethrown', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    ensureWeekDrafted.mockRejectedValueOnce(new Error('driver down'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await render();
+    await expect(afterCallbacks[0]()).resolves.toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('schedules nothing for a user with no athlete row', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue(undefined);
+    await render();
+    expect(afterCallbacks).toHaveLength(0);
   });
 });

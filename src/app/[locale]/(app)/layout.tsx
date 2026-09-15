@@ -3,6 +3,7 @@ import { hasLocale } from 'next-intl';
 import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { after } from 'next/server';
 import type { ViewId } from '@/components/shell/app-shell';
 import { ShellChrome } from '@/components/shell/shell-chrome';
 import { redirect } from '@/i18n/navigation';
@@ -18,7 +19,8 @@ import {
 import { selectOpenConversations } from '@/features/coach/conversation';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
-import { logNarrationFailure } from '@/lib/coach-log';
+import { logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { ensureWeekDrafted } from '@/features/coach/week-draft-service';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
@@ -190,6 +192,23 @@ export default async function AppShellLayout({
       weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
       hasHeldWeeklySessionThisWeek: heldWeeklySession,
     };
+
+    // The silent week draft (`training-architecture/16`) runs here, **after the
+    // response is sent** — the shell renders now, the ~20 s Coach call happens
+    // once the athlete has their screen, and the next navigation shows the
+    // proposal with the narration firing from this same layout. On the shell
+    // rather than the Training Plan page because 17 needs it to fire when the
+    // Head Coach opens the app too, and a coach never renders the athlete's
+    // page. Cheap on the common path (a handful of reads, then nothing), never
+    // on a render path, never thrown.
+    const athleteId = athlete.id;
+    after(async () => {
+      try {
+        await ensureWeekDrafted(athleteId, today);
+      } catch (error) {
+        logWeekDraftFailure(athleteId, error);
+      }
+    });
   }
 
   return (

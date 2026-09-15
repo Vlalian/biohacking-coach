@@ -109,12 +109,16 @@ describe('updateWeeklySessionDayAction', () => {
     });
   });
 
-  it('accepts Flexible, unlike onboarding’s narrower shortlist', async () => {
+  it('refuses Flexible — retired 2026-09-14; a stored one still reads as Sunday', async () => {
     const result = await updateWeeklySessionDayAction('Flexible');
-    expect(result).toEqual({ ok: true });
-    expect(mergeAthleteProfile).toHaveBeenCalledWith('athlete_1', {
-      weeklySessionDay: 'Flexible',
-    });
+    expect(result).toEqual({ ok: false, reason: 'invalid' });
+    expect(mergeAthleteProfile).not.toHaveBeenCalled();
+  });
+
+  it('accepts every weekday, not only the old onboarding shortlist', async () => {
+    for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
+      expect(await updateWeeklySessionDayAction(day)).toEqual({ ok: true });
+    }
   });
 
   it('refuses a value outside the closed set', async () => {

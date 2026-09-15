@@ -35,11 +35,8 @@ export type SettingsActionResult =
 // (`onboarding.tsx`'s "One source for every option set" comment) — the
 // validation module, not a copy hand-kept here.
 const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
-// Weekly Session Day additionally allows "Flexible". Settings offers every
-// weekday, not onboarding's narrower three-day example set — CONTEXT.md
-// defines the field as any day, "may be Flexible", with no restriction to
-// the MCQ's shortlist.
-const WEEKLY_SESSION_DAY_OPTIONS: readonly string[] = [...DAYS, 'Flexible'];
+// The seven weekdays, no "Flexible" (retired 2026-09-14, CONTEXT.md).
+const WEEKLY_SESSION_DAY_OPTIONS: readonly string[] = DAYS;
 const COMMUNICATION_STYLE_MAX = 300;
 const RACE_TARGET_MAX = 120;
 
@@ -140,7 +137,7 @@ export async function updateTargetRaceAction(
   return { ok: true };
 }
 
-/** Weekly Session Day — any weekday, or Flexible. */
+/** Weekly Session Day — any weekday. */
 export async function updateWeeklySessionDayAction(
   day: string,
 ): Promise<SettingsActionResult> {

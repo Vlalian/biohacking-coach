@@ -10,6 +10,10 @@ import {
   type PromptBlock,
 } from './prompt-blocks';
 import { planningWindow, type PlanningWindow } from './planning-window';
+import type { SkeletonDay } from './week-draft';
+import { effectiveWeeklySessionDay } from './weekly-offer';
+import type { RetrievedPassage } from '@/features/knowledge-oracle/retrieval';
+import type { Citation } from '@/lib/citation';
 import { ADJUST_TRAINING_BLOCKS_TOOL_NAME, type BlockAdjustmentContext } from './block-adjustment';
 import type { TrainingBlock } from './training-blocks';
 import { assertNoDirectIdentifier } from './check-in';
@@ -274,14 +278,12 @@ function planningWindowLine(window: PlanningWindow): string {
  * The question to ask when the athlete opened the Weekly Session off their
  * preferred day, or nothing when there is no question to ask.
  *
- * Nothing when no preferred day is set — `Flexible`, or the question skipped at
+ * Since 2026-09-14 every athlete has a day ("Flexible" is retired and reads as Sunday), so the only silence is on the day itself. It used to be: nothing when no preferred day is set — `Flexible`, or the question skipped at
  * onboarding — and nothing when today *is* the preferred day, which is the case
  * `CONTEXT.md` describes as planning the week ahead without asking.
  */
 function planningDayLine(today: string, weeklySessionDay?: string): string | null {
-  const prefDay =
-    weeklySessionDay && weeklySessionDay !== 'Flexible' ? weeklySessionDay : null;
-  if (!prefDay) return null;
+  const prefDay = effectiveWeeklySessionDay(weeklySessionDay);
 
   // Stryker disable next-line StringLiteral: same as `weekdayShort` above -
   // only distinguishable in a timezone behind UTC, which this suite is not.
@@ -969,5 +971,115 @@ export function renderBlockAdjustmentPrompt(ctx: BlockAdjustmentContext): string
 - Move a boundary only with a reason you could say to the athlete; otherwise keep the draft's dates. Every block is at least seven days.
 - Saying the race is unrealistic is the heaviest sentence you can produce. Use it only when the horizon makes the distance genuinely unreachable, and expect to use it almost never.
 - Call ${ADJUST_TRAINING_BLOCKS_TOOL_NAME} exactly once, with the whole set. Write no prose to the athlete.`,
+  ]);
+}
+
+// ── The silent week draft (training-architecture/16) ─────────────────────────
+
+/**
+ * Everything the Weekly Session prompt reasons from, plus the week being
+ * drafted: its window, the computed skeleton the Coach adjusts, and the
+ * training science retrieved for it. Assembled by the draft service; rendered
+ * by {@link renderWeekDraftPrompt}.
+ */
+export interface WeekDraftContext extends WeeklyContext {
+  window: PlanningWindow;
+  skeleton: SkeletonDay[];
+  passages: RetrievedPassage[];
+  citations: Citation[];
+}
+
+/** Today and the week being drafted, with the days ruled out of it. */
+function draftWindowBlock(today: string, window: PlanningWindow, fixedConstraints?: string[]): string {
+  const lines = [`TODAY: ${today}`, `WEEK WINDOW: ${window.start} to ${window.end}`];
+  if (window.excludedDates.length > 0) lines.push(`NO TRAINING ON: ${window.excludedDates.join(', ')}`);
+  if (fixedConstraints && fixedConstraints.length > 0) {
+    lines.push(`RECURRING NO-TRAIN DAYS: ${fixedConstraints.join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The skeleton as one dated line per day, with the instruction that makes it a
+ * default rather than a diktat (Mads, 2026-09-09: the structure is the
+ * default, the Coach makes the adjustments).
+ */
+function skeletonBlock(skeleton: SkeletonDay[]): string {
+  const lines = skeleton.map((d) => `${d.date}: ${d.role}`);
+  return `WEEK SKELETON (the default — one role per day):
+${lines.join('\n')}
+Adjust this skeleton for the athlete. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.`;
+}
+
+/**
+ * The retrieved passages, numbered, each with the source it came from — or the
+ * one line that says nothing came back and forbids inventing it. The Knowledge
+ * Oracle's SAFE-3 bar: a training-science claim comes with a source or is not
+ * made.
+ */
+function trainingScienceBlock(passages: RetrievedPassage[], citations: Citation[]): string {
+  if (passages.length === 0) {
+    return 'TRAINING SCIENCE: No sources were retrieved for this week. Do not assert a training-science claim; plan from the skeleton and what the athlete has reported.';
+  }
+  const byId = new Map(citations.map((c) => [c.sourceId, c.attribution]));
+  const lines = passages.map((p, i) => `[${i + 1}] ${p.text} — ${byId.get(p.sourceId) ?? 'source unknown'}`);
+  return `TRAINING SCIENCE (retrieved for this week; cite by number where a choice rests on it):
+${lines.join('\n')}`;
+}
+
+/**
+ * The system prompt for drafting a week with nobody in the room.
+ *
+ * The Weekly Session's blocks where they still apply — horizon, capacity, the
+ * athlete's own words, state, last week's reflections, unavailable days — and
+ * none of its conversation: no arc, no check-in questions, no guided tour.
+ * There is no athlete to ask, so the prompt says what it knows and what it
+ * does not, and asks for exactly one tool call covering the whole window.
+ */
+export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
+  assertNoDirectIdentifier(ctx.checkIn);
+
+  const { feedbackSummary, unavailableDates, today, window, skeleton, passages, citations } = ctx;
+  const {
+    readiness,
+    phase,
+    experienceLevel,
+    sessionCount,
+    language,
+    fixedConstraints,
+    raceTarget,
+    raceDistance,
+    raceDate,
+    blockWeek,
+    capacity,
+    notableSignal,
+  } = ctx.checkIn;
+
+  return assemble([
+    openingBlock(language, 'Drafting next week on your own — the athlete is not in the conversation.'),
+
+    'POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.',
+
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek),
+
+    capacity ?? null,
+
+    notableSignal ? `ATHLETE SAID (their words, this week): "${notableSignal}"` : null,
+
+    draftWindowBlock(today, window, fixedConstraints),
+
+    stateBlock({ phase, sessionCount, experienceLevel, readiness }),
+
+    lastWeekFeedbackBlock(feedbackSummary, readiness),
+
+    unavailableBlock(unavailableDates),
+
+    skeletonBlock(skeleton),
+
+    trainingScienceBlock(passages, citations),
+
+    'PROPOSING: Call the propose_week_plan tool once, for the whole window — every session dated (YYYY-MM-DD) inside it, omit rest days. Do not write prose first; the tool call is the answer. The server refuses dates outside the window.',
+
+    dataUseBlock(readiness),
   ]);
 }

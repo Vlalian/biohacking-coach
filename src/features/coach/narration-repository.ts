@@ -52,7 +52,7 @@ const NARRATABLE_TYPES = [
  * news. Admitting an actor is not the mechanism; admitting a (actor, type) pair
  * is.
  */
-const COACH_NARRATABLE_TYPES = ['blocks_drafted', 'race_flagged_unrealistic'] as const;
+const COACH_NARRATABLE_TYPES = ['blocks_drafted', 'race_flagged_unrealistic', 'week_drafted'] as const;
 
 /**
  * The athlete's un-narrated plan changes by another hand, oldest first.

@@ -117,7 +117,10 @@ export const ONBOARDING_OPTIONS = {
   hasHumanCoach: ['Yes', 'No'],
   trackedMetrics: ['Heart Rate', 'Power', 'HRV', 'Pace', 'None'],
   days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-  weeklySessionDay: ['Monday', 'Wednesday', 'Friday', 'Flexible'],
+  // Any weekday, and no "Flexible" (retired 2026-09-14, CONTEXT.md): the
+  // proposed week has to arrive on some day, and a Head Coach sees it the day
+  // before that. The same seven the Fixed Constraints use.
+  weeklySessionDay: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
 } as const;
 
 /**
@@ -186,7 +189,6 @@ export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
   Friday: 'dayFriday',
   Saturday: 'daySaturday',
   Sunday: 'daySunday',
-  Flexible: 'optFlexible',
 };
 
 /**

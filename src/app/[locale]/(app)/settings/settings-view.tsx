@@ -554,7 +554,7 @@ function WeeklySessionDayField({
   const t = useTranslations('Settings');
   const [current, setCurrent] = useState(value);
   const { pending, error, run } = useSave();
-  const options = [...DAYS, 'Flexible'];
+  const options = [...DAYS];
 
   async function choose(day: string) {
     if (day === current) return;
@@ -573,7 +573,7 @@ function WeeklySessionDayField({
         {options.map((day, i) => (
           <DayTile
             key={day}
-            label={day === 'Flexible' ? t('optFlexible') : t(DAY_KEYS[i])}
+            label={t(DAY_KEYS[i])}
             selected={current === day}
             onClick={() => choose(day)}
             disabled={pending}

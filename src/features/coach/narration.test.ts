@@ -273,6 +273,22 @@ describe('composeNarration — the Coach announcing its own blocks (training-arc
     }
   });
 
+  it('announces a drafted week in one sentence, naming no human, whatever the payload', () => {
+    // `training-architecture/16`: the proposal itself is on the calendar, so the
+    // sentence carries no session list — and a malformed payload says the same.
+    for (const payload of [{ weekStart: '2026-09-21', sessions: [] }, null, {}]) {
+      const out = composeNarration(
+        [{ id: 'ev_w', actorId: null, type: 'week_drafted', payload, createdAt: new Date('2026-09-16T08:00:00Z') }],
+        { coach_1: 'Lars' },
+        t,
+        weekday,
+      );
+      expect(out).toBe('single(clause=weekDrafted)');
+      expect(out).not.toContain('yourHeadCoach');
+      expect(out).not.toContain('Lars');
+    }
+  });
+
   it('renders the unrealistic flag with the race and the reason', () => {
     const out = composeNarration(
       [

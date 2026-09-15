@@ -80,7 +80,9 @@ export type ModelSurface =
   | 'coach_briefing'
   | 'feedback'
   /** The background Training Block adjustment (`training-architecture/07`); no conversation. */
-  | 'block_adjustment';
+  | 'block_adjustment'
+  /** The silent week draft (`training-architecture/16`); no conversation. */
+  | 'week_draft';
 
 export interface CoachFailure {
   surface: ModelSurface;
@@ -192,6 +194,23 @@ export function logBlockAdjustmentFailure(athleteId: string, error: unknown): vo
   try {
     console.error(
       JSON.stringify({ event: 'block_adjustment_failed', athleteId, errorType: errorType(error) }),
+    );
+  } catch {
+    // Deliberately silent: see above.
+  }
+}
+
+/**
+ * The week draft's `after()` boundary (`training-architecture/16`): the
+ * service never throws, so this line means something outside it did — the
+ * repository, the driver — and the athlete simply keeps the offer to plan by
+ * talking. Same reasoning as {@link logNarrationFailure}: a missed draft
+ * retries on the next app-open; a thrown shell does not.
+ */
+export function logWeekDraftFailure(athleteId: string, error: unknown): void {
+  try {
+    console.error(
+      JSON.stringify({ event: 'week_draft_failed', athleteId, message: error instanceof Error ? error.message : String(error) }),
     );
   } catch {
     // Deliberately silent: see above.

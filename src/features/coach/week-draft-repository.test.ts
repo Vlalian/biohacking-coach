@@ -1,0 +1,152 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+
+// The mocked-chain shape of `training-block-repository.test.ts`: builder
+// methods return the chain, awaiting it resolves the queued rows, `.where()`
+// arguments are captured so the athlete scoping (ADR 0006) can be asserted,
+// and raw statements handed to `.execute()` are rendered to real SQL.
+let nextRows: unknown[] = [];
+let whereArgs: unknown[] = [];
+let executed: { sql: string; params: unknown[] }[] = [];
+let executeRows: unknown[] = [];
+let selectArgs: unknown[] = [];
+
+function chain() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c: any = {};
+  for (const m of ['from', 'orderBy', 'limit']) c[m] = () => c;
+  c.select = (projection?: unknown) => {
+    selectArgs.push(projection);
+    return c;
+  };
+  c.where = (arg: unknown) => {
+    whereArgs.push(arg);
+    return c;
+  };
+  c.then = (resolve: (rows: unknown[]) => unknown) => Promise.resolve(nextRows).then(resolve);
+  return c;
+}
+
+const execute = vi.fn(async (statement: unknown) => {
+  executed.push(new PgDialect().sqlToQuery(statement as SQL));
+  return { rows: executeRows };
+});
+
+vi.mock('@/db', () => ({ getDb: () => Object.assign(chain(), { execute }) }));
+
+const { getPendingWeekDraft, recordWeekDraft } = await import('./week-draft-repository');
+
+function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
+  if (node === null || typeof node !== 'object') return [];
+  if (seen.has(node)) return [];
+  seen.add(node);
+  const out: unknown[] = [];
+  for (const value of Object.values(node as Record<string, unknown>)) {
+    if (value === null) continue;
+    if (typeof value === 'object') out.push(...boundValues(value, seen));
+    else out.push(value);
+  }
+  return out;
+}
+
+const ATHLETE = '11111111-1111-4111-8111-111111111111';
+const WEEK = '2026-09-21';
+const SESSION = { date: '2026-09-22', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: 'easy' };
+
+beforeEach(() => {
+  nextRows = [];
+  whereArgs = [];
+  executed = [];
+  executeRows = [];
+  selectArgs = [];
+  execute.mockClear();
+});
+
+describe('getPendingWeekDraft', () => {
+  it('scopes the read to the athlete and the week in SQL, and hands the rows to the pure decision', async () => {
+    nextRows = [
+      {
+        id: 'd1',
+        type: 'week_drafted',
+        payload: { weekStart: WEEK, visibleFrom: WEEK, sessions: [SESSION], citations: [] },
+        createdAt: new Date('2026-09-20T08:00:00Z'),
+      },
+    ];
+
+    const draft = await getPendingWeekDraft(ATHLETE, WEEK);
+
+    expect(draft).toMatchObject({ id: 'd1', weekStart: WEEK, sessions: [SESSION] });
+    const bound = boundValues(whereArgs[0]);
+    expect(bound).toContain(ATHLETE);
+    expect(bound).toContain(WEEK);
+    // Exactly the five types a draft's history is made of — one missing and a
+    // resolution is not seen, one extra and a proposal from the conversation
+    // would be read as a draft.
+    expect(bound.filter((v) => typeof v === 'string' && /^week_/.test(v as string))).toEqual([
+      'week_drafted',
+      'week_draft_approved',
+      'week_draft_withdrawn',
+      'week_plan_written',
+      'week_plan_declined',
+    ]);
+    // The four columns the decision needs, nothing else — no payload-free read
+    // and no accidental select-star pulling actor ids into a pure function.
+    expect(Object.keys(selectArgs[0] as object).sort()).toEqual(['createdAt', 'id', 'payload', 'type']);
+  });
+
+  it('returns null for a week with nothing pending — and never another athlete’s draft, because the id is in the WHERE', async () => {
+    nextRows = [];
+    expect(await getPendingWeekDraft(ATHLETE, WEEK)).toBeNull();
+    expect(boundValues(whereArgs[0])).toContain(ATHLETE);
+  });
+});
+
+describe('recordWeekDraft', () => {
+  const draft = {
+    athleteId: ATHLETE,
+    weekStart: WEEK,
+    visibleFrom: WEEK,
+    sessions: [SESSION],
+    citations: [],
+    skeleton: [{ date: '2026-09-22', role: 'easy' as const }],
+  };
+
+  it('inserts one coach_ai week_drafted event, guarded by NOT EXISTS over an unresolved draft for the same athlete and week', async () => {
+    executeRows = [{ id: 'new' }];
+
+    const outcome = await recordWeekDraft(draft);
+
+    expect(outcome).toBe('drafted');
+    expect(executed).toHaveLength(1);
+    const { sql, params } = executed[0];
+    expect(sql).toMatch(/INSERT INTO "events"/);
+    expect(sql).toContain("'coach_ai'");
+    expect(sql).toMatch(/WHERE NOT EXISTS/);
+    expect(sql).toMatch(/->> 'weekStart'/);
+    expect(sql).toMatch(/'week_plan_written', 'week_plan_declined'/);
+    expect(params).toContain(ATHLETE);
+    expect(params).toContain(WEEK);
+    expect(params).toContain('week_drafted');
+    // The statement is the guarantee, so the whole of it is pinned: every
+    // identifier and the shape of the guard. A changed column name or a
+    // dropped clause is a different statement, not a tidy-up.
+    expect(sql.replace(/\s+/g, ' ').trim()).toMatchInlineSnapshot(`"INSERT INTO "events" ( "athlete_id", "actor_type", "type", "payload" ) SELECT $1::uuid, 'coach_ai', $2, $3::jsonb WHERE NOT EXISTS ( SELECT 1 FROM "events" AS drafted WHERE drafted."athlete_id" = $4::uuid AND drafted."type" = $5 AND drafted."payload" ->> 'weekStart' = $6 AND NOT EXISTS ( SELECT 1 FROM "events" AS resolved WHERE resolved."athlete_id" = $7::uuid AND resolved."type" IN ('week_plan_written', 'week_plan_declined', $8) AND resolved."payload" ->> 'weekStart' = $9 AND resolved."created_at" > drafted."created_at" ) ) RETURNING "events"."id""`);
+    const payload = params.find((p) => typeof p === 'string' && p.startsWith('{')) as string;
+    // And the parameters in the order the statement binds them: $5 and $8 are
+    // the two event types the guard compares against, never the same string.
+    expect(params).toEqual([ATHLETE, 'week_drafted', payload, ATHLETE, 'week_drafted', WEEK, ATHLETE, 'week_draft_withdrawn', WEEK]);
+    expect(JSON.parse(payload)).toEqual({
+      weekStart: WEEK,
+      visibleFrom: WEEK,
+      sessions: [SESSION],
+      citations: [],
+      skeleton: draft.skeleton,
+    });
+  });
+
+  it('reports exists when the guard let nothing through — the loser of two tabs', async () => {
+    executeRows = [];
+    expect(await recordWeekDraft(draft)).toBe('exists');
+  });
+});

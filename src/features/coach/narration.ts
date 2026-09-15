@@ -16,7 +16,7 @@
  */
 
 /** The Coach's own two announcements (`training-architecture/07`). */
-export type CoachNarratableType = 'blocks_drafted' | 'race_flagged_unrealistic';
+export type CoachNarratableType = 'blocks_drafted' | 'race_flagged_unrealistic' | 'week_drafted';
 
 /** The Head Coach's session actions — the events {@link clause} renders. */
 export type HeadCoachNarratableType =
@@ -126,7 +126,11 @@ function blockNames(payload: unknown): string[] | undefined {
 function isCoachEvent(
   event: NarratableEvent,
 ): event is NarratableEvent & { type: CoachNarratableType } {
-  return event.type === 'blocks_drafted' || event.type === 'race_flagged_unrealistic';
+  return (
+    event.type === 'blocks_drafted' ||
+    event.type === 'race_flagged_unrealistic' ||
+    event.type === 'week_drafted'
+  );
 }
 
 /**
@@ -137,16 +141,30 @@ function isCoachEvent(
  * been attributed to a person who did nothing.
  */
 function coachClause(event: NarratableEvent, t: Translate): string {
-  const race = field(event.payload, 'raceName');
-  // No weekday here, unlike every session clause: a race is months out and its
-  // weekday says nothing, so the sentence names the race and the reason only.
-  if (event.type === 'race_flagged_unrealistic') {
-    return t('raceUnrealistic', {
-      race: race ?? t('yourRace'),
-      reason: field(event.payload, 'reason') ?? t('noReason'),
-    });
+  switch (event.type) {
+    // A drafted week (`training-architecture/16`): one sentence, no detail —
+    // the proposal itself is on the calendar, and a list of sessions here
+    // would be a second copy of it. Malformed or not, the sentence is the same.
+    case 'week_drafted':
+      return t('weekDrafted');
+    case 'race_flagged_unrealistic':
+      return unrealisticClause(event.payload, t);
+    default:
+      return blocksDraftedClause(event.payload, t);
   }
-  const names = blockNames(event.payload);
+}
+
+/** No weekday here, unlike every session clause: a race is months out and its weekday says nothing. */
+function unrealisticClause(payload: unknown, t: Translate): string {
+  return t('raceUnrealistic', {
+    race: field(payload, 'raceName') ?? t('yourRace'),
+    reason: field(payload, 'reason') ?? t('noReason'),
+  });
+}
+
+function blocksDraftedClause(payload: unknown, t: Translate): string {
+  const race = field(payload, 'raceName');
+  const names = blockNames(payload);
   if (!race || !names) return t('blocksDraftedNoDetail');
   return t('blocksDrafted', { race, blocks: names.join(' · ') });
 }
