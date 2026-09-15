@@ -16,7 +16,7 @@ describe('context-brief — what counts as a term', () => {
   });
 
   it('indexes sections and terms in order, first sentence only, CRLF or LF', () => {
-    const md = '## Coaching Hierarchy\r\n\r\n**Roster** — the set of athletes linked to a Head Coach. More words.\r\n**Bold heading**\r\n- **Nested** — one. Two.\r\n**Not a term.** — prose here.\r\n';
+    const md = '## Coaching Hierarchy\r\n\r\n**Roster** — the set of athletes linked to a Head Coach. More words.\r\n**Bold heading**\r\n- **Nested** — one. Two.\r\n**Not a term.** — prose here.\r\n**Head Coach** decides the plan without a dash.\r\n';
     expect(glossaryIndex(md)).toEqual([
       { section: 'Coaching Hierarchy' },
       { term: 'Roster', definition: 'the set of athletes linked to a Head Coach.' },

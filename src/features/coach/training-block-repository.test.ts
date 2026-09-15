@@ -48,7 +48,7 @@ vi.mock('@/db', () => ({
   getDb: () => Object.assign(chain(), { execute }),
 }));
 
-const { getBlockSet, insertBlockSet, casUpdateBlockSet, insertBlockEvent, getLatestUnrealisticFlag } =
+const { getBlockSet, insertBlockSet, casUpdateBlockSet, getLatestUnrealisticFlag } =
   await import(
   './training-block-repository'
 );
@@ -129,12 +129,14 @@ describe('insertBlockSet — one statement, the event gated on the insert winnin
     raceId: RACE,
     startDate: '2026-09-14',
     blocks: BLOCKS,
-    event: {
-      actorType: 'coach_ai' as const,
-      actorId: null,
-      type: 'blocks_drafted',
-      payload: { raceId: RACE, raceName: 'Ironman Copenhagen', blocks: [] },
-    },
+    events: [
+      {
+        actorType: 'coach_ai' as const,
+        actorId: null,
+        type: 'blocks_drafted',
+        payload: { raceId: RACE, raceName: 'Ironman Copenhagen', blocks: [] },
+      },
+    ],
   };
 
   it('inserts with ON CONFLICT DO NOTHING on the (athlete, race) index', async () => {
@@ -164,7 +166,7 @@ describe('insertBlockSet — one statement, the event gated on the insert winnin
     expect(sql).toMatch(/where exists \(select 1 from "?inserted"?\)/i);
     expect(bound).toContain('coach_ai');
     expect(bound).toContain('blocks_drafted');
-    expect(bound).toContain(JSON.stringify(params.event.payload));
+    expect(bound).toContain(JSON.stringify(params.events[0].payload));
   });
 
   it('reports inserted when the row landed and exists when the index refused it', async () => {
@@ -175,10 +177,31 @@ describe('insertBlockSet — one statement, the event gated on the insert winnin
     expect(await insertBlockSet(params)).toBe('exists');
   });
 
+  it('carries a second event in the same statement, under the same gate', async () => {
+    executeRows = [{ inserted: '1' }];
+    const verdict = {
+      actorType: 'coach_ai' as const,
+      actorId: null,
+      type: 'race_flagged_unrealistic',
+      payload: { raceId: RACE, reason: 'too short' },
+    };
+
+    await insertBlockSet({ ...params, events: [...params.events, verdict] });
+
+    const { sql, params: bound } = executed[0];
+    expect(sql.match(/insert into "events"/gi)).toHaveLength(2);
+    expect(sql.match(/where exists \(select 1 from "inserted"\)/gi)).toHaveLength(2);
+    expect(bound).toContain('race_flagged_unrealistic');
+    expect(sql).toMatch(/"announced_0" as/i);
+    expect(sql).toMatch(/"announced_1" as/i);
+    // Joined with nothing between: one CTE closes, a comma, the next opens.
+    expect(sql).toMatch(/\)\s*,\s*"announced_1" as/i);
+  });
+
   it('writes no event at all when none is given', async () => {
     executeRows = [{ inserted: '1' }];
 
-    await insertBlockSet({ ...params, event: undefined });
+    await insertBlockSet({ ...params, events: undefined });
 
     expect(executed[0].sql).not.toMatch(/"events"/);
     expect(executed[0].sql.replace(/\s+/g, ' ').trim()).toMatchSnapshot();
@@ -209,12 +232,14 @@ describe('casUpdateBlockSet — compare-and-swap on version, event in the same s
     setId: SET_ID,
     expectedVersion: 3,
     blocks: edited,
-    event: {
-      actorType: 'head_coach' as const,
-      actorId: '44444444-4444-4444-8444-444444444444',
-      type: 'block_edited',
-      payload: { raceId: RACE, position: 1 },
-    },
+    events: [
+      {
+        actorType: 'head_coach' as const,
+        actorId: '44444444-4444-4444-8444-444444444444',
+        type: 'block_edited',
+        payload: { raceId: RACE, position: 1 },
+      },
+    ],
   };
 
   it('updates only where id, athlete and the expected version all match, bumping version', async () => {
@@ -242,7 +267,7 @@ describe('casUpdateBlockSet — compare-and-swap on version, event in the same s
     expect(sql).toMatch(/insert into "events"/i);
     expect(sql).toMatch(/where exists \(select 1 from "?updated"?\)/i);
     expect(bound).toContain('head_coach');
-    expect(bound).toContain(params.event.actorId);
+    expect(bound).toContain(params.events[0].actorId);
     expect(bound).toContain('block_edited');
   });
 
@@ -250,6 +275,13 @@ describe('casUpdateBlockSet — compare-and-swap on version, event in the same s
     executeRows = [{ version: 4 }];
     await casUpdateBlockSet(params);
     expect(executed[0].sql.replace(/\s+/g, ' ').trim()).toMatchSnapshot();
+  });
+
+  it('writes no event when none is given — the update alone', async () => {
+    executeRows = [{ version: 4 }];
+    await casUpdateBlockSet({ ...params, events: undefined });
+    expect(executed[0].sql).not.toMatch(/"events"/);
+    expect(executed[0].sql).toMatch(/update "training_block_set"/i);
   });
 
   it('moves start_date only when asked — a redraft passes it, an edit does not', async () => {
@@ -274,51 +306,33 @@ describe('casUpdateBlockSet — compare-and-swap on version, event in the same s
   });
 });
 
-describe('insertBlockEvent — one attributed row, scoped to the athlete', () => {
-  it('writes the actor, type and payload against the athlete', async () => {
-    await insertBlockEvent(ATHLETE, {
-      actorType: 'coach_ai',
-      actorId: null,
-      type: 'race_flagged_unrealistic',
-      payload: { raceId: RACE, reason: 'too short' },
-    });
-
-    expect(insertValues).toEqual([
-      {
-        athleteId: ATHLETE,
-        actorType: 'coach_ai',
-        actorId: null,
-        type: 'race_flagged_unrealistic',
-        payload: { raceId: RACE, reason: 'too short' },
-      },
-    ]);
-  });
-});
-
 describe('getLatestUnrealisticFlag — the Coach’s standing verdict, scoped to the athlete', () => {
-  it('filters on the athlete and the event type, and reads the reason out of the payload', async () => {
+  it('filters on the athlete, the event type and the race, and reads the reason out of the payload', async () => {
     nextRows = [{ payload: { raceId: RACE, reason: 'eleven months is short' } }];
 
-    expect(await getLatestUnrealisticFlag(ATHLETE)).toBe('eleven months is short');
+    expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBe('eleven months is short');
 
     const bound = boundValues(whereArgs[0]);
     expect(bound).toContain(ATHLETE);
     expect(bound).toContain('race_flagged_unrealistic');
+    // The race id is a bound value inside the payload predicate, not a JS filter.
+    expect(bound).toContain(RACE);
+    expect(new PgDialect().sqlToQuery(whereArgs[0] as SQL).sql).toMatch(/"payload"->>'raceId' = \$\d+/);
   });
 
   it('returns null with no flag, or a flag whose payload carries no reason', async () => {
-    expect(await getLatestUnrealisticFlag(ATHLETE)).toBeNull();
+    expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBeNull();
     nextRows = [{ payload: { raceId: RACE } }];
-    expect(await getLatestUnrealisticFlag(ATHLETE)).toBeNull();
+    expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBeNull();
     nextRows = [{ payload: { reason: '   ' } }];
-    expect(await getLatestUnrealisticFlag(ATHLETE)).toBeNull();
+    expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBeNull();
     nextRows = [{ payload: { reason: 42 } }];
-    expect(await getLatestUnrealisticFlag(ATHLETE)).toBeNull();
+    expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBeNull();
   });
 
   it('trims the reason and selects only the payload column', async () => {
     nextRows = [{ payload: { reason: '  too short  ' } }];
-    expect(await getLatestUnrealisticFlag(ATHLETE)).toBe('too short');
+    expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBe('too short');
     expect(Object.keys(selectArgs[0] as object)).toEqual(['payload']);
   });
 });

@@ -79,19 +79,20 @@ async function buildBriefingSystem(
   // 0003; the Training Blocks are the horizon that calendar is built toward).
   // The Coach's own "unrealistic" verdict travels with the blocks for the same
   // reason: it is the Coach's judgement, not the athlete's report.
-  const [plan, resolved, raceUnrealistic] = await Promise.all([
-    getBriefingPlan(athleteId),
-    getResolvedBlocks(athleteId, today),
-    getLatestUnrealisticFlag(athleteId),
-  ]);
+  const [plan, resolved] = await Promise.all([getBriefingPlan(athleteId), getResolvedBlocks(athleteId, today)]);
+  // Scoped to the current Target Race: a verdict on a race the athlete has since
+  // replaced is not this race's.
+  const raceUnrealistic = resolved.race ? await getLatestUnrealisticFlag(athleteId, resolved.race.id) : null;
+  const phase = currentPhase(today, resolved.blocks);
   const blocks = {
     blocks: resolved.blocks.map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
+    phase,
     raceUnrealistic,
   };
 
   // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.
   const reports = canSeeAthleteReports(link.visibility)
-    ? await readReports(athleteId, currentPhase(today, resolved.blocks))
+    ? await readReports(athleteId, phase)
     : null;
 
   // Gated inside getSharedTranscripts: null (nothing fetched) when the flag is off.

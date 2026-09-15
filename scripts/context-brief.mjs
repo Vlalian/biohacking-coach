@@ -58,7 +58,9 @@ export function glossaryIndex(markdown) {
       out.push({ section: h[1].trim() });
       continue;
     }
-    const t = line.match(/^(?:- )?\*\*([^*]+)\*\*\s*[—–-]?\s*(.*)$/);
+    // The dash after the bold term is the glossary's own shape; without it a
+    // bold sentence opener (`**Head Coach** decides the plan.`) would index.
+    const t = line.match(/^(?:- )?\*\*([^*]+)\*\*\s+[—–-]\s+(.*)$/);
     // A bold line with nothing after it is a heading in bold; a bold sentence is
     // prose. Neither is a term.
     if (t && t[2].trim() && isTermName(t[1])) out.push({ term: t[1].trim(), definition: firstSentence(t[2]) });

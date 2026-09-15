@@ -97,6 +97,12 @@ export interface BriefingTranscript {
  */
 export interface BriefingBlocks {
   blocks: { name: string; endDate: string; authoredBy: BlockAuthor }[];
+  /**
+   * The block today falls inside, by name, or null. Carried here and not only
+   * in the profile: with reports withheld the profile is gone, and a block list
+   * with no start dates cannot say which block is now (CodeRabbit, PR #65).
+   */
+  phase: string | null;
   raceUnrealistic: string | null;
 }
 
@@ -236,7 +242,8 @@ const HEAD_COACH_BLOCKS_LINE =
 function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
   if (!blocks || blocks.blocks.length === 0) return 'TRAINING BLOCKS: none — the athlete has no Target Race.';
   const lines = blocks.blocks.map(
-    (b) => `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}`,
+    (b) =>
+      `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}${b.name === blocks.phase ? ' · current' : ''}`,
   );
   if (blocks.blocks.some((b) => b.authoredBy === 'head_coach')) lines.push(HEAD_COACH_BLOCKS_LINE);
   if (blocks.raceUnrealistic) {

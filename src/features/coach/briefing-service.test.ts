@@ -336,8 +336,8 @@ describe('startBriefing — the prompt material the rest of the suite does not r
       race: { id: 'r1', name: 'IM', date: '2027-08-15' },
       set: null,
       blocks: [
-        { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-09-14', endDate: '2027-01-10', authoredBy: 'coach_ai' },
-        { index: 2, total: 2, name: 'Long Rides', startDate: '2027-01-11', endDate: '2027-08-15', authoredBy: 'head_coach' },
+        { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-06-01', endDate: '2026-07-31', authoredBy: 'coach_ai' },
+        { index: 2, total: 2, name: 'Long Rides', startDate: '2026-08-01', endDate: '2027-08-15', authoredBy: 'head_coach' },
       ],
     });
     getLatestUnrealisticFlag.mockResolvedValue('eleven months is short');
@@ -345,12 +345,27 @@ describe('startBriefing — the prompt material the rest of the suite does not r
     await startBriefing('coach_1', 'a1', TODAY);
 
     expect(getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
-    expect(lastSystem()).toContain('Build the Volume · to 2027-01-10 · Coach');
+    expect(getLatestUnrealisticFlag).toHaveBeenCalledWith('a1', 'r1');
+    expect(lastSystem()).toContain('Build the Volume · to 2026-07-31 · Coach');
     expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach');
     expect(lastSystem()).toContain("The Training Blocks are the Head Coach's.");
     expect(lastSystem()).toContain('flagged the Target Race as unrealistic: eleven months is short');
     // Reports withheld, and the blocks rendered anyway: they are plan structure.
     expect(lastSystem()).toContain('withheld');
+    // ...including which block is now — the profile's phase line is gone with
+    // the reports, so the block list has to say it (CodeRabbit, PR #65).
+    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach · current');
+  });
+
+  it('reads no verdict at all for an athlete with no Target Race', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+    getLatestUnrealisticFlag.mockClear();
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getLatestUnrealisticFlag).not.toHaveBeenCalled();
+    expect(lastSystem()).toContain('TRAINING BLOCKS: none');
   });
 
   it('names the phase from the resolved block today falls inside', async () => {

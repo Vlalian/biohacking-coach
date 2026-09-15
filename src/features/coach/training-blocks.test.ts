@@ -234,6 +234,13 @@ describe('validateBlockSet — what a stored set must look like', () => {
     }
   });
 
+  it('rejects a name carrying an email or phone shape — it would reach the prompt as the phase', () => {
+    for (const name of ['Camp with lars@example.com', 'Call +45 12 34 56 78']) {
+      const bad = [{ ...good[0], name }, ...good.slice(1)];
+      expect(validateBlockSet(bad, START, RACE)).toEqual({ ok: false, reason: 'identifier' });
+    }
+  });
+
   it('rejects an end date that is not a calendar date', () => {
     const bad = [{ ...good[0], endDate: 'soon' }, ...good.slice(1)];
     expect(validateBlockSet(bad, START, RACE)).toEqual({ ok: false, reason: 'date' });
@@ -442,6 +449,16 @@ describe('applyBlockEdit — rename and re-boundary, nothing more', () => {
     expect(applyBlockEdit(set, 4, { name: 'X' }, RACE)).toEqual({ ok: false, reason: 'position' });
     expect(applyBlockEdit(set, 1, {}, RACE)).toEqual({ ok: false, reason: 'nothing' });
     expect(applyBlockEdit(set, 1, { endDate: 'soon' }, RACE)).toEqual({ ok: false, reason: 'date' });
+  });
+
+  it('refuses an edit that changes nothing, so authorship is never stamped for free', () => {
+    expect(applyBlockEdit(set, 2, { name: 'Sharpen the Bike' }, RACE)).toEqual({ ok: false, reason: 'nothing' });
+    expect(applyBlockEdit(set, 2, { name: '  Sharpen the Bike ' }, RACE)).toEqual({ ok: false, reason: 'nothing' });
+    expect(applyBlockEdit(set, 2, { endDate: '2027-01-17' }, RACE)).toEqual({ ok: false, reason: 'nothing' });
+    expect(applyBlockEdit(set, 2, { name: 'Sharpen the Bike', endDate: '2027-01-17' }, RACE)).toEqual({
+      ok: false,
+      reason: 'nothing',
+    });
   });
 
   it('cannot add or remove a block — the count is always the count it was given', () => {

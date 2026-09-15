@@ -153,6 +153,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
       { name: 'Build the Volume', endDate: '2027-01-10', authoredBy: 'coach_ai' as const },
       { name: 'Taper', endDate: '2027-08-15', authoredBy: 'coach_ai' as const },
     ],
+    phase: 'Taper',
     raceUnrealistic: null,
   };
 
@@ -162,7 +163,8 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     const prompt = renderBriefingPrompt(ctx({ blocks: coachOnly, reports: null }));
     expect(prompt).toContain('TRAINING BLOCKS');
     expect(prompt).toContain('Build the Volume · to 2027-01-10 · Coach');
-    expect(prompt).toContain('Taper · to 2027-08-15 · Coach');
+    expect(prompt).toContain('Taper · to 2027-08-15 · Coach · current');
+    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Coach · current');
     // No flag, no line — not "unrealistic: null".
     expect(prompt).not.toContain('unrealistic');
   });
@@ -186,6 +188,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
       ctx({
         blocks: {
           blocks: [{ name: 'Block 1 of 2', endDate: '2027-01-10', authoredBy: 'arithmetic' }],
+          phase: null,
           raceUnrealistic: 'eleven months is short',
         },
       }),
@@ -196,7 +199,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
 
   it('says plainly there are none for an athlete with no Target Race', () => {
     expect(renderBriefingPrompt(ctx({ blocks: null }))).toContain('TRAINING BLOCKS: none');
-    expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], raceUnrealistic: null } }))).toContain(
+    expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], phase: null, raceUnrealistic: null } }))).toContain(
       'TRAINING BLOCKS: none',
     );
   });
@@ -220,6 +223,7 @@ describe('renderBriefingPrompt — golden', () => {
             { name: 'Long Rides', endDate: '2027-05-02', authoredBy: 'head_coach' },
             { name: 'Block 3 of 3', endDate: '2027-08-15', authoredBy: 'arithmetic' },
           ],
+          phase: 'Long Rides',
           raceUnrealistic: 'eleven months is short',
         },
         reports: {

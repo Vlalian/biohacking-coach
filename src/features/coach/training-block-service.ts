@@ -21,7 +21,6 @@ import { renderBlockAdjustmentPrompt } from './prompts';
 import {
   casUpdateBlockSet,
   getBlockSet,
-  insertBlockEvent,
   insertBlockSet,
   type BlockSetRecord,
 } from './training-block-repository';
@@ -197,16 +196,32 @@ async function writeAdjustment(
   existing: BlockSetRecord | null,
   adjustment: BlockAdjustment,
 ): Promise<AdjustmentOutcome> {
-  const event = {
-    actorType: 'coach_ai' as const,
-    actorId: null,
-    type: 'blocks_drafted',
-    payload: {
-      raceId: race.id,
-      raceName: race.name,
-      blocks: adjustment.blocks.map(({ name, endDate }) => ({ name, endDate })),
+  // Both sentences ride the set write, each gated on it landing: a loser writes
+  // neither, and a verdict cannot be lost between two statements.
+  const evts = [
+    {
+      actorType: 'coach_ai' as const,
+      actorId: null,
+      type: 'blocks_drafted',
+      payload: {
+        raceId: race.id,
+        raceName: race.name,
+        blocks: adjustment.blocks.map(({ name, endDate }) => ({ name, endDate })),
+      },
     },
-  };
+    // Not a re-plan: the blocks are written regardless. This is the one extra
+    // sentence, and it is rare by instruction.
+    ...(adjustment.unrealistic
+      ? [
+          {
+            actorType: 'coach_ai' as const,
+            actorId: null,
+            type: 'race_flagged_unrealistic',
+            payload: { raceId: race.id, raceName: race.name, reason: adjustment.unrealistic.reason },
+          },
+        ]
+      : []),
+  ];
 
   const won = existing
     ? (
@@ -217,7 +232,7 @@ async function writeAdjustment(
           blocks: adjustment.blocks,
           // The redraft was validated from today, so the set starts today.
           startDate: today,
-          event,
+          events: evts,
         })
       ).ok
     : (await insertBlockSet({
@@ -225,20 +240,9 @@ async function writeAdjustment(
         raceId: race.id,
         startDate: today,
         blocks: adjustment.blocks,
-        event,
+        events: evts,
       })) === 'inserted';
   if (!won) return 'lost-race';
-
-  // Not a re-plan: the blocks above are written regardless. This is the one
-  // extra sentence, and it is rare by instruction.
-  if (adjustment.unrealistic) {
-    await insertBlockEvent(athleteId, {
-      actorType: 'coach_ai',
-      actorId: null,
-      type: 'race_flagged_unrealistic',
-      payload: { raceId: race.id, raceName: race.name, reason: adjustment.unrealistic.reason },
-    });
-  }
   return 'drafted';
 }
 
@@ -316,12 +320,13 @@ async function setToEdit(
   const existing = await getBlockSet(athleteId, race.id);
   if (existing) return fitsRace(existing, race.date) ? { set: existing, materialised: false } : 'stale';
 
+  // Never empty: `editableRace` has already refused a race on or before today,
+  // and every later date divides into at least two blocks.
   const draft = trainingBlocks(today, race.date).map(({ name, endDate, authoredBy }) => ({
     name,
     endDate,
     authoredBy,
   }));
-  if (draft.length === 0) return null;
   const outcome = await insertBlockSet({ athleteId, raceId: race.id, startDate: today, blocks: draft });
   const stored = await getBlockSet(athleteId, race.id);
   if (!stored) return null;
@@ -381,14 +386,26 @@ async function loadTarget(
   raceId: string,
   today: string,
 ): Promise<{ race: RaceRow; set: BlockSetRecord; materialised: boolean } | EditBlockResult> {
-  const race = await getTargetRace(athleteId);
-  if (!race || race.id !== raceId) return { ok: false, reason: 'no-race' };
+  const race = await editableRace(athleteId, raceId, today);
+  if (!race) return { ok: false, reason: 'no-race' };
 
   const target = await setToEdit(athleteId, race, today);
   if (!target) return { ok: false, reason: 'no-race' };
   if (target === 'stale') return { ok: false, reason: 'stale-set' };
   if ('conflict' in target) return { ok: false, reason: 'conflict', current: target.conflict };
   return { race, ...target };
+}
+
+/**
+ * The Target Race an edit may apply to, or null: it must be the athlete's
+ * current target, the one the panel named, and still ahead. A race already run
+ * has a set worth reading and nothing worth editing — before this check an
+ * existing set stayed editable after race day (CodeRabbit, PR #65).
+ */
+async function editableRace(athleteId: string, raceId: string, today: string): Promise<RaceRow | null> {
+  const race = await getTargetRace(athleteId);
+  if (!race || race.id !== raceId || race.date <= today) return null;
+  return race;
 }
 
 /** The CAS and its event, and the re-read that tells a refused coach what won. */
@@ -409,17 +426,19 @@ async function writeEdit(params: {
     setId: set.id,
     expectedVersion,
     blocks,
-    event: {
-      actorType: 'head_coach',
-      actorId: headCoachId,
-      type: 'block_edited',
-      payload: {
-        raceId,
-        position,
-        from: { name: from.name, endDate: from.endDate },
-        to: { name: to.name, endDate: to.endDate },
+    events: [
+      {
+        actorType: 'head_coach',
+        actorId: headCoachId,
+        type: 'block_edited',
+        payload: {
+          raceId,
+          position,
+          from: { name: from.name, endDate: from.endDate },
+          to: { name: to.name, endDate: to.endDate },
+        },
       },
-    },
+    ],
   });
   if (written.ok) return { ok: true, version: written.version };
 
