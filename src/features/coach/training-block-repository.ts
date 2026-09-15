@@ -130,14 +130,21 @@ export async function casUpdateBlockSet(params: {
   setId: string;
   expectedVersion: number;
   blocks: TrainingBlockSpec[];
+  /**
+   * A new first-block start, when the whole set was redrawn from a new day (the
+   * Coach's redraft of a stale set). A Head Coach's edit leaves it out: it moves
+   * one boundary inside a set whose start is already true.
+   */
+  startDate?: string;
   event?: BlockSetEvent;
 }): Promise<CasBlockSetResult> {
-  const { athleteId, setId, expectedVersion, blocks, event } = params;
+  const { athleteId, setId, expectedVersion, blocks, startDate, event } = params;
+  const startClause = startDate ? sql`, ${sql.identifier('start_date')} = ${startDate}::date` : sql``;
 
   const statement = sql`
     WITH updated AS (
       UPDATE ${trainingBlockSet}
-      SET ${sql.identifier('blocks')} = ${JSON.stringify(blocks)}::jsonb,
+      SET ${sql.identifier('blocks')} = ${JSON.stringify(blocks)}::jsonb${startClause},
           ${sql.identifier('version')} = ${trainingBlockSet.version} + 1,
           ${sql.identifier('updated_at')} = now()
       WHERE ${trainingBlockSet.id} = ${setId}::uuid

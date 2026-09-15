@@ -228,7 +228,7 @@ describe('validateBlockSet — what a stored set must look like', () => {
   });
 
   it('rejects a positional name — the arithmetic pretending to be coaching', () => {
-    for (const name of ['Block 2', 'block 2 of 4', 'Phase 3', 'Fase 1', 'PHASE1']) {
+    for (const name of ['Block 2', 'block 2 of 4', 'Phase 3', 'Fase 1', 'PHASE1', 'Blok 2']) {
       const bad = [{ ...good[0], name }, ...good.slice(1)];
       expect(validateBlockSet(bad, START, RACE)).toEqual({ ok: false, reason: 'positional' });
     }

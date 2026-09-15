@@ -16,22 +16,13 @@
  *
  *     node scripts/context-brief.mjs [repo-root]
  *
- * Both inputs are gitignored and live only in the canonical checkout, so the
- * default root is the parent of this script's repo when run from a worktree
- * with the canonical folder as a sibling; pass the root explicitly otherwise.
+ * Both inputs are gitignored and live only in the canonical checkout. The root
+ * defaults to the current directory; from a worktree, pass the canonical
+ * checkout explicitly.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-
-const root = resolve(process.argv[2] ?? process.cwd());
-const contextPath = join(root, 'CONTEXT.md');
-const overviewPath = join(root, 'OVERVIEW.md');
-for (const p of [contextPath, overviewPath]) {
-  if (!existsSync(p)) {
-    console.error(`context-brief: ${p} not found — pass the canonical checkout as the argument.`);
-    process.exit(1);
-  }
-}
+import { fileURLToPath } from 'node:url';
 
 /** The first sentence of a definition, capped so a long entry stays one line. */
 export function firstSentence(text, cap = 220) {
@@ -39,6 +30,17 @@ export function firstSentence(text, cap = 220) {
   const m = clean.match(/^.*?[.!?](?=\s|$)/);
   const sentence = (m ? m[0] : clean).trim();
   return sentence.length > cap ? `${sentence.slice(0, cap - 1).trimEnd()}…` : sentence;
+}
+
+/**
+ * A bold lead-in that is a *term*: a noun phrase, not a sentence. The glossary
+ * also opens paragraphs in bold — "Deliberately not a property of the race." —
+ * and those are prose, not vocabulary to "use exactly". A term has no terminal
+ * punctuation and is short.
+ */
+export function isTermName(name) {
+  const trimmed = name.trim();
+  return !/[.:!?]$/.test(trimmed) && trimmed.split(/\s+/).length <= 8;
 }
 
 /**
@@ -57,8 +59,9 @@ export function glossaryIndex(markdown) {
       continue;
     }
     const t = line.match(/^(?:- )?\*\*([^*]+)\*\*\s*[—–-]?\s*(.*)$/);
-    // A bold line with nothing after it is a heading in bold, not a term.
-    if (t && t[2].trim()) out.push({ term: t[1].trim(), definition: firstSentence(t[2]) });
+    // A bold line with nothing after it is a heading in bold; a bold sentence is
+    // prose. Neither is a term.
+    if (t && t[2].trim() && isTermName(t[1])) out.push({ term: t[1].trim(), definition: firstSentence(t[2]) });
   }
   return out;
 }
@@ -96,8 +99,22 @@ export function renderBrief(context, overview) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n') + '\n';
 }
 
-const brief = renderBrief(readFileSync(contextPath, 'utf8'), readFileSync(overviewPath, 'utf8'));
-const outPath = join(root, 'CONTEXT-BRIEF.md');
-writeFileSync(outPath, brief, 'utf8');
-const terms = (brief.match(/^- \*\*/gm) ?? []).length;
-console.log(`context-brief: wrote ${outPath} — ${terms} terms, ${brief.length} chars (~${Math.round(brief.length / 4)} tokens)`);
+function main(argv) {
+  const root = resolve(argv[2] ?? process.cwd());
+  const contextPath = join(root, 'CONTEXT.md');
+  const overviewPath = join(root, 'OVERVIEW.md');
+  for (const p of [contextPath, overviewPath]) {
+    if (!existsSync(p)) {
+      console.error(`context-brief: ${p} not found — pass the canonical checkout as the argument.`);
+      process.exit(1);
+    }
+  }
+  const brief = renderBrief(readFileSync(contextPath, 'utf8'), readFileSync(overviewPath, 'utf8'));
+  const outPath = join(root, 'CONTEXT-BRIEF.md');
+  writeFileSync(outPath, brief, 'utf8');
+  const terms = (brief.match(/^- \*\*/gm) ?? []).length;
+  console.log(`context-brief: wrote ${outPath} — ${terms} terms, ${brief.length} chars (~${Math.round(brief.length / 4)} tokens)`);
+}
+
+// Only when run as a script: the pure functions above are importable by tests.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv);

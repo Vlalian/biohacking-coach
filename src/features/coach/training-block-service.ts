@@ -110,7 +110,7 @@ function weeksTo(today: string, raceDate: string): number {
  */
 function gateOn(set: BlockSetRecord | null, race: RaceRow): AdjustmentOutcome | null {
   if (!set) return null;
-  if (set.blocks[set.blocks.length - 1]?.endDate === race.date) return 'already-adjusted';
+  if (fitsRace(set, race.date)) return 'already-adjusted';
   if (set.blocks.some((b) => b.authoredBy === 'head_coach')) return 'head-coach-owned';
   return null;
 }
@@ -215,6 +215,8 @@ async function writeAdjustment(
           setId: existing.id,
           expectedVersion: existing.version,
           blocks: adjustment.blocks,
+          // The redraft was validated from today, so the set starts today.
+          startDate: today,
           event,
         })
       ).ok

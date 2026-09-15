@@ -223,7 +223,7 @@ const MAX_NAME_LENGTH = 40;
  * of a materialised draft leaves the others as the formula made them, and that
  * set is still valid (slice 08).
  */
-const POSITIONAL_NAME = /^(block|phase|fase)\s*\d/i;
+const POSITIONAL_NAME = /^(block|blok|phase|fase)\s*\d/i;
 
 function nameProblemOf(block: TrainingBlockSpec): BlockSetProblem | null {
   const trimmed = block.name.trim();

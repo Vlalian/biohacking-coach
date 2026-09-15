@@ -85,6 +85,24 @@ describe('renderBlockAdjustmentPrompt — the briefing carries every listed fact
 });
 
 describe('buildBlockAdjustmentContext — no identifier reaches the briefing', () => {
+  it('refuses a race name that carries an email or phone — the whole context is asserted, not two leaves', () => {
+    // The race name is athlete-typed free text and it reaches the prompt. The
+    // Weekly Session asserts its whole check-in (`assertNoIdentity`), and until
+    // the 2026-09-15 review this path asserted only the signal and the comments.
+    expect(() =>
+      buildBlockAdjustmentContext({
+        today: TODAY,
+        race: { name: 'Ironman for lars@example.com', date: RACE.date, distance: 'Ironman' },
+        draft: trainingBlocks(TODAY, RACE.date),
+        experienceLevel: undefined,
+        capacity: null,
+        readiness: null,
+        notableSignal: null,
+        reflections: [],
+      }),
+    ).toThrow(/identifier/i);
+  });
+
   it('refuses a Check-in signal or a reflection comment that carries an email or phone', () => {
     const base = {
       today: TODAY,

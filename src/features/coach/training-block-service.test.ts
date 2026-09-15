@@ -180,6 +180,10 @@ describe('ensureBlocksAdjusted — a valid reply is written once, as the Coach',
     const params = casUpdateBlockSet.mock.calls[0][0];
     expect(params).toMatchObject({ athleteId: ATHLETE, setId: 'set-1', expectedVersion: 4, blocks: SHAPED });
     expect(params.event.type).toBe('blocks_drafted');
+    // The new blocks were validated against today, so the row's start moves
+    // too — or block 1 would be expanded from the old start and read as weeks
+    // longer than it is (review of 07, 2026-09-15).
+    expect(params.startDate).toBe(TODAY);
   });
 
   it('writes a second coach_ai event when the Coach flags the race unrealistic — and still writes the blocks', async () => {

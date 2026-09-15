@@ -76,8 +76,11 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": [
         "error",
         {
+          // The member access itself, not the call: `it.only(...)`, `it.only.each(...)(...)`
+          // and `test.only.skip` are all the same act, and the review of
+          // 2026-09-15 found `.each` slipping a call-shaped selector.
           selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name='only'][callee.object.name=/^(it|describe|test)$/]",
+            "MemberExpression[property.name='only'][object.name=/^(it|describe|test)$/]",
           message:
             "A focused test never leaves a branch: it makes the suite pass by not running it.",
         },

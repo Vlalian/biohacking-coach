@@ -46,16 +46,16 @@ function weeksBetween(from: string, to: string): number {
 
 /**
  * Assembles the context and asserts the detectable identifiers are absent from
- * every free-text leaf that reaches the prompt: the Check-in's sentence and the
- * reflection comments. The same backstop `buildWeeklyCheckIn` applies, for the
- * same reason — this string goes to the model, and a name or an email in it
- * would go too (GDPR decision 1).
+ * **the whole of it** — the race name is athlete-typed free text just as the
+ * Check-in's sentence and the reflection comments are, and every one of them
+ * reaches the model. The same backstop `buildWeeklyCheckIn` applies over its
+ * whole check-in, for the same reason (GDPR decision 1). Until the 2026-09-15
+ * review this asserted two leaves and let the race name through.
  */
 export function buildBlockAdjustmentContext(
   input: Omit<BlockAdjustmentContext, 'weeksToRace'>,
 ): BlockAdjustmentContext {
-  assertNoDirectIdentifier(input.notableSignal);
-  for (const r of input.reflections) assertNoDirectIdentifier(r.comment);
+  assertNoDirectIdentifier(input);
   return { ...input, weeksToRace: weeksBetween(input.today, input.race.date) };
 }
 

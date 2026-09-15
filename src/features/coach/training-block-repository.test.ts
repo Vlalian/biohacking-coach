@@ -252,6 +252,16 @@ describe('casUpdateBlockSet — compare-and-swap on version, event in the same s
     expect(executed[0].sql.replace(/\s+/g, ' ').trim()).toMatchSnapshot();
   });
 
+  it('moves start_date only when asked — a redraft passes it, an edit does not', async () => {
+    executeRows = [{ version: 4 }];
+    await casUpdateBlockSet({ ...params, startDate: '2026-10-01' });
+    expect(executed[0].sql).toMatch(/"start_date" = \$\d+::date/);
+    expect(executed[0].params).toContain('2026-10-01');
+
+    await casUpdateBlockSet(params);
+    expect(executed[1].sql).not.toMatch(/start_date/);
+  });
+
   it('returns the new version when it won, and conflict when the version had moved', async () => {
     executeRows = [{ version: 4 }];
     expect(await casUpdateBlockSet(params)).toEqual({ ok: true, version: 4 });
