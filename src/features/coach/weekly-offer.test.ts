@@ -21,17 +21,9 @@ describe('shouldOfferWeeklySession', () => {
     expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: true })).toBe(false);
   });
 
-  it('still offers for a week the Coach drafted and the athlete has not discussed', () => {
-    // The gate keys on the conversation, not the plan — otherwise automatic
-    // generation would silence its own offer (coach-overlay issue 04,
-    // decision 4). A drafted week is exactly the week worth discussing.
-    //
-    // Pinned by name for `training-architecture/07`, whose acceptance criteria
-    // ask for exactly this: the Coach now writes structure into the plan in the
-    // background, and an offer keyed on "does this week have a plan" would go
-    // silent the moment it did.
-    expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: false })).toBe(true);
-  });
+  // The "still offers for a drafted week" regression is pinned in
+  // `(app)/layout.test.tsx`: this function takes no plan input, so a test here
+  // could never fail it (review of 07, 2026-09-15).
 
   it('never nudges an athlete who chose Flexible', () => {
     // "Flexible" is a declared absence of a rhythm — ADR 0007 allows exactly one

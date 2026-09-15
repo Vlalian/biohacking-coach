@@ -15,7 +15,7 @@ import {
 } from './coach-repository';
 import { canHeadCoachEditContent } from './head-coach-authority';
 import { getResolvedBlocks, type ResolvedBlocks } from './training-block-service';
-import type { TrainingBlock } from './training-blocks';
+import { isStaleSet, type TrainingBlock } from './training-blocks';
 import type { LinkVisibility } from './link-visibility';
 import {
   applyVisibilityToInputs,
@@ -81,6 +81,12 @@ export type CoachBlocksView = {
   raceName: string;
   raceDate: string;
   version: number;
+  /**
+   * True when a set is stored but no longer ends on race day: the blocks shown
+   * are the arithmetic draft, the rows underneath are the old set, and the
+   * panel must not offer an edit that would land on the latter.
+   */
+  stale: boolean;
   startDate: string;
   blocks: TrainingBlock[];
 };
@@ -183,6 +189,7 @@ function blocksViewOf(horizon: ResolvedBlocks, todayKey: string): CoachBlocksVie
     raceName: horizon.race.name,
     raceDate: horizon.race.date,
     version: horizon.set?.version ?? 0,
+    stale: isStaleSet(horizon.set, horizon.race.date),
     startDate: horizon.set?.startDate ?? todayKey,
     blocks: horizon.blocks,
   };

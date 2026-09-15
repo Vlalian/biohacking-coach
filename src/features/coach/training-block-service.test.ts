@@ -490,6 +490,21 @@ describe('editBlockAsHeadCoach', () => {
     expect(await edit({ expectedVersion: 3 })).toMatchObject({ ok: false, reason: 'conflict', current: { version: 3 } });
   });
 
+  it('refuses stale-set, writing nothing, when the stored set no longer ends on race day', async () => {
+    // The race moved after the set was written. `resolveBlocks` shows the coach
+    // the arithmetic draft, but the stored rows are the old set — an edit by
+    // position would land on blocks the coach never saw and the CAS would let
+    // it through, because the version matches (review of 08, 2026-09-15).
+    getBlockSet.mockResolvedValue(storedSet({ blocks: SHAPED.map((b, i, all) => i === all.length - 1 ? { ...b, endDate: '2027-08-01' } : b) }));
+
+    const result = await edit({ expectedVersion: 1 });
+
+    expect(result).toEqual({ ok: false, reason: 'stale-set' });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+    expect(insertBlockSet).not.toHaveBeenCalled();
+    expect(insertBlockEvent).not.toHaveBeenCalled();
+  });
+
   it('uses the panel version, not the stored one, when the set already existed', async () => {
     getBlockSet.mockResolvedValue(storedSet({ version: 1 }));
 

@@ -1,3 +1,4 @@
+import type { BlockSetProblem } from '@/features/coach/training-blocks';
 import { refusalReason, type RefusalReason } from './identifiers';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
@@ -170,7 +171,10 @@ export function logNarrationFailure(athleteId: string, error: unknown): void {
  * that says so. The reason is a closed literal from the validator, never a
  * string read off the reply.
  */
-export function logBlockAdjustmentRefused(athleteId: string, reason: string): void {
+export function logBlockAdjustmentRefused(
+  athleteId: string,
+  reason: BlockSetProblem | 'malformed',
+): void {
   try {
     console.error(JSON.stringify({ event: 'block_adjustment_refused', athleteId, reason }));
   } catch {

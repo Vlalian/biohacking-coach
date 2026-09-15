@@ -269,6 +269,8 @@ describe('getCoachAthleteView — the Training Blocks are plan structure (traini
         raceName: 'IM',
         raceDate: '2027-08-15',
         version: 3,
+        // An empty stored set fits no race, so the panel must not edit it.
+        stale: true,
         startDate: '2026-09-14',
         blocks: BLOCKS,
       });
@@ -283,6 +285,31 @@ describe('getCoachAthleteView — the Training Blocks are plan structure (traini
     const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
 
     expect(view!.blocks).toMatchObject({ version: 0, startDate: TODAY });
+  });
+
+  it('marks the view stale when the stored set no longer ends on race day, so the panel goes read-only', async () => {
+    getResolvedBlocks.mockResolvedValue({
+      race: RACE,
+      set: { id: 's1', athleteId: 'a1', raceId: 'r1', startDate: '2026-09-14', version: 3, blocks: [{ name: 'Old Taper', endDate: '2027-08-01', authoredBy: 'coach_ai' }] },
+      blocks: BLOCKS,
+    });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+
+    const view = await getCoachAthleteView('c1', 'a1', TODAY);
+    expect(view!.blocks).toMatchObject({ stale: true, version: 3 });
+  });
+
+  it('is not stale when the set fits the race, nor when nothing is stored', async () => {
+    getResolvedBlocks.mockResolvedValue({
+      race: RACE,
+      set: { id: 's1', athleteId: 'a1', raceId: 'r1', startDate: '2026-09-14', version: 3, blocks: [{ name: 'Taper', endDate: '2027-08-15', authoredBy: 'coach_ai' }] },
+      blocks: BLOCKS,
+    });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    expect((await getCoachAthleteView('c1', 'a1', TODAY))!.blocks).toMatchObject({ stale: false });
+
+    getResolvedBlocks.mockResolvedValue({ race: RACE, set: null, blocks: BLOCKS });
+    expect((await getCoachAthleteView('c1', 'a1', TODAY))!.blocks).toMatchObject({ stale: false });
   });
 
   it('is null when the athlete has no Target Race', async () => {

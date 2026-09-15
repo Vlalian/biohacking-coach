@@ -34,6 +34,7 @@ import {
   type BlockEditProblem,
   type TrainingBlock,
   type TrainingBlockSpec,
+  fitsRace,
 } from './training-blocks';
 import { weekFeedbackFrom } from './weekly-session';
 
@@ -272,6 +273,12 @@ export interface BlockSetSnapshot {
 export type EditBlockResult =
   | { ok: true; version: number }
   | { ok: false; reason: 'not-linked' | 'no-race' }
+  // The stored set no longer ends on race day (the race moved). The coach's
+  // panel shows the arithmetic draft; the rows underneath are the old set, so
+  // an edit by position would land on blocks nobody is looking at — and the
+  // CAS would let it through, because the version matches. Refused until the
+  // Coach redraws the set (07) or a Head Coach re-pins it, which is not built.
+  | { ok: false; reason: 'stale-set' }
   | { ok: false; reason: 'invalid'; problem: BlockEditProblem }
   // The set changed under the coach — 07's background draft, or another
   // session. The refusal carries what won (ADR 0010).
@@ -295,9 +302,17 @@ async function setToEdit(
   athleteId: string,
   race: RaceRow,
   today: string,
-): Promise<{ set: BlockSetRecord; materialised: boolean } | { conflict: BlockSetSnapshot } | null> {
+): Promise<
+  | { set: BlockSetRecord; materialised: boolean }
+  | { conflict: BlockSetSnapshot }
+  // A word rather than `{ stale: true }`: the value of such a flag is never
+  // read (the key is the discriminant), so a boolean there is a literal no test
+  // can pin. The gate said so.
+  | 'stale'
+  | null
+> {
   const existing = await getBlockSet(athleteId, race.id);
-  if (existing) return { set: existing, materialised: false };
+  if (existing) return fitsRace(existing, race.date) ? { set: existing, materialised: false } : 'stale';
 
   const draft = trainingBlocks(today, race.date).map(({ name, endDate, authoredBy }) => ({
     name,
@@ -369,6 +384,7 @@ async function loadTarget(
 
   const target = await setToEdit(athleteId, race, today);
   if (!target) return { ok: false, reason: 'no-race' };
+  if (target === 'stale') return { ok: false, reason: 'stale-set' };
   if ('conflict' in target) return { ok: false, reason: 'conflict', current: target.conflict };
   return { race, ...target };
 }

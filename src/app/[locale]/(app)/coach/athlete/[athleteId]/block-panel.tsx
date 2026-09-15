@@ -27,11 +27,33 @@ export interface BlockPanelSet {
   raceName: string;
   raceDate: string;
   version: number;
+  /** The stored set no longer ends on race day — the rows are the arithmetic draft, not the set. */
+  stale: boolean;
   startDate: string;
   blocks: TrainingBlockSpec[];
 }
 
 type Row = { name: string; endDate: string };
+
+/**
+ * What the panel believes once a save has landed: the edited row as the coach
+ * typed it, authored by them, and the version the server just returned.
+ *
+ * Pure and exported for its test. The panel keeps the set in state, and
+ * `router.refresh()` re-renders the page without resetting that state — so
+ * without this, the second save in one visit re-sent the version of the first
+ * render and was refused as a conflict the coach did not cause (review of 08,
+ * 2026-09-15).
+ */
+export function afterSave(set: BlockPanelSet, position: number, row: Row, version: number): BlockPanelSet {
+  return {
+    ...set,
+    version,
+    blocks: set.blocks.map((b, i) =>
+      i === position - 1 ? { name: row.name.trim(), endDate: row.endDate, authoredBy: 'head_coach' } : b,
+    ),
+  };
+}
 
 const AUTHOR_KEY: Record<BlockAuthor, 'authorDraft' | 'authorCoach' | 'authorYou'> = {
   arithmetic: 'authorDraft',
@@ -66,6 +88,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
         current.version,
       );
       if (result.ok) {
+        setCurrent(afterSave(current, position, row, result.version));
         router.refresh();
         return;
       }
@@ -89,6 +112,23 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
         {t('toward', { race: current.raceName, date: current.raceDate })}
       </p>
 
+      {current.stale && (
+        // The race moved and the stored set no longer fits it. What is shown is
+        // the arithmetic draft; what an edit would land on is the old set. No
+        // inputs, no save — the Coach redraws it on the next background run.
+        <p className="mb-3 text-sm text-muted-foreground">{t('stale')}</p>
+      )}
+
+      {current.stale ? (
+        <ol className="flex flex-col gap-1">
+          {current.blocks.map((block, i) => (
+            <li key={i + 1} className="flex items-baseline justify-between gap-3 text-sm">
+              <span>{block.name}</span>
+              <span className="font-mono text-xs text-muted-foreground">{block.endDate}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
       <ol className="flex flex-col gap-2">
         {current.blocks.map((block, i) => {
           const position = i + 1;
@@ -138,6 +178,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
           );
         })}
       </ol>
+      )}
 
       {notice && <p className="mt-2 text-sm text-red-600">{notice}</p>}
     </section>

@@ -655,6 +655,7 @@
     "authorCoach": "Coach",
     "authorYou": "Dig",
     "save": "Gem",
+    "stale": "Blokkene passer ikke længere til løbsdatoen — Coachen tegner dem op igen. Intet at redigere endnu.",
     "conflict": "Ændret af en anden — det her er det gældende sæt.",
     "error": "Det virkede ikke ({reason})."
   }

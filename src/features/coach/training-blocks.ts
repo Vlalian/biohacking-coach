@@ -249,6 +249,13 @@ function spanProblemOf(blocks: TrainingBlockSpec[], startDate: string): BlockSet
   return null;
 }
 
+/** The set as a whole: how many, whether the dates are dates, whether it ends on race day. */
+function shapeProblemOf(blocks: TrainingBlockSpec[], raceDate: string): BlockSetProblem | null {
+  if (blocks.length < MIN_BLOCKS || blocks.length > MAX_BLOCKS) return 'count';
+  if (!blocks.every((b) => isValidDateKey(b.endDate))) return 'date';
+  return blocks[blocks.length - 1].endDate === raceDate ? null : 'end';
+}
+
 /**
  * Whether a set may be stored and shown to the athlete.
  *
@@ -258,13 +265,6 @@ function spanProblemOf(blocks: TrainingBlockSpec[], startDate: string): BlockSet
  * tool reply, or a Head Coach's edit — has to say *what* was wrong, and a
  * validator that only says "no" makes that sentence a guess.
  */
-/** The set as a whole: how many, whether the dates are dates, whether it ends on race day. */
-function shapeProblemOf(blocks: TrainingBlockSpec[], raceDate: string): BlockSetProblem | null {
-  if (blocks.length < MIN_BLOCKS || blocks.length > MAX_BLOCKS) return 'count';
-  if (!blocks.every((b) => isValidDateKey(b.endDate))) return 'date';
-  return blocks[blocks.length - 1].endDate === raceDate ? null : 'end';
-}
-
 export function validateBlockSet(
   blocks: TrainingBlockSpec[],
   startDate: string,
@@ -316,10 +316,29 @@ export function resolveBlocks(
   stored: StoredBlockSet | null,
 ): TrainingBlock[] {
   if (!race) return [];
-  if (stored && stored.blocks[stored.blocks.length - 1]?.endDate === race.date) {
-    return expandBlockSet(stored);
-  }
+  if (stored && fitsRace(stored, race.date)) return expandBlockSet(stored);
   return trainingBlocks(today, race.date);
+}
+
+/**
+ * Whether a stored set still describes this race: its last block ends on race
+ * day. The one place that question is answered — the resolver asks it to decide
+ * what the athlete sees, the coach's view asks it to decide whether the panel
+ * may edit, and the Head Coach's write asks it to refuse an edit that would land
+ * on blocks nobody is looking at. Three readers, one rule.
+ */
+export function fitsRace(set: StoredBlockSet, raceDate: string): boolean {
+  return set.blocks[set.blocks.length - 1]?.endDate === raceDate;
+}
+
+/**
+ * The coach-view question in one word: is there a stored set that no longer
+ * fits? Nothing stored is not stale — the athlete is on the arithmetic draft by
+ * design, and an edit materialises it. Only a set that exists and misses race
+ * day is a set nobody should be editing by position.
+ */
+export function isStaleSet(set: StoredBlockSet | null, raceDate: string): boolean {
+  return set !== null && !fitsRace(set, raceDate);
 }
 
 // ── The Head Coach's edit (slice 08) ──────────────────────────────────────────
@@ -348,20 +367,6 @@ function boundaryProblem(set: StoredBlockSet, index: number, endDate: string): B
   return endDate > previousEnd && endDate < nextEnd ? null : 'boundary';
 }
 
-/**
- * One block renamed and/or re-bounded by the Head Coach, as the new set — or a
- * refusal (`training-architecture/08`).
- *
- * Rename and re-boundary only: adding or removing a block is not the Head
- * Coach's authority here, and the shape of this function makes that so. The
- * edited block becomes `head_coach`-authored — the mark 07's gate reads to
- * leave the set alone — and every other block's author is untouched, because a
- * human editing one block did not author the others.
- *
- * The next block's start follows automatically: starts are derived, so moving
- * an end moves exactly one boundary. The last block's end is race day and
- * cannot move (the plan pins to the race, never the other way round).
- */
 /** What can be wrong with a new end date, before the set validator sees the whole set. */
 function endDateProblemOf(set: StoredBlockSet, index: number, endDate: string): BlockEditProblem | null {
   if (index === set.blocks.length - 1) return 'last-block-end';
@@ -376,6 +381,20 @@ function editProblemOf(set: StoredBlockSet, index: number, input: BlockEditInput
   return input.endDate === undefined ? null : endDateProblemOf(set, index, input.endDate);
 }
 
+/**
+ * One block renamed and/or re-bounded by the Head Coach, as the new set — or a
+ * refusal (`training-architecture/08`).
+ *
+ * Rename and re-boundary only: adding or removing a block is not the Head
+ * Coach's authority here, and the shape of this function makes that so. The
+ * edited block becomes `head_coach`-authored — the mark 07's gate reads to
+ * leave the set alone — and every other block's author is untouched, because a
+ * human editing one block did not author the others.
+ *
+ * The next block's start follows automatically: starts are derived, so moving
+ * an end moves exactly one boundary. The last block's end is race day and
+ * cannot move (the plan pins to the race, never the other way round).
+ */
 export function applyBlockEdit(
   set: StoredBlockSet,
   position: number,

@@ -655,6 +655,7 @@
     "authorCoach": "Coach",
     "authorYou": "You",
     "save": "Save",
+    "stale": "These blocks no longer match the race date — the Coach will redraw them. Nothing to edit here yet.",
     "conflict": "Changed by someone else — this is the current set.",
     "error": "That didn't work ({reason})."
   }

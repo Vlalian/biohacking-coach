@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { addDays } from '@/lib/date';
 import {
+  fitsRace,
+  isStaleSet,
   applyBlockEdit,
   blockPosition,
   currentBlock,
@@ -457,5 +459,30 @@ describe('an athlete with no Head Coach is untouched by slice 08', () => {
     const blocks = resolveBlocks('2026-09-14', { date: '2027-03-14' }, null);
     expect(blocks.some((b) => b.authoredBy === 'head_coach')).toBe(false);
     expect(blocks).toMatchSnapshot();
+  });
+});
+
+describe('fitsRace — the one test of whether a stored set still describes the race', () => {
+  const set = {
+    startDate: '2026-09-01',
+    blocks: [
+      { name: 'Build', endDate: '2027-01-10', authoredBy: 'coach_ai' as const },
+      { name: 'Taper', endDate: '2027-08-15', authoredBy: 'coach_ai' as const },
+    ],
+  };
+
+  it('fits when the last block ends on race day, and not otherwise', () => {
+    expect(fitsRace(set, '2027-08-15')).toBe(true);
+    expect(fitsRace(set, '2027-08-29')).toBe(false);
+  });
+
+  it('an empty set fits no race', () => {
+    expect(fitsRace({ startDate: '2026-09-01', blocks: [] }, '2027-08-15')).toBe(false);
+  });
+
+  it('isStaleSet: nothing stored is not stale; a stored set that misses race day is', () => {
+    expect(isStaleSet(null, '2027-08-15')).toBe(false);
+    expect(isStaleSet(set, '2027-08-15')).toBe(false);
+    expect(isStaleSet(set, '2027-08-29')).toBe(true);
   });
 });

@@ -20,13 +20,14 @@ vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) })
 // render never calls it.
 vi.mock('./block-actions', () => ({ editBlockAction: vi.fn() }));
 
-const { BlockPanel } = await import('./block-panel');
+const { BlockPanel, afterSave } = await import('./block-panel');
 
 const SET = {
   raceId: 'r1',
   raceName: 'Ironman Copenhagen',
   raceDate: '2027-03-14',
   version: 3,
+  stale: false,
   startDate: '2026-09-14',
   blocks: [
     { name: 'Block 1 of 3', endDate: '2026-11-15', authoredBy: 'arithmetic' as const },
@@ -74,6 +75,17 @@ describe('BlockPanel', () => {
     expect(html).not.toMatch(/add|remove|delete/i);
   });
 
+  it('goes read-only, with a word saying why, when the stored set no longer fits the race', () => {
+    // A race that moved leaves the athlete on the arithmetic draft while the
+    // stored rows are the old set; an edit here would land on blocks the coach
+    // never saw (review of 08, 2026-09-15). Show the blocks, offer no edit.
+    const stale = renderToStaticMarkup(<BlockPanel athleteId="a1" set={{ ...SET, stale: true }} />);
+    expect(stale).toContain('stale()');
+    expect(stale).not.toContain('<input');
+    expect(stale).not.toContain('<button');
+    expect(stale).toContain('Sharpen the Bike');
+  });
+
   it('renders nothing for an athlete with no Target Race', () => {
     expect(renderToStaticMarkup(<BlockPanel athleteId="a1" set={null} />)).toBe('');
   });
@@ -106,5 +118,24 @@ describe('the block edit has exactly one production caller', () => {
       'app/[locale]/(app)/coach/athlete/[athleteId]/block-actions.ts',
       'features/coach/training-block-service.ts',
     ]);
+  });
+});
+
+describe('afterSave — what the panel believes once a save has landed', () => {
+  // The panel keeps the set in state and `router.refresh()` does not reset
+  // state, so the *second* save used to send the version of the first render
+  // and be refused as a conflict the coach did not cause (review of 08).
+  it('carries the new version and the edited row, authored by the coach', () => {
+    const next = afterSave(SET, 2, { name: 'Bike Focus', endDate: '2027-01-24' }, 4);
+    expect(next.version).toBe(4);
+    expect(next.blocks[1]).toEqual({ name: 'Bike Focus', endDate: '2027-01-24', authoredBy: 'head_coach' });
+    expect(next.blocks[0]).toEqual(SET.blocks[0]);
+    expect(next.blocks[2]).toEqual(SET.blocks[2]);
+  });
+
+  it('two saves in a row each send the version the last save returned', () => {
+    const first = afterSave(SET, 1, { name: 'Base', endDate: SET.blocks[0].endDate }, 4);
+    const second = afterSave(first, 1, { name: 'Base Miles', endDate: SET.blocks[0].endDate }, 5);
+    expect([SET.version, first.version, second.version]).toEqual([3, 4, 5]);
   });
 });

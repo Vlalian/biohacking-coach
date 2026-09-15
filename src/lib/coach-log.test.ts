@@ -213,3 +213,11 @@ describe('logCoachFailure — the stop reason travels only when there is one', (
     s.mockRestore();
   });
 });
+
+describe('logBlockAdjustmentRefused — the reason is a closed literal', () => {
+  it('refuses a free string at the type level, so no reply text can be logged as a reason', () => {
+    // @ts-expect-error — only a validator problem or 'malformed' is a reason.
+    expect(() => logBlockAdjustmentRefused('a1', 'anything the model said')).not.toThrow();
+    expect(() => logBlockAdjustmentRefused('a1', 'malformed')).not.toThrow();
+  });
+});
