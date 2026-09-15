@@ -1,3 +1,4 @@
+import type { BlockSetProblem } from '@/features/coach/training-blocks';
 import { refusalReason, type RefusalReason } from './identifiers';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
@@ -42,13 +43,24 @@ import { EmptyCoachReplyError } from '@/features/coach/coach-client';
  * than deliberately detailed, because the alternative is echoing an attacker-
  * or athlete-controlled string into a log line.
  */
+// Most specific first: every entry below `EmptyCoachReplyError` is also an
+// `Error`, so the generic row has to be last. Built per call rather than at
+// module load so a test that mocks the Coach client without the error class
+// does not fail this module's import.
+function errorClasses(): [new (...args: never[]) => unknown, string][] {
+  return [
+    [EmptyCoachReplyError, 'empty_coach_reply'],
+    [TypeError, 'type_error'],
+    [SyntaxError, 'syntax_error'],
+    [RangeError, 'range_error'],
+    [Error, 'error'],
+  ];
+}
+
 function errorType(error: unknown): string {
-  if (error instanceof EmptyCoachReplyError) return 'empty_coach_reply';
-  if (error instanceof TypeError) return 'type_error';
-  if (error instanceof SyntaxError) return 'syntax_error';
-  if (error instanceof RangeError) return 'range_error';
-  if (error instanceof Error) return 'error';
-  return typeof error === 'object' && error === null ? 'null' : typeof error;
+  const known = errorClasses().find(([klass]) => error instanceof klass);
+  if (known) return known[1];
+  return error === null ? 'null' : typeof error;
 }
 
 /**
@@ -62,7 +74,13 @@ function errorType(error: unknown): string {
  * escape hatch is what broke — and it shares this log rather than having its own
  * so the surfaces can be compared in one query.
  */
-export type ModelSurface = 'coach_chat' | 'weekly_session' | 'coach_briefing' | 'feedback';
+export type ModelSurface =
+  | 'coach_chat'
+  | 'weekly_session'
+  | 'coach_briefing'
+  | 'feedback'
+  /** The background Training Block adjustment (`training-architecture/07`); no conversation. */
+  | 'block_adjustment';
 
 export interface CoachFailure {
   surface: ModelSurface;
@@ -136,6 +154,44 @@ export function logNarrationFailure(athleteId: string, error: unknown): void {
         athleteId,
         errorType: errorType(error),
       }),
+    );
+  } catch {
+    // Deliberately silent: see above.
+  }
+}
+
+/**
+ * Writes one structured line for a Training Block adjustment the app refused to
+ * store (`training-architecture/07`).
+ *
+ * The Coach answered — no failure to log in the sense above — but what it
+ * handed back was not a set the athlete can be shown: the wrong shape
+ * (`malformed`), or one `validateBlockSet` turned down, named by its reason. The
+ * athlete stays on the arithmetic draft either way, and this is the only place
+ * that says so. The reason is a closed literal from the validator, never a
+ * string read off the reply.
+ */
+export function logBlockAdjustmentRefused(
+  athleteId: string,
+  reason: BlockSetProblem | 'malformed',
+): void {
+  try {
+    console.error(JSON.stringify({ event: 'block_adjustment_refused', athleteId, reason }));
+  } catch {
+    // Deliberately silent: see above.
+  }
+}
+
+/**
+ * Writes one structured line when the background Training Block adjustment
+ * threw past the service (`training-architecture/07`). The service catches the
+ * Coach call itself; this is the last net under `after()`, where a throw would
+ * otherwise be lost with the request. Same discipline: opaque id, error class.
+ */
+export function logBlockAdjustmentFailure(athleteId: string, error: unknown): void {
+  try {
+    console.error(
+      JSON.stringify({ event: 'block_adjustment_failed', athleteId, errorType: errorType(error) }),
     );
   } catch {
     // Deliberately silent: see above.

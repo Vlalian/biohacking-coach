@@ -9,7 +9,7 @@ import { buildChatPrompt } from './prompts';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getResolvedBlocks } from './training-block-service';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
 import { buildWeeklyCheckIn } from './weekly-session';
@@ -69,7 +69,7 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<string> {
-  const [equipmentItems, weekSessions, reference, targetRace, checkInRow] = await Promise.all([
+  const [equipmentItems, weekSessions, reference, horizon, checkInRow] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
     referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
@@ -77,7 +77,7 @@ async function renderSystem(
     // tomorrow's intervals?" gets asked, and the answer depends on how far out
     // the race is — a Coach with no horizon here would contradict the one the
     // athlete just planned a week with.
-    getTargetRace(athlete.id),
+    getResolvedBlocks(athlete.id, today),
     // The same Check-in the Weekly Session reads. Chat is where "should I do
     // tomorrow's intervals?" gets asked, and an athlete who reported low energy
     // on Monday should not have to say it again on Wednesday.
@@ -95,13 +95,16 @@ async function renderSystem(
     1,
     language,
     equipmentItems,
-    targetRace ? { name: targetRace.name, date: targetRace.date } : null,
+    horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
     // No capacity block in Chat yet — that is the Weekly Session's surface.
     null,
     // The athlete's own sentence, for the same reason Chat reads the Check-in at
     // all: someone who wrote "calf tight since Tuesday" on Monday should not
     // have to say it again on Wednesday.
     notableSignalFrom(checkInRow),
+    // The same resolved blocks the Weekly Session plans inside, so Chat names
+    // the same phase the athlete just planned a week with.
+    horizon.blocks,
   );
 
   // The Reference is matched against the week by id here, where ids still

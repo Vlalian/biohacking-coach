@@ -230,3 +230,222 @@ describe('composeNarration — a batch', () => {
     expect(composeNarration([], NAMES, t, weekday)).toBeNull();
   });
 });
+
+describe('composeNarration — the Coach announcing its own blocks (training-architecture/07)', () => {
+  const drafted = (payload: unknown): NarratableEvent => ({
+    id: 'ev_b',
+    actorId: null,
+    type: 'blocks_drafted',
+    payload,
+    createdAt: new Date('2026-09-14T08:00:00Z'),
+  });
+
+  it('names the race and every block, and names no human — not even the fallback', () => {
+    const out = composeNarration(
+      [
+        drafted({
+          raceId: 'r1',
+          raceName: 'Ironman Copenhagen',
+          blocks: [
+            { name: 'Build the Volume', endDate: '2027-01-10' },
+            { name: 'Taper', endDate: '2027-08-15' },
+          ],
+        }),
+      ],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+
+    expect(out).toContain('blocksDrafted(');
+    expect(out).toContain('race=Ironman Copenhagen');
+    expect(out).toContain('Build the Volume');
+    expect(out).toContain('Taper');
+    expect(out).not.toContain('yourHeadCoach');
+    expect(out).not.toContain('coach=');
+    expect(out).not.toContain('Lars');
+  });
+
+  it('degrades a malformed payload to the sentence with no detail', () => {
+    for (const payload of [null, {}, { raceName: 'X' }, { raceName: 'X', blocks: 'four' }]) {
+      const out = composeNarration([drafted(payload)], {}, t, weekday);
+      expect(out).toBe('single(clause=blocksDraftedNoDetail)');
+    }
+  });
+
+  it('renders the unrealistic flag with the race and the reason', () => {
+    const out = composeNarration(
+      [
+        {
+          id: 'ev_u',
+          actorId: null,
+          type: 'race_flagged_unrealistic',
+          payload: { raceId: 'r1', raceName: 'Ironman Copenhagen', reason: 'eleven months is short' },
+          createdAt: new Date('2026-09-14T08:00:00Z'),
+        },
+      ],
+      {},
+      t,
+      weekday,
+    );
+
+    expect(out).toContain('raceUnrealistic(');
+    expect(out).toContain('race=Ironman Copenhagen');
+    expect(out).toContain('reason=eleven months is short');
+    expect(out).not.toContain('yourHeadCoach');
+  });
+});
+
+describe('composeNarration — malformed payloads degrade, never throw', () => {
+  const at = new Date('2026-08-19T08:00:00Z');
+
+  it('reads a whitespace-only or non-string field as absent', () => {
+    const out = composeNarration(
+      [{ id: 'e', actorId: null, type: 'session_prescribed', payload: { date: '  ', type: 7 }, createdAt: at }],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=prescribedNoType(coach=yourHeadCoach,day=recently))');
+  });
+
+  it('trims a field before rendering it', () => {
+    const out = composeNarration(
+      [{ id: 'e', actorId: null, type: 'session_prescribed', payload: { date: '2026-08-20', type: ' Endurance ' }, createdAt: at }],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=prescribed(coach=yourHeadCoach,day=day:2026-08-20,type=Endurance))');
+  });
+
+  it('survives a null payload, a primitive payload, and a null on the path', () => {
+    for (const payload of [null, 'x', { to: null }, { to: { date: null } }]) {
+      const out = composeNarration(
+        [{ id: 'e', actorId: null, type: 'session_edited', payload, createdAt: at }],
+        {},
+        t,
+        weekday,
+      );
+      expect(out).toBe('single(clause=editedNoType(coach=yourHeadCoach,day=recently))');
+    }
+  });
+
+  it('falls back to the from-date when an edit carries no to-date', () => {
+    const out = composeNarration(
+      [{ id: 'e', actorId: null, type: 'session_edited', payload: { from: { date: '2026-08-20' } }, createdAt: at }],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toContain('day=day:2026-08-20');
+  });
+});
+
+describe('composeNarration — the Coach’s own clauses at their edges', () => {
+  const at = new Date('2026-09-14T08:00:00Z');
+
+  it('falls back to no detail on an empty block list or an unnamed block', () => {
+    for (const blocks of [[], [{ name: 'A' }, {}], [{ endDate: '2027-01-01' }]]) {
+      const out = composeNarration(
+        [{ id: 'e', actorId: null, type: 'blocks_drafted', payload: { raceName: 'IM', blocks }, createdAt: at }],
+        {},
+        t,
+        weekday,
+      );
+      expect(out).toBe('single(clause=blocksDraftedNoDetail)');
+    }
+  });
+
+  it('joins the block names with a middle dot', () => {
+    const out = composeNarration(
+      [
+        {
+          id: 'e',
+          actorId: null,
+          type: 'blocks_drafted',
+          payload: { raceName: 'IM', blocks: [{ name: 'Base' }, { name: 'Build' }, { name: 'Taper' }] },
+          createdAt: at,
+        },
+      ],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blocksDrafted(race=IM,blocks=Base · Build · Taper))');
+  });
+
+  it('renders the unrealistic flag with fallbacks for a missing race name and reason', () => {
+    const out = composeNarration(
+      [{ id: 'e', actorId: null, type: 'race_flagged_unrealistic', payload: {}, createdAt: at }],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=raceUnrealistic(race=yourRace,reason=noReason))');
+  });
+});
+
+describe('composeNarration — a Head Coach edits a block (training-architecture/08)', () => {
+  const at = new Date('2026-09-14T08:00:00Z');
+  const edited = (from: { name: string; endDate: string }, to: { name: string; endDate: string }): NarratableEvent => ({
+    id: 'ev_e',
+    actorId: 'coach_1',
+    type: 'block_edited',
+    payload: { raceId: 'r1', position: 2, from, to },
+    createdAt: at,
+  });
+
+  it('narrates a rename, attributed to the acting coach', () => {
+    const out = composeNarration(
+      [edited({ name: 'Sharpen the Bike', endDate: '2027-05-02' }, { name: 'Long Rides', endDate: '2027-05-02' })],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blockRenamed(coach=Lars,from=Sharpen the Bike,to=Long Rides))');
+  });
+
+  it('narrates a moved end with the new date, falling back to "your Head Coach"', () => {
+    const out = composeNarration(
+      [edited({ name: 'Sharpen the Bike', endDate: '2027-05-02' }, { name: 'Sharpen the Bike', endDate: '2027-04-25' })],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blockRebounded(coach=yourHeadCoach,name=Sharpen the Bike,day=2027-04-25))');
+  });
+
+  it('narrates both when both changed', () => {
+    const out = composeNarration(
+      [edited({ name: 'Sharpen the Bike', endDate: '2027-05-02' }, { name: 'Long Rides', endDate: '2027-04-25' })],
+      {},
+      t,
+      weekday,
+    );
+    expect(out).toBe(
+      'single(clause=blockRenamedAndRebounded(coach=yourHeadCoach,from=Sharpen the Bike,to=Long Rides,day=2027-04-25))',
+    );
+  });
+
+  it('degrades a malformed payload to the plain sentence', () => {
+    const side = { name: 'A', endDate: '2027-01-01' };
+    for (const payload of [
+      null,
+      {},
+      { from: { name: 'A' }, to: side },
+      { from: { endDate: '2027-01-01' }, to: side },
+      { from: side, to: { name: 'A' } },
+      { from: side, to: { endDate: '2027-01-01' } },
+      { from: side, to: side },
+    ]) {
+      const out = composeNarration(
+        [{ id: 'e', actorId: null, type: 'block_edited', payload, createdAt: at }],
+        {},
+        t,
+        weekday,
+      );
+      expect(out).toBe('single(clause=blockEditedNoDetail(coach=yourHeadCoach))');
+    }
+  });
+});

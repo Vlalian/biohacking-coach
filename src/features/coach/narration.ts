@@ -15,16 +15,28 @@
  * something a build can prove rather than something a human has to go and read.
  */
 
-/** A Head Coach action worth telling the athlete about. */
+/** The Coach's own two announcements (`training-architecture/07`). */
+export type CoachNarratableType = 'blocks_drafted' | 'race_flagged_unrealistic';
+
+/** The Head Coach's session actions — the events {@link clause} renders. */
+export type HeadCoachNarratableType =
+  | 'session_prescribed'
+  | 'session_edited'
+  | 'session_deleted'
+  | 'session_moved';
+
+/** A Head Coach's Training Block edit (`training-architecture/08`) — rendered by {@link blockClause}. */
+export type BlockNarratableType = 'block_edited';
+
+/** A plan change by another hand worth telling the athlete about. */
 export interface NarratableEvent {
   id: string;
-  /** The acting Head Coach's opaque coach id — null only for malformed history. */
+  /**
+   * The acting Head Coach's opaque coach id. Null for the Coach's own events,
+   * which have no actor to name — and null for malformed Head Coach history.
+   */
   actorId: string | null;
-  type:
-    | 'session_prescribed'
-    | 'session_edited'
-    | 'session_deleted'
-    | 'session_moved';
+  type: HeadCoachNarratableType | BlockNarratableType | CoachNarratableType;
   /** `jsonb`, so genuinely unknown until narrowed. */
   payload: unknown;
   createdAt: Date;
@@ -53,7 +65,9 @@ function field(payload: unknown, ...path: string[]): string | undefined {
     if (node === null || typeof node !== 'object') return undefined;
     node = (node as Record<string, unknown>)[key];
   }
-  return typeof node === 'string' && node.trim() !== '' ? node.trim() : undefined;
+  // An empty or whitespace-only string is absent: every caller treats a falsy
+  // field as missing, so `||` is the whole rule rather than a separate check.
+  return typeof node === 'string' ? node.trim() || undefined : undefined;
 }
 
 /**
@@ -73,7 +87,7 @@ function field(payload: unknown, ...path: string[]): string | undefined {
  * What a move needs instead is the second day: "moved" is the one action whose
  * meaning is the pair, not the destination.
  */
-function subject(event: NarratableEvent): {
+function subject(event: NarratableEvent & { type: HeadCoachNarratableType }): {
   day?: string;
   type?: string;
   fromDay?: string;
@@ -96,6 +110,47 @@ function subject(event: NarratableEvent): {
   }
 }
 
+/**
+ * The block names out of a `blocks_drafted` payload, or undefined when the list
+ * is not there or holds anything that is not a named block. Half a list would
+ * announce half the plan, so it is all or the no-detail sentence.
+ */
+function blockNames(payload: unknown): string[] | undefined {
+  const blocks = (payload as { blocks?: unknown } | null)?.blocks;
+  if (!Array.isArray(blocks) || blocks.length === 0) return undefined;
+  const names = blocks.map((b) => field(b, 'name'));
+  return names.every((n): n is string => n !== undefined) ? names : undefined;
+}
+
+/** Whether an event is the Coach's own, rendered by {@link coachClause}. */
+function isCoachEvent(
+  event: NarratableEvent,
+): event is NarratableEvent & { type: CoachNarratableType } {
+  return event.type === 'blocks_drafted' || event.type === 'race_flagged_unrealistic';
+}
+
+/**
+ * The Coach speaking about its own change — so there is no `{coach}` in these
+ * keys, and no fallback to "your Head Coach". The distinction is the point of
+ * the acceptance criterion: an automatic adjustment is announced as the Coach's,
+ * naming no human. A `coach_ai` event pushed through {@link clause} would have
+ * been attributed to a person who did nothing.
+ */
+function coachClause(event: NarratableEvent, t: Translate): string {
+  const race = field(event.payload, 'raceName');
+  // No weekday here, unlike every session clause: a race is months out and its
+  // weekday says nothing, so the sentence names the race and the reason only.
+  if (event.type === 'race_flagged_unrealistic') {
+    return t('raceUnrealistic', {
+      race: race ?? t('yourRace'),
+      reason: field(event.payload, 'reason') ?? t('noReason'),
+    });
+  }
+  const names = blockNames(event.payload);
+  if (!race || !names) return t('blocksDraftedNoDetail');
+  return t('blocksDrafted', { race, blocks: names.join(' · ') });
+}
+
 const CLAUSE_KEY = {
   session_prescribed: 'prescribed',
   session_edited: 'edited',
@@ -103,9 +158,25 @@ const CLAUSE_KEY = {
   session_moved: 'moved',
 } as const;
 
+/**
+ * Which message key a Head Coach event renders with.
+ *
+ * A delete never carries a type, and any payload can be malformed — so there
+ * is a typeless phrasing for every kind rather than a placeholder word.
+ *
+ * A move varies on the other axis. It never carries a type either, so the
+ * `NoType` suffix would be its only spelling and says nothing; what it can
+ * lose is the day it came *from*, and a move missing that is a different
+ * sentence rather than a vaguer one.
+ */
+function clauseKey(type: HeadCoachNarratableType, sessionType?: string, fromDay?: string): string {
+  if (type === 'session_moved') return fromDay ? 'moved' : 'movedNoFrom';
+  return `${CLAUSE_KEY[type]}${sessionType ? '' : 'NoType'}`;
+}
+
 /** One event as one sentence, attributed to the coach who actually acted. */
 function clause(
-  event: NarratableEvent,
+  event: NarratableEvent & { type: HeadCoachNarratableType },
   coachFirstNames: Record<string, string>,
   t: Translate,
   weekdayOf: WeekdayOf,
@@ -123,19 +194,7 @@ function clause(
     ...(type ? { type } : {}),
     ...(fromDay ? { fromDay: weekdayOf(fromDay) } : {}),
   };
-  // A delete never carries a type, and any payload can be malformed — so there
-  // is a typeless phrasing for every kind rather than a placeholder word.
-  //
-  // A move varies on the other axis. It never carries a type either, so the
-  // `NoType` suffix would be its only spelling and says nothing; what it can
-  // lose is the day it came *from*, and a move missing that is a different
-  // sentence rather than a vaguer one.
-  const key =
-    event.type === 'session_moved'
-      ? fromDay
-        ? 'moved'
-        : 'movedNoFrom'
-      : `${CLAUSE_KEY[event.type]}${type ? '' : 'NoType'}`;
+  const key = clauseKey(event.type, type, fromDay);
   // **The Head Coach's note is deliberately not read** (Mads, 2026-08-21). It
   // is the one honest source of a *reason* — "he wants you race-sharp" — and
   // dropping it costs real warmth. But it is human free text, and this sentence
@@ -149,6 +208,53 @@ function clause(
   // Restoring it for the athlete alone would need the transcript to separate
   // what is displayed from what is replayed to the model, which it does not.
   return t(key, values);
+}
+
+/**
+ * A Head Coach's block edit as one sentence (`training-architecture/08`).
+ *
+ * Attributed like every other human clause — the acting coach's name, or "your
+ * Head Coach". The end date is rendered as the date key itself, not a weekday:
+ * a block ends months out, and its weekday says nothing. What changed decides
+ * the sentence: the name, the end, or both; a payload missing either side
+ * degrades to the plain "changed a block" rather than inventing a before.
+ */
+type BlockSide = { name: string; day: string };
+
+/** One side of a block edit, or undefined when the payload does not carry both halves. */
+function blockSide(payload: unknown, side: 'from' | 'to'): BlockSide | undefined {
+  const name = field(payload, side, 'name');
+  const day = field(payload, side, 'endDate');
+  return name && day ? { name, day } : undefined;
+}
+
+/** Which sentence a block edit is, from what actually changed — the key and exactly its values. */
+function blockEditSentence(
+  from: BlockSide,
+  to: BlockSide,
+): { key: string; values: Record<string, string> } {
+  const renamed = from.name !== to.name;
+  const rebounded = from.day !== to.day;
+  if (renamed && rebounded) {
+    return { key: 'blockRenamedAndRebounded', values: { from: from.name, to: to.name, day: to.day } };
+  }
+  if (renamed) return { key: 'blockRenamed', values: { from: from.name, to: to.name } };
+  return rebounded
+    ? { key: 'blockRebounded', values: { name: to.name, day: to.day } }
+    : { key: 'blockEditedNoDetail', values: {} };
+}
+
+function blockClause(
+  event: NarratableEvent,
+  coachFirstNames: Record<string, string>,
+  t: Translate,
+): string {
+  const coach = (event.actorId ? coachFirstNames[event.actorId] : undefined) ?? t('yourHeadCoach');
+  const from = blockSide(event.payload, 'from');
+  const to = blockSide(event.payload, 'to');
+  if (!from || !to) return t('blockEditedNoDetail', { coach });
+  const sentence = blockEditSentence(from, to);
+  return t(sentence.key, { coach, ...sentence.values });
 }
 
 /**
@@ -172,7 +278,11 @@ export function composeNarration(
   // Clauses are composed unpunctuated so the catalogue decides how a sentence
   // and a list item are each finished — punctuation differs by language, and it
   // is copy, not logic.
-  const clauses = events.map((e) => clause(e, coachFirstNames, t, weekdayOf));
+  const clauses = events.map((e) => {
+    if (isCoachEvent(e)) return coachClause(e, t);
+    if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
+    return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
+  });
   if (clauses.length === 1) return t('single', { clause: clauses[0] });
 
   return [

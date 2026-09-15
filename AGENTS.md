@@ -5,15 +5,26 @@ control when the repo went public (PR #24) and now live only on disk in each
 working copy, alongside the read-on-demand `.scratch/`, `docs/`, and `poc/` corpus.
 They remain the source of truth for this project's language and orientation.
 
-**Read `CONTEXT.md` and `OVERVIEW.md` at the start of every session**, before
-writing code or issues — `CONTEXT.md` is the domain glossary (use its terms
-exactly, don't drift to synonyms) and `OVERVIEW.md` says where truth lives.
-`docs/` and `.scratch/` are read on demand when a task calls for them.
+**Start every session from `CONTEXT-BRIEF.md`**, before writing code or issues.
+It is the generated index of both files — the orientation table from `OVERVIEW.md`
+(where truth lives, and the START HERE map) plus every glossary term from
+`CONTEXT.md` with its first sentence. Use its terms exactly; don't drift to
+synonyms. Then **read the full `CONTEXT.md` on demand** — before naming anything
+new, writing an issue, PRD or ADR, or when a one-line entry is not enough; the
+`_Avoid_` lists and the decisions behind each term live only there. `OVERVIEW.md`
+§"Current state" is long-form status, read when you need it. `docs/` and
+`.scratch/` are read on demand when a task calls for them.
 
-- **Claude Code** loads them automatically: `CLAUDE.md` `@`-imports `CONTEXT.md`
-  and `OVERVIEW.md`, so every Claude session already has them in context.
-- **Other agents** (Copilot, Cursor, Codex) do not `@`-import — open and read the
-  two files explicitly at session start.
+The brief is **generated, never hand-edited**: `node scripts/context-brief.mjs
+<canonical-checkout>` rebuilds it from the two sources. Run it after editing
+either, or the brief silently lags the glossary (since 2026-09-15; the whole-file
+imports before that cost ~41k tokens per session — see
+`.scratch/research/ecc-workflow-comparison.md` §7).
+
+- **Claude Code** loads it automatically: `CLAUDE.md` `@`-imports `AGENTS.md`
+  and `CONTEXT-BRIEF.md`, so every Claude session already has the index.
+- **Other agents** (Copilot, Cursor, Codex) do not `@`-import — open and read
+  `CONTEXT-BRIEF.md` explicitly at session start.
 - **A freshly-created worktree will not have these files** (they are gitignored,
   so they are never checked out from `main`). A missing file makes the `@`-import
   silently no-op, so an agent can lose the domain language with no error — confirm
@@ -99,8 +110,8 @@ gives a session the code but **not** `CONTEXT.md`, `OVERVIEW.md`, or the `.scrat
 
 - **`New-Session.ps1 -Name <slug> -Branch build/<NN>-<slug>`** — creates the worktree off
   `origin/main`, junctions the doc folders back to the canonical copies (admin-free on
-  Windows), and writes a gitignored `CLAUDE.md` that `@`-imports `CONTEXT.md`/`OVERVIEW.md`/
-  `AGENTS.md` by absolute path. Every session starts from the same ground truth, and doc
+  Windows), and writes a gitignored `CLAUDE.md` that `@`-imports `AGENTS.md` and
+  `CONTEXT-BRIEF.md` by absolute path. Every session starts from the same ground truth, and doc
   edits land on the one real copy.
 - **`Remove-Session.ps1 -Name <slug>`** — tears the session down. It **unlinks the junctions
   first**, then removes the worktree. This matters: a plain `git worktree remove` can follow

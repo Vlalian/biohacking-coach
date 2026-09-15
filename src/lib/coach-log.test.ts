@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { logCoachFailure } from './coach-log';
+import { logCoachFailure, logNarrationFailure, logBlockAdjustmentRefused, logBlockAdjustmentFailure } from './coach-log';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
 let written: string[] = [];
@@ -126,5 +126,98 @@ describe('logCoachFailure', () => {
         error: new Error('x'),
       }),
     ).not.toThrow();
+  });
+});
+
+describe('errorType — a closed table, most specific first', () => {
+  const spy = () => vi.spyOn(console, 'error').mockImplementation(() => {});
+  const logged = (error: unknown) => {
+    const s = spy();
+    logNarrationFailure('a1', error);
+    const line = JSON.parse(s.mock.calls[0][0] as string) as { errorType: string };
+    s.mockRestore();
+    return line.errorType;
+  };
+
+  it('names each known class, the generic Error, and the non-errors', () => {
+    expect(logged(new EmptyCoachReplyError('max_tokens'))).toBe('empty_coach_reply');
+    expect(logged(new TypeError('t'))).toBe('type_error');
+    expect(logged(new SyntaxError('s'))).toBe('syntax_error');
+    expect(logged(new RangeError('r'))).toBe('range_error');
+    expect(logged(new Error('e'))).toBe('error');
+    expect(logged(null)).toBe('null');
+    expect(logged(undefined)).toBe('undefined');
+    expect(logged('boom')).toBe('string');
+    expect(logged({ code: 1 })).toBe('object');
+  });
+});
+
+describe('the Training Block adjustment loggers (training-architecture/07)', () => {
+  it('logs a refusal with its closed reason and the opaque athlete id', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logBlockAdjustmentRefused('a1', 'positional');
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'block_adjustment_refused',
+      athleteId: 'a1',
+      reason: 'positional',
+    });
+    s.mockRestore();
+  });
+
+  it('logs a failure with the error class, never its message', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logBlockAdjustmentFailure('a1', new TypeError('lars@example.com'));
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'block_adjustment_failed',
+      athleteId: 'a1',
+      errorType: 'type_error',
+    });
+    expect(s.mock.calls[0][0]).not.toContain('example.com');
+    s.mockRestore();
+  });
+
+  it('never throws, even when console.error does', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {
+      throw new Error('console down');
+    });
+    expect(() => logBlockAdjustmentRefused('a1', 'short')).not.toThrow();
+    expect(() => logBlockAdjustmentFailure('a1', new Error('x'))).not.toThrow();
+    s.mockRestore();
+  });
+});
+
+describe('logCoachFailure — the stop reason travels only when there is one', () => {
+  it('carries stopReason for an empty reply that has one, and omits it otherwise', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const base = { surface: 'coach_chat' as const, athleteId: 'a1', conversationId: 'c1' };
+
+    logCoachFailure({ ...base, error: new EmptyCoachReplyError('max_tokens') });
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toMatchObject({ stopReason: 'max_tokens' });
+
+    logCoachFailure({ ...base, error: new EmptyCoachReplyError(null) });
+    expect(JSON.parse(s.mock.calls[1][0] as string)).not.toHaveProperty('stopReason');
+
+    logCoachFailure({ ...base, error: new Error('plain') });
+    expect(JSON.parse(s.mock.calls[2][0] as string)).not.toHaveProperty('stopReason');
+    s.mockRestore();
+  });
+
+  it('names the narration event on its own line', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logNarrationFailure('a1', new Error('x'));
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'narration_failed',
+      athleteId: 'a1',
+      errorType: 'error',
+    });
+    s.mockRestore();
+  });
+});
+
+describe('logBlockAdjustmentRefused — the reason is a closed literal', () => {
+  it('refuses a free string at the type level, so no reply text can be logged as a reason', () => {
+    // @ts-expect-error — only a validator problem or 'malformed' is a reason.
+    expect(() => logBlockAdjustmentRefused('a1', 'anything the model said')).not.toThrow();
+    expect(() => logBlockAdjustmentRefused('a1', 'malformed')).not.toThrow();
   });
 });

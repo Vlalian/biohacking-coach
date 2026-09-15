@@ -48,7 +48,7 @@ const {
   getOwnedConversation: vi.fn(),
   // No race booked by default: the ordinary state for most of these fixtures,
   // and the one the prompt has to state plainly rather than omit.
-  getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
+  getTargetRace: vi.fn<() => Promise<{ id?: string; name: string; date: string } | null>>(
     async () => null,
   ),
   // Nothing wrong by default: the ordinary state, and the one where the prompt
@@ -95,6 +95,7 @@ vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
+vi.mock('./training-block-repository', () => ({ getBlockSet: vi.fn(async () => null) }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
@@ -383,6 +384,28 @@ describe('the system prompt carries no invented readiness', () => {
     callCoach.mockClear();
     await startWeeklySession(ATHLETE, TODAY);
     expect(callCoach.mock.calls[0][0].system).toContain('phase=Block 1 of 6');
+  });
+
+  it('names the Coach-shaped block when a stored set fits the race (training-architecture/07)', async () => {
+    getTargetRace.mockResolvedValue({ id: 'race-1', name: 'Ironman Kalmar', date: '2027-08-18' });
+    const { getBlockSet } = await import('./training-block-repository');
+    vi.mocked(getBlockSet).mockResolvedValueOnce({
+      id: 'set-1',
+      athleteId: ATHLETE.id,
+      raceId: 'race-1',
+      startDate: TODAY,
+      version: 1,
+      blocks: [
+        { name: 'Build the Volume', endDate: '2027-02-01', authoredBy: 'coach_ai' },
+        { name: 'Taper', endDate: '2027-08-18', authoredBy: 'coach_ai' },
+      ],
+    });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('phase=Build the Volume');
+    expect(system).not.toContain('Block 1 of');
   });
 });
 

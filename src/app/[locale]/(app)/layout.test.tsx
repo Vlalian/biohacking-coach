@@ -222,3 +222,36 @@ describe('the Roster entry in the Navigation Drawer', () => {
     }
   });
 });
+
+describe('the weekly offer keys on the conversation, never on the plan', () => {
+  // `coach-overlay/04` decision 4, pinned for `training-architecture/07` and
+  // `/16`: a drafted week must still be offered, so the layout may derive
+  // `hasHeldWeeklySessionThisWeek` from held conversations only. A plan read
+  // here would be the exact regression — generation silencing its own offer.
+  it('the layout reads no sessions and no plan to decide the nudge', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
+    expect(source).toContain('hasHeldWeeklySessionInWeek');
+    expect(source).not.toMatch(/session-repository|getSessionsFor|hasCoachPlanForWeek|replaceCoachPlan/);
+  });
+
+  it('offers on a week that already has a plan, as long as no session was held', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      syntheticLabel: null,
+      profile: { weeklySessionDay: 'Monday' },
+    });
+    // A pending proposal — the closest thing to "this week already has a plan"
+    // the layout can see — must not touch the offer.
+    hasHeldWeeklySessionInWeek.mockResolvedValue(false);
+    const element = await render();
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    const coachContent = props.coachContent as { props: Record<string, unknown> };
+    expect(coachContent.props.weeklyOffer).toEqual({
+      weeklySessionDay: 'Monday',
+      hasHeldWeeklySessionThisWeek: false,
+    });
+  });
+});

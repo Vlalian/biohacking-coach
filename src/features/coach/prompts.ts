@@ -10,6 +10,8 @@ import {
   type PromptBlock,
 } from './prompt-blocks';
 import { planningWindow, type PlanningWindow } from './planning-window';
+import { ADJUST_TRAINING_BLOCKS_TOOL_NAME, type BlockAdjustmentContext } from './block-adjustment';
+import type { TrainingBlock } from './training-blocks';
 import { assertNoDirectIdentifier } from './check-in';
 import type { SessionOrigin } from '@/features/session/session';
 import type { WeekSession } from './week';
@@ -914,4 +916,58 @@ Session: ${sessionContext.type} — ${sessionContext.dayLabel}
 Duration: ${sessionContext.duration} · Zone: ${sessionContext.zone}
 Note: "${sessionContext.note}"${skipped}
 Walk through rationale in context of ${phase} phase.`;
+}
+
+// ── The Training Block adjustment (stage 2) ───────────────────────────────────
+
+function draftLine(b: TrainingBlock): string {
+  const days =
+    (new Date(`${b.endDate}T00:00:00Z`).getTime() - new Date(`${b.startDate}T00:00:00Z`).getTime()) /
+      (24 * 60 * 60 * 1000) +
+    1;
+  return `- ${b.name}: ${b.startDate} to ${b.endDate} (${Math.round(days / 7)} weeks)`;
+}
+
+/** This week's Check-in as one line, or the plain statement that there is none. */
+function checkInLine(ctx: BlockAdjustmentContext): string {
+  if (!ctx.readiness) return 'This week: No Check-in this week.';
+  const signal = ctx.notableSignal ? ` · "${ctx.notableSignal}"` : '';
+  return `This week's Check-in: ${readinessTokens(ctx.readiness)}${signal}`;
+}
+
+function athleteBlock(ctx: BlockAdjustmentContext): string {
+  const lines = [
+    tag('Experience', ctx.experienceLevel)?.replace('=', ': ') ?? 'Experience: not stated',
+    ctx.capacity,
+    checkInLine(ctx),
+  ].filter((l): l is string => l !== null);
+  const reflections =
+    formatWeekFeedback(ctx.reflections) ?? '- No Session Reflections rated in the last four weeks.';
+  return `ATHLETE:\n${lines.map((l) => `- ${l}`).join('\n')}\n\nSESSION REFLECTIONS (last four weeks, Body/Mind the athlete reported):\n${reflections}`;
+}
+
+/**
+ * The briefing the Coach shapes the Training Blocks from (`training-architecture/07`).
+ *
+ * Runs once per Target Race, in the background, with no athlete in the
+ * conversation — so unlike every other prompt here it addresses the model about
+ * a tool call, not about a person to talk to. Facts only: the draft, the
+ * horizon, what the app knows about the athlete. The rules are the shape the
+ * reply must have and one instruction about weight — the "unrealistic" sentence
+ * is the heaviest thing the Coach can say, and the prompt says so in those words.
+ */
+export function renderBlockAdjustmentPrompt(ctx: BlockAdjustmentContext): string {
+  const distance = ctx.race.distance ? `distance=${ctx.race.distance}` : 'distance unknown';
+  return assemble([
+    `You are Coach in a luxury Ironman training app. You are shaping the Training Blocks of one athlete's horizon toward their Target Race. This runs once, in the background: the athlete is not in this conversation and will read the result later in your own voice, so do not address them here — call the tool.`,
+    `HORIZON: ${distance} · race=${ctx.race.name} on ${ctx.race.date} · ${ctx.weeksToRace} weeks from today (${ctx.today})`,
+    `ARITHMETIC DRAFT (the horizon divided evenly, with no purpose yet):\n${ctx.draft.map(draftLine).join('\n')}`,
+    athleteBlock(ctx),
+    `RULES:
+- Keep two to six blocks, contiguous from today. The last block must end on race day, ${ctx.race.date}; never move race day.
+- Name each block for what it achieves, in at most four words. Never a position such as "Block 2" or "Phase 3".
+- Move a boundary only with a reason you could say to the athlete; otherwise keep the draft's dates. Every block is at least seven days.
+- Saying the race is unrealistic is the heaviest sentence you can produce. Use it only when the horizon makes the distance genuinely unreachable, and expect to use it almost never.
+- Call ${ADJUST_TRAINING_BLOCKS_TOOL_NAME} exactly once, with the whole set. Write no prose to the athlete.`,
+  ]);
 }

@@ -15,6 +15,7 @@ import {
   WEEKLY_OPENER,
   type Readiness,
 } from './weekly-session';
+import { resolveBlocks, trainingBlocks } from './training-blocks';
 import { planningWindow } from './planning-window';
 
 // The Training Phase is derived from the horizon now rather than stored on the
@@ -71,7 +72,18 @@ function session(overrides: Partial<Session> = {}): Session {
 
 describe('buildWeeklyCheckIn', () => {
   it('maps the opaque profile and readiness, with no identity', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 3, 'da', [], TARGET_RACE);
+    const checkIn = buildWeeklyCheckIn(
+      athlete(),
+      TODAY_KEY,
+      READINESS,
+      3,
+      'da',
+      [],
+      TARGET_RACE,
+      null,
+      null,
+      trainingBlocks(TODAY_KEY, TARGET_RACE.date),
+    );
     expect(checkIn).toMatchObject({
       readiness: READINESS,
       // Derived from the horizon, not read from a column: the Training Phase is
@@ -547,7 +559,18 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
   });
 
   it('keeps the facts that are real', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 3, undefined, [], TARGET_RACE);
+    const checkIn = buildWeeklyCheckIn(
+      athlete(),
+      TODAY_KEY,
+      null,
+      3,
+      undefined,
+      [],
+      TARGET_RACE,
+      null,
+      null,
+      trainingBlocks(TODAY_KEY, TARGET_RACE.date),
+    );
 
     expect(checkIn.phase).toBe('Block 1 of 5');
     expect(checkIn.experienceLevel).toBe('intermediate');
@@ -562,5 +585,29 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
     const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1);
 
     expect(checkIn.readiness).toEqual(READINESS);
+  });
+});
+
+describe('buildWeeklyCheckIn — the resolved Training Blocks (training-architecture/07)', () => {
+  it('carries the Coach-shaped block name and position when a set was passed', () => {
+    const shaped = resolveBlocks(TODAY_KEY, TARGET_RACE, {
+      startDate: TODAY_KEY,
+      blocks: [
+        { name: 'Build the Volume', endDate: '2026-11-15', authoredBy: 'coach_ai' },
+        { name: 'Taper', endDate: TARGET_RACE.date, authoredBy: 'coach_ai' },
+      ],
+    });
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 3, undefined, [], TARGET_RACE, null, null, shaped);
+
+    expect(checkIn.phase).toBe('Build the Volume');
+    expect(checkIn.blockWeek).toBe('week 1 of 10');
+  });
+
+  it('keeps the race and drops the phase when no blocks were resolved', () => {
+    // The honest rendering for a caller that could not resolve blocks: the
+    // race line still says where the horizon is; nothing claims a phase.
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 3, undefined, [], TARGET_RACE);
+    expect(checkIn.raceTarget).toBe('Ironman Copenhagen');
+    expect(checkIn.phase).toBeUndefined();
   });
 });
