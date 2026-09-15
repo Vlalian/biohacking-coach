@@ -39,6 +39,13 @@ const NARRATABLE_TYPES = [
   // (`training-architecture/08`): the plan's structure changed by a hand that
   // is not the athlete's, which is exactly what the rule is for.
   'block_edited',
+  // The Head Coach moving the athlete's Weekly Session Day, and shaping the
+  // drafted week before it reached them (`training-architecture/17`). The
+  // second narrates only when something changed — an unchanged approval is
+  // the coach nodding, not a hand on the plan — and that is decided in SQL
+  // below, so an unchanged approval is never even read as pending.
+  'weekly_session_day_set',
+  'week_draft_approved',
 ] as const;
 
 /**
@@ -80,7 +87,13 @@ export async function getPendingNarrationEvents(
         eq(events.athleteId, athleteId),
         isNull(events.narratedAt),
         or(
-          and(eq(events.actorType, 'head_coach'), inArray(events.type, [...NARRATABLE_TYPES])),
+          and(
+            eq(events.actorType, 'head_coach'),
+            inArray(events.type, [...NARRATABLE_TYPES]),
+            // An approval that changed nothing is the coach nodding, not a
+            // hand on the plan: it is never pending, so it is never told.
+            sql`(${events.type} <> 'week_draft_approved' OR ${events.payload} ->> 'changed' = 'true')`,
+          ),
           and(eq(events.actorType, 'coach_ai'), inArray(events.type, [...COACH_NARRATABLE_TYPES])),
         ),
       ),

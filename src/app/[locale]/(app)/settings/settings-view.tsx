@@ -121,6 +121,7 @@ export function SettingsView({
           raceDate={profile.raceDate}
           raceDistance={profile.raceDistance}
           weeklySessionDay={profile.weeklySessionDay}
+          weeklySessionDayLinked={coachingLink !== null}
           fixedConstraints={profile.fixedConstraints}
           onUpdateCommunicationStyle={onUpdateCommunicationStyle}
           onUpdateTargetRace={onUpdateTargetRace}
@@ -314,6 +315,7 @@ function TrainingSection({
   raceDate,
   raceDistance,
   weeklySessionDay,
+  weeklySessionDayLinked,
   fixedConstraints,
   onUpdateCommunicationStyle,
   onUpdateTargetRace,
@@ -327,6 +329,8 @@ function TrainingSection({
   raceDate: string;
   raceDistance: string;
   weeklySessionDay: string | null;
+  /** While a Head Coach is linked the day is theirs; the tiles show it and refuse the tap. */
+  weeklySessionDayLinked: boolean;
   fixedConstraints: string[];
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
   onUpdateTargetRace: (name: string, date: string) => Promise<SettingsActionResult>;
@@ -345,7 +349,7 @@ function TrainingSection({
         value={communicationStyle}
         onSave={onUpdateCommunicationStyle}
       />
-      <WeeklySessionDayField value={weeklySessionDay} onSave={onUpdateWeeklySessionDay} />
+      <WeeklySessionDayField value={weeklySessionDay} linked={weeklySessionDayLinked} onSave={onUpdateWeeklySessionDay} />
       <FixedConstraintsField
         value={fixedConstraints}
         onAdd={onAddFixedConstraint}
@@ -544,11 +548,14 @@ function CommunicationStyleField({
   );
 }
 
-function WeeklySessionDayField({
+export function WeeklySessionDayField({
   value,
+  linked = false,
   onSave,
 }: {
   value: string | null;
+  /** The Head Coach owns the day while linked (ADR 0003 amendment, 2026-09-14). */
+  linked?: boolean;
   onSave: (day: string) => Promise<SettingsActionResult>;
 }) {
   const t = useTranslations('Settings');
@@ -567,7 +574,7 @@ function WeeklySessionDayField({
         {t('weeklySessionDayLabel')}
       </p>
       <p className="mt-1 font-body text-xs text-muted-foreground">
-        {t('weeklySessionDayNote')}
+        {linked ? t('weeklySessionDayLinked') : t('weeklySessionDayNote')}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {options.map((day, i) => (
@@ -576,7 +583,7 @@ function WeeklySessionDayField({
             label={t(DAY_KEYS[i])}
             selected={current === day}
             onClick={() => choose(day)}
-            disabled={pending}
+            disabled={pending || linked}
           />
         ))}
       </div>

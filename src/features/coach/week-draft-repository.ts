@@ -2,7 +2,8 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
-import { pendingWeekDraft, WEEK_DRAFT_EVENT, type SkeletonDay, type WeekDraft } from './week-draft';
+import { pendingWeekDraft, visibleTo, WEEK_DRAFT_EVENT, type SkeletonDay, type WeekDraft } from './week-draft';
+import { addDays, weekStartOf } from '@/lib/date';
 import type { ProposedSession } from './weekly-session';
 
 /**
@@ -29,7 +30,22 @@ const WEEK_DRAFT_TYPES = [
  * athlete and this `weekStart`; the decision itself is the pure
  * {@link pendingWeekDraft}.
  */
-export async function getPendingWeekDraft(athleteId: string, weekStart: string): Promise<WeekDraft | null> {
+export async function getPendingWeekDraft(
+  athleteId: string,
+  weekStart: string,
+  /**
+   * The athlete's own reads pass today, and get nothing before the draft's
+   * `visibleFrom` — a linked Head Coach's day-early preview (`/17`). The
+   * coach-side reads pass nothing and see it regardless.
+   */
+  options: { asOf?: string } = {},
+): Promise<WeekDraft | null> {
+  const pending = await readPendingWeekDraft(athleteId, weekStart);
+  if (!pending) return null;
+  return options.asOf === undefined || visibleTo(pending, options.asOf) ? pending : null;
+}
+
+async function readPendingWeekDraft(athleteId: string, weekStart: string): Promise<WeekDraft | null> {
   const rows = await getDb()
     .select({ id: events.id, type: events.type, payload: events.payload, createdAt: events.createdAt })
     .from(events)
@@ -101,4 +117,64 @@ export async function recordWeekDraft(draft: NewWeekDraft): Promise<'drafted' | 
 
   const result = (await getDb().execute(statement)) as { rows: unknown[] };
   return result.rows.length > 0 ? 'drafted' : 'exists';
+}
+
+/** The Head Coach's approved version of a draft (`training-architecture/17`). */
+export interface WeekDraftApproval {
+  athleteId: string;
+  headCoachId: string;
+  /** The Coach's draft this approves. */
+  draftId: string;
+  weekStart: string;
+  visibleFrom: string;
+  sessions: ProposedSession[];
+  citations: Citation[];
+  /** Whether the coach changed anything — decides whether the athlete is told (narration). */
+  changed: boolean;
+}
+
+/**
+ * Records the Head Coach's approval as their own attributed event. It carries
+ * the whole draft again, so it stands in for the Coach's on the athlete's side
+ * ({@link pendingWeekDraft} prefers the newest carrier). Nothing is written to
+ * `sessions`: the athlete's accept (`/18`) is still the only write.
+ */
+export async function recordWeekDraftApproval(approval: WeekDraftApproval): Promise<void> {
+  const { athleteId, headCoachId, draftId, weekStart, visibleFrom, sessions, citations, changed } = approval;
+  await getDb().insert(events).values({
+    athleteId,
+    actorType: 'head_coach',
+    actorId: headCoachId,
+    type: WEEK_DRAFT_EVENT.approved,
+    payload: { draftId, weekStart, visibleFrom, sessions, citations, changed },
+  });
+}
+
+/**
+ * Withdraws every draft still in the Head Coach's preview — visible to the
+ * athlete only from a day that has not come — so the next app-open drafts
+ * afresh. Mads, 2026-09-14: a link severed mid-preview discards the draft,
+ * because nobody can tell what the departed coach had half-done to it. A draft
+ * the athlete can already see is theirs and is left alone.
+ *
+ * `system`, not a person: it is a consequence of the athlete's sever, not a
+ * coaching act, and it must never narrate.
+ */
+export async function withdrawPreviewDrafts(athleteId: string, today: string): Promise<number> {
+  const thisWeek = weekStartOf(today);
+  const weeks = [thisWeek, addDays(thisWeek, 7)];
+  let withdrawn = 0;
+  for (const weekStart of weeks) {
+    const pending = await readPendingWeekDraft(athleteId, weekStart);
+    if (!pending || visibleTo(pending, today)) continue;
+    await getDb().insert(events).values({
+      athleteId,
+      actorType: 'system',
+      actorId: null,
+      type: WEEK_DRAFT_EVENT.withdrawn,
+      payload: { weekStart, draftId: pending.id, reason: 'severed' },
+    });
+    withdrawn += 1;
+  }
+  return withdrawn;
 }

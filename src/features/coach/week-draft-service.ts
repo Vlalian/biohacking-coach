@@ -27,7 +27,8 @@ import {
   skippedFrom,
   type ProposedSession,
 } from './weekly-session';
-import { draftDueWeek, weekSkeleton, weekWindow, WEEK_DRAFT_OPENER, type SkeletonDay } from './week-draft';
+import { cycleAnchor, draftDueWeek, weekSkeleton, weekWindow, WEEK_DRAFT_OPENER, type SkeletonDay } from './week-draft';
+import { getLinkForAthlete } from './coach-repository';
 import { getPendingWeekDraft, recordWeekDraft } from './week-draft-repository';
 
 /**
@@ -89,7 +90,7 @@ export function draftGate(facts: {
 export async function ensureWeekDrafted(athleteId: string, today: string): Promise<DraftOutcome> {
   const facts = await gateFacts(athleteId, today);
   if ('gated' in facts) return facts.gated;
-  const { dueWeek, window, unavailableDates } = facts;
+  const { dueWeek, visibleFrom, window, unavailableDates } = facts;
 
   const asked = await askCoach(athleteId, today, window, unavailableDates);
   if (typeof asked === 'string') return asked;
@@ -97,9 +98,7 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
   const outcome = await recordWeekDraft({
     athleteId,
     weekStart: dueWeek,
-    // 17 moves this a day later than the Head Coach's; for a solo athlete the
-    // draft is theirs the moment it exists.
-    visibleFrom: today,
+    visibleFrom,
     sessions: asked.sessions,
     citations: asked.citations,
     skeleton: asked.skeleton,
@@ -111,10 +110,17 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
 async function gateFacts(
   athleteId: string,
   today: string,
-): Promise<{ gated: DraftOutcome } | { dueWeek: string; window: PlanningWindow; unavailableDates: string[] }> {
-  const athlete = await getAthleteById(athleteId);
+): Promise<
+  { gated: DraftOutcome } | { dueWeek: string; visibleFrom: string; window: PlanningWindow; unavailableDates: string[] }
+> {
+  const [athlete, link] = await Promise.all([getAthleteById(athleteId), getLinkForAthlete(athleteId)]);
   const { weeklySessionDay, fixedConstraints } = profileFacts(athlete);
-  const dueWeek = draftDueWeek(today, weeklySessionDay);
+  // A linked Head Coach sees the draft one day before the athlete (`/17`), so
+  // the cycle is due a day early — and the athlete's own day is stamped on the
+  // draft as the first day they may see it, whoever triggered it.
+  const leadDays = link ? HEAD_COACH_LEAD_DAYS : 0;
+  const dueWeek = draftDueWeek(today, weeklySessionDay, leadDays);
+  const visibleFrom = cycleAnchor(today, weeklySessionDay, leadDays);
 
   const [consent, pending, held, unavailableDates] = await Promise.all([
     assertAiCoachingConsent(athleteId),
@@ -126,8 +132,11 @@ async function gateFacts(
   const gated = draftGate({ consented: consent.ok, pending: pending !== null, held, window });
   // The gate's last exit is a null window, so past it the window is real.
   if (gated || !window) return { gated: gated ?? 'no-window' };
-  return { dueWeek, window, unavailableDates };
+  return { dueWeek, visibleFrom, window, unavailableDates };
 }
+
+/** How many days before the athlete's day a linked Head Coach gets the draft (Mads, 2026-09-14). */
+const HEAD_COACH_LEAD_DAYS = 1;
 
 /** The two profile fields the gate reads, with a missing row or profile read as "nothing set". */
 function profileFacts(athlete: Awaited<ReturnType<typeof getAthleteById>>): {

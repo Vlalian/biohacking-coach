@@ -465,3 +465,23 @@ describe('composeNarration — a Head Coach edits a block (training-architecture
     }
   });
 });
+
+describe('composeNarration — the Head Coach’s hand on the drafted week and its day (training-architecture/17)', () => {
+  const at = new Date('2026-09-16T08:00:00Z');
+  const ev = (type: NarratableEvent['type'], payload: unknown): NarratableEvent => ({ id: 'ev', actorId: 'coach_1', type, payload, createdAt: at });
+
+  it('narrates a moved planning day through the catalogue’s weekday key, attributed to the coach', () => {
+    const out = composeNarration([ev('weekly_session_day_set', { from: 'Wednesday', to: 'Sunday' })], { coach_1: 'Lars' }, t, weekday);
+    expect(out).toBe('single(clause=weeklyDaySet(coach=Lars,day=daySunday))');
+  });
+
+  it('degrades a day change with no readable day, and falls back to "your Head Coach"', () => {
+    const out = composeNarration([{ ...ev('weekly_session_day_set', {}), actorId: null }], {}, t, weekday);
+    expect(out).toBe('single(clause=weeklyDaySetNoDetail(coach=yourHeadCoach))');
+  });
+
+  it('narrates an approval that changed the week as the coach shaping it', () => {
+    const out = composeNarration([ev('week_draft_approved', { changed: true, weekStart: '2026-09-21' })], { coach_1: 'Lars' }, t, weekday);
+    expect(out).toBe('single(clause=weekDraftShaped(coach=Lars))');
+  });
+});

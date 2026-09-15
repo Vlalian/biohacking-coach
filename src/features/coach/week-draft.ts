@@ -37,16 +37,23 @@ const RESOLVING_TYPES: readonly string[] = [
   WEEK_DRAFT_EVENT.withdrawn,
 ];
 
-/** A drafted week, as staged. */
+/** A drafted week, as staged — or as a Head Coach approved it (`/17`). */
 export interface WeekDraft {
   id: string;
   /** Monday of the week it plans, `YYYY-MM-DD`. */
   weekStart: string;
-  /** The first day the athlete may see it — their Weekly Session Day (17 sets it earlier for the Head Coach). */
+  /** The first day the athlete may see it — their Weekly Session Day; a linked Head Coach sees it the day before. */
   visibleFrom: string;
   sessions: ProposedSession[];
   citations: Citation[];
+  /** True when this is the Head Coach's approved version rather than the Coach's draft. */
+  approved: boolean;
   createdAt: Date;
+}
+
+/** Whether the athlete may see this draft on `asOf` — the Head Coach's day-early preview is the only reason to say no. */
+export function visibleTo(draft: WeekDraft, asOf: string): boolean {
+  return asOf >= draft.visibleFrom;
 }
 
 /** The minimal event shape {@link pendingWeekDraft} reads — `pendingProposal`'s twin. */
@@ -91,17 +98,22 @@ function draftOf(event: WeekDraftEvent, weekStart: string): WeekDraft | null {
     visibleFrom: stringOr(rec.visibleFrom, weekStart),
     sessions: rec.sessions as ProposedSession[],
     citations: arrayOr<Citation>(rec.citations),
+    approved: event.type === WEEK_DRAFT_EVENT.approved,
     createdAt: event.createdAt,
   };
 }
+
+/** The two event types that carry a whole draft: the Coach's, and the Head Coach's approved version of it. */
+const DRAFT_CARRYING_TYPES: readonly string[] = [WEEK_DRAFT_EVENT.drafted, WEEK_DRAFT_EVENT.approved];
 
 /**
  * The draft a week is still waiting on, or null.
  *
  * Walks the week's events oldest-first: a `week_drafted` becomes the pending
- * one (a newer draft supersedes an older — one pending per week), and a later
- * written / declined / withdrawn event for the same week clears it. Events for
- * other weeks are ignored. Pure: events in, decision out — the same shape as
+ * one, a `week_draft_approved` (the Head Coach's version, `/17`) replaces it —
+ * the newest of either wins, one pending per week — and a later written /
+ * declined / withdrawn event for the same week clears it. Events for other
+ * weeks are ignored. Pure: events in, decision out — the same shape as
  * `pendingProposal`, keyed on `weekStart` because a silent draft has no
  * conversation to be keyed on.
  */
@@ -109,7 +121,7 @@ export function pendingWeekDraft(events: WeekDraftEvent[], weekStart: string): W
   let pending: WeekDraft | null = null;
   for (const event of events) {
     if (weekStartOfPayload(event.payload) !== weekStart) continue;
-    if (event.type === WEEK_DRAFT_EVENT.drafted) pending = draftOf(event, weekStart) ?? pending;
+    if (DRAFT_CARRYING_TYPES.includes(event.type)) pending = draftOf(event, weekStart) ?? pending;
     else if (RESOLVING_TYPES.includes(event.type)) pending = null;
   }
   return pending;
@@ -135,11 +147,19 @@ function weekdayIndex(key: string): number {
  * already held by talking) is the service gate's question, not this one's.
  */
 export function draftDueWeek(today: string, weeklySessionDay: string | null | undefined, leadDays = 0): string {
+  return addDays(weekStartOf(cycleAnchor(today, weeklySessionDay, leadDays)), 7);
+}
+
+/**
+ * The date of the Weekly Session Day the current cycle is anchored on: the
+ * most recent such day on or before today plus `leadDays`. It is the day the
+ * athlete gets the proposal — a linked Head Coach sees it `leadDays` earlier.
+ */
+export function cycleAnchor(today: string, weeklySessionDay: string | null | undefined, leadDays = 0): string {
   const target = WEEKDAYS.indexOf(effectiveWeeklySessionDay(weeklySessionDay));
   const horizon = addDays(today, leadDays);
   const back = (weekdayIndex(horizon) - target + 7) % 7;
-  const anchor = addDays(horizon, -back);
-  return addDays(weekStartOf(anchor), 7);
+  return addDays(horizon, -back);
 }
 
 /**

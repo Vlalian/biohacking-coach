@@ -2,6 +2,8 @@ import { loadCoachAthlete, NotACoach } from '../coach-athlete-guard';
 import { PrescribePanel } from '../prescribe-panel';
 import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
+import { WeeklyDayField } from '../weekly-day-field';
+import { WeekDraftReview } from '../week-draft-review';
 
 // Per-request: depends on the signed-in coach and the requested athlete.
 export const dynamic = 'force-dynamic';
@@ -32,6 +34,10 @@ export default async function CoachAthletePlanPage({
       {/* The horizon the week below is built toward, and the one surface where a
           Head Coach may rename a block or move its end (training-architecture/08). */}
       <BlockPanel athleteId={athleteId} set={view.blocks ?? null} />
+      {/* The drafted week, a day before the athlete sees it, and the day it
+          reaches them — both the Head Coach's while linked (training-architecture/17). */}
+      <WeekDraftReview athleteId={athleteId} draft={view.pendingDraft} />
+      <WeeklyDayField athleteId={athleteId} value={view.weeklySessionDay} />
       <CoachCalendar
         athleteId={athleteId}
         sessions={view.calendarSessions}

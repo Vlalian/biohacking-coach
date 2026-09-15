@@ -11,6 +11,8 @@ let whereArgs: unknown[] = [];
 let executed: { sql: string; params: unknown[] }[] = [];
 let executeRows: unknown[] = [];
 let selectArgs: unknown[] = [];
+let insertValues: unknown[] = [];
+let rowsQueue: unknown[][] = [];
 
 function chain() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,7 +26,9 @@ function chain() {
     whereArgs.push(arg);
     return c;
   };
-  c.then = (resolve: (rows: unknown[]) => unknown) => Promise.resolve(nextRows).then(resolve);
+  c.insert = () => ({ values: (v: unknown) => insertValues.push(v) });
+  c.then = (resolve: (rows: unknown[]) => unknown) =>
+    Promise.resolve(rowsQueue.length > 0 ? (rowsQueue.shift() as unknown[]) : nextRows).then(resolve);
   return c;
 }
 
@@ -35,7 +39,7 @@ const execute = vi.fn(async (statement: unknown) => {
 
 vi.mock('@/db', () => ({ getDb: () => Object.assign(chain(), { execute }) }));
 
-const { getPendingWeekDraft, recordWeekDraft } = await import('./week-draft-repository');
+const { getPendingWeekDraft, recordWeekDraft, recordWeekDraftApproval, withdrawPreviewDrafts } = await import('./week-draft-repository');
 
 function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
   if (node === null || typeof node !== 'object') return [];
@@ -60,6 +64,8 @@ beforeEach(() => {
   executed = [];
   executeRows = [];
   selectArgs = [];
+  insertValues = [];
+  rowsQueue = [];
   execute.mockClear();
 });
 
@@ -148,5 +154,81 @@ describe('recordWeekDraft', () => {
   it('reports exists when the guard let nothing through — the loser of two tabs', async () => {
     executeRows = [];
     expect(await recordWeekDraft(draft)).toBe('exists');
+  });
+});
+
+describe('getPendingWeekDraft — the athlete’s day-early blind spot (training-architecture/17)', () => {
+  const row = {
+    id: 'd1',
+    type: 'week_drafted',
+    payload: { weekStart: WEEK, visibleFrom: '2026-09-17', sessions: [SESSION], citations: [] },
+    createdAt: new Date('2026-09-16T08:00:00Z'),
+  };
+
+  it('with asOf before visibleFrom returns null; on or after it, the draft; without asOf, always the draft', async () => {
+    nextRows = [row];
+    expect(await getPendingWeekDraft(ATHLETE, WEEK, { asOf: '2026-09-16' })).toBeNull();
+    nextRows = [row];
+    expect(await getPendingWeekDraft(ATHLETE, WEEK, { asOf: '2026-09-17' })).toMatchObject({ id: 'd1' });
+    nextRows = [row];
+    expect(await getPendingWeekDraft(ATHLETE, WEEK)).toMatchObject({ id: 'd1' });
+  });
+});
+
+describe('recordWeekDraftApproval', () => {
+  it('writes one head_coach event, attributed to the acting coach, carrying the whole approved week and whether it changed', async () => {
+    await recordWeekDraftApproval({
+      athleteId: ATHLETE,
+      headCoachId: 'coach_1',
+      draftId: 'd1',
+      weekStart: WEEK,
+      visibleFrom: '2026-09-17',
+      sessions: [SESSION],
+      citations: [],
+      changed: true,
+    });
+    expect(insertValues).toEqual([
+      {
+        athleteId: ATHLETE,
+        actorType: 'head_coach',
+        actorId: 'coach_1',
+        type: 'week_draft_approved',
+        payload: { draftId: 'd1', weekStart: WEEK, visibleFrom: '2026-09-17', sessions: [SESSION], citations: [], changed: true },
+      },
+    ]);
+  });
+});
+
+describe('withdrawPreviewDrafts — a link severed mid-preview', () => {
+  const preview = (weekStart: string) => ({
+    id: `d-${weekStart}`,
+    type: 'week_drafted',
+    payload: { weekStart, visibleFrom: '2026-09-20', sessions: [], citations: [] },
+    createdAt: new Date('2026-09-16T08:00:00Z'),
+  });
+
+  it('withdraws a draft the athlete cannot see yet, as a system event that names the draft, and leaves one they can', async () => {
+    // 2026-09-16 (Wed): this week is the 14th, next the 21st. This week's draft
+    // has been visible since the 13th; next week's is still in preview (visible
+    // from the 20th). The two reads come back in that order.
+    const visible = { ...preview('2026-09-14'), payload: { ...preview('2026-09-14').payload, visibleFrom: '2026-09-13' } };
+    rowsQueue.push([visible], [preview('2026-09-21')]);
+
+    expect(await withdrawPreviewDrafts(ATHLETE, '2026-09-16')).toBe(1);
+    expect(insertValues).toEqual([
+      {
+        athleteId: ATHLETE,
+        actorType: 'system',
+        actorId: null,
+        type: 'week_draft_withdrawn',
+        payload: { weekStart: '2026-09-21', draftId: 'd-2026-09-21', reason: 'severed' },
+      },
+    ]);
+  });
+
+  it('withdraws nothing when nothing is pending', async () => {
+    nextRows = [];
+    expect(await withdrawPreviewDrafts(ATHLETE, '2026-09-16')).toBe(0);
+    expect(insertValues).toEqual([]);
   });
 });

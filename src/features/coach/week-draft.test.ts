@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { addDays } from '@/lib/date';
 import {
+  cycleAnchor,
   draftDueWeek,
+  visibleTo,
   nextWeekWindow,
   pendingWeekDraft,
   weekSkeleton,
@@ -230,5 +232,50 @@ describe('weekSkeleton — the default week the Coach adjusts', () => {
     const days = weekSkeleton(window(['2026-09-26', '2026-09-27']));
     expect(days.find((d) => d.role === 'long')?.date).toBe('2026-09-25');
     expect(addDays('2026-09-25', 2)).toBe('2026-09-27');
+  });
+});
+
+describe('cycleAnchor — the date of the day the current cycle turns on', () => {
+  it('is the most recent Weekly Session Day on or before today, or one day later with a lead', () => {
+    expect(cycleAnchor('2026-09-19', 'Wednesday')).toBe('2026-09-16');
+    expect(cycleAnchor('2026-09-16', 'Wednesday')).toBe('2026-09-16');
+    // With a one-day lead, the Tuesday before already belongs to Wednesday's cycle.
+    expect(cycleAnchor('2026-09-15', 'Wednesday', 1)).toBe('2026-09-16');
+    expect(cycleAnchor('2026-09-15', 'Wednesday')).toBe('2026-09-09');
+  });
+});
+
+describe('visibleTo — the Head Coach’s day-early preview is the only reason the athlete cannot see a draft', () => {
+  const draft = { id: 'd', weekStart: NEXT_MON, visibleFrom: '2026-09-17', sessions: [], citations: [], approved: false, createdAt: new Date() };
+  it('hides the draft before its visibleFrom and shows it from that day on', () => {
+    expect(visibleTo(draft, '2026-09-16')).toBe(false);
+    expect(visibleTo(draft, '2026-09-17')).toBe(true);
+    expect(visibleTo(draft, '2026-09-20')).toBe(true);
+  });
+});
+
+describe('pendingWeekDraft — the Head Coach’s approved version (training-architecture/17)', () => {
+  const at = (n: number) => new Date(2026, 8, 1, 12, n);
+  const drafted = (id: string, n: number) => ({
+    id,
+    type: WEEK_DRAFT_EVENT.drafted,
+    payload: { weekStart: NEXT_MON, visibleFrom: '2026-09-17', sessions: [{ date: '2026-09-22' }], citations: [] },
+    createdAt: at(n),
+  });
+  const approved = (id: string, n: number) => ({
+    id,
+    type: WEEK_DRAFT_EVENT.approved,
+    payload: { draftId: 'd1', weekStart: NEXT_MON, visibleFrom: '2026-09-17', sessions: [{ date: '2026-09-23' }], citations: [], changed: true },
+    createdAt: at(n),
+  });
+
+  it('an approval replaces the draft it approves as the pending week, marked approved', () => {
+    const p = pendingWeekDraft([drafted('d1', 1), approved('a1', 2)], NEXT_MON);
+    expect(p).toMatchObject({ id: 'a1', approved: true, sessions: [{ date: '2026-09-23' }], visibleFrom: '2026-09-17' });
+  });
+
+  it('a later draft (a regeneration) supersedes the approval, and a decision resolves whichever is pending', () => {
+    expect(pendingWeekDraft([drafted('d1', 1), approved('a1', 2), drafted('d2', 3)], NEXT_MON)).toMatchObject({ id: 'd2', approved: false });
+    expect(pendingWeekDraft([drafted('d1', 1), approved('a1', 2), { id: 'w', type: 'week_plan_written', payload: { weekStart: NEXT_MON }, createdAt: at(3) }], NEXT_MON)).toBeNull();
   });
 });

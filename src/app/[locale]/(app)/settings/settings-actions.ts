@@ -14,9 +14,12 @@ import {
 } from '@/features/athlete/athlete-repository';
 import { resolveAthlete, resolveUserId } from '../../current-actor';
 import {
+  getLinkForAthlete,
   severLinkForAthlete,
   updateLinkVisibility,
 } from '@/features/coach/coach-repository';
+import { withdrawPreviewDrafts } from '@/features/coach/week-draft-repository';
+import { dateKey } from '@/lib/date';
 import type { LinkVisibility } from '@/features/coach/link-visibility';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { setUiLanguage } from '@/features/user-prefs/user-prefs-repository';
@@ -29,7 +32,9 @@ import { routing } from '@/i18n/routing';
  */
 export type SettingsActionResult =
   | { ok: true }
-  | { ok: false; reason: 'not-authenticated' | 'invalid' };
+  // `linked`: the field belongs to the Head Coach while a Coaching Link is
+  // active (ADR 0003 amendment, 2026-09-14) — the athlete's tiles are read-only.
+  | { ok: false; reason: 'not-authenticated' | 'invalid' | 'linked' };
 
 // One source for the weekday set, like the onboarding UI already keeps
 // (`onboarding.tsx`'s "One source for every option set" comment) — the
@@ -148,6 +153,11 @@ export async function updateWeeklySessionDayAction(
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
+  // One field, whoever is present writes it: while a Head Coach is linked the
+  // day is theirs to set (`training-architecture/17`), and the athlete is told
+  // so on the tiles rather than silently overruled here.
+  if (await getLinkForAthlete(athlete.id)) return { ok: false, reason: 'linked' };
+
   await mergeAthleteProfile(athlete.id, { weeklySessionDay: day });
   return { ok: true };
 }
@@ -240,5 +250,8 @@ export async function severCoachingLinkAction(): Promise<SettingsActionResult> {
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
   await severLinkForAthlete(athlete.id);
+  // A draft still in the departed coach's preview is discarded, not delivered
+  // half-shaped (Mads, 2026-09-14); the next app-open drafts afresh.
+  await withdrawPreviewDrafts(athlete.id, dateKey(new Date()));
   return { ok: true };
 }

@@ -152,6 +152,7 @@
     "category_other": "Andet"
   },
   "Settings": {
+    "weeklySessionDayLinked": "Din head coach bestemmer denne, så længe I er koblet sammen.",
     "eyebrow": "Visning",
     "title": "Indstillinger",
     "lede": "Faste præferencer, som din Coach læser, hver gang planen lægges.",
@@ -223,6 +224,7 @@
     "raceDateLabel": "Løbsdato"
   },
   "Roster": {
+    "weekToReview": "Uge til gennemsyn",
     "title": "Atleter",
     "subtitle": "De atleter, du coacher.",
     "empty": "Ingen atleter tilknyttet endnu.",
@@ -604,6 +606,16 @@
     "recently": "for nylig",
     "blocksDrafted": "Jeg har formet din træning frem mod {race}: {blocks}",
     "weekDrafted": "Jeg har lavet et udkast til næste uge — kig på din plan, når du har tid",
+    "weeklyDaySet": "{coach} flyttede din ugentlige planlægningsdag til {day}",
+    "weeklyDaySetNoDetail": "{coach} ændrede din ugentlige planlægningsdag",
+    "weekDraftShaped": "{coach} justerede næste uges plan, før den nåede dig",
+    "dayMonday": "mandag",
+    "dayTuesday": "tirsdag",
+    "dayWednesday": "onsdag",
+    "dayThursday": "torsdag",
+    "dayFriday": "fredag",
+    "daySaturday": "lørdag",
+    "daySunday": "søndag",
     "blocksDraftedNoDetail": "Jeg har formet blokkene i din træning frem mod dit løb",
     "raceUnrealistic": "Helt ærligt: {race} ser ud til at være uden for rækkevidde på den her tidslinje — {reason}. Det bør vi tale om",
     "yourRace": "dit løb",
@@ -656,6 +668,24 @@
     "save": "Gem",
     "stale": "Blokkene passer ikke længere til løbsdatoen — Coachen tegner dem op igen. Intet at redigere endnu.",
     "conflict": "Ændret af en anden — det her er det gældende sæt.",
+    "error": "Det virkede ikke ({reason})."
+  },
+  "CoachDay": {
+    "label": "Atletens ugentlige planlægningsdag",
+    "note": "Når næste uge når frem til dem. Du ser udkastet dagen før.",
+    "error": "Det virkede ikke ({reason})."
+  },
+  "WeekDraftReview": {
+    "title": "Næste uge, udkast",
+    "lead": "Coachen har lavet dette udkast til ugen fra {week}. Godkend det, som det er, eller ret en session og godkend.",
+    "type": "Sessionstype",
+    "duration": "Minutter",
+    "zone": "Intensitetszone",
+    "note": "Bemærkning",
+    "approve": "Godkend til atleten",
+    "approved": "Godkendt. Det når atleten på deres planlægningsdag.",
+    "approvedChanged": "Godkendt med dine ændringer. Atleten får at vide, at du har justeret den.",
+    "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
     "error": "Det virkede ikke ({reason})."
   }
 }

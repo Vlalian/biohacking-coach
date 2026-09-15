@@ -18,6 +18,7 @@ const getResolvedBlocks = vi.fn();
 const getPendingWeekDraft = vi.fn();
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
+const getLinkForAthlete = vi.fn();
 
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
@@ -34,6 +35,7 @@ vi.mock('./conversation-repository', () => ({ hasHeldWeeklySessionInWeek }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft, recordWeekDraft }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+vi.mock('./coach-repository', () => ({ getLinkForAthlete }));
 
 const { ensureWeekDrafted, draftGate, groundingQuestion } = await import('./week-draft-service');
 
@@ -83,6 +85,7 @@ beforeEach(() => {
   });
   getPendingWeekDraft.mockResolvedValue(null);
   recordWeekDraft.mockResolvedValue('drafted');
+  getLinkForAthlete.mockResolvedValue(undefined);
 });
 
 describe('draftGate — six early exits, one pure decision', () => {
@@ -253,6 +256,30 @@ describe('ensureWeekDrafted — the edges', () => {
     expect(groundingQuestion({ position: null })).toBe(
       'How should a triathlete structure a training week with no race booked?',
     );
+  });
+});
+
+describe('ensureWeekDrafted — a linked Head Coach sees the draft a day early (training-architecture/17)', () => {
+  // The athlete's day is Wednesday. On Tuesday the 15th the solo cycle is
+  // last Wednesday's (this week, already begun); with a link the Wednesday
+  // cycle is already current, so next week is drafted — and stamped visible
+  // from Wednesday, the athlete's own day.
+  it('drafts a day early and stamps visibleFrom as the athlete’s day when a link is active', async () => {
+    getLinkForAthlete.mockResolvedValue({ headCoachName: 'Lars', link: { status: 'active' } });
+    expect(await ensureWeekDrafted(ATHLETE, '2026-09-15')).toBe('drafted');
+    expect(getPendingWeekDraft).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ weekStart: NEXT_MON, visibleFrom: '2026-09-16' });
+  });
+
+  it('with no link the same Tuesday is still last week’s cycle, visible from that day', async () => {
+    hasHeldWeeklySessionInWeek.mockResolvedValue(true);
+    expect(await ensureWeekDrafted(ATHLETE, '2026-09-15')).toBe('already-held');
+    expect(getPendingWeekDraft).toHaveBeenCalledWith(ATHLETE, '2026-09-14');
+  });
+
+  it('on the day itself a solo athlete’s draft is visible from that day', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ visibleFrom: TODAY });
   });
 });
 

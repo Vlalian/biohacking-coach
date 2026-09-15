@@ -28,6 +28,9 @@ export type HeadCoachNarratableType =
 /** A Head Coach's Training Block edit (`training-architecture/08`) — rendered by {@link blockClause}. */
 export type BlockNarratableType = 'block_edited';
 
+/** A Head Coach's hand on the drafted week or its day (`training-architecture/17`). */
+export type WeekNarratableType = 'weekly_session_day_set' | 'week_draft_approved';
+
 /** A plan change by another hand worth telling the athlete about. */
 export interface NarratableEvent {
   id: string;
@@ -36,7 +39,7 @@ export interface NarratableEvent {
    * which have no actor to name — and null for malformed Head Coach history.
    */
   actorId: string | null;
-  type: HeadCoachNarratableType | BlockNarratableType | CoachNarratableType;
+  type: HeadCoachNarratableType | BlockNarratableType | WeekNarratableType | CoachNarratableType;
   /** `jsonb`, so genuinely unknown until narrowed. */
   payload: unknown;
   createdAt: Date;
@@ -276,6 +279,19 @@ function blockClause(
 }
 
 /**
+ * The Head Coach moved the athlete's Weekly Session Day, or shaped the drafted
+ * week before it reached them (`training-architecture/17`). Attributed like
+ * every other human clause. The day is rendered through the catalogue's own
+ * weekday keys, never the stored English name.
+ */
+function weekClause(event: NarratableEvent, coachFirstNames: Record<string, string>, t: Translate): string {
+  const coach = (event.actorId ? coachFirstNames[event.actorId] : undefined) ?? t('yourHeadCoach');
+  if (event.type === 'week_draft_approved') return t('weekDraftShaped', { coach });
+  const to = field(event.payload, 'to');
+  return to ? t('weeklyDaySet', { coach, day: t(`day${to}`) }) : t('weeklyDaySetNoDetail', { coach });
+}
+
+/**
  * Everything the Head Coach has done since the athlete was last told, as **one**
  * message.
  *
@@ -298,6 +314,9 @@ export function composeNarration(
   // is copy, not logic.
   const clauses = events.map((e) => {
     if (isCoachEvent(e)) return coachClause(e, t);
+    if (e.type === 'weekly_session_day_set' || e.type === 'week_draft_approved') {
+      return weekClause(e, coachFirstNames, t);
+    }
     if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
     return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
   });
