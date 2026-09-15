@@ -28,10 +28,24 @@ export const TOP_K = 6;
 /**
  * Cosine similarity below which a passage is not worth showing.
  *
- * Provisional. Set from the corpus with `npm run oracle:ask`, and record the
- * number it was tuned against when you change it.
+ * Set 2026-09-15 from the first live `npm run oracle:ask` run, against 34
+ * sources / 1,815 chunks (`.scratch/knowledge-oracle/eval-runs/2026-09-15-smoke.md`).
+ * Nineteen questions: every in-corpus question's worst kept passage scored
+ * 0.45 or better, and every question with *nothing* near it in the corpus
+ * (swim technique, cold water, cadence, hills) peaked between 0.36 and 0.42. The
+ * floor sits in that gap. The previous 0.3 filtered nothing at all.
+ *
+ * What the floor does NOT do, learned the same day: a question *near* a real
+ * source but not answered by it — creatine against the nutrient-timing paper,
+ * chest pain against a bone-stress review's "any pain" passage — scores 0.47
+ * to 0.62, indistinguishable from a true match. Cosine similarity separates
+ * topics, not answers. Honesty at that edge is the tool gate's and the Coach's
+ * declared uncertainty (knowledge-oracle/05), never this number; raising it
+ * further only starts discarding real answers.
+ *
+ * Record the run you tuned against when you change it.
  */
-export const MIN_SIMILARITY = 0.3;
+export const MIN_SIMILARITY = 0.43;
 
 /**
  * How many sources the reference list names at most.

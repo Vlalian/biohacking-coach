@@ -11,7 +11,7 @@ import { retrievePassages, TOP_K } from '../src/features/knowledge-oracle/retrie
  * The same reasoning `coach-say.ts` states for the Coach, applied to the
  * Knowledge Oracle. The unit tests prove `retrievePassages` ranks by the number
  * the search gave it. **No test can tell you whether the passages are any good** —
- * that is a judgement about 1,583 chunks of real training science, and it needs a
+ * that is a judgement about 1,815 chunks of real training science, and it needs a
  * human reading real output.
  *
  *     npm run oracle:ask -- "How should training load be distributed in a base phase?"
