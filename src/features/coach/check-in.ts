@@ -182,6 +182,14 @@ export function notableSignalFrom(row: { notableSignal: string | null } | null):
  * The rest describe the athlete's phase, profile and preferences and are
  * optional because a brand-new athlete has few of them.
  */
+/** A Race as the prompt names it: what it is called, when, and how long. */
+export interface RaceMention {
+  name: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  distance: string;
+}
+
 export interface CheckIn {
   readiness?: Readiness;
   phase?: string;
@@ -200,6 +208,31 @@ export interface CheckIn {
   raceDistance?: string | null;
   /** The Target Race's date, `YYYY-MM-DD`, or absent when there is no race. */
   raceDate?: string | null;
+  /**
+   * Tune-up Races — the non-target races before the target, earliest first
+   * (`training-architecture/09`). Absent or empty when there are none, and the
+   * prompt renders nothing rather than "no tune-ups", which would read as a gap.
+   */
+  tuneUps?: RaceMention[];
+  /**
+   * Races entered after this week's plan was written — the glossary's "middle
+   * case". The Coach adjusts the week and says the blocks were not built toward
+   * them. Absent when nothing is late.
+   */
+  lateRaces?: RaceMention[];
+  /**
+   * The span where a tune-up would sit, present **only when today is inside
+   * it** — the service decides that with `inTuneUpWindow`, so the prompt can
+   * only raise a tune-up during the weeks where entering one still makes sense.
+   */
+  tuneUpWindow?: { from: string; to: string } | null;
+  /**
+   * The Head Coach interview's open option (`TUNE_UP_EVE_EASY`): whether the day
+   * before a tune-up is kept easy. Carried on the Check-in rather than read as a
+   * constant inside the prompt so both values are testable and the prompt stays
+   * a pure function of its input.
+   */
+  tuneUpEveEasy?: boolean;
   /**
    * Where in the current Training Block the athlete is standing, already
    * rendered ("week 2 of 8"). Absent when there is no horizon to be inside.

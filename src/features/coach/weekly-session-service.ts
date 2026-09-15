@@ -10,7 +10,10 @@ import {
 } from '@/features/session/session-repository';
 import { buildWeeklyContext, renderWeeklyPrompt } from './prompts';
 import { planningWindow, type PlanningWindow } from './planning-window';
-import { callCoach, type CoachReply } from './coach-client';
+import { callCoach, type CoachReply, type CoachToolCall } from './coach-client';
+import type { Citation } from '@/lib/citation';
+import { LOOKUP_TOOL_NAME } from '@/features/knowledge-oracle/lookup-tool';
+import { noteSourceMentions, productionGrounding, type Grounding } from './grounding';
 import {
   appendMessages,
   countWeeklySessions,
@@ -26,8 +29,9 @@ import {
   recordPlanCommitted,
   recordPlanDeclined,
   recordProposal,
+  getLatestPlanWrittenAt,
 } from './plan-proposal-repository';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getRaces, getTargetRace } from '@/features/race/race-repository';
 import { getCheckInForWeek } from './check-in-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
@@ -61,8 +65,6 @@ import {
  * lands ({@link commitWeeklyPlan}), and it replaces only coach-planned days.
  */
 
-
-
 const WEEKLY_MAX_TOKENS = 1400;
 
 // What the Coach is told after it proposes a plan: the plan is not saved, the
@@ -70,7 +72,6 @@ const WEEKLY_MAX_TOKENS = 1400;
 const PROPOSAL_ACK =
   'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
   'invite them to confirm when ready. Do not say it has been saved.';
-
 
 /**
  * The window this athlete's plan may be written into, today.
@@ -107,22 +108,27 @@ async function renderSystem(
   today: string,
   unavailableDates: string[],
   language?: string,
-): Promise<string> {
+): Promise<RenderedSystem> {
   const weekStart = weekStartOf(today);
-  const [weekSessions, equipmentItems, targetRace, checkInRow, capacity] = await Promise.all([
-    getSessionsForWeek(athlete.id, weekStart),
-    getEquipmentItems(athlete.id),
-    // The horizon. Null is an ordinary answer — an athlete may have no race,
-    // and the prompt says so rather than omitting the subject.
-    getTargetRace(athlete.id),
-    // The athlete's own report of how they arrive at this week. Null most weeks
-    // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
-    // rather than inventing scores, which is what it did before code-health/07.
-    getCheckInForWeek(athlete.id, weekStart),
-    // What the athlete's body currently allows. Only the capacity half is read;
-    // the detail thread has no reader on this path at all (ADR 0011).
-    capacityFor(athlete.id),
-  ]);
+  const [weekSessions, equipmentItems, targetRace, checkInRow, capacity, races, planWrittenAt] =
+    await Promise.all([
+      getSessionsForWeek(athlete.id, weekStart),
+      getEquipmentItems(athlete.id),
+      // The horizon. Null is an ordinary answer — an athlete may have no race,
+      // and the prompt says so rather than omitting the subject.
+      getTargetRace(athlete.id),
+      // The athlete's own report of how they arrive at this week. Null most weeks
+      // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
+      // rather than inventing scores, which is what it did before code-health/07.
+      getCheckInForWeek(athlete.id, weekStart),
+      // What the athlete's body currently allows. Only the capacity half is read;
+      // the detail thread has no reader on this path at all (ADR 0011).
+      capacityFor(athlete.id),
+      // Every race, and when this week's plan was written: together they say which
+      // races are tune-ups and which arrived too late for the blocks (slice 09).
+      getRaces(athlete.id),
+      getLatestPlanWrittenAt(athlete.id, weekStart),
+    ]);
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
@@ -133,6 +139,8 @@ async function renderSystem(
     targetRace ? { name: targetRace.name, date: targetRace.date } : null,
     capacity,
     notableSignalFrom(checkInRow),
+    races,
+    planWrittenAt,
   );
   // The inputs with a real source: the week's Session Reflections (feedback),
   // its skips, and — since showable-version/15 — the athlete's Unavailable
@@ -159,7 +167,33 @@ async function renderSystem(
     null,
     today,
   );
-  return renderWeeklyPrompt(ctx);
+  return {
+    system: renderWeeklyPrompt(ctx),
+    // What the grounding folds into its query (`knowledge-oracle/05`).
+    phase: checkIn.phase ?? null,
+    experienceLevel: checkIn.experienceLevel ?? null,
+  };
+}
+
+/** The rendered prompt plus the two facts the grounding's query wants. */
+interface RenderedSystem {
+  system: string;
+  phase: string | null;
+  experienceLevel: string | null;
+}
+
+/**
+ * The Weekly Session's tools for one turn: the plan proposal, and the lookup
+ * (`knowledge-oracle/05`). One resolver answers both — the lookup goes to the
+ * grounding, everything else gets the proposal acknowledgement — because the
+ * adapter makes exactly one tool round-trip and a turn may carry both calls.
+ */
+function turnTools(grounding: Grounding, withProposal: boolean) {
+  return {
+    tools: withProposal ? [PROPOSE_WEEK_PLAN_TOOL, grounding.tool] : [grounding.tool],
+    resolveTool: (call: CoachToolCall) =>
+      call.name === LOOKUP_TOOL_NAME ? grounding.resolve(call) : Promise.resolve(PROPOSAL_ACK),
+  };
 }
 
 /** The proposal a Weekly Session is currently awaiting a decision on. */
@@ -200,21 +234,33 @@ export async function startWeeklySession(
   const unavailableDates = await getUnavailableDates(athlete.id);
 
   let reply: CoachReply;
+  let grounding: Grounding;
   try {
     // Prompt rendering inside the boundary with the call — it asserts on free
     // text and throws, same as in `continueWeeklySession`.
-    const system = await renderSystem(
+    const { system, phase, experienceLevel } = await renderSystem(
       athlete,
       weeklySessionNumber,
       today,
       unavailableDates,
       language,
     );
+    // No conversation exists yet, so the lookup log carries none.
+    grounding = productionGrounding({
+      athleteId: athlete.id,
+      surface: 'weekly_session',
+      conversationId: null,
+      phase,
+      experienceLevel,
+    });
     reply = await callCoach({
       system,
       messages: [{ role: 'user', content: WEEKLY_OPENER }],
       maxTokens: WEEKLY_MAX_TOKENS,
+      // The opener offers the lookup only: nothing has been agreed to propose.
+      ...turnTools(grounding, false),
     });
+    noteSourceMentions('weekly_session', athlete.id, null, reply.text);
   } catch (error) {
     const reason = refusalReason(error);
     logCoachFailure({
@@ -238,7 +284,7 @@ export async function startWeeklySession(
     weeklySessionNumber,
   });
   const messages = await appendMessages(athlete.id, conversation.id, [
-    { role: 'coach_ai', content: reply.text },
+    { role: 'coach_ai', content: reply.text, citations: grounding.citations() },
   ]);
   if (!messages) {
     // Returning `failed` is not enough on its own: the row already exists, and
@@ -287,7 +333,10 @@ async function stageProposal(
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (!call) return null;
 
-  const validated = validateProposedPlan(call.input, planningWindowFor(athlete, today, unavailableDates));
+  const validated = validateProposedPlan(
+    call.input,
+    planningWindowFor(athlete, today, unavailableDates),
+  );
   if (!validated.ok) return null;
 
   await recordProposal(athlete.id, conversationId, validated.sessions);
@@ -315,7 +364,9 @@ async function askCoach(params: {
   language?: string;
   transcript: Message[];
   trimmed: string;
-}): Promise<{ ok: true; reply: CoachReply } | { ok: false; reason: ContinueRefusal }> {
+}): Promise<
+  { ok: true; reply: CoachReply; citations: Citation[] } | { ok: false; reason: ContinueRefusal }
+> {
   const {
     athlete,
     conversationId,
@@ -327,23 +378,30 @@ async function askCoach(params: {
     trimmed,
   } = params;
   try {
-    const system = await renderSystem(
+    const { system, phase, experienceLevel } = await renderSystem(
       athlete,
       weeklySessionNumber ?? 1,
       today,
       unavailableDates,
       language,
     );
+    const grounding = productionGrounding({
+      athleteId: athlete.id,
+      surface: 'weekly_session',
+      conversationId,
+      phase,
+      experienceLevel,
+    });
     const reply = await callCoach({
       system,
       // The athlete's turn joins the history here rather than being stored
       // first — the same messages the API would have seen either way.
       messages: [...toWeeklyApiMessages(transcript), { role: 'user', content: trimmed }],
       maxTokens: WEEKLY_MAX_TOKENS,
-      tools: [PROPOSE_WEEK_PLAN_TOOL],
-      toolResult: PROPOSAL_ACK,
+      ...turnTools(grounding, true),
     });
-    return { ok: true, reply };
+    noteSourceMentions('weekly_session', athlete.id, conversationId, reply.text);
+    return { ok: true, reply, citations: grounding.citations() };
   } catch (error) {
     const reason = refusalReason(error);
     logCoachFailure({
@@ -421,7 +479,7 @@ export async function continueWeeklySession(
 
   const afterBoth = await appendMessages(athlete.id, conversationId, [
     { role: 'athlete', content: trimmed },
-    { role: 'coach_ai', content: reply.text },
+    { role: 'coach_ai', content: reply.text, citations: answered.citations },
   ]);
   if (!afterBoth) return { ok: false, reason: 'not-owner' };
 
@@ -480,9 +538,7 @@ export async function commitWeeklyPlan(
   return { ok: true, sessionCount: rows.length, start, end };
 }
 
-export type DeclineResult =
-  | { ok: true }
-  | { ok: false; reason: 'not-owner' };
+export type DeclineResult = { ok: true } | { ok: false; reason: 'not-owner' };
 
 /**
  * Cancels the pending proposal — the athlete chose not to save. The proposal is

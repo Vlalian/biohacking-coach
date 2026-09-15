@@ -14,6 +14,11 @@ const {
   updateRaceDistance,
   upsertTargetRace,
   clearTargetRace,
+  createRace,
+  deleteRace,
+  getRaces,
+  getTargetRace,
+  setTargetRace,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   getAthleteByUserId: vi.fn(),
@@ -28,6 +33,11 @@ const {
   updateRaceDistance: vi.fn(() => Promise.resolve()),
   upsertTargetRace: vi.fn(() => Promise.resolve()),
   clearTargetRace: vi.fn(() => Promise.resolve()),
+  createRace: vi.fn(() => Promise.resolve('race_new')),
+  deleteRace: vi.fn(() => Promise.resolve()),
+  getRaces: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
+  getTargetRace: vi.fn<() => Promise<unknown>>(() => Promise.resolve(null)),
+  setTargetRace: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
@@ -46,7 +56,15 @@ vi.mock('@/features/coach/coach-repository', () => ({
   severLinkForAthlete,
 }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setUiLanguage }));
-vi.mock('@/features/race/race-repository', () => ({ upsertTargetRace, clearTargetRace }));
+vi.mock('@/features/race/race-repository', () => ({
+  upsertTargetRace,
+  clearTargetRace,
+  createRace,
+  deleteRace,
+  getRaces,
+  getTargetRace,
+  setTargetRace,
+}));
 
 const {
   updateCommunicationStyleAction,
@@ -56,6 +74,9 @@ const {
   updateLanguageAction,
   updateRaceDistanceAction,
   updateTargetRaceAction,
+  addRaceAction,
+  setTargetRaceAction,
+  removeRaceAction,
   updateLinkVisibilityAction,
   severCoachingLinkAction,
 } = await import('./settings-actions');
@@ -337,5 +358,101 @@ describe('the horizon actions refuse a caller they cannot identify', () => {
       updateTargetRaceAction('x'.repeat(121), '2027-08-15'),
     ).resolves.toEqual({ ok: false, reason: 'invalid' });
     expect(upsertTargetRace).not.toHaveBeenCalled();
+  });
+});
+
+describe('races beyond the first (training-architecture/09)', () => {
+  const target = {
+    id: 'race_t', athleteId: 'athlete_1', name: 'Ironman Copenhagen', date: '2027-08-15',
+    distance: 'Full', isTarget: true, createdAt: new Date(),
+  };
+  const other = { ...target, id: 'race_2', name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic', isTarget: false };
+
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
+  });
+
+  describe('addRaceAction', () => {
+    it('adds a non-target race when the athlete already has a target', async () => {
+      getTargetRace.mockResolvedValue(target);
+      await expect(addRaceAction('Olympic Odense', '2027-03-01', 'Olympic')).resolves.toEqual({
+        ok: true,
+        raceId: 'race_new',
+      });
+      expect(createRace).toHaveBeenCalledWith(
+        'athlete_1',
+        { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' },
+        { asTarget: false },
+      );
+      expect(updateRaceTarget).not.toHaveBeenCalled();
+    });
+
+    it('adds the race as the target, and writes the mirror, when the athlete has none', async () => {
+      getTargetRace.mockResolvedValue(null);
+      await expect(addRaceAction('Ironman Copenhagen', '2027-08-15', 'Full')).resolves.toEqual({
+        ok: true,
+        raceId: 'race_new',
+      });
+      expect(createRace).toHaveBeenCalledWith(
+        'athlete_1',
+        { name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full' },
+        { asTarget: true },
+      );
+      expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'Ironman Copenhagen');
+    });
+
+    it('refuses a bad date, an unknown distance, and an empty name', async () => {
+      await expect(addRaceAction('X', '2027-02-30', 'Full')).resolves.toEqual({ ok: false, reason: 'invalid' });
+      await expect(addRaceAction('X', '2027-03-01', 'Marathon')).resolves.toEqual({ ok: false, reason: 'invalid' });
+      await expect(addRaceAction('   ', '2027-03-01', 'Full')).resolves.toEqual({ ok: false, reason: 'invalid' });
+      expect(createRace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setTargetRaceAction', () => {
+    it('rotates the flag and keeps athlete.race_target in step', async () => {
+      // Two answers to one question is the failure: the onboarding greeting and
+      // the session-1 arc read the mirror column, the prompt reads the row.
+      getRaces.mockResolvedValue([target, other]);
+      await expect(setTargetRaceAction('race_2')).resolves.toEqual({ ok: true });
+      expect(setTargetRace).toHaveBeenCalledWith('athlete_1', 'race_2');
+      expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'Olympic Odense');
+    });
+
+    it('refuses a race the athlete does not have', async () => {
+      getRaces.mockResolvedValue([target]);
+      await expect(setTargetRaceAction('someone_elses')).resolves.toEqual({ ok: false, reason: 'invalid' });
+      expect(setTargetRace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeRaceAction', () => {
+    it('removes a non-target race and leaves the mirror alone', async () => {
+      getRaces.mockResolvedValue([target, other]);
+      await expect(removeRaceAction('race_2')).resolves.toEqual({ ok: true });
+      expect(deleteRace).toHaveBeenCalledWith('athlete_1', 'race_2');
+      expect(updateRaceTarget).not.toHaveBeenCalled();
+    });
+
+    it('removing the target clears the mirror column too', async () => {
+      getRaces.mockResolvedValue([target, other]);
+      await expect(removeRaceAction('race_t')).resolves.toEqual({ ok: true });
+      expect(deleteRace).toHaveBeenCalledWith('athlete_1', 'race_t');
+      expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', null);
+    });
+
+    it('refuses a race the athlete does not have', async () => {
+      getRaces.mockResolvedValue([target]);
+      await expect(removeRaceAction('someone_elses')).resolves.toEqual({ ok: false, reason: 'invalid' });
+      expect(deleteRace).not.toHaveBeenCalled();
+    });
+  });
+
+  it('all three refuse a caller they cannot identify', async () => {
+    getSession.mockResolvedValue(null);
+    await expect(addRaceAction('X', '2027-03-01', 'Full')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
+    await expect(setTargetRaceAction('race_2')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
+    await expect(removeRaceAction('race_2')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
   });
 });

@@ -86,11 +86,46 @@ describe('the detail thread does not reach the model', () => {
       .map((file) => file.slice(SRC.length).split(sep).join('/'))
       .sort();
 
+    // Slice 06 added the readers that show the thread to humans — the drawer,
+    // the actions behind it, and the Head Coach's link-gated service. None of
+    // them is on a prompt path, and the next test checks that separately.
     expect(readers).toEqual([
+      'app/[locale]/(app)/coach/athlete/[athleteId]/health-actions.test.ts',
+      'app/[locale]/(app)/coach/athlete/[athleteId]/health-actions.ts',
+      'app/[locale]/health-actions.test.ts',
+      'app/[locale]/health-actions.ts',
+      'app/[locale]/health-drawer.test.tsx',
+      'app/[locale]/health-drawer.tsx',
       'db/schema.ts',
       'features/health/health-repository.test.ts',
       'features/health/health-repository.ts',
+      'features/health/health-service.test.ts',
+      'features/health/health-service.ts',
     ]);
+  });
+
+  /**
+   * The Bother Rating (slice 06) lives on the same side of the split as the
+   * thread: human eyes only. There is no allowlist for it because the column is
+   * legitimately read by the calendar layer and the drawer — instead, every
+   * module that renders or assembles a prompt is asserted never to name it.
+   */
+  it('the Bother Rating is named by nothing on the prompt path', () => {
+    const promptPath = [
+      'features/coach/prompts.ts',
+      'features/coach/prompt-blocks.ts',
+      'features/coach/check-in.ts',
+      'features/coach/weekly-session.ts',
+      'features/coach/weekly-session-service.ts',
+      'features/coach/coach-chat-service.ts',
+      'features/coach/briefing.ts',
+      'features/coach/briefing-service.ts',
+      'features/health/capacity.ts',
+    ];
+    for (const rel of promptPath) {
+      const src = code(join(SRC, ...rel.split('/')));
+      expect(src, rel).not.toMatch(/\bbother\b/i);
+    }
   });
 
   it('has no field on the prompt-facing type that could carry it', () => {

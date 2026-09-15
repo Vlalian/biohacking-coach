@@ -141,3 +141,66 @@ export function logNarrationFailure(athleteId: string, error: unknown): void {
     // Deliberately silent: see above.
   }
 }
+
+/**
+ * Writes one structured line when a Coach reply names a source in its own words
+ * (`knowledge-oracle/05`, decision 3: the reply stays silent about sources; the
+ * app lists them). **A check that logs, never a rewrite** — the reply is stored
+ * as the model wrote it, and this is how Mads sees whether the instruction is
+ * holding without reading transcripts. The pattern names, never the text.
+ */
+export interface CoachDrift {
+  surface: ModelSurface;
+  athleteId: string;
+  conversationId: string | null;
+  /** From `sourceMentions` — e.g. `bracket-marker`, `according-to-study`. */
+  patterns: string[];
+}
+
+/**
+ * Writes one structured line when a lookup could not run — the embedder or the
+ * corpus database failing, not an empty corpus and not an identifier refusal.
+ * The Coach turn completes regardless (the athlete reads "lookup unavailable"),
+ * which is exactly why this line exists: without it a retrieval outage and a
+ * turn with no lookup look the same in the logs (CodeRabbit, PR #67). It is
+ * not a {@link CoachFailure}: a reply was produced. Same discipline — the
+ * opaque id and the error's class, never its message.
+ */
+export interface LookupFailure {
+  surface: ModelSurface;
+  athleteId: string;
+  conversationId: string | null;
+  error: unknown;
+}
+
+export function logLookupFailure(failure: LookupFailure): void {
+  try {
+    console.error(
+      JSON.stringify({
+        event: 'lookup_failed',
+        surface: failure.surface,
+        athleteId: failure.athleteId,
+        conversationId: failure.conversationId,
+        errorType: errorType(failure.error),
+      }),
+    );
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}
+
+export function logCoachDrift(drift: CoachDrift): void {
+  try {
+    console.warn(
+      JSON.stringify({
+        event: 'coach_source_mention',
+        surface: drift.surface,
+        athleteId: drift.athleteId,
+        conversationId: drift.conversationId,
+        patterns: drift.patterns,
+      }),
+    );
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}

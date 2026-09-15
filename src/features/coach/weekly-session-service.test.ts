@@ -25,6 +25,8 @@ const {
   getOwnedConversation,
   capacityFor,
   getTargetRace,
+  getRaces,
+  getLatestPlanWrittenAt,
   // No Check-in filed by default: the ordinary week, and the one the prompt has
   // to say it has nothing for rather than inventing scores.
   getCheckInForWeek,
@@ -51,6 +53,10 @@ const {
   getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
     async () => null,
   ),
+  // No other races by default, and no plan written for the week: the ordinary
+  // fixture, where none of slice 09's lines render.
+  getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
+  getLatestPlanWrittenAt: vi.fn<() => Promise<Date | null>>(async () => null),
   // Nothing wrong by default: the ordinary state, and the one where the prompt
   // carries no capacity block at all rather than "nothing is restricted".
   capacityFor: vi.fn<() => Promise<string | null>>(async () => null),
@@ -75,6 +81,27 @@ const {
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
+
+// One grounding per turn (knowledge-oracle/05), faked at the module seam: the
+// tests assert which tools the Coach is offered and where the citations land.
+const CITATION = {
+  sourceId: 's1', slug: 'seiler-2010', title: 'Training intensity distribution', authors: 'Seiler S',
+  year: 2010, url: null, licence: 'CC BY', licenceUrl: 'https://cc', attribution: 'Seiler 2010', ordinals: [3],
+};
+const { productionGrounding, groundingResolve, groundingCitations } = vi.hoisted(() => {
+  const groundingResolve = vi.fn(async () => '[1] passage');
+  const groundingCitations = vi.fn((): unknown[] => []);
+  const productionGrounding = vi.fn(() => ({
+    tool: { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+    resolve: groundingResolve,
+    citations: groundingCitations,
+  }));
+  return { productionGrounding, groundingResolve, groundingCitations };
+});
+vi.mock('./grounding', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./grounding')>()),
+  productionGrounding,
+}));
 vi.mock('./conversation-repository', () => ({
   appendMessages,
   countWeeklySessions,
@@ -85,6 +112,7 @@ vi.mock('./conversation-repository', () => ({
   getOwnedConversation,
 }));
 vi.mock('./plan-proposal-repository', () => ({
+  getLatestPlanWrittenAt,
   getPendingProposal,
   recordPlanCommitted,
   recordPlanDeclined,
@@ -94,7 +122,7 @@ vi.mock('@/features/availability/availability-repository', () => ({ getUnavailab
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
-vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
@@ -143,7 +171,7 @@ describe('startWeeklySession', () => {
 
     expect(result).toMatchObject({ ok: true, conversationId: 'conv_new' });
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_new', [
-      { role: 'coach_ai', content: 'How did the week feel?' },
+      { role: 'coach_ai', content: 'How did the week feel?', citations: [] },
     ]);
   });
 
@@ -181,8 +209,66 @@ describe('continueWeeklySession', () => {
     expect(appendMessages).toHaveBeenCalledTimes(1);
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
       { role: 'athlete', content: 'felt strong' },
-      { role: 'coach_ai', content: 'How did the week feel?' },
+      { role: 'coach_ai', content: 'How did the week feel?', citations: [] },
     ]);
+  });
+
+  describe('the Coach can look things up mid-session (knowledge-oracle/05)', () => {
+    beforeEach(() => {
+      productionGrounding.mockClear();
+      groundingResolve.mockClear();
+      groundingCitations.mockReset().mockReturnValue([]);
+    });
+
+    it('offers both tools — the plan proposal and the lookup — with one resolver', async () => {
+      await continueWeeklySession(ATHLETE, 'conv_1', 'why is Thursday easy?', TODAY);
+
+      const params = callCoach.mock.calls[0][0];
+      expect(params.tools.map((t: { name: string }) => t.name)).toEqual([
+        'propose_week_plan',
+        'look_up_training_science',
+      ]);
+      expect(typeof params.resolveTool).toBe('function');
+      expect(productionGrounding).toHaveBeenCalledWith(
+        expect.objectContaining({ athleteId: 'athlete_1', surface: 'weekly_session', conversationId: 'conv_1' }),
+      );
+    });
+
+    it('routes a lookup call to the grounding and a plan call to the fixed acknowledgement', async () => {
+      await continueWeeklySession(ATHLETE, 'conv_1', 'why?', TODAY);
+      const { resolveTool } = callCoach.mock.calls[0][0];
+
+      expect(await resolveTool({ name: 'look_up_training_science', input: { question: 'why?' } })).toBe('[1] passage');
+      expect(groundingResolve).toHaveBeenCalledTimes(1);
+      // The Weekly Session keeps its own acknowledgement — the Coach must not
+      // tell the athlete the week is saved, because it is not, yet.
+      expect(await resolveTool({ name: 'propose_week_plan', input: {} })).toContain(
+        'Do not say it has been saved',
+      );
+      expect(await resolveTool({ name: 'something_else', input: {} })).toContain(
+        'Do not say it has been saved',
+      );
+      expect(groundingResolve).toHaveBeenCalledTimes(1);
+    });
+
+    it('stores the citations the lookup earned on the Coach reply', async () => {
+      groundingCitations.mockReturnValue([CITATION]);
+      await continueWeeklySession(ATHLETE, 'conv_1', 'why?', TODAY);
+      expect(appendMessages.mock.calls[0][2][1]).toEqual({
+        role: 'coach_ai',
+        content: 'How did the week feel?',
+        citations: [CITATION],
+      });
+    });
+
+    it('offers the lookup tool on the opening turn as well', async () => {
+      await startWeeklySession(ATHLETE, TODAY);
+      const params = callCoach.mock.calls[0][0];
+      expect(params.tools.map((t: { name: string }) => t.name)).toEqual(['look_up_training_science']);
+      expect(appendMessages.mock.calls[0][2]).toEqual([
+        { role: 'coach_ai', content: 'How did the week feel?', citations: [] },
+      ]);
+    });
   });
 
   it('writes nothing when the Coach turn fails — no question without an answer', async () => {
@@ -320,6 +406,53 @@ describe("the Coach is told the athlete's Unavailable Dates", () => {
 
     const { system } = callCoach.mock.calls[0][0];
     expect(system).toContain('race=Ironman Kalmar on 2029-08-18');
+  });
+
+  it('names a Tune-up Race and a race entered after the week was planned (slice 09)', async () => {
+    // The rows the repository returns are what prove the wiring: a tune-up the
+    // prompt could not have named without `getRaces`, and a "late" flag it could
+    // not have derived without `getLatestPlanWrittenAt`.
+    const target = {
+      id: 't', athleteId: 'a', name: 'Ironman Kalmar', date: '2027-08-18', distance: 'Full',
+      isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+    };
+    const tuneUp = {
+      ...target, id: 'r2', name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic',
+      isTarget: false, createdAt: new Date('2026-06-02T10:00:00Z'),
+    };
+    const late = {
+      ...target, id: 'r3', name: 'Half Aarhus', date: '2026-08-30', distance: 'Half',
+      isTarget: false, createdAt: new Date('2026-08-11T12:00:00Z'),
+    };
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([target, tuneUp, late]);
+    getLatestPlanWrittenAt.mockResolvedValue(new Date('2026-08-10T08:00:00Z'));
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('TUNE-UPS: Half Aarhus on 2026-08-30 (Half); Olympic Odense on 2027-03-01 (Olympic)');
+    expect(system).toContain('LATE RACE: Half Aarhus on 2026-08-30 (Half)');
+    expect(system).not.toContain('LATE RACE: Olympic');
+    expect(getLatestPlanWrittenAt).toHaveBeenCalledWith(ATHLETE.id, '2026-08-10');
+  });
+
+  it('carries the tune-up window only while today is inside it', async () => {
+    // Entered 2026-06-01 for 2027-08-18: 443 days, so the window is day 133–266
+    // (2026-10-12 – 2027-02-22). TODAY is 2026-08-12, before it opens.
+    const target = {
+      id: 't', athleteId: 'a', name: 'Ironman Kalmar', date: '2027-08-18', distance: 'Full',
+      isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+    };
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([target]);
+
+    await startWeeklySession(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('TUNE-UP WINDOW');
+
+    callCoach.mockClear();
+    await startWeeklySession(ATHLETE, '2026-12-01');
+    expect(callCoach.mock.calls[0][0].system).toContain('TUNE-UP WINDOW: now (2026-10-12–2027-02-22)');
   });
 
   it('tells the Coach plainly when the athlete has no Target Race', async () => {
@@ -618,7 +751,11 @@ describe('what the service sends the Coach', () => {
     expect(args.maxTokens).toBe(1400);
     expect(args.tools?.[0]?.name).toBe('propose_week_plan');
     // The Coach must not tell the athlete the week is saved — it is not, yet.
-    expect(args.toolResult).toContain('Do not say it has been saved');
+    // Since knowledge-oracle/05 the acknowledgement comes through the per-call
+    // resolver (one round-trip may carry a lookup *and* a proposal).
+    expect(await args.resolveTool({ name: 'propose_week_plan', input: {} })).toContain(
+      'Do not say it has been saved',
+    );
     // The athlete's turn reaches the API even though it is not stored yet.
     expect(args.messages.at(-1)).toEqual({ role: 'user', content: 'plan my week' });
   });
@@ -727,7 +864,8 @@ describe('the last details the Coach path depends on', () => {
   it('tells the Coach exactly what a staged proposal means', async () => {
     await continueWeeklySession(ATHLETE, 'conv_1', 'plan my week', TODAY);
 
-    expect(callCoach.mock.calls.at(-1)?.[0].toolResult).toBe(
+    const { resolveTool } = callCoach.mock.calls.at(-1)?.[0];
+    expect(await resolveTool({ name: 'propose_week_plan', input: {} })).toBe(
       'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
         'invite them to confirm when ready. Do not say it has been saved.',
     );

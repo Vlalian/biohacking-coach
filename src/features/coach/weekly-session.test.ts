@@ -564,3 +564,51 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
     expect(checkIn.readiness).toEqual(READINESS);
   });
 });
+
+describe('buildWeeklyCheckIn — the other races (training-architecture/09)', () => {
+  const target = {
+    id: 't', athleteId: 'a', name: 'Ironman Copenhagen', date: '2027-06-01', distance: 'Full',
+    isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+  };
+  const tuneUp = {
+    ...target, id: 'r2', name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic',
+    isTarget: false, createdAt: new Date('2026-06-02T10:00:00Z'),
+  };
+  const build = (races: (typeof target)[], planWrittenAt: Date | null, today = TODAY_KEY) =>
+    buildWeeklyCheckIn(athlete(), today, null, 3, 'en', [], TARGET_RACE, null, null, races, planWrittenAt);
+
+  it('carries no race fields at all when there are no races beyond the target', () => {
+    const checkIn = build([target], null);
+    expect(checkIn).not.toHaveProperty('tuneUps');
+    expect(checkIn).not.toHaveProperty('tuneUpEveEasy');
+    expect(checkIn).not.toHaveProperty('lateRaces');
+    expect(checkIn).not.toHaveProperty('tuneUpWindow');
+  });
+
+  it('carries the tune-ups with the interview flag, and nothing about late races when none are', () => {
+    const checkIn = build([target, tuneUp], null);
+    expect(checkIn.tuneUps).toEqual([{ name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' }]);
+    expect(checkIn.tuneUpEveEasy).toBe(false);
+    expect(checkIn).not.toHaveProperty('lateRaces');
+  });
+
+  it('carries a late race without inventing a tune-up list', () => {
+    const late = { ...tuneUp, id: 'r3', date: '2026-09-20', createdAt: new Date('2026-09-08T12:00:00Z') };
+    const checkIn = build([target, late], new Date('2026-09-07T08:00:00Z'));
+    expect(checkIn.lateRaces).toEqual([{ name: 'Olympic Odense', date: '2026-09-20', distance: 'Olympic' }]);
+    // It is also a tune-up (before the target), so both are true at once.
+    expect(checkIn.tuneUps).toHaveLength(1);
+  });
+
+  it('carries the window only inside it, and never while a tune-up already exists', () => {
+    // Entered 2026-06-01 for 2027-06-01: 365 days, window day 110–219 = 2026-09-19 – 2027-01-06.
+    expect(build([target], null, '2026-09-18')).not.toHaveProperty('tuneUpWindow');
+    expect(build([target], null, '2026-09-19').tuneUpWindow).toEqual({ from: '2026-09-19', to: '2027-01-06' });
+    expect(build([target], null, '2027-01-07')).not.toHaveProperty('tuneUpWindow');
+    expect(build([target, tuneUp], null, '2026-10-01')).not.toHaveProperty('tuneUpWindow');
+  });
+
+  it('carries nothing when the races list has no target — a lone non-target race is just a race', () => {
+    expect(build([tuneUp], null)).not.toHaveProperty('tuneUps');
+  });
+});

@@ -131,3 +131,117 @@ describe('callCoach — an empty turn is refused, never returned', () => {
     expect(reply.toolCalls).toEqual([{ name: 'propose_week_plan', input: { s: 1 } }]);
   });
 });
+
+/**
+ * `knowledge-oracle/05`. The lookup tool needs a result computed from the
+ * call's input, so the adapter takes a per-call resolver. The plan-proposal
+ * path keeps its fixed acknowledgement — nothing about it changes.
+ */
+describe('callCoach — a per-call tool resolver', () => {
+  const twoTools = () =>
+    create
+      .mockResolvedValueOnce({
+        content: [
+          { type: 'tool_use', id: 't1', name: 'look_up_training_science', input: { question: 'why easy?' } },
+          { type: 'tool_use', id: 't2', name: 'propose_week_plan', input: {} },
+        ],
+        usage: {},
+      })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'closing' }], usage: {} });
+
+  it('sends each tool use its own resolver output as its tool_result', async () => {
+    twoTools();
+
+    await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'q' }],
+      maxTokens: 100,
+      tools: [{ name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } }],
+      resolveTool: async (call) => `resolved:${call.name}:${JSON.stringify(call.input)}`,
+    });
+
+    const followUp = create.mock.calls[1][0].messages.at(-1).content;
+    expect(followUp).toEqual([
+      { type: 'tool_result', tool_use_id: 't1', content: 'resolved:look_up_training_science:{"question":"why easy?"}' },
+      { type: 'tool_result', tool_use_id: 't2', content: 'resolved:propose_week_plan:{}' },
+    ]);
+    // The exchange the API expects: the model's own turn echoed back as the
+    // assistant, then the results as the user — and the tools offered up front.
+    const messages = create.mock.calls[1][0].messages;
+    expect(messages.at(-2).role).toBe('assistant');
+    expect(messages.at(-1).role).toBe('user');
+    expect(create.mock.calls[0][0].tools).toEqual([
+      { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+    ]);
+  });
+
+  it('offers no tools parameter at all when none are given', async () => {
+    create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: {} });
+    await callCoach({ system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 100 });
+    expect(create.mock.calls[0][0]).not.toHaveProperty('tools');
+    await callCoach({ system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 100, tools: [] });
+    expect(create.mock.calls[1][0]).not.toHaveProperty('tools');
+  });
+
+  it('falls back to the fixed acknowledgement when no resolver is given', async () => {
+    twoTools();
+
+    await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'q' }],
+      maxTokens: 100,
+      tools: [{ name: 'propose_week_plan', description: 'd', input_schema: { type: 'object' } }],
+    });
+
+    const followUp = create.mock.calls[1][0].messages.at(-1).content;
+    expect(followUp.map((r: { content: string }) => r.content)).toEqual([
+      'Presented to the athlete. Await their decision.',
+      'Presented to the athlete. Await their decision.',
+    ]);
+  });
+
+  it('turns a throwing resolver into the unavailable result and still returns a reply', async () => {
+    twoTools();
+
+    const reply = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'q' }],
+      maxTokens: 100,
+      tools: [{ name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } }],
+      resolveTool: async () => {
+        throw new Error('embedder down');
+      },
+    });
+
+    expect(reply.text).toBe('closing');
+    const followUp = create.mock.calls[1][0].messages.at(-1).content;
+    expect(followUp[0].content).toBe(
+      'Lookup unavailable. Answer without grounding and say that you have none.',
+    );
+  });
+});
+
+describe('callCoach — a turn that both speaks and calls a tool', () => {
+  it('joins the words before the call and the words after it with a blank line between', async () => {
+    create
+      .mockResolvedValueOnce({
+        content: [
+          { type: 'text', text: 'Let me check that.' },
+          { type: 'tool_use', id: 't1', name: 'look_up_training_science', input: { question: 'q' } },
+        ],
+        usage: {},
+      })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Thursday stays easy.' }], usage: {} });
+
+    const reply = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'why?' }],
+      maxTokens: 100,
+      tools: [{ name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } }],
+      resolveTool: async () => '[1] passage',
+    });
+
+    expect(reply.text).toBe('Let me check that.\n\nThursday stays easy.');
+    expect(reply.toolCalls).toEqual([{ name: 'look_up_training_science', input: { question: 'q' } }]);
+  });
+});

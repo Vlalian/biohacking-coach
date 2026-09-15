@@ -9,7 +9,10 @@ import { buildChatPrompt } from './prompts';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getRaces, getTargetRace } from '@/features/race/race-repository';
+import { getLatestPlanWrittenAt } from './plan-proposal-repository';
+import { productionGrounding } from './grounding';
+import { capacityFor } from '@/features/health/health-repository';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
 import { buildWeeklyCheckIn } from './weekly-session';
@@ -68,11 +71,22 @@ async function renderSystem(
   today: string,
   language?: string,
   referenceSessionId?: string | null,
-): Promise<string> {
-  const [equipmentItems, weekSessions, reference, targetRace, checkInRow] = await Promise.all([
+): Promise<{ system: string; phase: string | null; experienceLevel: string | null }> {
+  const [
+    equipmentItems,
+    weekSessions,
+    reference,
+    targetRace,
+    checkInRow,
+    races,
+    planWrittenAt,
+    capacity,
+  ] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
-    referenceSessionId ? getOwnedSession(athlete.id, referenceSessionId) : Promise.resolve(undefined),
+    referenceSessionId
+      ? getOwnedSession(athlete.id, referenceSessionId)
+      : Promise.resolve(undefined),
     // The same horizon the Weekly Session reads. Chat is where "should I do
     // tomorrow's intervals?" gets asked, and the answer depends on how far out
     // the race is — a Coach with no horizon here would contradict the one the
@@ -82,6 +96,13 @@ async function renderSystem(
     // tomorrow's intervals?" gets asked, and an athlete who reported low energy
     // on Monday should not have to say it again on Wednesday.
     getCheckInForWeek(athlete.id, weekStartOf(today)),
+    // Slice 09: the same tune-up and late-race lines the Weekly Session renders.
+    getRaces(athlete.id),
+    getLatestPlanWrittenAt(athlete.id, weekStartOf(today)),
+    // What the athlete's body currently allows — the capacity half only, as
+    // the Weekly Session reads it (training-architecture/06; CodeRabbit on PR
+    // #60 found Chat knew nothing of it). The detail thread has no reader here.
+    capacityFor(athlete.id),
   ]);
 
   // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
@@ -96,22 +117,36 @@ async function renderSystem(
     language,
     equipmentItems,
     targetRace ? { name: targetRace.name, date: targetRace.date } : null,
-    // No capacity block in Chat yet — that is the Weekly Session's surface.
-    null,
+    capacity,
     // The athlete's own sentence, for the same reason Chat reads the Check-in at
     // all: someone who wrote "calf tight since Tuesday" on Monday should not
     // have to say it again on Wednesday.
     notableSignalFrom(checkInRow),
+    races,
+    planWrittenAt,
   );
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.
-  return buildChatPrompt(
-    checkIn,
-    today,
-    reference ? toSessionContext(reference) : null,
-    weekFrom(weekSessions, reference?.id),
-  );
+  return {
+    system: buildChatPrompt(
+      checkIn,
+      today,
+      reference ? toSessionContext(reference) : null,
+      weekFrom(weekSessions, reference?.id),
+    ),
+    // What the grounding folds into its query: where in the season the athlete
+    // is, and how experienced — the same facts the prompt just rendered.
+    ...groundingFactsOf(checkIn),
+  };
+}
+
+/** The two Check-in facts the grounding's query wants, absent rendered as null. */
+function groundingFactsOf(checkIn: {
+  phase?: string;
+  experienceLevel?: string;
+}): { phase: string | null; experienceLevel: string | null } {
+  return { phase: checkIn.phase ?? null, experienceLevel: checkIn.experienceLevel ?? null };
 }
 
 export interface CoachChatState {
@@ -166,9 +201,28 @@ export async function sendCoachChatMessage(
     conversationId,
     content,
     maxTokens: CHAT_MAX_TOKENS,
-    prepare: async () => ({
-      system: await renderSystem(athlete, today, language, referenceSessionId),
-    }),
+    prepare: async (_transcript, conversationId) => {
+      const { system, phase, experienceLevel } = await renderSystem(
+        athlete,
+        today,
+        language,
+        referenceSessionId,
+      );
+      // One grounding per turn (`knowledge-oracle/05`): the lookup tool, its
+      // resolver, and — after the model has answered — the citations it earned.
+      const grounding = productionGrounding({
+        athleteId: athlete.id,
+        surface: 'coach_chat',
+        conversationId,
+        phase,
+        experienceLevel,
+      });
+      return {
+        system,
+        tools: [grounding.tool],
+        resolveTool: grounding.resolve,
+        citations: () => grounding.citations(),
+      };
+    },
   });
 }
-

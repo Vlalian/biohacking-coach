@@ -275,7 +275,13 @@ foreach ($rel in $FileCopies.Keys) {
 # 4. Gitignored CLAUDE.md that @-imports the canonical root docs by absolute path.
 #    AGENTS.md is tracked, so it comes from the worktree's own checkout - that way
 #    a branch that CHANGES the rules is read with its own version of them.
-#    CONTEXT.md and OVERVIEW.md are gitignored and live in the main folder.
+#    CONTEXT.md and OVERVIEW.md are gitignored here and, since 2026-09-11, are
+#    SYMLINKS in the main folder pointing into $Docs (bc-docs\CONTEXT.md and
+#    bc-docs\OVERVIEW.md), so they are versioned with the tracker and the Stop
+#    hook autosaves them. The @-import path below is unchanged on purpose. Do
+#    not "fix" the link back into a plain file - that recreates the single,
+#    unversioned copy this removed. (mklink needs an elevated shell; the
+#    junctions above do not, which is why these two are the odd ones out.)
 $claudeMd = @"
 @$MainFwd/AGENTS.md
 @$MainFwd/CONTEXT.md

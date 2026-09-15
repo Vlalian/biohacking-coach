@@ -9,7 +9,7 @@ import { callCoach, type CoachReply } from './coach-client';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getRaces, getTargetRace } from '@/features/race/race-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { currentPhase, trainingBlocks } from './training-blocks';
 import {
@@ -28,6 +28,7 @@ import {
   toBriefingReflection,
   type BriefingReports,
   type BriefingTranscript,
+  briefingRaces,
 } from './briefing';
 
 /**
@@ -78,7 +79,7 @@ async function buildBriefingSystem(
 
   let reports: BriefingReports | null = null;
   if (canSeeAthleteReports(link.visibility)) {
-    const [athlete, reflectionRows, targetRace, capacity] = await Promise.all([
+    const [athlete, reflectionRows, targetRace, capacity, races] = await Promise.all([
       getAthleteById(athleteId),
       getBriefingReflections(athleteId),
       getTargetRace(athleteId),
@@ -88,6 +89,9 @@ async function buildBriefingSystem(
       // this branch, so when the flag is off it is never fetched at all rather
       // than fetched and hidden (ticket 11).
       capacityFor(athleteId),
+      // Every race the athlete has (slice 09). Read inside this branch like the
+      // rest of the profile: a race is something the athlete reported.
+      getRaces(athleteId),
     ]);
     reports = {
       profile: {
@@ -103,6 +107,7 @@ async function buildBriefingSystem(
         // athlete's own page, not through a briefing that is assembled into a
         // model prompt (ADR 0011).
         capacity,
+        ...briefingRaces(races, today),
       },
       reflections: reflectionRows.map(toBriefingReflection),
     };

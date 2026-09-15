@@ -973,6 +973,34 @@ describe('the equipment nudge, exhaustively', () => {
   });
 });
 
+// ── Grounding: the Coach cites its sources (knowledge-oracle/05) ──────────────
+
+describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
+  const TUESDAY = '2026-08-18';
+  const weekly = () =>
+    renderWeeklyPrompt(buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TUESDAY));
+  const chat = () => buildChatPrompt(BASE, TUESDAY);
+
+  it('names the tool and asks for it before a training-science fact', () => {
+    for (const prompt of [weekly(), chat()]) {
+      expect(prompt).toContain('GROUNDING:');
+      expect(prompt).toContain('look_up_training_science');
+      expect(prompt).toMatch(/before stating a training-science fact/i);
+    }
+  });
+
+  it('instructs Declared Uncertainty when nothing comes back, and silence about sources always', () => {
+    // Decision 3 (Mads, 2026-09-11): the reply never names a source — the app
+    // lists them beneath it. This is what makes the voice criterion testable.
+    for (const prompt of [weekly(), chat()]) {
+      expect(prompt).toContain('do not have grounding for that claim');
+      expect(prompt).toContain('do not assert it');
+      expect(prompt).toContain('Never write citations, footnotes or source names in your reply');
+      expect(prompt).toContain('the app lists your sources beneath it');
+    }
+  });
+});
+
 // ── The horizon: Race Distance and the Target Race (training-architecture/02) ──
 
 /**
@@ -1021,6 +1049,77 @@ describe('the horizon reaches the prompt, including when there is none', () => {
     const prompt = weekly({ raceDistance: 'Half' });
     expect(prompt).toContain('no race booked');
     expect(prompt).toContain('distance=Half');
+  });
+
+  // ── Races beyond the first (training-architecture/09) ──────────────────────
+  describe('tune-ups, late races and the tune-up window', () => {
+    const target = { raceDistance: 'Full', raceTarget: 'Ironman Copenhagen', raceDate: '2027-08-15' };
+    const olympic = { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' };
+
+    it('names each Tune-up Race as an ordinary training day that is not tapered for', () => {
+      const prompt = weekly({ ...target, tuneUps: [olympic] });
+      expect(prompt).toContain('TUNE-UPS: Olympic Odense on 2027-03-01 (Olympic)');
+      expect(prompt).toContain('ordinary training day, do not taper');
+    });
+
+    it('omits the TUNE-UPS line entirely when there are none', () => {
+      expect(weekly(target)).not.toContain('TUNE-UPS');
+      expect(weekly({ ...target, tuneUps: [] })).not.toContain('TUNE-UPS');
+    });
+
+    it('adds the eve-easy clause only when the interview option is on', () => {
+      // The option is built and its value is the Head Coach interview's. Both
+      // values render, so flipping the constant later changes one line. Exact
+      // lines, so nothing can be appended to the "off" case unnoticed.
+      expect(weekly({ ...target, tuneUps: [olympic], tuneUpEveEasy: false })).toContain(
+        '\nTUNE-UPS: Olympic Odense on 2027-03-01 (Olympic) — ordinary training day, do not taper\n',
+      );
+      expect(weekly({ ...target, tuneUps: [olympic], tuneUpEveEasy: true })).toContain(
+        '\nTUNE-UPS: Olympic Odense on 2027-03-01 (Olympic) — ordinary training day, do not taper — keep the day before easy\n',
+      );
+    });
+
+    it('lists several tune-ups or late races on one line each, separated by semicolons, beneath HORIZON', () => {
+      const half = { name: 'Half Aarhus', date: '2027-05-01', distance: 'Half' };
+      const prompt = weekly({ ...target, tuneUps: [olympic, half], lateRaces: [half, olympic] });
+      expect(prompt).toContain(
+        'HORIZON: distance=Full · race=Ironman Copenhagen on 2027-08-15\nTUNE-UPS: Olympic Odense on 2027-03-01 (Olympic); Half Aarhus on 2027-05-01 (Half) — ordinary',
+      );
+      expect(prompt).toContain('LATE RACE: Half Aarhus on 2027-05-01 (Half); Olympic Odense on 2027-03-01 (Olympic) — entered');
+    });
+
+    it('names a race entered after this week was planned, and tells the Coach to say so', () => {
+      const prompt = weekly({ ...target, lateRaces: [{ ...olympic, date: '2026-09-27' }] });
+      expect(prompt).toContain('LATE RACE: Olympic Odense on 2026-09-27 (Olympic)');
+      expect(prompt).toContain('entered after this week was planned');
+      expect(prompt).toContain('blocks were not built toward it');
+      expect(prompt).toContain('adjust the week only');
+    });
+
+    it('omits the LATE RACE line when nothing is late', () => {
+      expect(weekly(target)).not.toContain('LATE RACE');
+      expect(weekly({ ...target, lateRaces: [] })).not.toContain('LATE RACE');
+    });
+
+    it('carries the tune-up window only when the Check-in says today is inside it', () => {
+      // The service decides *whether* — `inTuneUpWindow` — and hands the prompt
+      // the span only then, so the prompt cannot nag outside the window.
+      const prompt = weekly({ ...target, tuneUpWindow: { from: '2026-12-01', to: '2027-02-10' } });
+      expect(prompt).toContain('TUNE-UP WINDOW: now (2026-12-01–2027-02-10)');
+      expect(prompt).toContain('may suggest');
+      expect(prompt).not.toContain('should have');
+      expect(prompt).toContain('never imply the plan is deficient');
+      expect(weekly(target)).not.toContain('TUNE-UP WINDOW');
+    });
+
+    it('renders the same lines in Coach Chat — Chat must not know less than the Weekly Session', () => {
+      const prompt = buildChatPrompt(
+        { ...BASE, ...target, tuneUps: [olympic], lateRaces: [{ ...olympic, date: '2026-09-27' }] },
+        TUESDAY,
+      );
+      expect(prompt).toContain('TUNE-UPS: Olympic Odense on 2027-03-01 (Olympic)');
+      expect(prompt).toContain('LATE RACE: Olympic Odense on 2026-09-27 (Olympic)');
+    });
   });
 
   it('says the distance is unknown for an athlete who was never asked', () => {

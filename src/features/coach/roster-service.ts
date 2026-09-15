@@ -18,7 +18,10 @@ import type { LinkVisibility } from './link-visibility';
 import {
   applyVisibilityToInputs,
   applyVisibilityToSessions,
+  canSeeAthleteReports,
 } from './link-visibility';
+import { getHealthHistory } from '@/features/health/health-repository';
+import { spansFrom, type HealthSpan } from '@/features/health/health-layer';
 
 /**
  * A plan session as the Head Coach's editing surface sees it — the fields a
@@ -77,6 +80,15 @@ export type CoachAthleteView = {
   planSessions: PlanSession[];
   /** Shared transcripts, or null when `share_ai_transcripts` is off. */
   sharedTranscripts: SharedTranscript[] | null;
+  /**
+   * The athlete's Injuries and Illnesses as calendar spans, or **null** when
+   * `share_athlete_reports` is off (`training-architecture/06`). Null and never
+   * `[]`: a coach who could tell "no injuries" from "not shared" could infer
+   * health state from absence. Not fetched at all when withheld — the same
+   * discipline as the transcripts, and the same flag slice 04 put the capacity
+   * statement behind.
+   */
+  health: HealthSpan[] | null;
   dataset: InfoDataset;
 };
 
@@ -90,7 +102,7 @@ export async function getCoachAthleteView(
   if (!link) return null;
   const { visibility } = link;
 
-  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }] =
+  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }, health] =
     await Promise.all([
       getAthleteName(athleteId),
       getDb()
@@ -104,6 +116,10 @@ export async function getCoachAthleteView(
       // Gated on share_ai_transcripts: null (unfetched) when the flag is off.
       getSharedTranscripts(link),
       getInformationViewInputs(athleteId),
+      // Gated on share_athlete_reports: null (unfetched) when the flag is off.
+      canSeeAthleteReports(visibility)
+        ? getHealthHistory(athleteId).then((h) => spansFrom(h.injuries, h.illnesses))
+        : Promise.resolve(null),
     ]);
 
   const calendarSessions = applyVisibilityToSessions(
@@ -143,6 +159,7 @@ export async function getCoachAthleteView(
     unavailableDates,
     planSessions,
     sharedTranscripts,
+    health,
     dataset,
   };
 }
