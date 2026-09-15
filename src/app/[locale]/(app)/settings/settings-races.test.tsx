@@ -15,6 +15,7 @@ vi.mock('next-intl', () => ({
 const { RacesSection } = await import('./settings-races');
 
 const noop = async () => ({ ok: true }) as const;
+const add = async () => ({ ok: true, raceId: 'r_new' }) as const;
 
 const races = [
   { id: 'r1', name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true },
@@ -23,7 +24,7 @@ const races = [
 
 function render(list = races) {
   return renderToStaticMarkup(
-    <RacesSection races={list} onAdd={noop} onSetTarget={noop} onRemove={noop} />,
+    <RacesSection races={list} onAdd={add} onSetTarget={noop} onRemove={noop} />,
   );
 }
 

@@ -90,5 +90,11 @@ export function latestPlanWrittenAt(events: PlanEvent[], weekStart: string): Dat
 /** Whether a plan event's sessions fall in the week starting `weekStart`. */
 function writesWeek(event: PlanEvent, weekStart: string): boolean {
   const payload = payloadOf(event);
-  return payload !== null && payload.sessions.some((s) => weekStartOf(s.date) === weekStart);
+  // `payloadOf` checks the list, not its entries: a stored `sessions: [null]`
+  // must be skipped like any other malformed payload, not thrown on
+  // (CodeRabbit, PR #67).
+  return (
+    payload !== null &&
+    payload.sessions.some((s) => typeof s?.date === 'string' && weekStartOf(s.date) === weekStart)
+  );
 }

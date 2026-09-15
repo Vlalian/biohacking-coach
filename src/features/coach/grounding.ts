@@ -16,7 +16,7 @@ import {
 import { openAiEmbedder, refusingEmbedder } from '@/features/knowledge-oracle/embedder';
 import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repository';
 import { recordLookupPerformed } from '@/features/knowledge-oracle/lookup-repository';
-import { logCoachDrift, type ModelSurface } from '@/lib/coach-log';
+import { logCoachDrift, logLookupFailure, type ModelSurface } from '@/lib/coach-log';
 import { citationsFrom } from './citations';
 import type { CoachTool, CoachToolCall } from './coach-client';
 
@@ -65,13 +65,33 @@ export interface GroundingDeps {
    * grounding Mads cannot see.
    */
   record: (record: LookupRecord) => Promise<void>;
+  /**
+   * Where a lookup that could not run is written down — the embedder or the
+   * database failing, not an empty corpus. Optional because the pure tests
+   * have nowhere to send it; production wires the coach log. Never throws
+   * into the turn: the athlete gets the unavailable sentence either way.
+   */
+  failed?: (error: unknown) => void;
 }
 
 export const LOOKUP_UNAVAILABLE =
   'Lookup unavailable. Answer without grounding and say that you have none.';
 
+/**
+ * What a second lookup in the same turn reads. F9 says *at most one* embedding
+ * and one search per turn, and the adapter resolves tool calls concurrently —
+ * so the limit has to live here, where the count is kept, or a model that
+ * emits two calls would spend twice and the stored citations would cover only
+ * whichever finished last (CodeRabbit, PR #67).
+ */
+export const LOOKUP_LIMIT_REACHED =
+  'Lookup already performed this turn. Answer from the passages you were given.';
+
 export function createGrounding(deps: GroundingDeps): Grounding {
   let latest: RetrievalResult | null = null;
+  // Set synchronously, before the first await, so two concurrent calls cannot
+  // both pass the check. A malformed call does not spend the turn's lookup.
+  let spent = false;
 
   return {
     tool: LOOKUP_TOOL,
@@ -79,6 +99,8 @@ export function createGrounding(deps: GroundingDeps): Grounding {
     async resolve(call) {
       const question = parseLookupInput(call.input);
       if (question === null) return NO_PASSAGES_RESULT;
+      if (spent) return LOOKUP_LIMIT_REACHED;
+      spent = true;
 
       let result: RetrievalResult;
       try {
@@ -93,11 +115,15 @@ export function createGrounding(deps: GroundingDeps): Grounding {
         });
       } catch (error) {
         // An identifier in the question is the athlete's mistake, not an outage:
-        // answer without grounding rather than refusing the turn. Anything else
-        // — the embedder, the database — propagates to the adapter, which
-        // renders the same sentence; it is caught there so the log names it.
-        if (error instanceof DirectIdentifierError) return LOOKUP_UNAVAILABLE;
-        throw error;
+        // answer without grounding rather than refusing the turn, and do not
+        // log it as a failure — it is a refusal, and a correct one. Anything
+        // else — the embedder, the database — is an outage the athlete never
+        // sees (they get the same sentence), so it is reported here, where the
+        // surface and athlete are known, rather than thrown to an adapter that
+        // catches silently. Without this line a retrieval outage was
+        // indistinguishable from a turn with no lookup (CodeRabbit, PR #67).
+        if (!(error instanceof DirectIdentifierError)) deps.failed?.(error);
+        return LOOKUP_UNAVAILABLE;
       }
 
       latest = result;
@@ -155,6 +181,13 @@ export function productionGrounding(facts: {
         surface: facts.surface,
         conversationId: facts.conversationId,
         ...entry,
+      }),
+    failed: (error) =>
+      logLookupFailure({
+        surface: facts.surface,
+        athleteId: facts.athleteId,
+        conversationId: facts.conversationId,
+        error,
       }),
   });
 }

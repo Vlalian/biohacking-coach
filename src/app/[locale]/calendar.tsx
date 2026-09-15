@@ -482,7 +482,6 @@ export function Calendar({
         <HealthDrawer
           state={healthDrawer}
           spans={health}
-          todayKey={todayKey}
           locale={locale}
           coachAthleteId={coachAthleteId}
           onClose={() => setHealthDrawer({ open: false })}
@@ -608,6 +607,9 @@ function WeekRow({
                       <button
                         type="button"
                         onClick={() => onOpenHealth(span)}
+                        // Only the first day carries visible text; the rest of
+                        // the band would otherwise be unlabelled focus stops.
+                        aria-label={t('healthIll')}
                         className="block h-6 w-full bg-muted text-left font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
                       >
                         {first ? <span className="pl-2">{t('healthIll')}</span> : null}

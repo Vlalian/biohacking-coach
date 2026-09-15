@@ -83,6 +83,18 @@ describe('latestPlanWrittenAt — when the current week was planned (slice 09)',
     expect(latestPlanWrittenAt([straddling], '2026-09-07')).toEqual(new Date('2026-09-07T08:00:00Z'));
   });
 
+  it('skips a malformed session entry inside an otherwise valid payload', () => {
+    const at = new Date('2026-09-07T08:00:00Z');
+    const event: PlanEvent = {
+      type: PLAN_EVENT.written,
+      createdAt: at,
+      payload: { conversationId: 'c1', sessions: [null, 'x', { note: 'no date' }, { date: '2026-09-09' }] },
+    };
+    expect(latestPlanWrittenAt([event], '2026-09-07')).toEqual(at);
+    const onlyBad: PlanEvent = { ...event, payload: { conversationId: 'c1', sessions: [null] } };
+    expect(latestPlanWrittenAt([onlyBad], '2026-09-07')).toBeNull();
+  });
+
   it('skips a written event whose payload is malformed rather than throwing', () => {
     const at = new Date('2026-09-07T08:00:00Z');
     const malformed: unknown[] = [

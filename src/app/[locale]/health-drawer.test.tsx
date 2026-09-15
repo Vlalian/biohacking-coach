@@ -51,7 +51,6 @@ function render(props: Partial<Parameters<typeof HealthDrawer>[0]> = {}) {
     <HealthDrawer
       state={{ open: true }}
       spans={[openInjury, openIllness, closedInjury]}
-      todayKey="2026-09-11"
       locale="en"
       onClose={() => {}}
       {...props}
@@ -93,6 +92,13 @@ describe('HealthDrawer — the athlete', () => {
     const html = render();
     expect(html).toContain('history');
     expect(html).toMatch(/<details[^>]*>[\s\S]*inj_0/);
+    expect(html.match(/imBack/g)?.length).toBe(1);
+  });
+
+  it('treats a record closed today as closed — no close button, no rating on it', () => {
+    const closedToday: HealthSpan = { ...closedInjury, id: 'inj_today', to: '2026-09-11' };
+    const html = render({ spans: [openInjury, closedToday] });
+    expect(html).toMatch(/<details[^>]*>[\s\S]*inj_today/);
     expect(html.match(/imBack/g)?.length).toBe(1);
   });
 

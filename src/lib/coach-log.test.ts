@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { logCoachFailure } from './coach-log';
+import { logCoachFailure, logLookupFailure } from './coach-log';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
 let written: string[] = [];
@@ -126,5 +126,27 @@ describe('logCoachFailure', () => {
         error: new Error('x'),
       }),
     ).not.toThrow();
+  });
+});
+
+describe('logLookupFailure', () => {
+  it('records a lookup that could not run, by surface and class, never by message', () => {
+    // A retrieval outage completes the Coach turn ("lookup unavailable"), so
+    // without this line it looks exactly like a turn with no lookup.
+    logLookupFailure({
+      surface: 'weekly_session',
+      athleteId: 'athlete_opaque_1',
+      conversationId: null,
+      error: new Error('OPENAI_API_KEY is not set for mads@example.com'),
+    });
+    expect(written).toHaveLength(1);
+    expect(JSON.parse(written[0])).toEqual({
+      event: 'lookup_failed',
+      surface: 'weekly_session',
+      athleteId: 'athlete_opaque_1',
+      conversationId: null,
+      errorType: 'error',
+    });
+    expect(written[0]).not.toContain('mads@example.com');
   });
 });

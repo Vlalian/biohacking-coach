@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createGrounding, type LookupRecord } from './grounding';
+import { createGrounding, LOOKUP_LIMIT_REACHED, type LookupRecord } from './grounding';
 import { LOOKUP_TOOL_NAME, NO_PASSAGES_RESULT } from '@/features/knowledge-oracle/lookup-tool';
 import type { ChunkSearchResult, KnowledgeSearch } from '@/features/knowledge-oracle/retrieval';
 import type { Embedder } from '@/features/knowledge-oracle/embedder';
@@ -124,9 +124,54 @@ describe('createGrounding — when there is nothing, or the input is wrong', () 
     expect(g.citations()).toEqual([]);
   });
 
-  it('lets an embedder failure propagate — the adapter turns it into the unavailable result', async () => {
-    embed.mockRejectedValueOnce(new Error('OPENAI_API_KEY is not set'));
-    await expect(grounding().resolve(call())).rejects.toThrow('OPENAI_API_KEY');
+  it('turns an embedder failure into the unavailable result and reports it — an outage is not a silent turn', async () => {
+    const failure = new Error('OPENAI_API_KEY is not set');
+    embed.mockRejectedValueOnce(failure);
+    const failed = vi.fn();
+    const g = grounding({ failed });
+    await expect(g.resolve(call())).resolves.toContain('Lookup unavailable');
+    expect(failed).toHaveBeenCalledWith(failure);
+    expect(g.citations()).toEqual([]);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('does not report an identifier refusal as a failure — that one is the athlete\'s, and correct', async () => {
+    const failed = vi.fn();
+    await grounding({ failed }).resolve(call('is mads@example.com right?'));
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  it('survives having nowhere to report a failure', async () => {
+    embed.mockRejectedValueOnce(new Error('down'));
+    await expect(grounding().resolve(call())).resolves.toContain('Lookup unavailable');
+  });
+});
+
+describe('createGrounding — one lookup per turn, even when the model asks twice', () => {
+  it('runs the first call and refuses the second with the limit sentence, embedding once', async () => {
+    // The adapter resolves tool calls concurrently, so both arrive before
+    // either has finished. F9's "at most one" has to hold here, not there.
+    const g = grounding();
+    const [first, second] = await Promise.all([g.resolve(call('why easy?')), g.resolve(call('how hard?'))]);
+    expect(first).toContain('[1]');
+    expect(second).toBe(LOOKUP_LIMIT_REACHED);
+    expect(embed).toHaveBeenCalledTimes(1);
+    expect(searchChunks).toHaveBeenCalledTimes(1);
+    expect(recorded).toHaveLength(1);
+  });
+
+  it('keeps the citations of the lookup that ran — the refused call changes nothing', async () => {
+    const g = grounding();
+    await g.resolve(call('why easy?'));
+    await g.resolve(call('how hard?'));
+    expect(g.citations().map((c) => c.slug)).toEqual(['seiler-2010']);
+  });
+
+  it('does not spend the turn on a call that was not a question', async () => {
+    const g = grounding();
+    await g.resolve(call(''));
+    await expect(g.resolve(call('why easy?'))).resolves.toContain('[1]');
+    expect(embed).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -152,15 +197,19 @@ describe('createGrounding — the evidence Mads reads (option a, 2026-09-11)', (
 });
 
 describe('productionGrounding — without an OpenAI key', () => {
-  it('refuses to embed with a one-line reason, which the adapter turns into the unavailable result', async () => {
+  it('refuses to embed with a one-line reason, answers unavailable, and logs the outage', async () => {
     const { productionGrounding } = await import('./grounding');
     const saved = process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const g = productionGrounding({ athleteId: 'a1', surface: 'coach_chat', conversationId: null });
-      await expect(g.resolve(call())).rejects.toThrow('OPENAI_API_KEY is not set');
+      await expect(g.resolve(call())).resolves.toContain('Lookup unavailable');
       expect(g.citations()).toEqual([]);
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(error.mock.calls[0][0] as string)).toMatchObject({ event: 'lookup_failed', surface: 'coach_chat' });
     } finally {
+      error.mockRestore();
       if (saved !== undefined) process.env.OPENAI_API_KEY = saved;
     }
   });

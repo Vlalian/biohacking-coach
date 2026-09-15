@@ -167,6 +167,19 @@ describe('renderBriefingPrompt — the races (training-architecture/09)', () => 
     expect(prompt).not.toContain('No Target Race');
   });
 
+  it('calls a race after the Target Race a later race, never a tune-up', () => {
+    // A tune-up is a race *before* the target. October is not a warm-up for
+    // August (CodeRabbit, PR #67).
+    const prompt = withRaces({
+      races: [
+        { name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true },
+        { name: 'Autumn Half', date: '2027-10-01', distance: 'Half', isTarget: false },
+      ],
+    });
+    expect(prompt).toContain('- 2027-10-01 · Autumn Half (Half) — later race');
+    expect(prompt).not.toContain('Autumn Half (Half) — tune-up');
+  });
+
   it('says No Target Race plainly when the athlete has nothing in the future to build toward', () => {
     // Mads, 2026-09-11: this is the "unplanned race" the glossary meant — the
     // Head Coach is told so they can raise it; the Coach never does unprompted.

@@ -50,7 +50,6 @@ export type HealthDrawerState =
 export function HealthDrawer({
   state,
   spans,
-  todayKey,
   locale,
   onClose,
   coachAthleteId,
@@ -58,7 +57,6 @@ export function HealthDrawer({
   state: HealthDrawerState;
   /** Every span, open and closed — the drawer sorts them. */
   spans: HealthSpan[];
-  todayKey: string;
   locale: string;
   onClose: () => void;
   /** Set when the Head Coach is the one looking. Read-only except for notes. */
@@ -71,8 +69,11 @@ export function HealthDrawer({
   const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
   const isCoach = Boolean(coachAthleteId);
 
-  const open = spans.filter((s) => s.to === null || s.to >= todayKey);
-  const closed = spans.filter((s) => s.to !== null && s.to < todayKey);
+  // Closed is closed, including a record closed today: the calendar draws `to`
+  // inclusively so the band covers the last day, but the drawer must not keep
+  // offering "I'm back" and the Bother Rating on it (CodeRabbit, PR #67).
+  const open = spans.filter((s) => s.to === null);
+  const closed = spans.filter((s) => s.to !== null);
   const [selectedId, setSelectedId] = useState<string | null>(
     state.open && state.id ? state.id : (open[0]?.id ?? null),
   );

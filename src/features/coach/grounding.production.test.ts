@@ -77,12 +77,24 @@ describe('productionGrounding', () => {
     });
   });
 
-  it('uses the refusing embedder when the key is absent, naming the reason', async () => {
+  it('uses the refusing embedder when the key is absent, and logs the outage against the surface — never the message', async () => {
     delete process.env.OPENAI_API_KEY;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const g = productionGrounding({ athleteId: 'a1', surface: 'coach_chat', conversationId: null });
-    await expect(g.resolve(call)).rejects.toThrow('OPENAI_API_KEY is not set');
+    await expect(g.resolve(call)).resolves.toContain('Lookup unavailable');
     expect(refusingEmbedder).toHaveBeenCalledWith(expect.stringContaining('OPENAI_API_KEY is not set'));
     expect(openAiEmbedder).not.toHaveBeenCalled();
     expect(recordLookupPerformed).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    const line = JSON.parse(error.mock.calls[0][0] as string);
+    expect(line).toEqual({
+      event: 'lookup_failed',
+      surface: 'coach_chat',
+      athleteId: 'a1',
+      conversationId: null,
+      errorType: 'error',
+    });
+    expect(error.mock.calls[0][0]).not.toContain('OPENAI_API_KEY');
+    error.mockRestore();
   });
 });

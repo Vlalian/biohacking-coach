@@ -33,7 +33,7 @@ const {
   updateRaceDistance: vi.fn(() => Promise.resolve()),
   upsertTargetRace: vi.fn(() => Promise.resolve()),
   clearTargetRace: vi.fn(() => Promise.resolve()),
-  createRace: vi.fn(() => Promise.resolve()),
+  createRace: vi.fn(() => Promise.resolve('race_new')),
   deleteRace: vi.fn(() => Promise.resolve()),
   getRaces: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
   getTargetRace: vi.fn<() => Promise<unknown>>(() => Promise.resolve(null)),
@@ -376,7 +376,10 @@ describe('races beyond the first (training-architecture/09)', () => {
   describe('addRaceAction', () => {
     it('adds a non-target race when the athlete already has a target', async () => {
       getTargetRace.mockResolvedValue(target);
-      await expect(addRaceAction('Olympic Odense', '2027-03-01', 'Olympic')).resolves.toEqual({ ok: true });
+      await expect(addRaceAction('Olympic Odense', '2027-03-01', 'Olympic')).resolves.toEqual({
+        ok: true,
+        raceId: 'race_new',
+      });
       expect(createRace).toHaveBeenCalledWith(
         'athlete_1',
         { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' },
@@ -387,7 +390,10 @@ describe('races beyond the first (training-architecture/09)', () => {
 
     it('adds the race as the target, and writes the mirror, when the athlete has none', async () => {
       getTargetRace.mockResolvedValue(null);
-      await expect(addRaceAction('Ironman Copenhagen', '2027-08-15', 'Full')).resolves.toEqual({ ok: true });
+      await expect(addRaceAction('Ironman Copenhagen', '2027-08-15', 'Full')).resolves.toEqual({
+        ok: true,
+        raceId: 'race_new',
+      });
       expect(createRace).toHaveBeenCalledWith(
         'athlete_1',
         { name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full' },

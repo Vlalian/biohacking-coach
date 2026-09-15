@@ -241,12 +241,16 @@ function raceLines(p: BriefingProfile): string[] {
     return ['No Target Race — nothing in the future to build toward; worth raising with the athlete.'];
   }
   if (p.races.length === 0) return [];
-  return [
-    'Races:',
-    ...p.races.map(
-      (r) => `- ${r.date} · ${r.name} (${r.distance}) — ${r.isTarget ? 'target' : 'tune-up'}`,
-    ),
-  ];
+  // A Tune-up Race is a non-target race *before* the target (CONTEXT.md); one
+  // after it is simply a later race, and calling it a tune-up would tell the
+  // Head Coach the athlete is warming up for something already behind them
+  // (CodeRabbit, PR #67).
+  const targetDate = p.races.find((r) => r.isTarget)?.date ?? null;
+  const roleOf = (r: BriefingRace): string => {
+    if (r.isTarget) return 'target';
+    return targetDate !== null && r.date < targetDate ? 'tune-up' : 'later race';
+  };
+  return ['Races:', ...p.races.map((r) => `- ${r.date} · ${r.name} (${r.distance}) — ${roleOf(r)}`)];
 }
 
 /**

@@ -40,6 +40,15 @@ export type SettingsActionResult =
   | { ok: true }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
 
+/**
+ * Adding a Race is the one Settings action whose caller needs something back:
+ * the persisted id, so the list can remove or target the new race without a
+ * reload (CodeRabbit, PR #67). Same failure half as every other action.
+ */
+export type AddRaceResult =
+  | { ok: true; raceId: string }
+  | { ok: false; reason: 'not-authenticated' | 'invalid' };
+
 // One source for the weekday set, like the onboarding UI already keeps
 // (`onboarding.tsx`'s "One source for every option set" comment) — the
 // validation module, not a copy hand-kept here.
@@ -163,7 +172,7 @@ export async function addRaceAction(
   name: string,
   date: string,
   distance: string,
-): Promise<SettingsActionResult> {
+): Promise<AddRaceResult> {
   const newRace = parseNewRace(name, date, distance);
   if (!newRace) return { ok: false, reason: 'invalid' };
 
@@ -171,9 +180,9 @@ export async function addRaceAction(
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
   const asTarget = (await getTargetRace(athlete.id)) === null;
-  await createRace(athlete.id, newRace, { asTarget });
+  const raceId = await createRace(athlete.id, newRace, { asTarget });
   if (asTarget) await updateRaceTarget(athlete.id, newRace.name);
-  return { ok: true };
+  return { ok: true, raceId };
 }
 
 /** A Race as the form typed it, or null when any part of it is not one. */

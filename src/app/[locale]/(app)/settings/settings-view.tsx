@@ -9,7 +9,7 @@ import { Check, Download, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-rea
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
-import type { SettingsActionResult } from './settings-actions';
+import type { AddRaceResult, SettingsActionResult } from './settings-actions';
 import { RacesSection, type SettingsRace } from './settings-races';
 import type { DeleteAccountResult } from './erasure-actions';
 
@@ -41,7 +41,7 @@ export interface SettingsViewProps {
   language: string;
   coachingLink: SettingsCoachingLink | null;
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onAddRace: (name: string, date: string, distance: string) => Promise<SettingsActionResult>;
+  onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
   onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
   onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
@@ -335,7 +335,7 @@ function TrainingSection({
   weeklySessionDay: string | null;
   fixedConstraints: string[];
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onAddRace: (name: string, date: string, distance: string) => Promise<SettingsActionResult>;
+  onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
   onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
   onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;

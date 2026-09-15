@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import { RACE_DISTANCES } from '@/lib/race-distances';
-import type { SettingsActionResult } from './settings-actions';
+import type { AddRaceResult, SettingsActionResult } from './settings-actions';
 import { useSave } from './use-save';
 
 /**
@@ -36,7 +36,7 @@ export function RacesSection({
   onRemove,
 }: {
   races: SettingsRace[];
-  onAdd: (name: string, date: string, distance: string) => Promise<SettingsActionResult>;
+  onAdd: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
   onSetTarget: (raceId: string) => Promise<SettingsActionResult>;
   onRemove: (raceId: string) => Promise<SettingsActionResult>;
 }) {
@@ -106,16 +106,22 @@ export function RacesSection({
 
       <AddRaceForm
         onAdd={async (name, date, distance) => {
-          const ok = await run(() => onAdd(name, date, distance));
-          if (ok) {
+          // The persisted id, captured from the result the save hook only
+          // reads `ok` from — so remove and make-target work on the new race
+          // at once, with no reload (CodeRabbit, PR #67).
+          const created = { id: null as string | null };
+          const ok = await run(async () => {
+            const result = await onAdd(name, date, distance);
+            if (result.ok) created.id = result.raceId;
+            return result;
+          });
+          if (ok && created.id !== null) {
             // The server decides whether this became the target (it does when
             // there was none); mirror that rule so the badge is right without a
             // reload.
             const first = current.every((r) => !r.isTarget);
-            setCurrent((prev) => [
-              ...prev,
-              { id: `local-${Date.now()}`, name, date, distance, isTarget: first },
-            ]);
+            const id = created.id;
+            setCurrent((prev) => [...prev, { id, name, date, distance, isTarget: first }]);
           }
           return ok;
         }}

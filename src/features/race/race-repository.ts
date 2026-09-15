@@ -32,8 +32,15 @@ export async function createRace(
   athleteId: string,
   newRace: NewRace,
   { asTarget = true }: { asTarget?: boolean } = {},
-): Promise<void> {
-  await getDb().insert(race).values({ athleteId, ...newRace, isTarget: asTarget });
+): Promise<string> {
+  // The id comes back so the Settings list can act on the new race at once —
+  // before this it held a synthetic id the server would refuse until reload
+  // (CodeRabbit, PR #67).
+  const [row] = await getDb()
+    .insert(race)
+    .values({ athleteId, ...newRace, isTarget: asTarget })
+    .returning({ id: race.id });
+  return row.id;
 }
 
 /** Every Race this athlete has, earliest first. Empty is an ordinary answer. */

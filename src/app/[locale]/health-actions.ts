@@ -145,9 +145,13 @@ function parseBother(value: unknown): Bother | undefined {
 
 function isSubject(value: unknown): value is HealthSubject {
   // Optional chaining guards null, undefined and primitives in one step.
+  // Exactly one id: the `health_note_one_subject` constraint refuses both, and
+  // it should be refused here as invalid input rather than as a thrown insert
+  // (CodeRabbit, PR #67).
   const v = value as { injuryId?: unknown; illnessId?: unknown } | null | undefined;
-  const id = v?.injuryId ?? v?.illnessId;
-  return typeof id === 'string' && id !== '';
+  const hasInjury = typeof v?.injuryId === 'string' && v.injuryId !== '';
+  const hasIllness = typeof v?.illnessId === 'string' && v.illnessId !== '';
+  return hasInjury !== hasIllness;
 }
 
 /** The detail thread on one of the athlete's own records — theirs to read. */

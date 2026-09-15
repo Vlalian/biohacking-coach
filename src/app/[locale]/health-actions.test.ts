@@ -127,6 +127,13 @@ describe('closing, rating, noting', () => {
     expect(await readHealthNotesAction({ injuryId: 'inj_1' })).toEqual({ ok: true, notes: [{ id: 'n1' }] });
     expect(getHealthNotes).toHaveBeenCalledWith('athlete_1', { injuryId: 'inj_1' });
     expect(await readHealthNotesAction({} as never)).toEqual({ ok: false, reason: 'invalid' });
+    // Both ids at once is not a subject either — the XOR constraint would
+    // throw on the insert; it is refused before any write instead.
+    expect(await addHealthNoteAction({ injuryId: 'inj_1', illnessId: 'ill_1' } as never, 'note')).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    expect(addHealthNote).not.toHaveBeenCalledWith('athlete_1', { injuryId: 'inj_1', illnessId: 'ill_1' }, 'athlete', 'note');
     resolveAthleteId.mockResolvedValue(null);
     expect(await readHealthNotesAction({ injuryId: 'inj_1' })).toEqual({ ok: false, reason: 'not-authenticated' });
   });

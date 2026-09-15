@@ -10,7 +10,7 @@ const selectWhere = vi.fn(() => ({ orderBy }));
 const inserted: unknown[] = [];
 const insertValues = vi.fn((v: unknown) => {
   inserted.push(v);
-  return Promise.resolve();
+  return { returning: () => Promise.resolve([{ id: 'race_new' }]) };
 });
 
 const updates: { set: unknown; where: unknown }[] = [];
@@ -73,13 +73,14 @@ beforeEach(() => {
 });
 
 describe('a Race is a record of its own', () => {
-  it('is created with a name, a date and a distance', async () => {
-    await createRace('athlete_1', {
+  it('is created with a name, a date and a distance, and answers with its id', async () => {
+    const id = await createRace('athlete_1', {
       name: 'Ironman Copenhagen',
       date: '2027-08-15',
       distance: 'Full',
     });
 
+    expect(id).toBe('race_new');
     expect(inserted[0]).toMatchObject({
       athleteId: 'athlete_1',
       name: 'Ironman Copenhagen',
