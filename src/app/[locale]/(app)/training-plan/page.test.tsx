@@ -8,7 +8,13 @@ const {
   getUnavailableDates,
   listPendingActivities,
   listImportedSessionIds,
+  after,
+  ensureBlocksAdjusted,
+  getResolvedBlocks,
 } = vi.hoisted(() => ({
+    after: vi.fn((task: () => Promise<void>) => task()),
+    ensureBlocksAdjusted: vi.fn(() => Promise.resolve('drafted')),
+    getResolvedBlocks: vi.fn(() => Promise.resolve({ race: null, set: null, blocks: [] })),
     getSession: vi.fn(),
     redirect: vi.fn(() => {
       // The real next-intl redirect() throws to stop rendering; the mock does
@@ -26,6 +32,9 @@ vi.mock('next-intl/server', () => ({
   setRequestLocale: vi.fn(),
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
+vi.mock('next/server', () => ({ after }));
+vi.mock('@/features/coach/training-block-service', () => ({ ensureBlocksAdjusted, getResolvedBlocks }));
+vi.mock('../../block-strip', () => ({ BlockStrip: () => null }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
@@ -90,5 +99,44 @@ describe('TrainingPlanPage', () => {
     expect(getUnavailableDates).not.toHaveBeenCalled();
     expect(listPendingActivities).not.toHaveBeenCalled();
     expect(listImportedSessionIds).not.toHaveBeenCalled();
+  });
+});
+
+describe('TrainingPlanPage — the Training Block adjustment trigger (training-architecture/07)', () => {
+  beforeEach(() => {
+    after.mockClear();
+    ensureBlocksAdjusted.mockClear();
+    getResolvedBlocks.mockClear();
+    getSession.mockResolvedValue({ user: { id: 'u1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'a1' });
+  });
+
+  it('runs the adjustment through after(), not on the render path', async () => {
+    await render();
+
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(ensureBlocksAdjusted).toHaveBeenCalledWith('a1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it('reads the resolved blocks for the strip, scoped to the athlete', async () => {
+    await render();
+    expect(getResolvedBlocks).toHaveBeenCalledWith('a1', expect.any(String));
+  });
+
+  it('swallows and logs a thrown adjustment rather than failing the request', async () => {
+    ensureBlocksAdjusted.mockRejectedValueOnce(new Error('upstream'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(render()).resolves.toBeDefined();
+
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('block_adjustment_failed'));
+    spy.mockRestore();
+  });
+
+  it('does nothing for a signed-in user with no athlete row', async () => {
+    getAthleteByUserId.mockResolvedValue(undefined);
+    await render();
+    expect(after).not.toHaveBeenCalled();
+    expect(getResolvedBlocks).not.toHaveBeenCalled();
   });
 });

@@ -146,3 +146,117 @@ describe('toBriefingApiMessages', () => {
     ]);
   });
 });
+
+describe('renderBriefingPrompt — the Training Blocks (training-architecture/07)', () => {
+  const coachOnly = {
+    blocks: [
+      { name: 'Build the Volume', endDate: '2027-01-10', authoredBy: 'coach_ai' as const },
+      { name: 'Taper', endDate: '2027-08-15', authoredBy: 'coach_ai' as const },
+    ],
+    phase: 'Taper',
+    raceUnrealistic: null,
+  };
+
+  it('lists every block with its end date and author, outside the reports gate', () => {
+    // Blocks are plan structure, visible like the calendar (ADR 0003) — so
+    // they render with reports withheld.
+    const prompt = renderBriefingPrompt(ctx({ blocks: coachOnly, reports: null }));
+    expect(prompt).toContain('TRAINING BLOCKS');
+    expect(prompt).toContain('Build the Volume · to 2027-01-10 · Coach');
+    expect(prompt).toContain('Taper · to 2027-08-15 · Coach · current');
+    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Coach · current');
+    // No flag, no line — not "unrealistic: null".
+    expect(prompt).not.toContain('unrealistic');
+  });
+
+  it('carries the suggest-do-not-overwrite line only when a block is the Head Coach’s', () => {
+    const line = "The Training Blocks are the Head Coach's.";
+    expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).not.toContain(line);
+
+    const withHuman = {
+      ...coachOnly,
+      blocks: [{ ...coachOnly.blocks[0], name: 'Long Rides', authoredBy: 'head_coach' as const }, coachOnly.blocks[1]],
+    };
+    const prompt = renderBriefingPrompt(ctx({ blocks: withHuman }));
+    expect(prompt).toContain(line);
+    expect(prompt).toContain('say so as a suggestion');
+    expect(prompt).toContain('Long Rides · to 2027-01-10 · Head Coach');
+  });
+
+  it('reports the unrealistic flag with its reason, and the arithmetic draft as such', () => {
+    const prompt = renderBriefingPrompt(
+      ctx({
+        blocks: {
+          blocks: [{ name: 'Block 1 of 2', endDate: '2027-01-10', authoredBy: 'arithmetic' }],
+          phase: null,
+          raceUnrealistic: 'eleven months is short',
+        },
+      }),
+    );
+    expect(prompt).toContain('Block 1 of 2 · to 2027-01-10 · draft');
+    expect(prompt).toContain('The Coach has flagged the Target Race as unrealistic: eleven months is short');
+  });
+
+  it('says plainly there are none for an athlete with no Target Race', () => {
+    expect(renderBriefingPrompt(ctx({ blocks: null }))).toContain('TRAINING BLOCKS: none');
+    expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], phase: null, raceUnrealistic: null } }))).toContain(
+      'TRAINING BLOCKS: none',
+    );
+  });
+});
+
+describe('renderBriefingPrompt — golden', () => {
+  // Every line of copy in this prompt is an instruction to the model, so the
+  // whole render is pinned for the shapes that matter: everything shared, and
+  // everything withheld. A changed word shows in the diff.
+  it('renders identically with everything shared', () => {
+    const prompt = renderBriefingPrompt(
+      ctx({
+        language: 'da',
+        plan: [
+          ...plan,
+          { date: '2026-08-07', type: 'Recovery', status: 'skipped', duration: null, zone: null, note: null },
+        ],
+        blocks: {
+          blocks: [
+            { name: 'Build the Volume', endDate: '2027-01-10', authoredBy: 'coach_ai' },
+            { name: 'Long Rides', endDate: '2027-05-02', authoredBy: 'head_coach' },
+            { name: 'Block 3 of 3', endDate: '2027-08-15', authoredBy: 'arithmetic' },
+          ],
+          phase: 'Long Rides',
+          raceUnrealistic: 'eleven months is short',
+        },
+        reports: {
+          profile: {
+            ...reports.profile,
+            capacity: 'Currently: no run, bike easy only.',
+            onboarding: { sportBackground: 'cycling', availableHours: '10–12h', motivation: 'finish' },
+          },
+          reflections: [
+            ...reports.reflections,
+            { date: '2026-08-06', type: 'Intensity', body: 4, mind: 6, comment: null },
+          ],
+        },
+        transcripts: [
+          { kind: 'coach_chat', lines: ['Athlete: tired', 'Coach: rest'] },
+          { kind: 'weekly_session', lines: ['Head Coach: note', 'Coach: ok'] },
+        ],
+      }),
+    );
+    expect(prompt).toMatchSnapshot();
+  });
+
+  it('renders identically with everything withheld or absent', () => {
+    expect(
+      renderBriefingPrompt(ctx({ plan: [], blocks: null, reports: null, transcripts: null })),
+    ).toMatchSnapshot();
+    expect(
+      renderBriefingPrompt(
+        ctx({
+          reports: { profile: { phase: null, experienceLevel: null, raceTarget: null, sessionsPerWeek: null, onboarding: null, capacity: null }, reflections: [] },
+          transcripts: [],
+        }),
+      ),
+    ).toMatchSnapshot();
+  });
+});

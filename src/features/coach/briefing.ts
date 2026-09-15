@@ -1,3 +1,4 @@
+import type { BlockAuthor } from './training-blocks';
 import type { Onboarding } from './check-in';
 import { assertNoDirectIdentifier } from './check-in';
 import {
@@ -87,11 +88,31 @@ export interface BriefingTranscript {
   lines: string[];
 }
 
+/**
+ * The Training Blocks as the briefing reads them (`training-architecture/07`).
+ *
+ * Plan structure, so visible like the calendar with no flag (ADR 0003) — this
+ * sits beside `plan`, outside the reports gate. `raceUnrealistic` is the Coach's
+ * own flag, not something the athlete reported, for the same reason.
+ */
+export interface BriefingBlocks {
+  blocks: { name: string; endDate: string; authoredBy: BlockAuthor }[];
+  /**
+   * The block today falls inside, by name, or null. Carried here and not only
+   * in the profile: with reports withheld the profile is gone, and a block list
+   * with no start dates cannot say which block is now (CodeRabbit, PR #65).
+   */
+  phase: string | null;
+  raceUnrealistic: string | null;
+}
+
 export interface BriefingContext {
   today: string;
   language?: string;
   /** The plan — always visible, no flag (ADR 0003). */
   plan: BriefingPlanEntry[];
+  /** The Training Blocks — always visible; null or empty when there is no Target Race. */
+  blocks?: BriefingBlocks | null;
   /** Self-reported data, or null when `shareAthleteReports` is off. */
   reports: BriefingReports | null;
   /** Athlete conversations, or null when `shareAiTranscripts` is off. */
@@ -112,6 +133,7 @@ export interface BriefingContext {
 export function buildBriefingContext(input: {
   today: string;
   plan: BriefingPlanEntry[];
+  blocks?: BriefingBlocks | null;
   reports: BriefingReports | null;
   transcripts: BriefingTranscript[] | null;
   language?: string;
@@ -120,12 +142,13 @@ export function buildBriefingContext(input: {
     today: input.today,
     language: input.language,
     plan: input.plan,
+    blocks: input.blocks ?? null,
     reports: input.reports,
     transcripts: input.transcripts,
   };
   // Guard the material the app assembled from the athlete's opaque record. The
   // transcripts are deliberately excluded — see the doc comment.
-  assertNoDirectIdentifier({ plan: ctx.plan, reports: ctx.reports });
+  assertNoDirectIdentifier({ plan: ctx.plan, blocks: ctx.blocks, reports: ctx.reports });
   return ctx;
 }
 
@@ -147,6 +170,10 @@ export function toBriefingReflection(r: {
 }
 
 const weekdayShort = (dateKey: string): string =>
+  // Stryker disable next-line StringLiteral: equivalent where the tests run. The
+  // suffix pins local midnight so a bare date is not parsed as UTC and shown a
+  // day early west of Greenwich; on a machine at or east of UTC both spellings
+  // render the same weekday, so no test here can tell them apart.
   new Date(dateKey + 'T00:00:00').toLocaleDateString('en-GB', {
     weekday: 'short',
     day: 'numeric',
@@ -192,6 +219,37 @@ function profileLines(p: BriefingProfile): string[] {
 function planBlock(plan: BriefingPlanEntry[]): string {
   if (plan.length === 0) return "PLAN: No sessions on this athlete's calendar yet.";
   return `PLAN (always visible — the calendar and its sessions):\n${plan.map(planLine).join('\n')}`;
+}
+
+const BLOCK_AUTHOR_LABEL: Record<BlockAuthor, string> = {
+  arithmetic: 'draft',
+  coach_ai: 'Coach',
+  head_coach: 'Head Coach',
+};
+
+const HEAD_COACH_BLOCKS_LINE =
+  "The Training Blocks are the Head Coach's. If you would change one, say so as a suggestion; do not present a different structure as the plan.";
+
+/**
+ * The Training Blocks, always visible like the plan they structure.
+ *
+ * The author label is what makes the suggest-don't-overwrite line actionable:
+ * the Coach can see which block is a human's. And the "unrealistic" flag lands
+ * here rather than in the reports because it is the Coach's own judgement, made
+ * in the background, that the Head Coach ought to hear about whether or not the
+ * athlete shares their self-reported data.
+ */
+function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
+  if (!blocks || blocks.blocks.length === 0) return 'TRAINING BLOCKS: none — the athlete has no Target Race.';
+  const lines = blocks.blocks.map(
+    (b) =>
+      `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}${b.name === blocks.phase ? ' · current' : ''}`,
+  );
+  if (blocks.blocks.some((b) => b.authoredBy === 'head_coach')) lines.push(HEAD_COACH_BLOCKS_LINE);
+  if (blocks.raceUnrealistic) {
+    lines.push(`The Coach has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
+  }
+  return `TRAINING BLOCKS (the horizon toward the Target Race, always visible):\n${lines.join('\n')}`;
 }
 
 /**
@@ -251,13 +309,14 @@ BOUNDARIES:
  * built even though what they say is deliberately different.
  */
 export function renderBriefingPrompt(ctx: BriefingContext): string {
-  const { today, language, plan, reports, transcripts } = ctx;
+  const { today, language, plan, blocks, reports, transcripts } = ctx;
 
   return assemble([
     `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
     BRIEFING_POSTURE,
     `TODAY: ${today}`,
     planBlock(plan),
+    blocksBlock(blocks),
     ...reportsBlocks(reports),
     transcriptsBlock(transcripts),
   ]);

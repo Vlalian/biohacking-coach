@@ -41,6 +41,10 @@ function chain() {
 }
 
 vi.mock('@/db', () => ({ getDb: () => chain() }));
+const { getResolvedBlocks } = vi.hoisted(() => ({
+  getResolvedBlocks: vi.fn(async (): Promise<unknown> => ({ race: null, set: null, blocks: [] })),
+}));
+vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('./coach-repository', () => ({
   getActiveLink,
   getAthleteName,
@@ -235,5 +239,108 @@ describe('getCoachAthleteView — Link Visibility applied server-side', () => {
     });
     // The Body & Mind panel is gone, not empty — no session carries a reading.
     expect(view!.dataset.sessions.every((s) => s.body == null && s.mind == null)).toBe(true);
+  });
+});
+
+describe('getCoachAthleteView — the Training Blocks are plan structure (training-architecture/08)', () => {
+  const RACE = { id: 'r1', athleteId: 'a1', name: 'IM', date: '2027-08-15', distance: 'Ironman', isTarget: true, createdAt: new Date() };
+  const BLOCKS = [
+    { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-09-14', endDate: '2027-01-10', authoredBy: 'coach_ai' },
+    { index: 2, total: 2, name: 'Taper', startDate: '2027-01-11', endDate: '2027-08-15', authoredBy: 'coach_ai' },
+  ];
+
+  beforeEach(() => {
+    calendarRows.value = [];
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+  });
+
+  it('returns the blocks with the set version and race, regardless of shareAthleteReports', async () => {
+    getResolvedBlocks.mockResolvedValue({
+      race: RACE,
+      set: { id: 's1', athleteId: 'a1', raceId: 'r1', startDate: '2026-09-14', version: 3, blocks: [] },
+      blocks: BLOCKS,
+    });
+
+    for (const share of [true, false]) {
+      getActiveLink.mockResolvedValue(activeLink(share, false));
+      const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+      expect(view!.blocks).toEqual({
+        raceId: 'r1',
+        raceName: 'IM',
+        raceDate: '2027-08-15',
+        version: 3,
+        // An empty stored set fits no race, so the panel must not edit it.
+        stale: true,
+        startDate: '2026-09-14',
+        blocks: BLOCKS,
+      });
+    }
+    expect(getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
+  });
+
+  it('carries version 0 and today as the start when nothing is stored yet — the arithmetic draft', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getResolvedBlocks.mockResolvedValue({ race: RACE, set: null, blocks: BLOCKS });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(view!.blocks).toMatchObject({ version: 0, startDate: TODAY });
+  });
+
+  it('marks the view stale when the stored set no longer ends on race day, so the panel goes read-only', async () => {
+    getResolvedBlocks.mockResolvedValue({
+      race: RACE,
+      set: { id: 's1', athleteId: 'a1', raceId: 'r1', startDate: '2026-09-14', version: 3, blocks: [{ name: 'Old Taper', endDate: '2027-08-01', authoredBy: 'coach_ai' }] },
+      blocks: BLOCKS,
+    });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+
+    const view = await getCoachAthleteView('c1', 'a1', TODAY);
+    expect(view!.blocks).toMatchObject({ stale: true, version: 3 });
+  });
+
+  it('is not stale when the set fits the race, nor when nothing is stored', async () => {
+    getResolvedBlocks.mockResolvedValue({
+      race: RACE,
+      set: { id: 's1', athleteId: 'a1', raceId: 'r1', startDate: '2026-09-14', version: 3, blocks: [{ name: 'Taper', endDate: '2027-08-15', authoredBy: 'coach_ai' }] },
+      blocks: BLOCKS,
+    });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    expect((await getCoachAthleteView('c1', 'a1', TODAY))!.blocks).toMatchObject({ stale: false });
+
+    getResolvedBlocks.mockResolvedValue({ race: RACE, set: null, blocks: BLOCKS });
+    expect((await getCoachAthleteView('c1', 'a1', TODAY))!.blocks).toMatchObject({ stale: false });
+  });
+
+  it('is null when the athlete has no Target Race', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, true));
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(view!.blocks).toBeNull();
+  });
+
+  it('reads nothing when there is no link', async () => {
+    getActiveLink.mockResolvedValue(undefined);
+    getResolvedBlocks.mockClear();
+    await getCoachAthleteView('coach_1', 'a_stranger', TODAY);
+    expect(getResolvedBlocks).not.toHaveBeenCalled();
+  });
+});
+
+describe('getCoachAthleteView — the editing surface starts today', () => {
+  it('includes a session dated today and excludes yesterday and the completed', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    calendarRows.value = [
+      calRow({ id: 'today', date: TODAY, status: 'planned', origin: 'coach' }),
+      calRow({ id: 'yesterday', date: '2026-07-13', status: 'planned', origin: 'coach' }),
+      calRow({ id: 'done', date: '2026-07-20', status: 'completed', origin: 'coach' }),
+    ];
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(view!.planSessions.map((p) => p.id)).toEqual(['today']);
   });
 });

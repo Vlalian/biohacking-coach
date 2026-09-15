@@ -275,11 +275,13 @@ foreach ($rel in $FileCopies.Keys) {
 # 4. Gitignored CLAUDE.md that @-imports the canonical root docs by absolute path.
 #    AGENTS.md is tracked, so it comes from the worktree's own checkout - that way
 #    a branch that CHANGES the rules is read with its own version of them.
-#    CONTEXT.md and OVERVIEW.md are gitignored and live in the main folder.
+#    CONTEXT-BRIEF.md is the generated index of CONTEXT.md + OVERVIEW.md (both
+#    gitignored, both in the main folder); importing the brief instead of the two
+#    whole files is what keeps a session's opening context at ~6k tokens rather
+#    than ~41k (2026-09-15). Rebuild it with scripts/context-brief.mjs.
 $claudeMd = @"
 @$MainFwd/AGENTS.md
-@$MainFwd/CONTEXT.md
-@$MainFwd/OVERVIEW.md
+@$MainFwd/CONTEXT-BRIEF.md
 "@
 # WriteAllText writes UTF-8 WITHOUT a BOM (Set-Content -Encoding utf8 would add one,
 # and a leading BOM can break the first @-import).

@@ -222,3 +222,60 @@ describe('the Roster entry in the Navigation Drawer', () => {
     }
   });
 });
+
+describe('the weekly offer keys on the conversation, never on the plan', () => {
+  // `coach-overlay/04` decision 4, pinned for `training-architecture/07` and
+  // `/16`: a drafted week must still be offered, so the layout may derive
+  // `hasHeldWeeklySessionThisWeek` from held conversations only. A plan read
+  // here would be the exact regression — generation silencing its own offer.
+  it('the layout reads no sessions and no plan to decide the nudge', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
+    expect(source).toContain('hasHeldWeeklySessionInWeek');
+    // Every seam a plan or a drafted week could be read through, by name.
+    expect(source).not.toMatch(
+      /session-repository|getSessionsFor|hasCoachPlanForWeek|replaceCoachPlan|getResolvedBlocks|getBlockSet|training-block|plan-proposal-repository'\)[^]*?weeklyOffer/,
+    );
+  });
+
+  // The runtime half. The layout can see two things that resemble "this week
+  // has a plan": a pending proposal and a held Weekly Session. The offer must
+  // follow the second and ignore the first — and the previous version of this
+  // test set up neither, so it asserted the default and could not fail (review
+  // of 07, 2026-09-15).
+  const weeklyOfferOf = async () => {
+    const element = await render();
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    return (props.coachContent as { props: Record<string, unknown> }).props.weeklyOffer;
+  };
+
+  it('derives the offer from the held-session read for this week, and from nothing else', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      syntheticLabel: null,
+      profile: { weeklySessionDay: 'Monday' },
+    });
+    hasHeldWeeklySessionInWeek.mockResolvedValue(false);
+    getPendingProposal.mockClear();
+
+    expect(await weeklyOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasHeldWeeklySessionThisWeek: false });
+    expect(hasHeldWeeklySessionInWeek).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    // No open Weekly Session, so the proposal — the only plan-shaped thing in
+    // reach — is never even read on the way to the offer.
+    expect(getPendingProposal).not.toHaveBeenCalled();
+  });
+
+  it('withdraws the offer only when this week\'s session was actually held', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      syntheticLabel: null,
+      profile: { weeklySessionDay: 'Monday' },
+    });
+    hasHeldWeeklySessionInWeek.mockResolvedValue(true);
+
+    expect(await weeklyOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasHeldWeeklySessionThisWeek: true });
+  });
+});

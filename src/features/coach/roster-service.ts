@@ -14,6 +14,8 @@ import {
   type SharedTranscript,
 } from './coach-repository';
 import { canHeadCoachEditContent } from './head-coach-authority';
+import { getResolvedBlocks, type ResolvedBlocks } from './training-block-service';
+import { isStaleSet, type TrainingBlock } from './training-blocks';
 import type { LinkVisibility } from './link-visibility';
 import {
   applyVisibilityToInputs,
@@ -67,6 +69,28 @@ export type PlanSession = {
  * nothing exists to leak toward the client (Link Visibility at the query, not
  * the UI). The view exposes `sharedTranscripts` only when the link permits it.
  */
+/**
+ * The athlete's Training Blocks as the Head Coach's editing surface
+ * (`training-architecture/08`). Plan structure, so always present when there is
+ * a Target Race (ADR 0003) — outside the visibility branch. `version` is the
+ * compare-and-swap token an edit sends back; `0` means nothing is stored yet
+ * and the blocks shown are the arithmetic draft the edit will materialise.
+ */
+export type CoachBlocksView = {
+  raceId: string;
+  raceName: string;
+  raceDate: string;
+  version: number;
+  /**
+   * True when a set is stored but no longer ends on race day: the blocks shown
+   * are the arithmetic draft, the rows underneath are the old set, and the
+   * panel must not offer an edit that would land on the latter.
+   */
+  stale: boolean;
+  startDate: string;
+  blocks: TrainingBlock[];
+};
+
 export type CoachAthleteView = {
   athleteName: string;
   visibility: LinkVisibility;
@@ -78,6 +102,8 @@ export type CoachAthleteView = {
   /** Shared transcripts, or null when `share_ai_transcripts` is off. */
   sharedTranscripts: SharedTranscript[] | null;
   dataset: InfoDataset;
+  /** The Training Blocks — always visible; null when the athlete has no Target Race. */
+  blocks: CoachBlocksView | null;
 };
 
 export async function getCoachAthleteView(
@@ -90,7 +116,7 @@ export async function getCoachAthleteView(
   if (!link) return null;
   const { visibility } = link;
 
-  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }] =
+  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }, horizon] =
     await Promise.all([
       getAthleteName(athleteId),
       getDb()
@@ -104,6 +130,9 @@ export async function getCoachAthleteView(
       // Gated on share_ai_transcripts: null (unfetched) when the flag is off.
       getSharedTranscripts(link),
       getInformationViewInputs(athleteId),
+      // The Training Blocks are the structure the calendar is built toward —
+      // plan, not report — so they are read here, outside the visibility branch.
+      getResolvedBlocks(athleteId, todayKey),
     ]);
 
   const calendarSessions = applyVisibilityToSessions(
@@ -144,5 +173,24 @@ export async function getCoachAthleteView(
     planSessions,
     sharedTranscripts,
     dataset,
+    blocks: blocksViewOf(horizon, todayKey),
+  };
+}
+
+/**
+ * The resolved blocks as the panel's editing surface. With nothing stored the
+ * version is 0 and the start is today: the edit will materialise the arithmetic
+ * draft from today, so that is the set the panel is describing.
+ */
+function blocksViewOf(horizon: ResolvedBlocks, todayKey: string): CoachBlocksView | null {
+  if (!horizon.race) return null;
+  return {
+    raceId: horizon.race.id,
+    raceName: horizon.race.name,
+    raceDate: horizon.race.date,
+    version: horizon.set?.version ?? 0,
+    stale: isStaleSet(horizon.set, horizon.race.date),
+    startDate: horizon.set?.startDate ?? todayKey,
+    blocks: horizon.blocks,
   };
 }
