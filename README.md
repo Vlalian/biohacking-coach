@@ -27,6 +27,23 @@ npm run db:migrate           # apply the schema
 npm run seed                 # optional: seed sample data
 ```
 
+`DATABASE_URL` must point at a **non-production** Neon branch. The project keeps real
+athlete data on the `production` branch, reached only by Vercel's production
+environment; everything else — local dev, agent worktrees, preview deployments —
+runs on children of `seed-template`, a schema-only branch seeded once with the
+sample accounts. `New-Session.ps1` creates such a branch per worktree; for a plain
+checkout use `vercel-dev` or cut your own (`neon branches create --parent
+seed-template`). Never cut a branch from `production`. See `.env.example` and GDPR
+decision 8 in the tracker.
+
+Migrations are applied by hand (`npm run db:migrate` reads `DATABASE_URL`), to
+`seed-template` first — its children inherit the change — and to `production`
+separately, **before** the code that needs the new columns is deployed. Gotcha: a
+schema-only branch copies the `drizzle.__drizzle_migrations` table but not its
+rows, so `db:migrate` on a fresh one tries migration 0000 and fails on the first
+`CREATE TABLE`; copy the ledger rows from the parent first (done once for
+`seed-template` on 2026-09-11 — children inherit them).
+
 ## Run
 
 ```bash

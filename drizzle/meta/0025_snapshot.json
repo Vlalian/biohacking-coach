@@ -1,6 +1,6 @@
 {
-  "id": "01e4a496-eadd-4073-bca1-9aa423bd310a",
-  "prevId": "315cacd3-d194-4157-8218-0b7480109c0f",
+  "id": "d723be4f-0ebf-4fe9-9ea4-18b7f8603775",
+  "prevId": "01e4a496-eadd-4073-bca1-9aa423bd310a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1319,6 +1319,12 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+        },
+        "bother": {
+          "name": "bother",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1362,7 +1368,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "illness_bother_range": {
+          "name": "illness_bother_range",
+          "value": "\"illness\".\"bother\" IS NULL OR \"illness\".\"bother\" BETWEEN 1 AND 5"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.injury": {
@@ -1415,6 +1426,12 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+        },
+        "bother": {
+          "name": "bother",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1462,6 +1479,10 @@
         "injury_allowances_known": {
           "name": "injury_allowances_known",
           "value": "swim IN ('none', 'easy', 'full') AND bike IN ('none', 'easy', 'full') AND run IN ('none', 'easy', 'full')"
+        },
+        "injury_bother_range": {
+          "name": "injury_bother_range",
+          "value": "\"injury\".\"bother\" IS NULL OR \"injury\".\"bother\" BETWEEN 1 AND 5"
         }
       },
       "isRLSEnabled": false

@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { nextCookies } from 'better-auth/next-js';
+import { admin } from 'better-auth/plugins';
 // Relative imports, not the @/ alias: this module is loaded by the seed (tsx)
 // and the better-auth CLI as well as Next, and relative paths resolve in all of
 // them without alias configuration.
@@ -85,7 +86,19 @@ export const auth = betterAuth({
     },
   },
 
-  plugins: [nextCookies()],
+  // The operator's tools (2026-09-11): list users, set a role, ban, and above
+  // all *impersonate* — open the app as the coach for an hour to see what they
+  // see, without knowing their password. That is a health-data access path, so
+  // it is logged by the plugin (`session.impersonated_by`) and must be named in
+  // the consent artifact as "the operator can view the app as you for support"
+  // before anyone but Mads holds an account it could reach.
+  //
+  // Who is an admin: the `user.role` column, which the seed sets to 'admin' on
+  // Mads and on nobody else. No `adminUserIds` — ids differ per database branch,
+  // and a role column travels with the seed to every branch. The eval has one
+  // operator, so one admin. nextCookies() stays last, as better-auth's Next.js
+  // guide requires.
+  plugins: [admin({ adminRoles: ['admin'] }), nextCookies()],
 });
 
 /** The signed-in session shape, inferred from the config above. */

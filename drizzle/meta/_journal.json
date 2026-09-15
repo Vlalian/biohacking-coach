@@ -173,8 +173,15 @@
     {
       "idx": 24,
       "version": "7",
-      "when": 1789334463424,
-      "tag": "0024_bother_rating",
+      "when": 1789161931301,
+      "tag": "0024_admin_plugin",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789479916510,
+      "tag": "0025_bother_rating",
       "breakpoints": true
     }
   ]
