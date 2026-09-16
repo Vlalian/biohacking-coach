@@ -16,6 +16,7 @@ import { getCheckInForWeek } from './check-in-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
 import { hasHeldWeeklySessionInWeek } from './conversation-repository';
 import { getResolvedBlocks } from './training-block-service';
+import { getRaces } from '@/features/race/race-repository';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
 import type { Athlete } from '@/features/athlete/athlete';
 import {
@@ -232,7 +233,7 @@ async function gatherContext(
   unavailableDates: string[],
 ): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult }> {
   const weekStart = weekStartOf(today);
-  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity] = await Promise.all([
+  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races] = await Promise.all([
     getAthleteById(athleteId),
     getSessionsForWeek(athleteId, weekStart),
     getEquipmentItems(athleteId),
@@ -240,6 +241,10 @@ async function gatherContext(
     getCheckInForWeek(athleteId, weekStart),
     // The capacity half only; the detail thread has no reader here (ADR 0011).
     capacityFor(athleteId),
+    // Every race, so the draft knows a tune-up from the target (slice 09). No
+    // plan-written-at: the draft is the plan being written, so nothing is late
+    // relative to it yet.
+    getRaces(athleteId),
   ]);
   if (!athlete) throw new Error('athlete row missing');
 
@@ -253,6 +258,8 @@ async function gatherContext(
     horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
     capacity,
     notableSignalFrom(checkInRow),
+    races,
+    null,
     horizon.blocks,
   );
 

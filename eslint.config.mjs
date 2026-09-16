@@ -84,6 +84,14 @@ const eslintConfig = defineConfig([
           message:
             "A focused test never leaves a branch: it makes the suite pass by not running it.",
         },
+        {
+          // `it.each(cases).only(...)`: the object is the `.each(...)` call, not
+          // the bare name, so the selector above cannot see it (CodeRabbit, PR #65).
+          selector:
+            "MemberExpression[property.name='only'][object.type='CallExpression'][object.callee.type='MemberExpression'][object.callee.property.name='each'][object.callee.object.name=/^(it|describe|test)$/]",
+          message:
+            "A focused test never leaves a branch: it makes the suite pass by not running it.",
+        },
       ],
     },
   },

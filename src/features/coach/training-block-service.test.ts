@@ -6,7 +6,6 @@ const getTargetRace = vi.fn();
 const getBlockSet = vi.fn();
 const insertBlockSet = vi.fn();
 const casUpdateBlockSet = vi.fn();
-const insertBlockEvent = vi.fn();
 const getAthleteById = vi.fn();
 const capacityFor = vi.fn();
 const getCheckInForWeek = vi.fn();
@@ -21,7 +20,6 @@ vi.mock('./training-block-repository', () => ({
   getBlockSet,
   insertBlockSet,
   casUpdateBlockSet,
-  insertBlockEvent,
 }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
@@ -76,7 +74,6 @@ beforeEach(() => {
   getBlockSet.mockResolvedValue(null);
   insertBlockSet.mockResolvedValue('inserted');
   casUpdateBlockSet.mockResolvedValue({ ok: true, version: 2 });
-  insertBlockEvent.mockResolvedValue(undefined);
   getAthleteById.mockResolvedValue({ id: ATHLETE, experienceLevel: 'intermediate' });
   capacityFor.mockResolvedValue(null);
   getCheckInForWeek.mockResolvedValue(null);
@@ -144,17 +141,18 @@ describe('ensureBlocksAdjusted — a valid reply is written once, as the Coach',
     expect(params.startDate).toBe(TODAY);
     expect(params.blocks).toEqual(SHAPED);
     expect(params.blocks.every((b: TrainingBlockSpec) => b.authoredBy === 'coach_ai')).toBe(true);
-    expect(params.event).toEqual({
-      actorType: 'coach_ai',
-      actorId: null,
-      type: 'blocks_drafted',
-      payload: {
-        raceId: RACE.id,
-        raceName: RACE.name,
-        blocks: SHAPED.map(({ name, endDate }) => ({ name, endDate })),
+    expect(params.events).toEqual([
+      {
+        actorType: 'coach_ai',
+        actorId: null,
+        type: 'blocks_drafted',
+        payload: {
+          raceId: RACE.id,
+          raceName: RACE.name,
+          blocks: SHAPED.map(({ name, endDate }) => ({ name, endDate })),
+        },
       },
-    });
-    expect(insertBlockEvent).not.toHaveBeenCalled();
+    ]);
   });
 
   it('offers exactly the adjust tool, and briefs from the arithmetic draft', async () => {
@@ -179,7 +177,7 @@ describe('ensureBlocksAdjusted — a valid reply is written once, as the Coach',
     expect(casUpdateBlockSet).toHaveBeenCalledTimes(1);
     const params = casUpdateBlockSet.mock.calls[0][0];
     expect(params).toMatchObject({ athleteId: ATHLETE, setId: 'set-1', expectedVersion: 4, blocks: SHAPED });
-    expect(params.event.type).toBe('blocks_drafted');
+    expect(params.events.map((e: { type: string }) => e.type)).toEqual(['blocks_drafted']);
     // The new blocks were validated against today, so the row's start moves
     // too — or block 1 would be expanded from the old start and read as weeks
     // longer than it is (review of 07, 2026-09-15).
@@ -197,16 +195,21 @@ describe('ensureBlocksAdjusted — a valid reply is written once, as the Coach',
     expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('drafted');
 
     expect(insertBlockSet).toHaveBeenCalledTimes(1);
-    expect(insertBlockEvent).toHaveBeenCalledWith(ATHLETE, {
-      actorType: 'coach_ai',
-      actorId: null,
-      type: 'race_flagged_unrealistic',
-      payload: {
-        raceId: RACE.id,
-        raceName: RACE.name,
-        reason: 'eleven months is short for a first full distance',
+    // Both sentences in the one write, so a lost race loses neither and a
+    // verdict cannot vanish between two statements.
+    expect(insertBlockSet.mock.calls[0][0].events).toEqual([
+      expect.objectContaining({ type: 'blocks_drafted' }),
+      {
+        actorType: 'coach_ai',
+        actorId: null,
+        type: 'race_flagged_unrealistic',
+        payload: {
+          raceId: RACE.id,
+          raceName: RACE.name,
+          reason: 'eleven months is short for a first full distance',
+        },
       },
-    });
+    ]);
   });
 });
 
@@ -219,7 +222,6 @@ describe('ensureBlocksAdjusted — the athlete is never worse off than stage 1',
     expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('refused');
 
     expect(insertBlockSet).not.toHaveBeenCalled();
-    expect(insertBlockEvent).not.toHaveBeenCalled();
     expect(logBlockAdjustmentRefused).toHaveBeenCalledWith(ATHLETE, 'positional');
   });
 
@@ -256,9 +258,10 @@ describe('ensureBlocksAdjusted — the athlete is never worse off than stage 1',
 
     expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('lost-race');
 
-    // The `blocks_drafted` event rode inside the insert statement and was gated
-    // there; the second event must not be written by a run that wrote no set.
-    expect(insertBlockEvent).not.toHaveBeenCalled();
+    // Both events rode inside the one insert statement, gated there; nothing
+    // else is written by a run that wrote no set.
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+    expect(insertBlockSet).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the resolved blocks as the arithmetic draft after a refused reply', async () => {
@@ -419,14 +422,14 @@ describe('editBlockAsHeadCoach', () => {
 
     expect(result).toEqual({ ok: true, version: 2 });
     const inserted = insertBlockSet.mock.calls[0][0];
-    expect(inserted.event).toBeUndefined();
+    expect(inserted.events).toBeUndefined();
     expect(inserted.startDate).toBe(TODAY);
     expect(inserted.blocks.every((b: TrainingBlockSpec) => b.authoredBy === 'arithmetic')).toBe(true);
     // The panel's version is meaningless for a set that did not exist; the
     // materialised set is at version 1 and that is what the CAS expects.
     const cas = casUpdateBlockSet.mock.calls[0][0];
     expect(cas.expectedVersion).toBe(1);
-    expect(cas.event.type).toBe('block_edited');
+    expect(cas.events.map((e: { type: string }) => e.type)).toEqual(['block_edited']);
   });
 
   it('returns conflict with what won when the materialising insert loses to the Coach draft', async () => {
@@ -462,18 +465,19 @@ describe('editBlockAsHeadCoach', () => {
     expect(cas).toMatchObject({ athleteId: ATHLETE, setId: 'set-1', expectedVersion: 1 });
     expect(cas.blocks[1]).toEqual({ name: 'Long Rides', endDate: '2027-04-25', authoredBy: 'head_coach' });
     expect(cas.blocks[0]).toEqual(SHAPED[0]);
-    expect(cas.event).toEqual({
-      actorType: 'head_coach',
-      actorId: COACH,
-      type: 'block_edited',
-      payload: {
-        raceId: RACE.id,
-        position: 2,
-        from: { name: 'Sharpen the Bike', endDate: '2027-05-02' },
-        to: { name: 'Long Rides', endDate: '2027-04-25' },
+    expect(cas.events).toEqual([
+      {
+        actorType: 'head_coach',
+        actorId: COACH,
+        type: 'block_edited',
+        payload: {
+          raceId: RACE.id,
+          position: 2,
+          from: { name: 'Sharpen the Bike', endDate: '2027-05-02' },
+          to: { name: 'Long Rides', endDate: '2027-04-25' },
+        },
       },
-    });
-    expect(insertBlockEvent).not.toHaveBeenCalled();
+    ]);
   });
 
   it('returns conflict carrying the current set when the version had moved', async () => {
@@ -506,7 +510,6 @@ describe('editBlockAsHeadCoach', () => {
     expect(result).toEqual({ ok: false, reason: 'stale-set' });
     expect(casUpdateBlockSet).not.toHaveBeenCalled();
     expect(insertBlockSet).not.toHaveBeenCalled();
-    expect(insertBlockEvent).not.toHaveBeenCalled();
   });
 
   it('uses the panel version, not the stored one, when the set already existed', async () => {
@@ -515,6 +518,16 @@ describe('editBlockAsHeadCoach', () => {
     await edit({ expectedVersion: 7 });
 
     expect(casUpdateBlockSet.mock.calls[0][0].expectedVersion).toBe(7);
+  });
+
+  it('refuses to edit a stored set once race day has come, writing nothing', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: TODAY });
+    getBlockSet.mockResolvedValue(storedSet({ blocks: SHAPED.map((b, i) => (i === 3 ? { ...b, endDate: TODAY } : b)) }));
+
+    expect(await edit()).toEqual({ ok: false, reason: 'no-race' });
+
+    expect(getBlockSet).not.toHaveBeenCalled();
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
   });
 
   it('answers no-race for a race already run, and when the materialised set cannot be read back', async () => {

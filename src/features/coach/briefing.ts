@@ -74,6 +74,48 @@ export interface BriefingProfile {
    * 0011 keeps that thread out of one.
    */
   capacity: string | null;
+  /**
+   * The athlete's future races, earliest first (`training-architecture/09`):
+   * the Target Race, and the Tune-up Races before it. Races already run are
+   * left out — they are the record, not the horizon.
+   */
+  races: BriefingRace[];
+  /**
+   * Whether a Target Race exists at all. Carried separately from `races` so
+   * the renderer can state **No Target Race** — the athlete has nothing in the
+   * future to build toward — and the Head Coach can raise it (Mads,
+   * 2026-09-11). `raceTarget` above cannot say this: it is the mirror column,
+   * and an athlete whose race has passed still has a name in it.
+   */
+  hasTargetRace: boolean;
+}
+
+/** One race as the briefing names it. */
+export interface BriefingRace {
+  name: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  distance: string;
+  isTarget: boolean;
+}
+
+/**
+ * The race half of the profile, from the rows the repository returned.
+ *
+ * Future races only — earlier ones are the record, not the horizon — and the
+ * target counts only while it is ahead: a Target Race that has passed is the
+ * same "No Target Race" state as never having had one, and the Head Coach's
+ * conversation is the same either way (Mads, 2026-09-11).
+ */
+export function briefingRaces(
+  races: readonly { name: string; date: string; distance: string; isTarget: boolean }[],
+  today: string,
+): Pick<BriefingProfile, 'races' | 'hasTargetRace'> {
+  const future = races.filter((r) => r.date > today);
+  return {
+    races: future.map((r) => ({ name: r.name, date: r.date, distance: r.distance, isTarget: r.isTarget })),
+    hasTargetRace: future.some((r) => r.isTarget),
+  };
 }
 
 /** The self-reported half of the material — present only when reports are shared. */
@@ -97,6 +139,12 @@ export interface BriefingTranscript {
  */
 export interface BriefingBlocks {
   blocks: { name: string; endDate: string; authoredBy: BlockAuthor }[];
+  /**
+   * The block today falls inside, by name, or null. Carried here and not only
+   * in the profile: with reports withheld the profile is gone, and a block list
+   * with no start dates cannot say which block is now (CodeRabbit, PR #65).
+   */
+  phase: string | null;
   raceUnrealistic: string | null;
 }
 
@@ -196,6 +244,7 @@ function profileLines(p: BriefingProfile): string[] {
   if (p.phase) lines.push(`Training phase: ${p.phase}`);
   if (p.experienceLevel) lines.push(`Experience: ${p.experienceLevel}`);
   if (p.raceTarget) lines.push(`Race target: ${p.raceTarget}`);
+  lines.push(...raceLines(p));
   if (p.sessionsPerWeek != null)
     lines.push(`Training sessions per week: ${p.sessionsPerWeek}`);
   // What the athlete's body currently allows. Last, because it is the line that
@@ -204,6 +253,31 @@ function profileLines(p: BriefingProfile): string[] {
   if (p.capacity) lines.push(p.capacity);
   lines.push(...buildOnboardingLines(p.onboarding));
   return lines;
+}
+
+/**
+ * The races, or the absence of one (`training-architecture/09`).
+ *
+ * "No Target Race" is said out loud rather than omitted. Before this, a null
+ * race simply dropped the line, and the Head Coach — the one person whose job
+ * it is to raise it — was never told. The athlete's own Coach does not raise
+ * it unprompted (US-3); this is the channel for it.
+ */
+function raceLines(p: BriefingProfile): string[] {
+  if (!p.hasTargetRace) {
+    return ['No Target Race — nothing in the future to build toward; worth raising with the athlete.'];
+  }
+  if (p.races.length === 0) return [];
+  // A Tune-up Race is a non-target race *before* the target (CONTEXT.md); one
+  // after it is simply a later race, and calling it a tune-up would tell the
+  // Head Coach the athlete is warming up for something already behind them
+  // (CodeRabbit, PR #67).
+  const targetDate = p.races.find((r) => r.isTarget)?.date ?? null;
+  const roleOf = (r: BriefingRace): string => {
+    if (r.isTarget) return 'target';
+    return targetDate !== null && r.date < targetDate ? 'tune-up' : 'later race';
+  };
+  return ['Races:', ...p.races.map((r) => `- ${r.date} · ${r.name} (${r.distance}) — ${roleOf(r)}`)];
 }
 
 /**
@@ -236,7 +310,8 @@ const HEAD_COACH_BLOCKS_LINE =
 function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
   if (!blocks || blocks.blocks.length === 0) return 'TRAINING BLOCKS: none — the athlete has no Target Race.';
   const lines = blocks.blocks.map(
-    (b) => `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}`,
+    (b) =>
+      `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}${b.name === blocks.phase ? ' · current' : ''}`,
   );
   if (blocks.blocks.some((b) => b.authoredBy === 'head_coach')) lines.push(HEAD_COACH_BLOCKS_LINE);
   if (blocks.raceUnrealistic) {

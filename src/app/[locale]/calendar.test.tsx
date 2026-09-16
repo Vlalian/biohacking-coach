@@ -367,3 +367,83 @@ describe('Calendar — the drafted week the athlete has not decided on (training
     expect(markup).not.toContain('proposedChip');
   });
 });
+
+/**
+ * `training-architecture/06` — the health layer, drawn beside the plan.
+ *
+ * Option (a), decided 2026-09-11: a band above the seven day cells spanning
+ * only the affected days; an injury chip at its left on every week the injury
+ * is open; muted, never red; one click into the Health Drawer; and a persistent
+ * "How's your body?" button for the athlete, never for the Head Coach.
+ */
+vi.mock('./health-drawer', () => ({ HealthDrawer: () => <div data-testid="health-drawer" /> }));
+
+describe('the health layer (training-architecture/06)', () => {
+  const ILL_WEEK_START = '2026-08-17'; // TODAY is Wed 2026-08-19
+  const illness = { kind: 'illness' as const, id: 'ill_1', from: '2026-08-18', to: null, bother: null };
+  const injury = {
+    kind: 'injury' as const, id: 'inj_1', from: '2026-08-01', to: null,
+    capacity: { swim: 'full' as const, bike: 'easy' as const, run: 'none' as const }, bother: 3,
+  };
+
+  it('renders byte-identical markup with no health prop and with an empty list — nothing is added for the healthy', () => {
+    expect(render({ health: [] })).toBe(render());
+    expect(render()).not.toContain('data-health');
+  });
+
+  it('draws an illness band over exactly the ill days of that week, and not into the future', () => {
+    const html = render({ health: [illness] });
+    const cells = [...html.matchAll(/data-health-day="([^"]+)"(?: data-ill="true")?/g)];
+    const ill = cells.filter((m) => m[0].includes('data-ill="true"')).map((m) => m[1]);
+    // Declared Tuesday the 18th; today is Wednesday the 19th: two days, no more.
+    expect(ill).toEqual(['2026-08-18', '2026-08-19']);
+    expect(html).toContain('healthIll');
+    expect(html).toContain(`data-health-week="${ILL_WEEK_START}"`);
+  });
+
+  it('draws an injury chip with the glance on every week the injury is open', () => {
+    const html = render({ health: [injury] });
+    const chips = html.match(/data-health-chip="inj_1"/g) ?? [];
+    // The calendar renders the weeks of the viewed month; the injury has been
+    // open since the 1st, so every one of them carries the chip.
+    expect(chips.length).toBeGreaterThanOrEqual(4);
+    expect(html).toContain('glance_none_run');
+    expect(html).toContain('glance_easy_bike');
+  });
+
+  it('leaves the sessions exactly as they were — the layer adds, it never restyles', () => {
+    const plain = render();
+    const layered = render({ health: [injury, illness] });
+    const chip = (html: string) => html.match(SESSION_AS_BUTTON)?.[0];
+    expect(chip(layered)).toBe(chip(plain));
+    const dayCell = (html: string) => html.match(/<div[^>]*data-day="2026-08-21"[^>]*>/)?.[0];
+    expect(dayCell(layered)).toBe(dayCell(plain));
+  });
+
+  it('uses the muted tone, never the destructive one', () => {
+    const html = render({ health: [injury, illness] });
+    const layer = html.match(/<div[^>]*data-health-week[\s\S]*?<\/div>\s*<\/div>/g)?.join('') ?? '';
+    expect(layer).not.toContain('destructive');
+    expect(layer).not.toContain('red');
+    expect(layer).toContain('muted');
+  });
+
+  it('draws nothing for a record closed before the week', () => {
+    const closed = { ...injury, to: '2026-08-10' };
+    const closedIllness = { ...illness, from: '2026-08-03', to: '2026-08-05' };
+    const html = render({ health: [closed, closedIllness] });
+    expect(html).not.toContain(`data-health-week="${ILL_WEEK_START}"`);
+  });
+
+  it('offers "How\u2019s your body?" to the athlete whether or not anything is open, and never to the Head Coach', () => {
+    expect(render()).toContain('healthButton');
+    expect(render({ health: [injury] })).toContain('healthButton');
+    expect(render({ readOnly: true, coachAthleteId: 'a1', health: [injury] })).not.toContain('healthButton');
+  });
+
+  it('gives the Head Coach the same band and chip when the athlete shares them', () => {
+    const html = render({ readOnly: true, coachAthleteId: 'a1', health: [injury, illness] });
+    expect(html).toContain('data-health-chip="inj_1"');
+    expect(html).toContain('data-ill="true"');
+  });
+});

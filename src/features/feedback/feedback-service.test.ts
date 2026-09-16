@@ -130,7 +130,9 @@ describe('sendFeedbackTurn', () => {
     expect(appendMessages).toHaveBeenCalledTimes(1);
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
       { role: 'athlete', content: 'the plan was too hard' },
-      { role: 'coach_ai', content: 'Which session was it?' },
+      // Every surface on the shared turn stores a citations list, empty here: the
+      // interview offers no lookup tool (knowledge-oracle/05).
+      { role: 'coach_ai', content: 'Which session was it?', citations: [] },
     ]);
   });
 

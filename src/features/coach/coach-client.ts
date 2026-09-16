@@ -1,5 +1,6 @@
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
+import { LOOKUP_UNAVAILABLE } from './grounding';
 
 /**
  * The thin adapter over the Anthropic API — the one place the Coach talks to
@@ -165,6 +166,14 @@ const toolUsesIn = (content: Anthropic.ContentBlock[]): Anthropic.ToolUseBlock[]
  * the stored transcript, and every later API turn rebuilt from it, stay plain
  * text with no dangling tool call. A single round-trip only: a tool the Coach
  * calls again in the follow-up is ignored.
+ *
+ * `resolveTool` computes a result **from the call's input**, per call — the
+ * Knowledge Oracle's lookup needs the passages for *this* question
+ * (`knowledge-oracle/05`). Without it every call gets the fixed `toolResult`
+ * acknowledgement, which is all a plan proposal ever needed. A resolver that
+ * throws yields a result telling the Coach the lookup is unavailable, never a
+ * failed turn: a search backend being down is not a reason the athlete gets no
+ * answer.
  */
 export async function callCoach(input: {
   system: string;
@@ -172,6 +181,7 @@ export async function callCoach(input: {
   maxTokens: number;
   tools?: readonly CoachTool[];
   toolResult?: string;
+  resolveTool?: (call: CoachToolCall) => Promise<string>;
 }): Promise<CoachReply> {
   const client = getClient();
   const first = await client.messages.create(
@@ -196,9 +206,17 @@ export async function callCoach(input: {
     return { text, toolCalls: [] };
   }
 
-  // The Coach proposed something. Acknowledge every tool call and ask for a brief
-  // close, so the athlete sees a natural hand-off to the confirm step.
+  // The Coach called a tool. Answer every call — the resolver's result, or the
+  // fixed acknowledgement — and ask for a brief close, so the athlete sees a
+  // natural hand-off.
   const ack = input.toolResult ?? 'Presented to the athlete. Await their decision.';
+  const results = await Promise.all(
+    toolUses.map(async (use) => ({
+      type: 'tool_result' as const,
+      tool_use_id: use.id,
+      content: await resolveOrAck(input.resolveTool, { name: use.name, input: use.input }, ack),
+    })),
+  );
   const second = await client.messages.create(
     withInferenceGeo({
       model: COACH_MODEL,
@@ -207,14 +225,7 @@ export async function callCoach(input: {
       messages: [
         ...input.messages,
         { role: 'assistant', content: first.content },
-        {
-          role: 'user',
-          content: toolUses.map((use) => ({
-            type: 'tool_result' as const,
-            tool_use_id: use.id,
-            content: ack,
-          })),
-        },
+        { role: 'user', content: results },
       ],
     }),
   );
@@ -230,4 +241,17 @@ export async function callCoach(input: {
     text,
     toolCalls: toolUses.map((use) => ({ name: use.name, input: use.input })),
   };
+}
+
+async function resolveOrAck(
+  resolve: ((call: CoachToolCall) => Promise<string>) | undefined,
+  call: CoachToolCall,
+  ack: string,
+): Promise<string> {
+  if (!resolve) return ack;
+  try {
+    return await resolve(call);
+  } catch {
+    return LOOKUP_UNAVAILABLE;
+  }
 }

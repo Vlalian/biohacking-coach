@@ -27,7 +27,31 @@ const {
 }));
 
 vi.mock('./coach-client', () => ({ callCoach }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
+const { capacityFor } = vi.hoisted(() => ({ capacityFor: vi.fn<() => Promise<string | null>>(async () => null) }));
+vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
+
+// One grounding per turn (knowledge-oracle/05). Faked at the module seam so
+// these tests assert the wiring — which tools the Coach is offered, where the
+// citations land — without an embedder or a corpus.
+const GROUNDING_CITATION = {
+  sourceId: 's1', slug: 'seiler-2010', title: 'Training intensity distribution', authors: 'Seiler S',
+  year: 2010, url: null, licence: 'CC BY', licenceUrl: 'https://cc', attribution: 'Seiler 2010', ordinals: [3],
+};
+const { productionGrounding, groundingResolve } = vi.hoisted(() => {
+  const groundingResolve = vi.fn(async () => '[1] passage');
+  const productionGrounding = vi.fn(() => ({
+    tool: { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+    resolve: groundingResolve,
+    citations: () => [] as unknown[],
+  }));
+  return { productionGrounding, groundingResolve };
+});
+vi.mock('./grounding', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./grounding')>()),
+  productionGrounding,
+}));
 vi.mock('./conversation-repository', () => ({
   createConversation,
   getOwnedConversation,
@@ -40,13 +64,16 @@ vi.mock('./check-in-repository', () => ({
   // has nothing for rather than inventing scores.
   getCheckInForWeek: vi.fn(async () => null),
 }));
-const { getTargetRace, getLatestOpenConversation } = vi.hoisted(() => ({
+const { getTargetRace, getRaces, getLatestPlanWrittenAt, getLatestOpenConversation } = vi.hoisted(() => ({
   // No race booked: the ordinary state for most of these fixtures, and the one
   // the prompt has to state plainly rather than omit.
-  getTargetRace: vi.fn(async (): Promise<unknown> => null),
+  getTargetRace: vi.fn<() => Promise<unknown>>(async () => null),
+  getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
+  getLatestPlanWrittenAt: vi.fn<() => Promise<Date | null>>(async () => null),
   getLatestOpenConversation: vi.fn(async (): Promise<unknown> => null),
 }));
-vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
+vi.mock('./plan-proposal-repository', () => ({ getLatestPlanWrittenAt }));
 vi.mock('./training-block-repository', () => ({ getBlockSet: vi.fn(async () => null) }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
@@ -217,7 +244,9 @@ describe('sendCoachChatMessage', () => {
     expect(appendMessages).toHaveBeenCalledTimes(1);
     expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
       { role: 'athlete', content: 'should I ride?' },
-      { role: 'coach_ai', content: 'Fuel early.' },
+      // Always a list, so a renderer asks one question rather than two
+      // (`citations.ts`); empty when the Coach looked nothing up.
+      { role: 'coach_ai', content: 'Fuel early.', citations: [] },
     ]);
   });
 
@@ -297,6 +326,33 @@ describe('the Coach Chat system prompt carries no invented readiness', () => {
     const { system } = callCoach.mock.calls[0][0];
     for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
     expect(system).toContain('NO CHECK-IN DATA');
+  });
+
+  it('names tune-ups and late races the same way the Weekly Session does (slice 09)', async () => {
+    // CodeRabbit on PR #60: Chat knew less than the Weekly Session. Same rows,
+    // same lines.
+    const target = {
+      id: 't', athleteId: 'a', name: 'Ironman Kalmar', date: '2027-08-18', distance: 'Full',
+      isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+    };
+    const late = {
+      ...target, id: 'r3', name: 'Half Aarhus', date: '2026-08-30', distance: 'Half',
+      isTarget: false, createdAt: new Date('2026-08-11T12:00:00Z'),
+    };
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([target, late]);
+    getLatestPlanWrittenAt.mockResolvedValue(new Date('2026-08-10T08:00:00Z'));
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getOwnedConversation.mockReset();
+
+    await sendCoachChatMessage(ATHLETE, null, 'Should I race the half?', '2026-08-12');
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('TUNE-UPS: Half Aarhus on 2026-08-30 (Half)');
+    expect(system).toContain('LATE RACE: Half Aarhus on 2026-08-30 (Half)');
   });
 
   it('derives the phase from the horizon, the same as the Weekly Session', () => {
@@ -470,5 +526,99 @@ describe('getOpenCoachChat — resume, never mint', () => {
       messages: [{ id: 'm1', role: 'athlete', content: 'hi', seq: 0 }],
     });
     expect(getMessages).toHaveBeenCalledWith('conv_9');
+  });
+});
+
+describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracle/05)', () => {
+  beforeEach(() => {
+    callCoach.mockReset().mockResolvedValue({ text: 'Keep Thursday easy.', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    productionGrounding.mockClear();
+    logCoachDrift.mockClear();
+  });
+
+  it('offers the lookup tool on every turn, with its resolver, built for this athlete and surface', async () => {
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why is Thursday easy?', '2026-08-12');
+
+    expect(productionGrounding).toHaveBeenCalledTimes(1);
+    expect(productionGrounding).toHaveBeenCalledWith(
+      expect.objectContaining({ athleteId: 'athlete_1', surface: 'coach_chat', conversationId: 'conv_1' }),
+    );
+    const params = callCoach.mock.calls[0][0];
+    expect(params.tools.map((t: { name: string }) => t.name)).toEqual(['look_up_training_science']);
+    expect(params.resolveTool).toBe(groundingResolve);
+  });
+
+  it('threads the phase and experience level from the Check-in into the grounding', async () => {
+    getTargetRace.mockResolvedValue({ name: 'IM', date: '2027-08-15' });
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'how much Z2?', '2026-08-12');
+    expect(productionGrounding).toHaveBeenCalledWith(
+      expect.objectContaining({ experienceLevel: 'intermediate', phase: expect.stringMatching(/^Block \d of \d$/) }),
+    );
+    getTargetRace.mockResolvedValue(null);
+  });
+
+  it('stores the citations the grounding supplied on the Coach reply, and none when there were none', async () => {
+    productionGrounding.mockReturnValueOnce({
+      tool: { name: 'look_up_training_science', description: 'd', input_schema: { type: 'object' } },
+      resolve: groundingResolve,
+      citations: () => [GROUNDING_CITATION],
+    });
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
+    expect(appendMessages).toHaveBeenCalledWith('athlete_1', 'conv_1', [
+      { role: 'athlete', content: 'why?' },
+      { role: 'coach_ai', content: 'Keep Thursday easy.', citations: [GROUNDING_CITATION] },
+    ]);
+
+    appendMessages.mockClear();
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'thanks', '2026-08-12');
+    expect(appendMessages.mock.calls[0][2][1]).toEqual({ role: 'coach_ai', content: 'Keep Thursday easy.', citations: [] });
+  });
+
+  it('logs a source mention in the reply and stores the reply untouched — never rewrites', async () => {
+    callCoach.mockResolvedValue({ text: 'Polarised works [1], according to the study.', toolCalls: [] });
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
+
+    expect(logCoachDrift).toHaveBeenCalledWith({
+      surface: 'coach_chat',
+      athleteId: 'athlete_1',
+      conversationId: 'conv_1',
+      patterns: ['bracket-marker', 'according-to-study'],
+    });
+    expect(appendMessages.mock.calls[0][2][1].content).toBe('Polarised works [1], according to the study.');
+  });
+
+  it('logs nothing about drift for an ordinary reply', async () => {
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'why?', '2026-08-12');
+    expect(logCoachDrift).not.toHaveBeenCalled();
+  });
+});
+
+describe('what the athlete’s body allows reaches Coach Chat too (training-architecture/06)', () => {
+  // CodeRabbit on PR #60: Chat received no capacity block at all, and Chat is
+  // where "should I do tomorrow's intervals?" gets asked. Same read, same
+  // sentence as the Weekly Session — only the capacity half, never the thread.
+  it('states the capacity when something is restricted, and nothing when not', async () => {
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getOwnedConversation.mockReset();
+
+    capacityFor.mockResolvedValue(
+      'CAPACITY (what the athlete can do right now — not a diagnosis): no run · bike easy only.',
+    );
+    await sendCoachChatMessage(ATHLETE, null, 'intervals tomorrow?', '2026-08-12');
+    expect(capacityFor).toHaveBeenCalledWith('athlete_1');
+    expect(callCoach.mock.calls[0][0].system).toContain('no run');
+
+    callCoach.mockClear();
+    capacityFor.mockResolvedValue(null);
+    await sendCoachChatMessage(ATHLETE, null, 'intervals tomorrow?', '2026-08-12');
+    expect(callCoach.mock.calls[0][0].system).not.toContain('CAPACITY');
   });
 });

@@ -804,6 +804,18 @@ export const injuries = pgTable(
     run: text('run').notNull().default('full'),
     openedAt: timestamp('opened_at').notNull().defaultNow(),
     closedAt: timestamp('closed_at'),
+    /**
+     * The **Bother Rating** (`training-architecture/06`, Mads 2026-09-11): an
+     * optional 1–5 answer to "how much is it bothering you today?". **For human
+     * eyes only** — the athlete's and the Head Coach's — never a planner input
+     * and never read on a prompt path: the planner reads capacity, and a number
+     * cannot say whether swimming is fine. Sits on ADR 0011's detail-thread
+     * side; `detail-thread-never-prompts.test.ts` pins that nothing on the
+     * prompt path names this column. 1–5 to match every other scale the athlete
+     * meets (Session Reflection, Check-in). Slices 04/10 ruled out a *severity*
+     * dial; this is not one.
+     */
+    bother: integer('bother'),
   },
   (table) => [
     check(
@@ -812,6 +824,7 @@ export const injuries = pgTable(
         `swim IN (${quotedList(ALLOWANCES)}) AND bike IN (${quotedList(ALLOWANCES)}) AND run IN (${quotedList(ALLOWANCES)})`,
       ),
     ),
+    check('injury_bother_range', sql`${table.bother} IS NULL OR ${table.bother} BETWEEN 1 AND 5`),
     index('injury_athlete_open').on(table.athleteId, table.closedAt),
   ],
 );
@@ -839,8 +852,23 @@ export const illnesses = pgTable(
       .references(() => athlete.id, { onDelete: 'cascade' }),
     openedAt: timestamp('opened_at').notNull().defaultNow(),
     closedAt: timestamp('closed_at'),
+    /**
+     * The **Bother Rating** (`training-architecture/06`, Mads 2026-09-11): an
+     * optional 1–5 answer to "how much is it bothering you today?". **For human
+     * eyes only** — the athlete's and the Head Coach's — never a planner input
+     * and never read on a prompt path: the planner reads capacity, and a number
+     * cannot say whether swimming is fine. Sits on ADR 0011's detail-thread
+     * side; `detail-thread-never-prompts.test.ts` pins that nothing on the
+     * prompt path names this column. 1–5 to match every other scale the athlete
+     * meets (Session Reflection, Check-in). Slices 04/10 ruled out a *severity*
+     * dial; this is not one.
+     */
+    bother: integer('bother'),
   },
-  (table) => [index('illness_athlete_open').on(table.athleteId, table.closedAt)],
+  (table) => [
+    check('illness_bother_range', sql`${table.bother} IS NULL OR ${table.bother} BETWEEN 1 AND 5`),
+    index('illness_athlete_open').on(table.athleteId, table.closedAt),
+  ],
 );
 
 export type IllnessRow = typeof illnesses.$inferSelect;

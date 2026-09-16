@@ -225,6 +225,24 @@ describe('getPendingNarrationEvents', () => {
     expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\) and \(.*\)\) or \("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\)/);
   });
 
+  it('never narrates a lookup — a coach_ai act the athlete must not be told was "Your Head Coach"', async () => {
+    // `knowledge-oracle/05`: the Coach's lookups are recorded on the same events
+    // log as `coach_ai` acts. Two gates keep them out of the athlete's feed —
+    // the actor filter and this type list — and this pins the second, so that
+    // slice 07 widening the actor filter for its own `coach_ai` events cannot
+    // let a lookup through by accident.
+    nextRows = [];
+
+    await getPendingNarrationEvents('a1');
+
+    const bound = boundValues(whereArgs[0]);
+    expect(bound).toContain('head_coach');
+    // Slice 07 admits `coach_ai` for exactly two types (see the test above), so
+    // the pin is the type list, not the actor: a lookup is never in it.
+    expect(bound).toContain('coach_ai');
+    expect(bound).not.toContain('lookup_performed');
+  });
+
   it('returns an empty list when nothing is pending', async () => {
     nextRows = [];
     expect(await getPendingNarrationEvents('a1')).toEqual([]);

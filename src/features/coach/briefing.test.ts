@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BRIEFING_OPENER,
+  briefingRaces,
   buildBriefingContext,
   renderBriefingPrompt,
   toBriefingApiMessages,
@@ -24,6 +25,8 @@ const reports: BriefingReports = {
     sessionsPerWeek: 6,
     onboarding: null,
     capacity: null,
+    races: [],
+    hasTargetRace: true,
   },
   reflections: [
     { date: '2026-08-04', type: 'Endurance', body: 8, mind: 10, comment: 'strong ride' },
@@ -153,6 +156,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
       { name: 'Build the Volume', endDate: '2027-01-10', authoredBy: 'coach_ai' as const },
       { name: 'Taper', endDate: '2027-08-15', authoredBy: 'coach_ai' as const },
     ],
+    phase: 'Taper',
     raceUnrealistic: null,
   };
 
@@ -162,7 +166,8 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     const prompt = renderBriefingPrompt(ctx({ blocks: coachOnly, reports: null }));
     expect(prompt).toContain('TRAINING BLOCKS');
     expect(prompt).toContain('Build the Volume · to 2027-01-10 · Coach');
-    expect(prompt).toContain('Taper · to 2027-08-15 · Coach');
+    expect(prompt).toContain('Taper · to 2027-08-15 · Coach · current');
+    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Coach · current');
     // No flag, no line — not "unrealistic: null".
     expect(prompt).not.toContain('unrealistic');
   });
@@ -186,6 +191,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
       ctx({
         blocks: {
           blocks: [{ name: 'Block 1 of 2', endDate: '2027-01-10', authoredBy: 'arithmetic' }],
+          phase: null,
           raceUnrealistic: 'eleven months is short',
         },
       }),
@@ -196,7 +202,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
 
   it('says plainly there are none for an athlete with no Target Race', () => {
     expect(renderBriefingPrompt(ctx({ blocks: null }))).toContain('TRAINING BLOCKS: none');
-    expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], raceUnrealistic: null } }))).toContain(
+    expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], phase: null, raceUnrealistic: null } }))).toContain(
       'TRAINING BLOCKS: none',
     );
   });
@@ -220,6 +226,7 @@ describe('renderBriefingPrompt — golden', () => {
             { name: 'Long Rides', endDate: '2027-05-02', authoredBy: 'head_coach' },
             { name: 'Block 3 of 3', endDate: '2027-08-15', authoredBy: 'arithmetic' },
           ],
+          phase: 'Long Rides',
           raceUnrealistic: 'eleven months is short',
         },
         reports: {
@@ -249,10 +256,96 @@ describe('renderBriefingPrompt — golden', () => {
     expect(
       renderBriefingPrompt(
         ctx({
-          reports: { profile: { phase: null, experienceLevel: null, raceTarget: null, sessionsPerWeek: null, onboarding: null, capacity: null }, reflections: [] },
+          reports: { profile: { phase: null, experienceLevel: null, raceTarget: null, sessionsPerWeek: null, onboarding: null, capacity: null, races: [], hasTargetRace: false }, reflections: [] },
           transcripts: [],
         }),
       ),
     ).toMatchSnapshot();
+  });
+});
+
+describe('renderBriefingPrompt — the races (training-architecture/09)', () => {
+  const withRaces = (over: Partial<BriefingReports['profile']>) =>
+    renderBriefingPrompt(ctx({ reports: { ...reports, profile: { ...reports.profile, ...over } } }));
+
+  it('lists future races with target and tune-up markers', () => {
+    const prompt = withRaces({
+      races: [
+        { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic', isTarget: false },
+        { name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true },
+      ],
+    });
+    expect(prompt).toContain('Races:');
+    expect(prompt).toContain('- 2027-03-01 · Olympic Odense (Olympic) — tune-up');
+    expect(prompt).toContain('- 2027-08-15 · IM Copenhagen (Full) — target');
+    expect(prompt).not.toContain('No Target Race');
+  });
+
+  it('calls a race after the Target Race a later race, never a tune-up', () => {
+    // A tune-up is a race *before* the target. October is not a warm-up for
+    // August (CodeRabbit, PR #67).
+    const prompt = withRaces({
+      races: [
+        { name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true },
+        { name: 'Autumn Half', date: '2027-10-01', distance: 'Half', isTarget: false },
+      ],
+    });
+    expect(prompt).toContain('- 2027-10-01 · Autumn Half (Half) — later race');
+    expect(prompt).not.toContain('Autumn Half (Half) — tune-up');
+  });
+
+  it('says No Target Race plainly when the athlete has nothing in the future to build toward', () => {
+    // Mads, 2026-09-11: this is the "unplanned race" the glossary meant — the
+    // Head Coach is told so they can raise it; the Coach never does unprompted.
+    // Silence was the bug: `if (p.raceTarget)` omitted the subject entirely.
+    const prompt = withRaces({ races: [], hasTargetRace: false, raceTarget: null });
+    expect(prompt).toContain('No Target Race — nothing in the future to build toward; worth raising with the athlete');
+  });
+
+  it('says No Target Race for an athlete whose only races are in the past', () => {
+    // The same data state as never having entered one: `getTargetRace` is null
+    // for both, and the Head Coach conversation is the same either way.
+    const prompt = withRaces({ races: [], hasTargetRace: false, raceTarget: 'IM Copenhagen 2025' });
+    expect(prompt).toContain('No Target Race');
+  });
+
+  it('renders no race block at all when the target exists but the list is empty', () => {
+    // A transient shape — the service always lists the target when it exists —
+    // but the renderer must not invent a heading for nothing.
+    const prompt = withRaces({ races: [], hasTargetRace: true });
+    expect(prompt).not.toContain('Races:');
+    expect(prompt).not.toContain('No Target Race');
+    // Nothing at all between the lines on either side of where races would go.
+    expect(prompt).toContain('- Race target: IM Copenhagen\n- Training sessions per week: 6');
+  });
+
+  it('never says No Target Race when a future target exists', () => {
+    const prompt = withRaces({
+      races: [{ name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true }],
+      hasTargetRace: true,
+    });
+    expect(prompt).not.toContain('No Target Race');
+  });
+});
+
+describe('briefingRaces — the race half of the profile', () => {
+  const rows = [
+    { name: 'Sprint Vejle', date: '2026-05-01', distance: 'Sprint', isTarget: false },
+    { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic', isTarget: false },
+    { name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true },
+  ];
+
+  it('keeps only the races ahead of today, in the order given', () => {
+    expect(briefingRaces(rows, '2026-09-11').races.map((r) => r.name)).toEqual(['Olympic Odense', 'IM Copenhagen']);
+  });
+
+  it('a race on today is not ahead', () => {
+    expect(briefingRaces([{ ...rows[2], date: '2026-09-11' }], '2026-09-11').races).toEqual([]);
+  });
+
+  it('has a target only while the target is ahead', () => {
+    expect(briefingRaces(rows, '2026-09-11').hasTargetRace).toBe(true);
+    expect(briefingRaces(rows, '2027-08-16').hasTargetRace).toBe(false);
+    expect(briefingRaces([rows[1]], '2026-09-11').hasTargetRace).toBe(false);
   });
 });

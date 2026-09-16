@@ -32,8 +32,15 @@ export async function createRace(
   athleteId: string,
   newRace: NewRace,
   { asTarget = true }: { asTarget?: boolean } = {},
-): Promise<void> {
-  await getDb().insert(race).values({ athleteId, ...newRace, isTarget: asTarget });
+): Promise<string> {
+  // The id comes back so the Settings list can act on the new race at once —
+  // before this it held a synthetic id the server would refuse until reload
+  // (CodeRabbit, PR #67).
+  const [row] = await getDb()
+    .insert(race)
+    .values({ athleteId, ...newRace, isTarget: asTarget })
+    .returning({ id: race.id });
+  return row.id;
 }
 
 /** Every Race this athlete has, earliest first. Empty is an ordinary answer. */
@@ -118,4 +125,19 @@ export async function clearTargetRace(athleteId: string): Promise<void> {
     .update(race)
     .set({ isTarget: false })
     .where(eq(race.athleteId, athleteId));
+}
+
+/**
+ * Removes a Race the athlete entered (slice 09).
+ *
+ * The athlete id is in the `WHERE` beside the race id, so a race id alone —
+ * held or guessed — deletes nothing that is not theirs (ADR 0006). The caller
+ * owns the mirror column: removing the Target Race must also clear
+ * `athlete.race_target`, which lives on another table and is the action
+ * layer's to keep in step, as `updateTargetRaceAction` already does.
+ */
+export async function deleteRace(athleteId: string, raceId: string): Promise<void> {
+  await getDb()
+    .delete(race)
+    .where(and(eq(race.athleteId, athleteId), eq(race.id, raceId)));
 }

@@ -1,4 +1,5 @@
 import { addDays, isValidDateKey } from '@/lib/date';
+import { shapedIdentifierIn } from '@/lib/identifiers';
 
 /**
  * Training Blocks — the arithmetic first draft (`training-architecture/03`).
@@ -205,7 +206,7 @@ export function blockPosition(today: string, block: TrainingBlock): BlockPositio
 // ── The stored set (slice 07) ─────────────────────────────────────────────────
 
 /** Why a set was refused. A closed list so a caller can log it without prose. */
-export type BlockSetProblem = 'count' | 'end' | 'date' | 'order' | 'short' | 'name' | 'positional';
+export type BlockSetProblem = 'count' | 'end' | 'date' | 'order' | 'short' | 'name' | 'positional' | 'identifier';
 
 export type ValidateBlockSetResult = { ok: true } | { ok: false; reason: BlockSetProblem };
 
@@ -225,9 +226,17 @@ const MAX_NAME_LENGTH = 40;
  */
 const POSITIONAL_NAME = /^(block|blok|phase|fase)\s*\d/i;
 
+/**
+ * A block name reaches the athlete's Coach prompt as the phase, so it carries
+ * the same backstop every other free-text leaf does: an email or phone shape
+ * is refused at write time (Mads, 2026-09-15, on CodeRabbit's finding — a
+ * block name is a plan label the Coach is meant to use, unlike a Head Coach's
+ * note, so it is checked rather than withheld).
+ */
 function nameProblemOf(block: TrainingBlockSpec): BlockSetProblem | null {
   const trimmed = block.name.trim();
   if (trimmed === '' || trimmed.length > MAX_NAME_LENGTH) return 'name';
+  if (shapedIdentifierIn(trimmed)) return 'identifier';
   return block.authoredBy !== 'arithmetic' && POSITIONAL_NAME.test(trimmed) ? 'positional' : null;
 }
 
@@ -377,8 +386,17 @@ function endDateProblemOf(set: StoredBlockSet, index: number, endDate: string): 
 /** The refusals an edit can earn before the set validator sees it. */
 function editProblemOf(set: StoredBlockSet, index: number, input: BlockEditInput): BlockEditProblem | null {
   if (!set.blocks[index]) return 'position';
-  if (input.name === undefined && input.endDate === undefined) return 'nothing';
   return input.endDate === undefined ? null : endDateProblemOf(set, index, input.endDate);
+}
+
+/**
+ * The same name and end is not an edit. Stamping it `head_coach` would be a
+ * false authorship the Coach's gate later honours (CodeRabbit, PR #65) — and
+ * an input with neither field is the same non-edit, so one rule covers both.
+ * Stored names are trimmed at write, so the comparison needs no trim.
+ */
+function isUnchanged(current: TrainingBlockSpec, edited: TrainingBlockSpec): boolean {
+  return edited.name === current.name && edited.endDate === current.endDate;
 }
 
 /**
@@ -411,6 +429,7 @@ export function applyBlockEdit(
     endDate: input.endDate ?? current.endDate,
     authoredBy: 'head_coach',
   };
+  if (isUnchanged(current, edited)) return { ok: false, reason: 'nothing' };
   const blocks = set.blocks.map((b, i) => (i === index ? edited : b));
   const verdict = validateBlockSet(blocks, set.startDate, raceDate);
   return verdict.ok ? { ok: true, blocks } : { ok: false, reason: verdict.reason };

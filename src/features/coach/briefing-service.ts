@@ -9,6 +9,7 @@ import { callCoach, type CoachReply } from './coach-client';
 import { getActiveLink, getSharedTranscripts } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
+import { getRaces } from '@/features/race/race-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { currentPhase } from './training-blocks';
 import { getLatestUnrealisticFlag } from './training-block-repository';
@@ -29,6 +30,7 @@ import {
   toBriefingReflection,
   type BriefingReports,
   type BriefingTranscript,
+  briefingRaces,
 } from './briefing';
 
 /**
@@ -79,19 +81,20 @@ async function buildBriefingSystem(
   // 0003; the Training Blocks are the horizon that calendar is built toward).
   // The Coach's own "unrealistic" verdict travels with the blocks for the same
   // reason: it is the Coach's judgement, not the athlete's report.
-  const [plan, resolved, raceUnrealistic] = await Promise.all([
-    getBriefingPlan(athleteId),
-    getResolvedBlocks(athleteId, today),
-    getLatestUnrealisticFlag(athleteId),
-  ]);
+  const [plan, resolved] = await Promise.all([getBriefingPlan(athleteId), getResolvedBlocks(athleteId, today)]);
+  // Scoped to the current Target Race: a verdict on a race the athlete has since
+  // replaced is not this race's.
+  const raceUnrealistic = resolved.race ? await getLatestUnrealisticFlag(athleteId, resolved.race.id) : null;
+  const phase = currentPhase(today, resolved.blocks);
   const blocks = {
     blocks: resolved.blocks.map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
+    phase,
     raceUnrealistic,
   };
 
   // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.
   const reports = canSeeAthleteReports(link.visibility)
-    ? await readReports(athleteId, currentPhase(today, resolved.blocks))
+    ? await readReports(athleteId, phase, today)
     : null;
 
   // Gated inside getSharedTranscripts: null (nothing fetched) when the flag is off.
@@ -116,8 +119,8 @@ async function buildBriefingSystem(
  * (`training-architecture/07`) — and null for an athlete with no race, which
  * the briefing renders as no phase.
  */
-async function readReports(athleteId: string, phase: string | null): Promise<BriefingReports> {
-  const [athlete, reflectionRows, capacity] = await Promise.all([
+async function readReports(athleteId: string, phase: string | null, today: string): Promise<BriefingReports> {
+  const [athlete, reflectionRows, capacity, races] = await Promise.all([
     getAthleteById(athleteId),
     getBriefingReflections(athleteId),
     // An open Injury or Illness is data the athlete reported about their own
@@ -126,6 +129,9 @@ async function readReports(athleteId: string, phase: string | null): Promise<Bri
     // this branch, so when the flag is off it is never fetched at all rather
     // than fetched and hidden (ticket 11).
     capacityFor(athleteId),
+    // Every race the athlete has (slice 09). Read inside this branch like the
+    // rest of the profile: a race is something the athlete reported.
+    getRaces(athleteId),
   ]);
   // A missing athlete row reads as an athlete who has said nothing: every
   // column is nullable already, so the empty row is the honest stand-in.
@@ -144,6 +150,7 @@ async function readReports(athleteId: string, phase: string | null): Promise<Bri
       // athlete's own page, not through a briefing that is assembled into a
       // model prompt (ADR 0011).
       capacity,
+      ...briefingRaces(races, today),
     },
     reflections: reflectionRows.map(toBriefingReflection),
   };

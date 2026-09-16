@@ -56,11 +56,18 @@ export async function getBlockSet(athleteId: string, raceId: string): Promise<Bl
   };
 }
 
-/** The event half of a write statement, or nothing — see the callers. */
-function eventCte(athleteId: string, event: BlockSetEvent | undefined, gate: string) {
-  if (!event) return sql``;
-  return sql`,
-    announced AS (
+/**
+ * The event half of a write statement — every event, each gated on the write
+ * having landed, or nothing. One CTE per event: a set write can carry two (the
+ * Coach's `blocks_drafted` and its rare `race_flagged_unrealistic`), and a
+ * second statement after the first had committed could lose the verdict with
+ * no retry able to restore it (CodeRabbit, PR #65).
+ */
+function eventCtes(athleteId: string, evts: BlockSetEvent[], gate: string) {
+  return sql.join(
+    evts.map(
+      (event, i) => sql`,
+    ${sql.identifier(`announced_${i}`)} AS (
       INSERT INTO ${events} (
         ${sql.identifier('athlete_id')},
         ${sql.identifier('actor_type')},
@@ -76,7 +83,10 @@ function eventCte(athleteId: string, event: BlockSetEvent | undefined, gate: str
         ${JSON.stringify(event.payload)}::jsonb
       WHERE EXISTS (SELECT 1 FROM ${sql.identifier(gate)})
       RETURNING ${events.id}
-    )`;
+    )`,
+    ),
+    sql``,
+  );
 }
 
 /**
@@ -94,9 +104,10 @@ export async function insertBlockSet(params: {
   raceId: string;
   startDate: string;
   blocks: TrainingBlockSpec[];
-  event?: BlockSetEvent;
+  /** Announced in the same statement, only where the insert landed. */
+  events?: BlockSetEvent[];
 }): Promise<'inserted' | 'exists'> {
-  const { athleteId, raceId, startDate, blocks, event } = params;
+  const { athleteId, raceId, startDate, blocks, events: evts = [] } = params;
 
   const statement = sql`
     WITH inserted AS (
@@ -109,7 +120,7 @@ export async function insertBlockSet(params: {
       VALUES (${athleteId}::uuid, ${raceId}::uuid, ${startDate}::date, ${JSON.stringify(blocks)}::jsonb)
       ON CONFLICT (${sql.identifier('athlete_id')}, ${sql.identifier('race_id')}) DO NOTHING
       RETURNING ${trainingBlockSet.id}
-    )${eventCte(athleteId, event, 'inserted')}
+    )${eventCtes(athleteId, evts, 'inserted')}
     SELECT (SELECT count(*) FROM inserted) AS inserted
   `;
 
@@ -136,9 +147,10 @@ export async function casUpdateBlockSet(params: {
    * one boundary inside a set whose start is already true.
    */
   startDate?: string;
-  event?: BlockSetEvent;
+  /** Announced in the same statement, only where the update matched. */
+  events?: BlockSetEvent[];
 }): Promise<CasBlockSetResult> {
-  const { athleteId, setId, expectedVersion, blocks, startDate, event } = params;
+  const { athleteId, setId, expectedVersion, blocks, startDate, events: evts = [] } = params;
   const startClause = startDate ? sql`, ${sql.identifier('start_date')} = ${startDate}::date` : sql``;
 
   const statement = sql`
@@ -151,7 +163,7 @@ export async function casUpdateBlockSet(params: {
         AND ${trainingBlockSet.athleteId} = ${athleteId}::uuid
         AND ${trainingBlockSet.version} = ${expectedVersion}
       RETURNING ${trainingBlockSet.version}
-    )${eventCte(athleteId, event, 'updated')}
+    )${eventCtes(athleteId, evts, 'updated')}
     SELECT ${sql.identifier('version')} FROM updated
   `;
 
@@ -161,31 +173,24 @@ export async function casUpdateBlockSet(params: {
 }
 
 /**
- * One attributed event on its own — the second sentence a draft can carry
- * (`race_flagged_unrealistic`). The first rides inside the set write; this one
- * is written only after that write is known to have landed, by the caller.
- */
-export async function insertBlockEvent(athleteId: string, event: BlockSetEvent): Promise<void> {
-  await getDb().insert(events).values({
-    athleteId,
-    actorType: event.actorType,
-    actorId: event.actorId,
-    type: event.type,
-    payload: event.payload,
-  });
-}
-
-/**
  * The reason the Coach last flagged this athlete's race as unrealistic, or
  * null. Read by the Briefing so the Head Coach hears it; the athlete already did
  * through narration. Latest first, one row — a race that was flagged twice has
  * one current reason.
  */
-export async function getLatestUnrealisticFlag(athleteId: string): Promise<string | null> {
+export async function getLatestUnrealisticFlag(athleteId: string, raceId: string): Promise<string | null> {
   const [row] = await getDb()
     .select({ payload: events.payload })
     .from(events)
-    .where(and(eq(events.athleteId, athleteId), eq(events.type, 'race_flagged_unrealistic')))
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        eq(events.type, 'race_flagged_unrealistic'),
+        // The verdict was about one race; a new Target Race starts clean
+        // (CodeRabbit, PR #65).
+        sql`${events.payload}->>'raceId' = ${raceId}`,
+      ),
+    )
     .orderBy(desc(events.createdAt))
     .limit(1);
   const reason = (row?.payload as { reason?: unknown } | null)?.reason;

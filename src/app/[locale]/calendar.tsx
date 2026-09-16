@@ -16,6 +16,8 @@ import { SessionDrawer, type DrawerState } from './session-drawer';
 import { ProposalCard } from './proposal-card';
 import type { CalendarProposalState } from '@/features/coach/week-draft-repository';
 import type { ProposedSession } from '@/features/coach/weekly-session';
+import { HealthDrawer, type HealthDrawerState } from './health-drawer';
+import { glanceParts, layerForWeek, type HealthSpan } from '@/features/health/health-layer';
 
 // 'conflict' is the only reason the client cannot predict: it means someone
 // else — the Head Coach — changed this session while it was on screen, so the
@@ -203,9 +205,17 @@ export function Calendar({
   onMove,
   coachAthleteId,
   proposal = null,
+  health = [],
 }: {
   sessions: Session[];
   unavailableDates: string[];
+  /**
+   * The athlete's Injuries and Illnesses, open and closed, drawn as a layer
+   * beside the plan (`training-architecture/06`). Empty by default so a caller
+   * with nothing to show — or a Head Coach the athlete has not shared their
+   * reports with — renders exactly the calendar it always did.
+   */
+  health?: HealthSpan[];
   /** Passed through to the Session Drawer, which offers undo on these. Empty
    *  by default so the Head Coach's read-only calendar needs no extra read. */
   importedSessionIds?: string[];
@@ -268,6 +278,7 @@ export function Calendar({
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const [bounce, setBounce] = useState<{ date: string; messageKey: string } | null>(null);
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
+  const [healthDrawer, setHealthDrawer] = useState<HealthDrawerState>({ open: false });
   const [ratingSession, setRatingSession] = useState<Session | null>(null);
 
   const byDate = new Map<string, Session[]>();
@@ -386,6 +397,16 @@ export function Calendar({
           <GhostButton onClick={toggleAllWeeks} icon={ChevronsUpDown}>
             {allExpanded ? t('collapseAll') : t('expandAll')}
           </GhostButton>
+          {!readOnly && (
+            // "How's your body?" — always there for the athlete, healthy or
+            // not: it is how the first injury gets declared when nothing on the
+            // calendar can be clicked yet, and where "I'm back" lives too. The
+            // Head Coach never sees it. (Mads, 2026-09-11: a good start, may
+            // move — one button, easy to move.)
+            <GhostButton onClick={() => setHealthDrawer({ open: true })}>
+              {t('healthButton')}
+            </GhostButton>
+          )}
         </div>
       </header>
 
@@ -461,6 +482,16 @@ export function Calendar({
             onDragOverDay={setHoverDate}
             onDropDay={handleDrop}
             onToggleAvailability={toggleAvailability}
+            healthLayer={
+              health.length > 0
+                ? layerForWeek(
+                    week.days.map((d) => d.date),
+                    health,
+                    todayKey,
+                  )
+                : null
+            }
+            onOpenHealth={(span) => setHealthDrawer({ open: true, kind: span.kind, id: span.id })}
           />
         ))}
       </div>
@@ -486,6 +517,16 @@ export function Calendar({
 
       {ratingSession && (
         <RatingModal session={ratingSession} onClose={() => setRatingSession(null)} />
+      )}
+
+      {healthDrawer.open && (
+        <HealthDrawer
+          state={healthDrawer}
+          spans={health}
+          locale={locale}
+          coachAthleteId={coachAthleteId}
+          onClose={() => setHealthDrawer({ open: false })}
+        />
       )}
     </div>
   );
@@ -513,10 +554,15 @@ function WeekRow({
   onDragOverDay,
   onDropDay,
   onToggleAvailability,
+  healthLayer,
+  onOpenHealth,
 }: {
   week: Week;
   expanded: boolean;
   readOnly: boolean;
+  /** What of the athlete's health this week draws, or null for nothing at all. */
+  healthLayer: ReturnType<typeof layerForWeek> | null;
+  onOpenHealth: (span: HealthSpan) => void;
   /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
    *  calendar is read-only and opens one (showable-version/20). */
   canOpenSession: boolean;
@@ -550,8 +596,73 @@ function WeekRow({
     timeZone: 'UTC',
   }).format(new Date(`${week.isoWeekStart}T00:00:00Z`));
 
+  const showHealth =
+    healthLayer !== null && (healthLayer.hasIllness || healthLayer.injuries.length > 0);
+
   return (
     <div>
+      {/* The health layer, drawn ABOVE the seven day cells and beside the plan
+          (training-architecture/06, option a — Mads, 2026-09-11). An Illness is
+          a band over exactly the days it covered, the way an all-day event sits
+          above a day's items; an Injury is a chip at the left with what it
+          prevents, on every week it was open — a standing state, not a set of
+          days. Muted, never red: the point is "no alarm, no demand for an
+          explanation". Absent entirely for a healthy week, so the day cells and
+          Session Chips below are exactly what they always were. */}
+      {showHealth && healthLayer && (
+        <div
+          data-health-week={week.isoWeekStart}
+          className="grid grid-cols-1 border-b border-dashed border-border md:grid-cols-[56px_repeat(7,minmax(0,1fr))]"
+        >
+          <div className="flex flex-wrap items-center gap-1 px-2 py-1 md:col-span-8 md:pl-[64px]">
+            {healthLayer.injuries.map((span) => (
+              <button
+                key={span.id}
+                type="button"
+                data-health-chip={span.id}
+                onClick={() => onOpenHealth(span)}
+                className="flex h-[38px] items-center border border-border bg-muted/60 px-2 text-left transition-colors hover:border-signal"
+              >
+                <span className="block font-body text-[11px] font-medium leading-tight text-foreground">
+                  {t('healthInjury')}
+                </span>
+                <span className="ml-2 block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                  {span.capacity
+                    ? glanceParts(span.capacity)
+                        .map((p) => t(`glance_${p.allowance}_${p.discipline}`))
+                        .join(' · ')
+                    : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+          {healthLayer.hasIllness && (
+            <>
+              <span className="hidden md:block" />
+              {healthLayer.days.map((day, i) => {
+                const first = day.ill && (i === 0 || !healthLayer.days[i - 1].ill);
+                const span = healthLayer.illnesses.find((s) => s.id === day.illnessId) ?? null;
+                return (
+                  <div key={day.date} data-health-day={day.date} data-ill={day.ill || undefined} className="px-1 pb-1">
+                    {span && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenHealth(span)}
+                        // Only the first day carries visible text; the rest of
+                        // the band would otherwise be unlabelled focus stops.
+                        aria-label={t('healthIll')}
+                        className="block h-6 w-full bg-muted text-left font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {first ? <span className="pl-2">{t('healthIll')}</span> : null}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
       {/* `CONTEXT.md`, Expanded Week: "Tapping a week row toggles it." Only the
           date label was a button, so the row and the glossary disagreed.
 

@@ -2,6 +2,7 @@
 
 import { Calendar } from '@/app/[locale]/calendar';
 import type { Session } from '@/features/session/session';
+import type { HealthSpan } from '@/features/health/health-layer';
 import { moveSessionAsCoachAction } from '../prescribe-actions';
 
 /**
@@ -20,17 +21,21 @@ export function CoachCalendar({
   sessions,
   unavailableDates,
   todayKey,
+  health,
 }: {
   athleteId: string;
   sessions: Session[];
   unavailableDates: string[];
   todayKey: string;
+  /** Null when the athlete does not share their reports — the calendar then draws no layer. */
+  health: HealthSpan[] | null;
 }) {
   return (
     <Calendar
       sessions={sessions}
       unavailableDates={unavailableDates}
       todayKey={todayKey}
+      health={health ?? []}
       readOnly
       coachAthleteId={athleteId}
       onMove={(sessionId, targetDate, expectedVersion) =>

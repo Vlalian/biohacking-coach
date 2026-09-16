@@ -15,6 +15,8 @@ const callCoach = vi.fn();
 const getCheckInForWeek = vi.fn();
 const hasHeldWeeklySessionInWeek = vi.fn();
 const getResolvedBlocks = vi.fn();
+// Every race the athlete has (slice 09). Empty by default: no tune-ups, no late races.
+const getRaces = vi.fn(async () => []);
 const getPendingWeekDraft = vi.fn();
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
@@ -33,6 +35,7 @@ vi.mock('./coach-client', () => ({ callCoach }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('./conversation-repository', () => ({ hasHeldWeeklySessionInWeek }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
+vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft, recordWeekDraft }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete }));

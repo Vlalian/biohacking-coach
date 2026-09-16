@@ -33,7 +33,14 @@ export default async function CoachAthletePlanPage({
     <>
       {/* The horizon the week below is built toward, and the one surface where a
           Head Coach may rename a block or move its end (training-architecture/08). */}
-      <BlockPanel athleteId={athleteId} set={view.blocks ?? null} />
+      {/* Keyed by the snapshot: the panel copies `set` into state, and without
+          a key `router.refresh()` would keep those rows while a newer version
+          or a `stale` set arrived underneath (CodeRabbit, PR #65). */}
+      <BlockPanel
+        key={`${athleteId}:${view.blocks?.raceId ?? 'none'}:${view.blocks?.version ?? 0}:${view.blocks?.stale ?? false}`}
+        athleteId={athleteId}
+        set={view.blocks ?? null}
+      />
       {/* The drafted week, a day before the athlete sees it, and the day it
           reaches them — both the Head Coach's while linked (training-architecture/17). */}
       <WeekDraftReview athleteId={athleteId} draft={view.pendingDraft} />
@@ -43,6 +50,7 @@ export default async function CoachAthletePlanPage({
         sessions={view.calendarSessions}
         unavailableDates={view.unavailableDates}
         todayKey={todayKey}
+        health={view.health}
       />
       <PrescribePanel athleteId={athleteId} />
     </>

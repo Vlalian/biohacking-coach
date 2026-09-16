@@ -36,11 +36,13 @@ const {
 
 vi.mock('./coach-repository', () => ({ getActiveLink, getSharedTranscripts }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
-vi.mock('@/features/race/race-repository', () => ({
+const { getTargetRace, getRaces } = vi.hoisted(() => ({
   // No Target Race: the Head Coach's briefing has to render an athlete with no
   // horizon, and the Training Phase is derived from it rather than stored.
-  getTargetRace: vi.fn(async () => null),
+  getTargetRace: vi.fn<() => Promise<unknown>>(async () => null),
+  getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
 }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
@@ -336,8 +338,8 @@ describe('startBriefing — the prompt material the rest of the suite does not r
       race: { id: 'r1', name: 'IM', date: '2027-08-15' },
       set: null,
       blocks: [
-        { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-09-14', endDate: '2027-01-10', authoredBy: 'coach_ai' },
-        { index: 2, total: 2, name: 'Long Rides', startDate: '2027-01-11', endDate: '2027-08-15', authoredBy: 'head_coach' },
+        { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-06-01', endDate: '2026-07-31', authoredBy: 'coach_ai' },
+        { index: 2, total: 2, name: 'Long Rides', startDate: '2026-08-01', endDate: '2027-08-15', authoredBy: 'head_coach' },
       ],
     });
     getLatestUnrealisticFlag.mockResolvedValue('eleven months is short');
@@ -345,12 +347,27 @@ describe('startBriefing — the prompt material the rest of the suite does not r
     await startBriefing('coach_1', 'a1', TODAY);
 
     expect(getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
-    expect(lastSystem()).toContain('Build the Volume · to 2027-01-10 · Coach');
+    expect(getLatestUnrealisticFlag).toHaveBeenCalledWith('a1', 'r1');
+    expect(lastSystem()).toContain('Build the Volume · to 2026-07-31 · Coach');
     expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach');
     expect(lastSystem()).toContain("The Training Blocks are the Head Coach's.");
     expect(lastSystem()).toContain('flagged the Target Race as unrealistic: eleven months is short');
     // Reports withheld, and the blocks rendered anyway: they are plan structure.
     expect(lastSystem()).toContain('withheld');
+    // ...including which block is now — the profile's phase line is gone with
+    // the reports, so the block list has to say it (CodeRabbit, PR #65).
+    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach · current');
+  });
+
+  it('reads no verdict at all for an athlete with no Target Race', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+    getLatestUnrealisticFlag.mockClear();
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getLatestUnrealisticFlag).not.toHaveBeenCalled();
+    expect(lastSystem()).toContain('TRAINING BLOCKS: none');
   });
 
   it('names the phase from the resolved block today falls inside', async () => {
@@ -486,5 +503,52 @@ describe('the two remaining refusals and the opening log', () => {
       conversationId: null,
     });
     spy.mockRestore();
+  });
+});
+
+describe('startBriefing — the races reach the Head Coach (training-architecture/09)', () => {
+  const target = {
+    id: 't', athleteId: 'a1', name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full',
+    isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+  };
+
+  beforeEach(() => {
+    getTargetRace.mockReset().mockResolvedValue(null);
+    getRaces.mockReset().mockResolvedValue([]);
+  });
+
+  it('lists the athlete’s future races when reports are shared, and omits ones already run', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([
+      target,
+      { ...target, id: 'r2', name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic', isTarget: false },
+      { ...target, id: 'past', name: 'Sprint Vejle', date: '2026-05-01', distance: 'Sprint', isTarget: false },
+    ]);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    const system = lastSystem();
+    expect(system).toContain('IM Copenhagen (Full) — target');
+    expect(system).toContain('Olympic Odense (Olympic) — tune-up');
+    expect(system).not.toContain('Sprint Vejle');
+    expect(system).not.toContain('No Target Race');
+  });
+
+  it('tells the Head Coach the athlete has No Target Race', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('No Target Race');
+  });
+
+  it('fetches no races at all when reports are not shared', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getRaces).not.toHaveBeenCalled();
+    expect(lastSystem()).not.toContain('No Target Race');
   });
 });

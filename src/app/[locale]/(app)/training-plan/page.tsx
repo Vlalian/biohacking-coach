@@ -9,6 +9,8 @@ import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
+import { getHealthHistory } from '@/features/health/health-repository';
+import { spansFrom } from '@/features/health/health-layer';
 import { dateKey } from '@/lib/date';
 import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
@@ -97,6 +99,11 @@ export default async function TrainingPlanPage({
       }
     });
   }
+  // The athlete's Injuries and Illnesses, open and closed, drawn as a layer
+  // beside the plan (training-architecture/06). Their own rows only.
+  const health = athlete
+    ? await getHealthHistory(athlete.id).then((h) => spansFrom(h.injuries, h.illnesses))
+    : [];
 
   return (
     <div className="flex flex-col items-center gap-6 p-8">
@@ -111,6 +118,7 @@ export default async function TrainingPlanPage({
         importedSessionIds={importedSessionIds}
         todayKey={todayKey}
         proposal={proposal}
+        health={health}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />
       <GarminUpload />

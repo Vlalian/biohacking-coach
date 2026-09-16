@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { logCoachFailure, logNarrationFailure, logBlockAdjustmentRefused, logBlockAdjustmentFailure, logWeekDraftFailure } from './coach-log';
+import {
+  logCoachFailure,
+  logNarrationFailure,
+  logBlockAdjustmentRefused,
+  logBlockAdjustmentFailure,
+  logWeekDraftFailure,
+  logLookupFailure,
+  logCoachDrift,
+} from './coach-log';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
 let written: string[] = [];
@@ -243,5 +251,73 @@ describe('logWeekDraftFailure — the after() boundary of the silent draft', () 
     });
     expect(() => logWeekDraftFailure('a1', new Error('x'))).not.toThrow();
     s.mockRestore();
+  });
+});
+
+describe('logLookupFailure', () => {
+  it('records a lookup that could not run, by surface and class, never by message', () => {
+    // A retrieval outage completes the Coach turn ("lookup unavailable"), so
+    // without this line it looks exactly like a turn with no lookup.
+    logLookupFailure({
+      surface: 'weekly_session',
+      athleteId: 'athlete_opaque_1',
+      conversationId: null,
+      error: new Error('OPENAI_API_KEY is not set for mads@example.com'),
+    });
+    expect(written).toHaveLength(1);
+    expect(JSON.parse(written[0])).toEqual({
+      event: 'lookup_failed',
+      surface: 'weekly_session',
+      athleteId: 'athlete_opaque_1',
+      conversationId: null,
+      errorType: 'error',
+    });
+    expect(written[0]).not.toContain('mads@example.com');
+  });
+});
+
+describe('logCoachDrift', () => {
+  // Drift is a warning, not a failure: the turn completed, the athlete got an
+  // answer. So it goes to console.warn, and the error capture above stays empty.
+  let warned: string[] = [];
+  beforeEach(() => {
+    warned = [];
+    vi.spyOn(console, 'warn').mockImplementation((line: unknown) => {
+      warned.push(String(line));
+    });
+  });
+
+  it('records a reply that mentioned its sources, by surface and pattern, as one structured line', () => {
+    // The Coach is told never to cite; when it does anyway, the drift is
+    // logged rather than corrected, so the prompt can be tuned from the log.
+    logCoachDrift({
+      surface: 'weekly_session',
+      athleteId: 'athlete_opaque_1',
+      conversationId: null,
+      patterns: ['bracket-marker', 'according-to-study'],
+    });
+    expect(written).toHaveLength(0);
+    expect(warned).toHaveLength(1);
+    expect(JSON.parse(warned[0])).toEqual({
+      event: 'coach_source_mention',
+      surface: 'weekly_session',
+      athleteId: 'athlete_opaque_1',
+      conversationId: null,
+      patterns: ['bracket-marker', 'according-to-study'],
+    });
+  });
+
+  it('keeps the conversation id when the turn has one', () => {
+    logCoachDrift({ surface: 'coach_chat', athleteId: 'a1', conversationId: 'conv_9', patterns: ['bracket-marker'] });
+    expect(JSON.parse(warned[0])).toMatchObject({ surface: 'coach_chat', conversationId: 'conv_9' });
+  });
+
+  it('never throws, even when the console is broken', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {
+      throw new Error('stdout closed');
+    });
+    expect(() =>
+      logCoachDrift({ surface: 'coach_chat', athleteId: 'a1', conversationId: null, patterns: ['bracket-marker'] }),
+    ).not.toThrow();
   });
 });
