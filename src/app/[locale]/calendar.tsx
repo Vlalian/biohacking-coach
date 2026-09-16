@@ -354,7 +354,10 @@ export function Calendar({
           <h1 className="font-display text-4xl leading-none tracking-[0.05em] text-foreground">
             {t('viewTitle')}
           </h1>
-          <span className="font-mono text-xs uppercase tracking-[0.24em] text-signal">
+          <span
+            className="font-mono text-xs uppercase tracking-[0.24em] text-signal"
+            data-calendar-month
+          >
             {format.dateTime(viewedMonth, { month: 'long', year: 'numeric' })}
           </span>
         </div>

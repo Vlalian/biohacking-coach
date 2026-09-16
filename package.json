@@ -20,7 +20,9 @@
     "oracle:ask": "tsx --conditions=react-server scripts/oracle-ask.ts",
     "quality": "tsx scripts/quality.ts",
     "test:visual": "playwright test -c playwright-ct.config.ts",
-    "test:visual:update": "playwright test -c playwright-ct.config.ts --update-snapshots"
+    "test:visual:update": "playwright test -c playwright-ct.config.ts --update-snapshots",
+    "test:e2e": "playwright test -c playwright-e2e.config.ts",
+    "test:e2e:update": "playwright test -c playwright-e2e.config.ts --update-snapshots"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.47",
