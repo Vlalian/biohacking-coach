@@ -50,7 +50,7 @@ const {
   getOwnedConversation: vi.fn(),
   // No race booked by default: the ordinary state for most of these fixtures,
   // and the one the prompt has to state plainly rather than omit.
-  getTargetRace: vi.fn<() => Promise<{ name: string; date: string } | null>>(
+  getTargetRace: vi.fn<() => Promise<{ id?: string; name: string; date: string } | null>>(
     async () => null,
   ),
   // No other races by default, and no plan written for the week: the ordinary
@@ -119,10 +119,12 @@ vi.mock('./plan-proposal-repository', () => ({
   recordProposal,
 }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
+const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
+vi.mock('./training-block-repository', () => ({ getBlockSet: vi.fn(async () => null) }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
@@ -516,6 +518,28 @@ describe('the system prompt carries no invented readiness', () => {
     callCoach.mockClear();
     await startWeeklySession(ATHLETE, TODAY);
     expect(callCoach.mock.calls[0][0].system).toContain('phase=Block 1 of 6');
+  });
+
+  it('names the Coach-shaped block when a stored set fits the race (training-architecture/07)', async () => {
+    getTargetRace.mockResolvedValue({ id: 'race-1', name: 'Ironman Kalmar', date: '2027-08-18' });
+    const { getBlockSet } = await import('./training-block-repository');
+    vi.mocked(getBlockSet).mockResolvedValueOnce({
+      id: 'set-1',
+      athleteId: ATHLETE.id,
+      raceId: 'race-1',
+      startDate: TODAY,
+      version: 1,
+      blocks: [
+        { name: 'Build the Volume', endDate: '2027-02-01', authoredBy: 'coach_ai' },
+        { name: 'Taper', endDate: '2027-08-18', authoredBy: 'coach_ai' },
+      ],
+    });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('phase=Build the Volume');
+    expect(system).not.toContain('Block 1 of');
   });
 });
 
@@ -1077,5 +1101,71 @@ describe("the athlete's own sentence survives the whole path", () => {
     await startWeeklySession(ATHLETE, TODAY);
 
     expect(callCoach.mock.calls[0][0].system).not.toContain('ATHLETE SAID');
+  });
+});
+
+describe('the grounding knows whose turn it is (knowledge-oracle/05, /06)', () => {
+  beforeEach(() => {
+    productionGrounding.mockClear();
+    logCoachDrift.mockClear();
+    getTargetRace.mockResolvedValue(null);
+  });
+
+  it('is built for the athlete, the Weekly Session surface, and the phase the prompt names', async () => {
+    getTargetRace.mockResolvedValue({ name: 'Ironman Kalmar', date: '2029-08-18' });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(productionGrounding).toHaveBeenCalledTimes(1);
+    expect(productionGrounding).toHaveBeenCalledWith({
+      athleteId: 'athlete_1',
+      surface: 'weekly_session',
+      // A first turn has no conversation yet; the id is minted after the reply.
+      conversationId: null,
+      phase: expect.stringMatching(/^Block \d+ of \d+$/),
+      experienceLevel: 'intermediate',
+    });
+  });
+
+  it('passes null, not undefined, when there is no race and no stated experience', async () => {
+    const unknown = { ...(ATHLETE as object), experienceLevel: null } as typeof ATHLETE;
+
+    await startWeeklySession(unknown, TODAY);
+
+    expect(productionGrounding).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: null, experienceLevel: null }),
+    );
+  });
+
+  it('logs a first reply that cites its sources, against the surface and no conversation', async () => {
+    callCoach.mockResolvedValue({ text: 'Polarised works [1], according to the study.', toolCalls: [] });
+
+    await startWeeklySession(ATHLETE, TODAY);
+
+    expect(logCoachDrift).toHaveBeenCalledWith({
+      surface: 'weekly_session',
+      athleteId: 'athlete_1',
+      conversationId: null,
+      patterns: ['bracket-marker', 'according-to-study'],
+    });
+  });
+
+  it('logs a continuing reply that cites its sources, against the conversation it happened in', async () => {
+    callCoach.mockResolvedValue({ text: 'Polarised works [1].', toolCalls: [] });
+
+    await continueWeeklySession(ATHLETE, 'conv_1', 'why?', TODAY);
+
+    expect(logCoachDrift).toHaveBeenCalledWith({
+      surface: 'weekly_session',
+      athleteId: 'athlete_1',
+      conversationId: 'conv_1',
+      patterns: ['bracket-marker'],
+    });
+  });
+
+  it('logs nothing about drift for an ordinary reply', async () => {
+    await startWeeklySession(ATHLETE, TODAY);
+    await continueWeeklySession(ATHLETE, 'conv_1', 'felt strong', TODAY);
+    expect(logCoachDrift).not.toHaveBeenCalled();
   });
 });

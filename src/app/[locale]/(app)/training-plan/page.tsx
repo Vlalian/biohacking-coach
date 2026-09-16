@@ -2,6 +2,7 @@ import { hasLocale } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { after } from 'next/server';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
@@ -11,6 +12,9 @@ import { getUnavailableDates } from '@/features/availability/availability-reposi
 import { getHealthHistory } from '@/features/health/health-repository';
 import { spansFrom } from '@/features/health/health-layer';
 import { dateKey } from '@/lib/date';
+import { logBlockAdjustmentFailure } from '@/lib/coach-log';
+import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
+import { BlockStrip } from '../../block-strip';
 import { Calendar } from '../../calendar';
 import { GarminUpload } from '../../garmin-upload';
 import { DetectedActivities } from '../../detected-activities';
@@ -64,6 +68,30 @@ export default async function TrainingPlanPage({
   // completing is otherwise one-directional (session-status-rules.ts).
   const importedSessionIds = athlete ? await listImportedSessionIds(athlete.id) : [];
 
+  const todayKey = dateKey(new Date());
+
+  // The athlete's Training Blocks — the Coach-shaped set when one exists, the
+  // arithmetic draft when not (`training-architecture/07`). Same resolver the
+  // Coach's own prompts read, so the strip and the Coach never disagree.
+  const horizon = athlete ? await getResolvedBlocks(athlete.id, todayKey) : { race: null, blocks: [] };
+
+  // Stage 2 runs here, **after the response is sent**. The page renders now;
+  // the ~20 s Coach call runs once the athlete has their calendar, and the next
+  // navigation shows the result with the narration firing from the shell. The
+  // service is idempotent and cheap on the common path (two reads, then
+  // nothing), so hanging it off the default View costs the athlete no wait and
+  // covers every tester who already has a race. Never on a render path, never
+  // thrown: a failure here is logged and the athlete stays on the draft.
+  if (athlete) {
+    const athleteId = athlete.id;
+    after(async () => {
+      try {
+        await ensureBlocksAdjusted(athleteId, todayKey);
+      } catch (error) {
+        logBlockAdjustmentFailure(athleteId, error);
+      }
+    });
+  }
   // The athlete's Injuries and Illnesses, open and closed, drawn as a layer
   // beside the plan (training-architecture/06). Their own rows only.
   const health = athlete
@@ -72,11 +100,16 @@ export default async function TrainingPlanPage({
 
   return (
     <div className="flex flex-col items-center gap-6 p-8">
+      <BlockStrip
+        todayKey={todayKey}
+        race={horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null}
+        blocks={horizon.blocks}
+      />
       <Calendar
         sessions={trainingSessions}
         unavailableDates={unavailableDates}
         importedSessionIds={importedSessionIds}
-        todayKey={dateKey(new Date())}
+        todayKey={todayKey}
         health={health}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />

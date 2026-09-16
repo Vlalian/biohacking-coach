@@ -620,7 +620,16 @@
     "moved": "{coach} moved your session from {fromDay} to {day}",
     "movedNoFrom": "{coach} moved a session to {day}",
     "yourHeadCoach": "Your Head Coach",
-    "recently": "recently"
+    "recently": "recently",
+    "blocksDrafted": "I've shaped your training toward {race}: {blocks}",
+    "blocksDraftedNoDetail": "I've shaped the blocks of your training toward your race",
+    "raceUnrealistic": "Honestly: {race} looks out of reach on this timeline — {reason}. Worth talking about",
+    "yourRace": "your race",
+    "noReason": "the horizon is short for the distance",
+    "blockRenamed": "{coach} renamed your \"{from}\" block to \"{to}\"",
+    "blockRebounded": "{coach} moved the end of your \"{name}\" block to {day}",
+    "blockRenamedAndRebounded": "{coach} renamed your \"{from}\" block to \"{to}\" and moved its end to {day}",
+    "blockEditedNoDetail": "{coach} changed one of your training blocks"
   },
   "Privacy": {
     "dataRightsTitle": "Your data",
@@ -648,6 +657,24 @@
     "fallbackSend": "Submit",
     "fallbackSent": "Sent. Thank you — someone will read it.",
     "fallbackError": "That did not save. Try again."
+  },
+  "BlockStrip": {
+    "weekOf": "week {week} of {weeks}",
+    "weeksToRace": "{weeks, plural, =1 {1 week} other {# weeks}} to {race}"
+  },
+  "BlockPanel": {
+    "title": "Training Blocks",
+    "toward": "toward {race} on {date}",
+    "name": "Name",
+    "endsOn": "Ends on",
+    "endsOnRaceDay": "ends on race day",
+    "authorDraft": "draft",
+    "authorCoach": "Coach",
+    "authorYou": "You",
+    "save": "Save",
+    "stale": "These blocks no longer match the race date — the Coach will redraw them. Nothing to edit here yet.",
+    "conflict": "Changed by someone else — this is the current set.",
+    "error": "That didn't work ({reason})."
   },
   "HealthDrawer": {
     "title": "How's your body?",

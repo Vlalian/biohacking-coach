@@ -282,10 +282,13 @@ foreach ($rel in $FileCopies.Keys) {
 #    not "fix" the link back into a plain file - that recreates the single,
 #    unversioned copy this removed. (mklink needs an elevated shell; the
 #    junctions above do not, which is why these two are the odd ones out.)
+#    CONTEXT-BRIEF.md is the generated index of CONTEXT.md + OVERVIEW.md (both
+#    gitignored, both in the main folder); importing the brief instead of the two
+#    whole files is what keeps a session's opening context at ~6k tokens rather
+#    than ~41k (2026-09-15). Rebuild it with scripts/context-brief.mjs.
 $claudeMd = @"
 @$MainFwd/AGENTS.md
-@$MainFwd/CONTEXT.md
-@$MainFwd/OVERVIEW.md
+@$MainFwd/CONTEXT-BRIEF.md
 "@
 # WriteAllText writes UTF-8 WITHOUT a BOM (Set-Content -Encoding utf8 would add one,
 # and a leading BOM can break the first @-import).

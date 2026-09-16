@@ -1,5 +1,6 @@
 import { loadCoachAthlete, NotACoach } from '../coach-athlete-guard';
 import { PrescribePanel } from '../prescribe-panel';
+import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
 
 // Per-request: depends on the signed-in coach and the requested athlete.
@@ -28,6 +29,16 @@ export default async function CoachAthletePlanPage({
 
   return (
     <>
+      {/* The horizon the week below is built toward, and the one surface where a
+          Head Coach may rename a block or move its end (training-architecture/08). */}
+      {/* Keyed by the snapshot: the panel copies `set` into state, and without
+          a key `router.refresh()` would keep those rows while a newer version
+          or a `stale` set arrived underneath (CodeRabbit, PR #65). */}
+      <BlockPanel
+        key={`${athleteId}:${view.blocks?.raceId ?? 'none'}:${view.blocks?.version ?? 0}:${view.blocks?.stale ?? false}`}
+        athleteId={athleteId}
+        set={view.blocks ?? null}
+      />
       <CoachCalendar
         athleteId={athleteId}
         sessions={view.calendarSessions}

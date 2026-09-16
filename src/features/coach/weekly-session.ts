@@ -19,7 +19,7 @@ import {
   type SkippedSession,
   type WeekFeedbackEntry,
 } from './check-in';
-import { blockPosition, currentBlock, trainingBlocks } from './training-blocks';
+import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
 import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
 
@@ -108,13 +108,27 @@ export function buildWeeklyCheckIn(
   // behaves exactly as an empty one.
   races: readonly RaceRow[] = [],
   planWrittenAt: Date | null = null,
+  /**
+   * The athlete's Training Blocks, already resolved
+   * (`training-block-service.ts:getResolvedBlocks`): the Coach-shaped set when
+   * one exists, the arithmetic draft when not (`training-architecture/07`).
+   *
+   * Passed in rather than derived here, because since 07 the blocks are no
+   * longer a function of `today` and the race alone — a stored set is a read.
+   * This function stays pure; the caller resolves. A caller that cannot passes
+   * `[]`, and the prompt then carries the race with no phase, which is honest.
+   */
+  // Stryker disable next-line ArrayDeclaration: equivalent. `currentBlock` finds
+  // the block today falls inside; a junk element has no dates and matches no
+  // day, so a mutated default yields the same "no phase" as an empty one.
+  blocks: TrainingBlock[] = [],
 ): CheckIn {
   const checkIn: CheckIn = {
     // Omitted entirely when absent, rather than set to undefined: nothing can
     // then interpolate "undefined" into a prompt.
     ...(readiness ? { readiness } : {}),
     ...coachingFactsFrom(athlete),
-    ...horizonFactsFrom(today, targetRace),
+    ...horizonFactsFrom(today, targetRace, blocks),
     ...raceFactsFrom(today, races, planWrittenAt),
     ...(capacity ? { capacity } : {}),
     ...(notableSignal ? { notableSignal } : {}),
@@ -141,18 +155,22 @@ export function buildWeeklyCheckIn(
  * Its own function for the same reason {@link coachingFactsFrom} is — the
  * check-in is a record of facts from several sources, and each source assembling
  * itself keeps any one of them from turning the builder into a pile of
- * conditionals. All of it is **derived, never stored**: an athlete with no race
- * has no phase, which is a real state, and the prompt renders it as no phase
- * rather than as a guess.
+ * conditionals. The blocks arrive resolved (see `buildWeeklyCheckIn`); an
+ * athlete with no race has no phase, which is a real state, and the prompt
+ * renders it as no phase rather than as a guess.
  */
-function horizonFactsFrom(today: string, targetRace: { name: string; date: string } | null) {
+function horizonFactsFrom(
+  today: string,
+  targetRace: { name: string; date: string } | null,
+  blocks: TrainingBlock[],
+) {
   if (!targetRace) return {};
   const race = { raceTarget: targetRace.name, raceDate: targetRace.date };
 
   // A race in the past leaves the athlete with a race but no blocks — nothing
   // left to divide. They keep the race and lose the phase, which is the honest
   // rendering of that state.
-  const block = currentBlock(today, trainingBlocks(today, targetRace.date));
+  const block = currentBlock(today, blocks);
   if (!block) return race;
 
   // Position is never checked separately: it is derived from the block, so a

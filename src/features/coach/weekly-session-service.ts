@@ -31,7 +31,8 @@ import {
   recordProposal,
   getLatestPlanWrittenAt,
 } from './plan-proposal-repository';
-import { getRaces, getTargetRace } from '@/features/race/race-repository';
+import { getRaces } from '@/features/race/race-repository';
+import { getResolvedBlocks } from './training-block-service';
 import { getCheckInForWeek } from './check-in-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
@@ -110,13 +111,15 @@ async function renderSystem(
   language?: string,
 ): Promise<RenderedSystem> {
   const weekStart = weekStartOf(today);
-  const [weekSessions, equipmentItems, targetRace, checkInRow, capacity, races, planWrittenAt] =
+  const [weekSessions, equipmentItems, horizon, checkInRow, capacity, races, planWrittenAt] =
     await Promise.all([
       getSessionsForWeek(athlete.id, weekStart),
       getEquipmentItems(athlete.id),
-      // The horizon. Null is an ordinary answer — an athlete may have no race,
-      // and the prompt says so rather than omitting the subject.
-      getTargetRace(athlete.id),
+      // The horizon: the Target Race and the Training Blocks resolved for it —
+      // the Coach-shaped set when one exists, the arithmetic draft when not
+      // (`training-architecture/07`). A null race is an ordinary answer, and the
+      // prompt says so rather than omitting the subject.
+      getResolvedBlocks(athlete.id, today),
       // The athlete's own report of how they arrive at this week. Null most weeks
       // — the Weekly Session is not a gate (ADR 0007) — and the prompt says so
       // rather than inventing scores, which is what it did before code-health/07.
@@ -136,11 +139,12 @@ async function renderSystem(
     weeklySessionNumber,
     language,
     equipmentItems,
-    targetRace ? { name: targetRace.name, date: targetRace.date } : null,
+    horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
     capacity,
     notableSignalFrom(checkInRow),
     races,
     planWrittenAt,
+    horizon.blocks,
   );
   // The inputs with a real source: the week's Session Reflections (feedback),
   // its skips, and — since showable-version/15 — the athlete's Unavailable

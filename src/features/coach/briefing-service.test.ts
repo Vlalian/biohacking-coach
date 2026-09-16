@@ -48,7 +48,13 @@ vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
   getBriefingReflections,
 }));
-vi.mock('./coach-client', () => ({ callCoach }));
+vi.mock('./coach-client', () => ({ callCoach, EmptyCoachReplyError: class EmptyCoachReplyError extends Error {} }));
+const { getResolvedBlocks, getLatestUnrealisticFlag } = vi.hoisted(() => ({
+  getResolvedBlocks: vi.fn(async (): Promise<unknown> => ({ race: null, set: null, blocks: [] })),
+  getLatestUnrealisticFlag: vi.fn(async (): Promise<string | null> => null),
+}));
+vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
+vi.mock('./training-block-repository', () => ({ getLatestUnrealisticFlag }));
 vi.mock('./conversation-repository', () => ({
   createBriefing,
   getOwnedBriefing,
@@ -322,6 +328,181 @@ describe('an open Injury is athlete-reported data, gated by the same flag', () =
 
     expect(capacityFor).not.toHaveBeenCalled();
     expect(callCoach.mock.calls[0][0].system).not.toContain('no run');
+  });
+});
+
+describe('startBriefing — the prompt material the rest of the suite does not reach', () => {
+  it('carries the resolved Training Blocks, their authors and the unrealistic flag (training-architecture/07)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'r1', name: 'IM', date: '2027-08-15' },
+      set: null,
+      blocks: [
+        { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-06-01', endDate: '2026-07-31', authoredBy: 'coach_ai' },
+        { index: 2, total: 2, name: 'Long Rides', startDate: '2026-08-01', endDate: '2027-08-15', authoredBy: 'head_coach' },
+      ],
+    });
+    getLatestUnrealisticFlag.mockResolvedValue('eleven months is short');
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
+    expect(getLatestUnrealisticFlag).toHaveBeenCalledWith('a1', 'r1');
+    expect(lastSystem()).toContain('Build the Volume · to 2026-07-31 · Coach');
+    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach');
+    expect(lastSystem()).toContain("The Training Blocks are the Head Coach's.");
+    expect(lastSystem()).toContain('flagged the Target Race as unrealistic: eleven months is short');
+    // Reports withheld, and the blocks rendered anyway: they are plan structure.
+    expect(lastSystem()).toContain('withheld');
+    // ...including which block is now — the profile's phase line is gone with
+    // the reports, so the block list has to say it (CodeRabbit, PR #65).
+    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach · current');
+  });
+
+  it('reads no verdict at all for an athlete with no Target Race', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+    getLatestUnrealisticFlag.mockClear();
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getLatestUnrealisticFlag).not.toHaveBeenCalled();
+    expect(lastSystem()).toContain('TRAINING BLOCKS: none');
+  });
+
+  it('names the phase from the resolved block today falls inside', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getAthleteById.mockResolvedValue({ experienceLevel: 'intermediate', raceTarget: null, trainingSessionsPerWeek: null, profile: null });
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'r1', name: 'IM', date: '2027-08-15' },
+      set: null,
+      blocks: [
+        { index: 1, total: 2, name: 'Build the Volume', startDate: '2026-08-01', endDate: '2026-12-31', authoredBy: 'coach_ai' },
+        { index: 2, total: 2, name: 'Taper', startDate: '2027-01-01', endDate: '2027-08-15', authoredBy: 'coach_ai' },
+      ],
+    });
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('Training phase: Build the Volume');
+  });
+
+  it('renders a profile with no athlete row as absent fields, not a crash', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getAthleteById.mockResolvedValue(undefined);
+
+    const result = await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(result.ok).toBe(true);
+    expect(lastSystem()).not.toContain('Experience:');
+    expect(lastSystem()).not.toContain('Race target:');
+    expect(lastSystem()).not.toContain('Training sessions per week');
+  });
+
+  it('labels all three speakers in a shared transcript', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, true));
+    getSharedTranscripts.mockResolvedValue([
+      {
+        conversationId: 'c1',
+        kind: 'weekly_session',
+        createdAt: new Date(),
+        messages: [
+          { role: 'athlete', content: 'tired', seq: 0 },
+          { role: 'coach_ai', content: 'rest', seq: 1 },
+          { role: 'head_coach', content: 'agreed', seq: 2 },
+        ],
+      },
+    ]);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('[Weekly Session]\nAthlete: tired\nCoach: rest\nHead Coach: agreed');
+  });
+
+  it('opens with the fixed primer and the briefing token budget', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+
+    await startBriefing('coach_1', 'a1', TODAY, 'da');
+
+    const call = callCoach.mock.calls[0][0];
+    expect(call.messages).toEqual([{ role: 'user', content: "Brief me on this athlete." }]);
+    expect(call.maxTokens).toBe(1400);
+    expect(call.system).toContain('Danish');
+  });
+});
+
+describe('continueBriefing — the failure log', () => {
+  it('logs the failed turn against the briefing surface with the refusal reason', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getOwnedBriefing.mockResolvedValue({ id: 'b1', athleteId: 'a1', coachId: 'coach_1', kind: 'coach_briefing' });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    callCoach.mockRejectedValue(new Error('empty turn'));
+
+    await continueBriefing('coach_1', 'b1', 'how is her sleep?', TODAY);
+
+    expect(JSON.parse(spy.mock.calls[0][0] as string)).toMatchObject({
+      event: 'coach_call_failed',
+      surface: 'coach_briefing',
+      athleteId: 'a1',
+      conversationId: 'b1',
+      reason: 'coach-unavailable',
+    });
+    spy.mockRestore();
+  });
+
+  it('sends the whole transcript plus the new turn, in order', async () => {
+    getOwnedBriefing.mockResolvedValue({ id: 'b1', athleteId: 'a1', coachId: 'coach_1', kind: 'coach_briefing' });
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getMessages.mockResolvedValue([
+      { id: 'm0', role: 'coach_ai', content: 'my read', seq: 0, createdAt: new Date() },
+    ]);
+
+    await continueBriefing('coach_1', 'b1', '  how is her sleep?  ', TODAY);
+
+    const call = callCoach.mock.calls[0][0];
+    expect((call.messages as { role: string; content: string }[]).at(-1)).toEqual({ role: 'user', content: 'how is her sleep?' });
+    expect(call.maxTokens).toBe(1400);
+    expect(appendBriefingMessages).toHaveBeenCalledWith('coach_1', 'b1', [
+      { role: 'head_coach', content: 'how is her sleep?' },
+      { role: 'coach_ai', content: 'my read' },
+    ]);
+  });
+});
+
+describe('the two remaining refusals and the opening log', () => {
+  it('reads a zero-per-week athlete as zero, not as unknown', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getAthleteById.mockResolvedValue({ experienceLevel: 'novice', raceTarget: null, trainingSessionsPerWeek: 0, profile: { onboarding: { motivation: 'finish' } } });
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('Training sessions per week: 0');
+    expect(lastSystem()).toContain('Motivation: finish');
+  });
+
+  it('refuses continue as not-owner when the append finds the briefing is no longer this coach’s', async () => {
+    getOwnedBriefing.mockResolvedValue({ id: 'b1', athleteId: 'a1', coachId: 'coach_1', kind: 'coach_briefing' });
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    appendBriefingMessages.mockResolvedValue(null);
+
+    expect(await continueBriefing('coach_1', 'b1', 'still there?', TODAY)).toEqual({ ok: false, reason: 'not-owner' });
+  });
+
+  it('logs a failed opening turn against the briefing surface', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    callCoach.mockRejectedValue(new Error('down'));
+
+    const result = await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+    expect(JSON.parse(spy.mock.calls[0][0] as string)).toMatchObject({
+      event: 'coach_call_failed',
+      surface: 'coach_briefing',
+      athleteId: 'a1',
+      conversationId: null,
+    });
+    spy.mockRestore();
   });
 });
 

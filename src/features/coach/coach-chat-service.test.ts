@@ -57,29 +57,31 @@ vi.mock('./conversation-repository', () => ({
   getOwnedConversation,
   appendMessages,
   getMessages,
-  getLatestOpenConversation: vi.fn(),
+  getLatestOpenConversation,
 }));
 vi.mock('./check-in-repository', () => ({
   // No Check-in filed: the ordinary week, and the one the prompt has to say it
   // has nothing for rather than inventing scores.
   getCheckInForWeek: vi.fn(async () => null),
 }));
-const { getTargetRace, getRaces, getLatestPlanWrittenAt } = vi.hoisted(() => ({
+const { getTargetRace, getRaces, getLatestPlanWrittenAt, getLatestOpenConversation } = vi.hoisted(() => ({
   // No race booked: the ordinary state for most of these fixtures, and the one
   // the prompt has to state plainly rather than omit.
   getTargetRace: vi.fn<() => Promise<unknown>>(async () => null),
   getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
   getLatestPlanWrittenAt: vi.fn<() => Promise<Date | null>>(async () => null),
+  getLatestOpenConversation: vi.fn(async (): Promise<unknown> => null),
 }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('./plan-proposal-repository', () => ({ getLatestPlanWrittenAt }));
+vi.mock('./training-block-repository', () => ({ getBlockSet: vi.fn(async () => null) }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
   getOwnedSession,
   getSessionsForWeek,
 }));
 
-const { sendCoachChatMessage } = await import('./coach-chat-service');
+const { sendCoachChatMessage, getOpenCoachChat } = await import('./coach-chat-service');
 // Coach Chat's history is the shared conversion with no primer — the athlete
 // speaks first here, so there is no fabricated opening turn. Imported from the
 // shared module rather than re-exported by the service, so the test asserts the
@@ -438,6 +440,92 @@ describe('Coach Chat sees the week', () => {
     const system = callCoach.mock.calls[0][0].system;
     expect(system).toContain('SESSION DISCUSSION');
     expect(system.match(/threshold set/g)).toHaveLength(1);
+  });
+});
+
+describe('the Reference as the prompt sees it', () => {
+  beforeEach(() => {
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+  });
+
+  it('renders a session with no duration, zone or note with dashes and nothing, not "null"', async () => {
+    getOwnedSession.mockReset().mockResolvedValue({
+      id: 'sess_1',
+      type: 'Recovery',
+      date: '2026-08-18',
+      duration: null,
+      zone: null,
+      note: null,
+      status: 'planned',
+    });
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'this one?', '2026-08-12', undefined, 'sess_1');
+
+    const system = callCoach.mock.calls[0][0].system as string;
+    expect(system).toContain('Duration: — · Zone: —');
+    expect(system).toContain('Note: ""');
+    expect(system).not.toContain('null');
+  });
+
+  it('renders the duration in minutes when there is one', async () => {
+    getOwnedSession.mockReset().mockResolvedValue({
+      id: 'sess_1',
+      type: 'Endurance',
+      date: '2026-08-18',
+      duration: 90,
+      zone: 'Z2',
+      note: 'steady',
+      status: 'planned',
+    });
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'this one?', '2026-08-12', undefined, 'sess_1');
+
+    expect(callCoach.mock.calls[0][0].system).toContain('Duration: 90 min · Zone: Z2');
+  });
+});
+
+describe('the horizon in Coach Chat (training-architecture/07)', () => {
+  it('names the Target Race and the block today falls inside, from the same resolver the Weekly Session uses', async () => {
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getTargetRace.mockResolvedValue({ id: 'r1', name: 'Ironman Kalmar', date: '2027-08-18' });
+
+    await sendCoachChatMessage(ATHLETE, 'conv_1', 'how far out am I?', '2026-08-12');
+
+    const system = callCoach.mock.calls[0][0].system as string;
+    expect(system).toContain('race=Ironman Kalmar on 2027-08-18');
+    expect(system).toContain('Block 1 of');
+    getTargetRace.mockResolvedValue(null);
+  });
+});
+
+describe('getOpenCoachChat — resume, never mint', () => {
+  it('returns null when the athlete has never opened a chat, reading no messages', async () => {
+    getLatestOpenConversation.mockResolvedValue(null);
+    getMessages.mockReset();
+    createConversation.mockReset();
+
+    expect(await getOpenCoachChat(ATHLETE.id)).toBeNull();
+
+    expect(getLatestOpenConversation).toHaveBeenCalledWith(ATHLETE.id, 'coach_chat');
+    expect(getMessages).not.toHaveBeenCalled();
+    expect(createConversation).not.toHaveBeenCalled();
+  });
+
+  it('returns the open conversation with its transcript', async () => {
+    getLatestOpenConversation.mockResolvedValue({ id: 'conv_9', kind: 'coach_chat' });
+    getMessages.mockReset().mockResolvedValue([{ id: 'm1', role: 'athlete', content: 'hi', seq: 0 }]);
+
+    expect(await getOpenCoachChat(ATHLETE.id)).toEqual({
+      conversationId: 'conv_9',
+      messages: [{ id: 'm1', role: 'athlete', content: 'hi', seq: 0 }],
+    });
+    expect(getMessages).toHaveBeenCalledWith('conv_9');
   });
 });
 

@@ -677,6 +677,50 @@ export type RaceRow = typeof race.$inferSelect;
 export type NewRaceRow = typeof race.$inferInsert;
 
 /**
+ * The adjusted Training Blocks for one race (`training-architecture/07`).
+ *
+ * Stage 1's arithmetic draft is derived on every read and stored nowhere; this
+ * is what stages 2 and 3 write once the Coach (or a Head Coach) has decided what
+ * the blocks are *for*. One row per (athlete, race): the unique index is the
+ * whole concurrency story for the Coach's background draft — two runs racing to
+ * draft the same horizon both INSERT, one loses on the index and writes nothing
+ * more.
+ *
+ * `blocks` is JSONB rather than a child table — an ordered list of
+ * `{ name, endDate, authoredBy }` — because the set is edited and validated as
+ * one thing: one row, one CAS on `version`, one unique index, one pure validator
+ * (`training-blocks.ts:validateBlockSet`). The same reasoning as `events.payload`
+ * and `session_streams.samples`. The first block's start is `start_date`; every
+ * other start is derived, so contiguity cannot be stored wrong.
+ *
+ * `version` is the Head Coach's optimistic-concurrency token (slice 08): an edit
+ * carries the version it read and matches zero rows if the set changed under it.
+ */
+export const trainingBlockSet = pgTable(
+  'training_block_set',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    raceId: uuid('race_id')
+      .notNull()
+      .references(() => race.id, { onDelete: 'cascade' }),
+    startDate: date('start_date', { mode: 'string' }).notNull(),
+    blocks: jsonb('blocks').notNull(),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('training_block_set_one_per_race').on(table.athleteId, table.raceId),
+  ],
+);
+
+export type TrainingBlockSetRow = typeof trainingBlockSet.$inferSelect;
+export type NewTrainingBlockSetRow = typeof trainingBlockSet.$inferInsert;
+
+/**
  * A Check-in — how the athlete arrives at the week
  * (`training-architecture/05`, CONTEXT.md).
  *

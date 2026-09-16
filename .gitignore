@@ -38,6 +38,8 @@ coverage/
 # docs/adr/ is published while the rest of docs/ stays local.
 /CONTEXT.md
 /OVERVIEW.md
+# Generated from the two above by scripts/context-brief.mjs; never hand-edited.
+/CONTEXT-BRIEF.md
 /CLAUDE.md
 /.scratch/
 /poc/
