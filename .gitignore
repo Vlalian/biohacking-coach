@@ -71,3 +71,8 @@ coverage/
 # neon link writes the branch pointer for this checkout here (neon.ts policy is
 # tracked; which branch a checkout is on is not).
 .neon
+
+# Playwright (frontend-quality/01, /05)
+/test-results/
+/playwright-report/
+/playwright/.cache/

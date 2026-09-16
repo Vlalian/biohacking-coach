@@ -130,6 +130,10 @@ they never enter a PR.
 - **No direct identifier reaches the LLM.** Name, email, DOB, and location are never sent to the Anthropic API (GDPR decision 1). Prompt builders assert this.
 - **Colocate tests** with the code they test (`calc-load.ts` next to `calc-load.test.ts`).
 
+### A primitive ships with its snapshot
+
+A component in `src/components/ui` has a `*.visual.tsx` beside it, and any change to one — or to `globals.css` — is run through `npm run test:visual` before commit; a full-page change through `npm run test:e2e` (needs the dev database and the seed accounts in `.env.local`). Baselines are committed `-win32` PNGs under `__snapshots__/`, regenerated with the matching `:update` script only when the change in appearance was the point. Rationale and the platform ruling: `.scratch/frontend-quality/`.
+
 ### Definition of done
 
 Product code (`src/`, `scripts/`, build config) is not done until all four pass:
