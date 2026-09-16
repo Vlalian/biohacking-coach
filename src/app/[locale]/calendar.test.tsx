@@ -29,6 +29,11 @@ vi.mock('./availability-actions', () => ({
 }));
 vi.mock('./rating-modal', () => ({ RatingModal: () => null }));
 vi.mock('./session-drawer', () => ({ SessionDrawer: () => null }));
+// The card reaches the overlay context and three server actions; the calendar
+// test asserts where it is rendered, not what it does.
+vi.mock('./proposal-card', () => ({
+  ProposalCard: ({ draft }: { draft: { id: string } }) => <div data-proposal-card={draft.id} />,
+}));
 
 const { Calendar, MOVE_REFUSAL_KEY, liftRefusal } = await import('./calendar');
 
@@ -317,5 +322,48 @@ describe('Calendar — the week row is the toggle', () => {
     const markup = render();
 
     expect(markup).toMatch(/<button[^>]*data-week-toggle=/);
+  });
+});
+
+describe('Calendar — the drafted week the athlete has not decided on (training-architecture/18)', () => {
+  const draft = {
+    id: 'd1',
+    weekStart: '2026-08-24',
+    visibleFrom: '2026-08-19',
+    sessions: [
+      { date: '2026-08-25', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: null },
+      { date: '2026-08-27', type: 'Intensity' as const, durationMinutes: 45, zone: null, note: null },
+    ],
+    citations: [],
+    approved: false,
+    createdAt: new Date(),
+  };
+
+  it('renders nothing new when no proposal is passed — the markup is what it was before 18', () => {
+    const markup = render();
+    expect(markup).not.toContain('data-proposal-card');
+    expect(markup).not.toContain('data-proposed');
+    expect(markup).not.toContain('data-discussing');
+    expect(markup).toMatchSnapshot();
+  });
+
+  it('renders the card above the grid and one ghosted chip per proposed session in the draft’s week only', () => {
+    const markup = render({ proposal: { kind: 'proposal', draft } });
+    expect(markup).toContain('data-proposal-card="d1"');
+    // The draft's week (24–30 Aug) is not the current week (19 Aug is a
+    // Wednesday, week of the 17th), so it renders collapsed: one dashed dot per
+    // proposed session, labelled as proposed — never as a session.
+    expect(markup.match(/aria-label="Endurance · proposedChip"/g)).toHaveLength(1);
+    expect(markup.match(/aria-label="Intensity · proposedChip"/g)).toHaveLength(1);
+    expect(markup).not.toMatch(/<button[^>]*proposedChip/);
+    expect(markup).not.toMatch(/draggable="true"[^>]*proposedChip/);
+  });
+
+  it('renders the pointer, and no card and no chips, while the draft is being discussed', () => {
+    const markup = render({ proposal: { kind: 'discussing', conversationId: 'c1', weekStart: '2026-08-24' } });
+    expect(markup).toContain('data-discussing="c1"');
+    expect(markup).toContain('>discussing<');
+    expect(markup).not.toContain('data-proposal-card');
+    expect(markup).not.toContain('proposedChip');
   });
 });

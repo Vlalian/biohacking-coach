@@ -289,6 +289,8 @@
     "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
   },
   "Calendar": {
+    "proposedChip": "foreslået",
+    "discussing": "Næste uge er ved at blive drøftet med Coachen — åbn Coachen for at afslutte.",
     "empty": "Ingen sessioner planlagt endnu.",
     "rate": "Bedøm {type}-session",
     "markUnavailable": "Marker {date} som utilgængelig",
@@ -686,6 +688,19 @@
     "approved": "Godkendt. Det når atleten på deres planlægningsdag.",
     "approvedChanged": "Godkendt med dine ændringer. Atleten får at vide, at du har justeret den.",
     "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
+    "error": "Det virkede ikke ({reason})."
+  },
+  "ProposalCard": {
+    "title": "Næste uge er udkastet",
+    "lead": "{count, plural, one {# session} other {# sessioner}} for ugen fra {week}. Accepter den, drøft den med Coachen, eller lad ugen være som den er.",
+    "accept": "Accepter",
+    "discuss": "Drøft med Coachen",
+    "decline": "Ikke denne uge",
+    "accepted": "Gemt.",
+    "acceptedPast": "Gemt — {count, plural, one {# af dagene er} other {# af dagene er}} allerede gået.",
+    "declined": "Ladt som den er.",
+    "replaced": "Udkastet er erstattet — genindlæs for at se det gældende.",
+    "consentRequired": "For at drøfte den skal du først tillade AI-coaching under Privatliv.",
     "error": "Det virkede ikke ({reason})."
   }
 }

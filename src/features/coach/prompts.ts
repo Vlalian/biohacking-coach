@@ -11,6 +11,7 @@ import {
 } from './prompt-blocks';
 import { planningWindow, type PlanningWindow } from './planning-window';
 import type { SkeletonDay } from './week-draft';
+import type { ProposedSession } from './weekly-session';
 import { effectiveWeeklySessionDay } from './weekly-offer';
 import type { RetrievedPassage } from '@/features/knowledge-oracle/retrieval';
 import type { Citation } from '@/lib/citation';
@@ -165,6 +166,12 @@ export interface WeeklyContext {
   unavailableDates: string[];
   weekActivityLines: string | null;
   today: string;
+  /**
+   * The drafted week already staged on this conversation as its pending
+   * proposal (`training-architecture/18`, "discuss"). Set by the caller after
+   * assembly; absent on every other Weekly Session.
+   */
+  stagedProposal?: ProposedSession[];
 }
 
 export function buildWeeklyContext(
@@ -638,6 +645,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     weekActivityBlock(weekActivityLines),
 
+    stagedProposalBlock(ctx.stagedProposal),
+
     "DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.",
 
     'SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Every date must fall inside the PLANNING WINDOW above; dates outside it are dropped by the server.',
@@ -987,6 +996,27 @@ export interface WeekDraftContext extends WeeklyContext {
   skeleton: SkeletonDay[];
   passages: RetrievedPassage[];
   citations: Citation[];
+}
+
+/**
+ * The week the athlete brought into the conversation from their calendar
+ * (`/18`): it is already on the table as the pending proposal, so the Coach
+ * discusses *that* week rather than proposing a fresh one.
+ */
+function stagedProposalBlock(sessions?: ProposedSession[]): PromptBlock {
+  if (!sessions || sessions.length === 0) return null;
+  return `PROPOSED WEEK (drafted for the athlete, already shown to them as a proposal — they opened this conversation to discuss it):
+${sessions.map(stagedSessionLine).join('\n')}
+Talk about this week. If they want changes, agree them and call propose_week_plan with the revised week; if they are happy, tell them to confirm the proposal they already have.`;
+}
+
+/** One staged session as the Coach reads it: date and type always, the rest only when set. */
+export function stagedSessionLine(s: ProposedSession): string {
+  const parts = [`${s.date}: ${s.type}`];
+  if (s.durationMinutes) parts.push(`${s.durationMinutes}min`);
+  if (s.zone) parts.push(s.zone);
+  const line = parts.join(' ');
+  return s.note ? `${line} — ${s.note}` : line;
 }
 
 /** Today and the week being drafted, with the days ruled out of it. */

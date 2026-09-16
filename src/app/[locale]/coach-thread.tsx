@@ -47,7 +47,7 @@ export function CoachThread({
   weeklyOffer?: WeeklyOfferInput | null;
 }) {
   const t = useTranslations('CoachThread');
-  const { reference, weeklyOfferDismissed, dismissWeeklyOffer } = useCoachOverlay();
+  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, weeklySeed, setWeeklySeed } = useCoachOverlay();
 
   // Decided on the client only. The server and the browser can disagree about
   // what day it is — no timezone is stored on the profile — so answering this
@@ -75,8 +75,11 @@ export function CoachThread({
   // to. Missing that was a real bug: with a Weekly Session open, the overlay
   // reopened in weekly mode and the chip was unreachable (caught in a fresh tab;
   // a warm one hid it, because the component was already mounted in chat).
+  // A seed present at mount wins outright: the overlay was closed when the
+  // athlete tapped "Discuss" on the calendar, and it mounts straight onto the
+  // session that tap started (training-architecture/18).
   const [mode, setMode] = useState<'chat' | 'weekly'>(
-    reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
+    weeklySeed ? 'weekly' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
   );
 
   // And the same rule while already mounted: a *new* Reference arriving (the
@@ -91,13 +94,30 @@ export function CoachThread({
     if (referenceId) setMode('chat');
   }
 
+  // A Weekly Session seeded from the calendar ("Discuss with the Coach" on a
+  // drafted week, `training-architecture/18`): the same adjust-state-on-prop
+  // shape as the Reference above. A new seed opens weekly mode on it; the
+  // seed's conversation id is the WeeklySession's key, so a session already
+  // showing is replaced rather than left holding stale state.
+  const seedId = weeklySeed?.conversationId ?? null;
+  const [seenSeedId, setSeenSeedId] = useState(seedId);
+  if (seedId !== seenSeedId) {
+    setSeenSeedId(seedId);
+    if (seedId) setMode('weekly');
+  }
+  const weeklyStart = (weeklySeed as WeeklySessionInitial | null) ?? weeklyInitial;
+
   if (mode === 'weekly') {
     return (
       <WeeklySession
-        initial={weeklyInitial}
+        key={weeklyStart?.conversationId ?? 'fresh'}
+        initial={weeklyStart}
         athleteFirstName={athleteFirstName}
         raceTarget={raceTarget}
-        onExit={() => setMode('chat')}
+        onExit={() => {
+          setWeeklySeed(null);
+          setMode('chat');
+        }}
       />
     );
   }

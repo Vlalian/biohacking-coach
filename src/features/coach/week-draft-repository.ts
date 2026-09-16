@@ -1,8 +1,9 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import { pendingWeekDraft, visibleTo, WEEK_DRAFT_EVENT, type SkeletonDay, type WeekDraft } from './week-draft';
+import { getPendingProposal } from './plan-proposal-repository';
 import { addDays, weekStartOf } from '@/lib/date';
 import type { ProposedSession } from './weekly-session';
 
@@ -177,4 +178,97 @@ export async function withdrawPreviewDrafts(athleteId: string, today: string): P
     withdrawn += 1;
   }
   return withdrawn;
+}
+
+/**
+ * What the athlete's calendar shows about a drafted week (`/18`): the proposal
+ * itself, a pointer to the conversation it moved into, or nothing.
+ */
+export type CalendarProposalState =
+  | { kind: 'proposal'; draft: WeekDraft }
+  | { kind: 'discussing'; conversationId: string; weekStart: string };
+
+/**
+ * Next week's visible pending draft, else this week's — at most one proposal is
+ * ever shown, and next week wins. When neither is pending, the most recent
+ * draft handed to a conversation whose proposal is still open is reported as
+ * "being discussed", so the calendar can point at where it went.
+ */
+export async function getCalendarProposalState(athleteId: string, today: string): Promise<CalendarProposalState | null> {
+  const thisWeek = weekStartOf(today);
+  for (const weekStart of [addDays(thisWeek, 7), thisWeek]) {
+    const draft = await getPendingWeekDraft(athleteId, weekStart, { asOf: today });
+    if (draft) return { kind: 'proposal', draft };
+  }
+  return discussingState(athleteId, [addDays(thisWeek, 7), thisWeek]);
+}
+
+/** The reason a withdrawn draft carries when the athlete took it into a conversation. */
+const DISCUSSED = 'discussed';
+
+/** The most recent draft handed to a conversation for one of `weeks`, or null. */
+async function latestDiscussedHandoff(
+  athleteId: string,
+  weeks: string[],
+): Promise<{ conversationId: string; weekStart: string } | null> {
+  const [row] = await getDb()
+    .select({ payload: events.payload })
+    .from(events)
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        eq(events.type, WEEK_DRAFT_EVENT.withdrawn),
+        sql`${events.payload} ->> 'reason' = ${DISCUSSED}`,
+        inArray(sql`${events.payload} ->> 'weekStart'`, weeks),
+      ),
+    )
+    .orderBy(desc(events.createdAt))
+    .limit(1);
+  const payload = (row?.payload ?? null) as { conversationId?: unknown; weekStart?: unknown } | null;
+  if (typeof payload?.conversationId !== 'string' || typeof payload.weekStart !== 'string') return null;
+  return { conversationId: payload.conversationId, weekStart: payload.weekStart };
+}
+
+async function discussingState(athleteId: string, weeks: string[]): Promise<CalendarProposalState | null> {
+  const handoff = await latestDiscussedHandoff(athleteId, weeks);
+  if (!handoff) return null;
+  // Still being discussed only while that conversation's proposal is pending;
+  // once it was confirmed or cancelled there, the calendar has nothing to point at.
+  const pending = await getPendingProposal(athleteId, handoff.conversationId);
+  return pending ? { kind: 'discussing', ...handoff } : null;
+}
+
+/** The athlete's own decision on a draft — the event 16's pending rule resolves on. */
+export async function recordWeekDraftDecision(decision: {
+  athleteId: string;
+  type: 'week_plan_written' | 'week_plan_declined';
+  weekStart: string;
+  draftId: string;
+  sessions: ProposedSession[];
+}): Promise<void> {
+  const { athleteId, type, weekStart, draftId, sessions } = decision;
+  await getDb().insert(events).values({
+    athleteId,
+    actorType: 'athlete',
+    actorId: athleteId,
+    type,
+    payload: { weekStart, draftId, sessions },
+  });
+}
+
+/** The draft moved into a Weekly Session: withdrawn from the calendar, the conversation owns it now. */
+export async function recordWeekDraftDiscussed(handoff: {
+  athleteId: string;
+  weekStart: string;
+  draftId: string;
+  conversationId: string;
+}): Promise<void> {
+  const { athleteId, weekStart, draftId, conversationId } = handoff;
+  await getDb().insert(events).values({
+    athleteId,
+    actorType: 'athlete',
+    actorId: athleteId,
+    type: WEEK_DRAFT_EVENT.withdrawn,
+    payload: { weekStart, draftId, reason: 'discussed', conversationId },
+  });
 }

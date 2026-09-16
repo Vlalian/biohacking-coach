@@ -107,6 +107,8 @@ async function renderSystem(
   today: string,
   unavailableDates: string[],
   language?: string,
+  /** The drafted week already staged on this conversation (`/18`, "discuss"); null on every other session. */
+  stagedProposal: ProposedSession[] | null = null,
 ): Promise<string> {
   const weekStart = weekStartOf(today);
   const [weekSessions, equipmentItems, horizon, checkInRow, capacity] = await Promise.all([
@@ -162,7 +164,7 @@ async function renderSystem(
     null,
     today,
   );
-  return renderWeeklyPrompt(ctx);
+  return renderWeeklyPrompt(stagedProposal ? { ...ctx, stagedProposal } : ctx);
 }
 
 /** The proposal a Weekly Session is currently awaiting a decision on. */
@@ -195,6 +197,8 @@ export async function startWeeklySession(
   athlete: Athlete,
   today: string,
   language?: string,
+  /** `stagedProposal`: the drafted week the athlete brought in from the calendar (`/18`). */
+  options: { stagedProposal?: ProposedSession[] } = {},
 ): Promise<StartWeeklySessionResult> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
   // Read once per turn and threaded from here: the prompt (`renderSystem`)
@@ -212,6 +216,7 @@ export async function startWeeklySession(
       today,
       unavailableDates,
       language,
+      options.stagedProposal ?? null,
     );
     reply = await callCoach({
       system,
@@ -330,12 +335,16 @@ async function askCoach(params: {
     trimmed,
   } = params;
   try {
+    // A week brought in from the calendar (`/18`) is this conversation's
+    // pending proposal; the Coach is told so on every turn, not only the first.
+    const staged = await getPendingProposal(athlete.id, conversationId);
     const system = await renderSystem(
       athlete,
       weeklySessionNumber ?? 1,
       today,
       unavailableDates,
       language,
+      staged?.sessions ?? null,
     );
     const reply = await callCoach({
       system,

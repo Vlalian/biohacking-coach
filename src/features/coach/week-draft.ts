@@ -190,6 +190,27 @@ export function weekWindow(
   };
 }
 
+/**
+ * A week as a whole, Monday to Sunday, whatever today is — the window a late
+ * acceptance validates against (`/18`; Mads, 2026-09-15: the week is written
+ * whole, as drafted). Excluded days are still excluded: a session on a day the
+ * athlete ruled out was never valid. Never null — an all-excluded week simply
+ * validates to nothing, which the caller refuses.
+ */
+export function wholeWeekWindow(
+  weekStart: string,
+  fixedConstraints: string[] = [],
+  unavailableDates: string[] = [],
+): PlanningWindow {
+  const end = addDays(weekStart, 6);
+  return {
+    start: weekStart,
+    end,
+    excludedDates: excludedBetween(weekStart, end, fixedConstraints, unavailableDates),
+    fellThrough: false,
+  };
+}
+
 /** The week after today's, as a window — the common case for a draft. */
 export function nextWeekWindow(
   today: string,

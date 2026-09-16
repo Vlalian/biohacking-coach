@@ -964,3 +964,26 @@ describe("the athlete's own sentence survives the whole path", () => {
     expect(callCoach.mock.calls[0][0].system).not.toContain('ATHLETE SAID');
   });
 });
+
+describe('a week brought in from the calendar is on the table (training-architecture/18)', () => {
+  const STAGED = [{ date: '2026-08-20', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: 'easy spin' }];
+
+  it('startWeeklySession tells the Coach about the staged proposal, and says nothing about one otherwise', async () => {
+    callCoach.mockResolvedValue({ text: 'Hello.', toolCalls: [] });
+    await startWeeklySession(ATHLETE, TODAY, 'en', { stagedProposal: STAGED });
+    const withSeed = callCoach.mock.calls.at(-1)![0].system as string;
+    expect(withSeed).toContain('PROPOSED WEEK');
+    expect(withSeed).toContain('2026-08-20: Endurance 60min Z2 — easy spin');
+    expect(withSeed).toMatch(/tell them to confirm the proposal they already have/);
+
+    await startWeeklySession(ATHLETE, TODAY, 'en');
+    expect(callCoach.mock.calls.at(-1)![0].system).not.toContain('PROPOSED WEEK');
+  });
+
+  it('continueWeeklySession reads the conversation’s pending proposal and tells the Coach on every later turn', async () => {
+    callCoach.mockResolvedValue({ text: 'Sure.', toolCalls: [] });
+    vi.mocked(getPendingProposal).mockResolvedValueOnce({ conversationId: 'conv_1', sessions: STAGED });
+    await continueWeeklySession(ATHLETE, 'conv_1', 'can we swap Tuesday?', TODAY, 'en');
+    expect(callCoach.mock.calls.at(-1)![0].system).toContain('PROPOSED WEEK');
+  });
+});

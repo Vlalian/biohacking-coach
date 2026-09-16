@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWeeklyContext, renderWeekDraftPrompt, type WeekDraftContext } from './prompts';
+import { buildWeeklyContext, renderWeekDraftPrompt, renderWeeklyPrompt, stagedSessionLine, type WeekDraftContext } from './prompts';
 import type { CheckIn } from './check-in';
 import { WEEK_DRAFT_OPENER } from './week-draft';
 
@@ -146,5 +146,27 @@ describe('renderWeekDraftPrompt — the window block, line by line', () => {
   it('names a passage whose source is missing from the citations as unknown rather than dropping it', () => {
     const out = renderWeekDraftPrompt(ctx({ citations: [] }));
     expect(out).toContain('[1] Polarised distribution: most volume easy, a small hard fraction. — source unknown');
+  });
+});
+
+describe('the Weekly Session prompt with a week brought in from the calendar (training-architecture/18)', () => {
+  const weekly = (staged?: WeekDraftContext['checkIn'] extends never ? never : Parameters<typeof renderWeeklyPrompt>[0]['stagedProposal']) =>
+    renderWeeklyPrompt({ ...buildWeeklyContext({ ...CHECK_IN, weeklySessionNumber: 4 }, [], [], [], [], null, TODAY), stagedProposal: staged });
+
+  it('carries the PROPOSED WEEK block only when a proposal is staged, and not for an empty list', () => {
+    expect(weekly(undefined)).not.toContain('PROPOSED WEEK');
+    expect(weekly([])).not.toContain('PROPOSED WEEK');
+    const out = weekly([{ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy spin' }]);
+    expect(out).toContain('PROPOSED WEEK (drafted for the athlete, already shown to them as a proposal');
+    expect(out).toContain('2026-09-22: Endurance 60min Z2 — easy spin');
+    expect(out).toContain('tell them to confirm the proposal they already have');
+  });
+
+  it('renders each staged session with only the parts it has', () => {
+    expect(stagedSessionLine({ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy spin' })).toBe('2026-09-22: Endurance 60min Z2 — easy spin');
+    expect(stagedSessionLine({ date: '2026-09-22', type: 'Endurance', durationMinutes: null, zone: null, note: null })).toBe('2026-09-22: Endurance');
+    expect(stagedSessionLine({ date: '2026-09-22', type: 'Recovery', durationMinutes: 30, zone: null, note: null })).toBe('2026-09-22: Recovery 30min');
+    expect(stagedSessionLine({ date: '2026-09-22', type: 'Tempo', durationMinutes: null, zone: 'Z3', note: null })).toBe('2026-09-22: Tempo Z3');
+    expect(stagedSessionLine({ date: '2026-09-22', type: 'Tempo', durationMinutes: null, zone: null, note: 'steady' })).toBe('2026-09-22: Tempo — steady');
   });
 });

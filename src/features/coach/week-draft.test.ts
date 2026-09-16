@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { addDays } from '@/lib/date';
 import {
   cycleAnchor,
+  wholeWeekWindow,
   draftDueWeek,
   visibleTo,
   nextWeekWindow,
@@ -277,5 +278,17 @@ describe('pendingWeekDraft — the Head Coach’s approved version (training-arc
   it('a later draft (a regeneration) supersedes the approval, and a decision resolves whichever is pending', () => {
     expect(pendingWeekDraft([drafted('d1', 1), approved('a1', 2), drafted('d2', 3)], NEXT_MON)).toMatchObject({ id: 'd2', approved: false });
     expect(pendingWeekDraft([drafted('d1', 1), approved('a1', 2), { id: 'w', type: 'week_plan_written', payload: { weekStart: NEXT_MON }, createdAt: at(3) }], NEXT_MON)).toBeNull();
+  });
+});
+
+describe('wholeWeekWindow — the window a late acceptance validates against', () => {
+  it('is Monday to Sunday whatever today is, with the excluded days resolved, and never null', () => {
+    expect(wholeWeekWindow(NEXT_MON, ['Thursday'], ['2026-09-26'])).toEqual({
+      start: NEXT_MON,
+      end: '2026-09-27',
+      excludedDates: ['2026-09-24', '2026-09-26'],
+      fellThrough: false,
+    });
+    expect(wholeWeekWindow(NEXT_MON)).toEqual({ start: NEXT_MON, end: '2026-09-27', excludedDates: [], fellThrough: false });
   });
 });

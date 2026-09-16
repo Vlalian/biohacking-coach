@@ -289,6 +289,8 @@
     "error": "That didn't work. Check your details and try again."
   },
   "Calendar": {
+    "proposedChip": "proposed",
+    "discussing": "Next week is being discussed with the Coach — open the Coach to finish.",
     "empty": "No sessions planned yet.",
     "rate": "Rate {type} session",
     "markUnavailable": "Mark {date} unavailable",
@@ -686,6 +688,19 @@
     "approved": "Approved. It reaches the athlete on their planning day.",
     "approvedChanged": "Approved with your changes. The athlete will be told you shaped it.",
     "stale": "This draft was replaced. Reload to see the current one.",
+    "error": "That didn't work ({reason})."
+  },
+  "ProposalCard": {
+    "title": "Next week is drafted",
+    "lead": "{count, plural, one {# session} other {# sessions}} for the week of {week}. Accept it, talk it over with the Coach, or leave the week as it is.",
+    "accept": "Accept",
+    "discuss": "Discuss with the Coach",
+    "decline": "Not this week",
+    "accepted": "Saved.",
+    "acceptedPast": "Saved — {count, plural, one {# of these days has} other {# of these days have}} already passed.",
+    "declined": "Left as it is.",
+    "replaced": "This draft was replaced — reload to see the current one.",
+    "consentRequired": "To talk it over, first allow AI coaching under Privacy.",
     "error": "That didn't work ({reason})."
   }
 }
