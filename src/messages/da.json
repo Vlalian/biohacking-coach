@@ -696,7 +696,10 @@
   },
   "WeekDraftReview": {
     "title": "Næste uge, udkast",
-    "lead": "Coachen har lavet dette udkast til ugen fra {week}. Godkend det, som det er, eller ret en session og godkend.",
+    "lead": "Coachen har lavet dette udkast til ugen fra {week}. Ret, flyt, fjern eller tilføj sessioner efter behov, og godkend.",
+    "day": "Dag",
+    "add": "Tilføj en session",
+    "remove": "Fjern",
     "type": "Sessionstype",
     "duration": "Minutter",
     "zone": "Intensitetszone",

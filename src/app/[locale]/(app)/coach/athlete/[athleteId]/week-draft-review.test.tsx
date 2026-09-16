@@ -38,28 +38,48 @@ const DRAFT = {
 describe('WeekDraftReview', () => {
   const html = renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={DRAFT} />);
 
-  it('renders one row per proposed session with the day fixed and type, minutes, zone and note editable', () => {
+  it('renders one row per proposed session with day, type, minutes, zone and note all editable', () => {
     expect(html.match(/<li\b/g)).toHaveLength(3);
     expect(html).toContain('2026-09-22');
     expect(html).toContain('2026-09-27');
-    expect(html.match(/<select\b/g)).toHaveLength(3);
+    // Two selects per row: the day and the type. Mads, 2026-09-16: the coach
+    // adjusts the preview as much as possible, so a session can move.
+    expect(html.match(/<select\b/g)).toHaveLength(6);
     expect(html.match(/<input type="number"/g)).toHaveLength(3);
     expect(html).toContain('value="easy spin"');
-    // The day is text, never an input: it comes from the skeleton.
-    expect(html).not.toMatch(/<input[^>]*type="date"/);
   });
 
-  it('carries the draft id and offers exactly one action — approve', () => {
+  it('offers a session exactly the seven days of the draft’s week to move to, the stored day selected', () => {
+    // The server refuses any day outside the draft's week, so the panel never
+    // offers one. Monday the 21st through Sunday the 27th, nothing else.
+    const daySelect = html.match(/<select[^>]*data-field="date"[^>]*>[\s\S]*?<\/select>/)?.[0] ?? '';
+    const options = daySelect.match(/<option value="\d{4}-\d{2}-\d{2}"/g) ?? [];
+    expect(options).toHaveLength(7);
+    expect(daySelect).toContain('value="2026-09-21"');
+    expect(daySelect).toContain('value="2026-09-27"');
+    expect(daySelect).not.toContain('value="2026-09-20"');
+    expect(daySelect).not.toContain('value="2026-09-28"');
+    expect(daySelect).toMatch(/<option value="2026-09-22"[^>]*selected/);
+  });
+
+  it('offers remove on every row and one add, beside the one approve', () => {
     expect(html).toContain('data-draft-id="d1"');
-    expect(html.match(/<button\b/g)).toHaveLength(1);
-    expect(html).toContain('approve()');
+    expect(html.match(/data-action="remove"/g)).toHaveLength(3);
+    expect(html.match(/data-action="add"/g)).toHaveLength(1);
+    expect(html.match(/data-action="approve"/g)).toHaveLength(1);
     expect(html).toContain('lead(week=2026-09-21)');
-    expect(html).not.toMatch(/decline|reject|delete/i);
   });
 
   it('renders nothing when there is no draft, and nothing once the draft is the approved version', () => {
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={null} />)).toBe('');
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, approved: true }} />)).toBe('');
+  });
+
+  it('still offers add and approve on a draft the Coach left empty — the coach can build the week from nothing', () => {
+    const empty = renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions: [] }} />);
+    expect(empty.match(/<li\b/g)).toBeNull();
+    expect(empty.match(/data-action="add"/g)).toHaveLength(1);
+    expect(empty.match(/data-action="approve"/g)).toHaveLength(1);
   });
 });
 

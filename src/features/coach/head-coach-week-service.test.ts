@@ -115,6 +115,24 @@ describe('approveWeekDraft', () => {
     expect(recordWeekDraftApproval).not.toHaveBeenCalled();
   });
 
+  it('refuses invalid when the coach removed every session — an empty week never becomes the athlete’s proposal', async () => {
+    // The panel lets the coach remove rows (Mads, 2026-09-16); removing all of
+    // them is a refusal here, not a blank week the athlete is asked to accept.
+    expect(await approve({ sessions: [] })).toEqual({ ok: false, reason: 'invalid' });
+    expect(recordWeekDraftApproval).not.toHaveBeenCalled();
+  });
+
+  it('accepts a session the coach added on a day the Coach left empty, and one moved to another day', async () => {
+    const reshaped = [
+      { ...SESSIONS[0], date: '2026-09-23' },
+      SESSIONS[1],
+      { date: '2026-09-25', type: 'Recovery', durationMinutes: 30, zone: null, note: null },
+    ];
+    expect(await approve({ sessions: reshaped })).toEqual({ ok: true, changed: true });
+    const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+    expect(recorded.map((r: { date: string }) => r.date)).toEqual(['2026-09-23', '2026-09-27', '2026-09-25']);
+  });
+
   it('refuses invalid when the draft’s week has already ended — nothing left to plan', async () => {
     expect(await approve({ today: '2026-10-05' })).toEqual({ ok: false, reason: 'invalid' });
     expect(recordWeekDraftApproval).not.toHaveBeenCalled();

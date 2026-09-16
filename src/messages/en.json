@@ -696,7 +696,10 @@
   },
   "WeekDraftReview": {
     "title": "Next week, drafted",
-    "lead": "The Coach drafted this for the week of {week}. Approve it as it is, or change a session and approve.",
+    "lead": "The Coach drafted this for the week of {week}. Change, move, remove or add sessions as you see fit, then approve.",
+    "day": "Day",
+    "add": "Add a session",
+    "remove": "Remove",
     "type": "Type",
     "duration": "Minutes",
     "zone": "Zone",
