@@ -28,8 +28,16 @@ import {
   skippedFrom,
   type ProposedSession,
 } from './weekly-session';
-import { cycleAnchor, draftDueWeek, weekSkeleton, weekWindow, WEEK_DRAFT_OPENER, type SkeletonDay } from './week-draft';
-import { getLinkForAthlete } from './coach-repository';
+import {
+  cycleAnchor,
+  draftDueWeek,
+  weekSkeleton,
+  weekWindow,
+  HEAD_COACH_LEAD_DAYS,
+  WEEK_DRAFT_OPENER,
+  type SkeletonDay,
+} from './week-draft';
+import { getCoachByUserId, getLinkForAthlete, getRoster } from './coach-repository';
 import { getPendingWeekDraft, recordWeekDraft } from './week-draft-repository';
 
 /**
@@ -89,7 +97,11 @@ export function draftGate(facts: {
  * then nothing. Never throws.
  */
 export async function ensureWeekDrafted(athleteId: string, today: string): Promise<DraftOutcome> {
-  const facts = await gateFacts(athleteId, today);
+  // The gate's reads sit inside the boundary too: "never throws" has to hold
+  // for a dead driver on the first read, or a roster loop stops at the first
+  // athlete and the shell's after() has an error nobody asked for.
+  const facts = await guarded(athleteId, () => gateFacts(athleteId, today));
+  if (facts === 'coach-failed') return facts;
   if ('gated' in facts) return facts.gated;
   const { dueWeek, visibleFrom, window, unavailableDates } = facts;
 
@@ -105,6 +117,29 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
     skeleton: asked.skeleton,
   });
   return outcome === 'drafted' ? 'drafted' : 'lost-race';
+}
+
+/**
+ * The Head Coach's app-open as a trigger: one {@link ensureWeekDrafted} per
+ * athlete on their Roster (`training-architecture/16`, "whoever opens the app
+ * first on or after the due day triggers it, coach or athlete"; `/17`).
+ *
+ * Without this the day-early preview `/17` promises could only exist if the
+ * athlete happened to open the app the day before their own day — the one day
+ * they have no reason to. Nothing for a user with no coach row. A failure on
+ * one athlete is that athlete's outcome and the loop goes on; a coach's open
+ * must not lose the second athlete's draft to the first's dead driver. Never
+ * throws, like the entry point it fans out to.
+ */
+export async function ensureRosterDrafted(coachUserId: string, today: string): Promise<Record<string, DraftOutcome>> {
+  const coach = await getCoachByUserId(coachUserId);
+  if (!coach) return {};
+  const roster = await getRoster(coach.id);
+  const outcomes: Record<string, DraftOutcome> = {};
+  for (const entry of roster) {
+    outcomes[entry.athleteId] = await ensureWeekDrafted(entry.athleteId, today);
+  }
+  return outcomes;
 }
 
 /** The facts the gate decides on, gathered in one round of reads. */
@@ -135,9 +170,6 @@ async function gateFacts(
   if (gated || !window) return { gated: gated ?? 'no-window' };
   return { dueWeek, visibleFrom, window, unavailableDates };
 }
-
-/** How many days before the athlete's day a linked Head Coach gets the draft (Mads, 2026-09-14). */
-const HEAD_COACH_LEAD_DAYS = 1;
 
 /** The two profile fields the gate reads, with a missing row or profile read as "nothing set". */
 function profileFacts(athlete: Awaited<ReturnType<typeof getAthleteById>>): {

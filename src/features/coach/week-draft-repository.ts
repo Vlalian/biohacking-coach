@@ -163,7 +163,11 @@ export async function recordWeekDraftApproval(approval: WeekDraftApproval): Prom
  */
 export async function withdrawPreviewDrafts(athleteId: string, today: string): Promise<number> {
   const thisWeek = weekStartOf(today);
-  const weeks = [thisWeek, addDays(thisWeek, 7)];
+  // Three weeks, not two: a cycle anchored a day early can be due the week
+  // after next (a Sunday trigger for a Monday athlete anchors on the coming
+  // Monday and drafts the week after it), and a preview left there would reach
+  // the athlete on their day as the departed coach's half-shaped draft.
+  const weeks = [thisWeek, addDays(thisWeek, 7), addDays(thisWeek, 14)];
   let withdrawn = 0;
   for (const weekStart of weeks) {
     const pending = await readPendingWeekDraft(athleteId, weekStart);

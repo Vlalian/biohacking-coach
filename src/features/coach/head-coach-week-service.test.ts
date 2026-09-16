@@ -150,8 +150,63 @@ describe('approveWeekDraft', () => {
       expect(recordWeekDraftApproval.mock.calls[0][0]).toMatchObject({ changed: true });
     }
   });
-});
 
+  describe('a Head Coach’s note never reaches the model (prompts.ts:sessionNote, Mads 2026-08-21)', () => {
+    // The draft's sessions become the athlete's proposal: staged into a Weekly
+    // Session prompt on "discuss", written as `origin: 'coach'` rows on "accept".
+    // Both routes would carry a note the coach typed as if the Coach had written
+    // it, and the existing origin guard cannot see it. So the coach's prose is
+    // stripped at the one write. A note the Coach itself drafted survives.
+    it('strips a note the coach wrote, and keeps the Coach’s own', async () => {
+      const edited = [{ ...SESSIONS[0], note: 'keep her sharp for Lars’s ride' }, SESSIONS[1]];
+      expect(await approve({ sessions: edited })).toEqual({ ok: true, changed: true });
+      const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(recorded[0].note).toBeNull();
+      expect(recorded[1].note).toBe(SESSIONS[1].note);
+    });
+
+    it('strips a note on a session the coach added, which has no Coach note to fall back on', async () => {
+      const added = [...SESSIONS, { date: '2026-09-25', type: 'Recovery', durationMinutes: 30, zone: null, note: 'easy, she asked' }];
+      expect(await approve({ sessions: added })).toEqual({ ok: true, changed: true });
+      const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(recorded[2].note).toBeNull();
+    });
+
+    it('keeps a note the coach left exactly as the Coach drafted it, on a session they moved', async () => {
+      // Same note, new date: the words are still the Coach's.
+      const moved = [{ ...SESSIONS[0], date: '2026-09-23' }, SESSIONS[1]];
+      expect(await approve({ sessions: moved })).toEqual({ ok: true, changed: true });
+      expect(recordWeekDraftApproval.mock.calls[0][0].sessions[0].note).toBe(SESSIONS[0].note);
+    });
+
+    it('strips only the coach’s note in a week that also keeps the Coach’s — both branches, one array', async () => {
+      // A version that always stripped would null 'long'; one that never
+      // stripped would keep the coach's words. Both conditions are pinned by
+      // the same recorded array.
+      const mixed = [{ ...SESSIONS[0], note: 'coach words' }, SESSIONS[1]];
+      await approve({ sessions: mixed });
+      const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(recorded.map((r: { note: string | null }) => r.note)).toEqual([null, 'long']);
+    });
+
+    it('a Coach draft with no notes at all gives the coach nothing to reuse — any note they add is stripped', async () => {
+      // With every drafted note null the set of the Coach's words is empty,
+      // so the null filter has to hold or `has(null)` would let a coach's
+      // note through whenever the Coach wrote none.
+      getPendingWeekDraft.mockResolvedValue({ ...DRAFT, sessions: SESSIONS.map((s) => ({ ...s, note: null })) });
+      const edited = [{ ...SESSIONS[0], note: 'easy' }, { ...SESSIONS[1], note: null }];
+      await approve({ sessions: edited });
+      const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(recorded[0].note).toBeNull();
+      expect(recorded[1].note).toBeNull();
+    });
+
+    it('still counts a note change as changed, so the athlete is told the coach shaped the week', async () => {
+      const edited = [{ ...SESSIONS[0], note: 'steady' }, SESSIONS[1]];
+      expect(await approve({ sessions: edited })).toEqual({ ok: true, changed: true });
+    });
+  });
+});
 describe('approval never reaches the calendar', () => {
   it('head-coach-week-service.ts imports neither the plan writer nor the sessions table', () => {
     const source = readFileSync(fileURLToPath(new URL('./head-coach-week-service.ts', import.meta.url)), 'utf8');

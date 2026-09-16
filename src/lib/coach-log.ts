@@ -209,9 +209,10 @@ export function logBlockAdjustmentFailure(athleteId: string, error: unknown): vo
  */
 export function logWeekDraftFailure(athleteId: string, error: unknown): void {
   try {
-    console.error(
-      JSON.stringify({ event: 'week_draft_failed', athleteId, message: error instanceof Error ? error.message : String(error) }),
-    );
+    // The class, never the message — the same discipline as every other line
+    // here (see the header). A driver error here echoes the INSERT it failed
+    // on, and that INSERT carries the draft's session notes.
+    console.error(JSON.stringify({ event: 'week_draft_failed', athleteId, errorType: errorType(error) }));
   } catch {
     // Deliberately silent: see above.
   }

@@ -16,7 +16,7 @@ import {
 } from './coach-repository';
 import type { RosterEntry } from './coach';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
-import { draftDueWeek, type WeekDraft } from './week-draft';
+import { draftDueWeek, HEAD_COACH_LEAD_DAYS, type WeekDraft } from './week-draft';
 import { getPendingWeekDraft } from './week-draft-repository';
 import { canHeadCoachEditContent } from './head-coach-authority';
 import { getResolvedBlocks, type ResolvedBlocks } from './training-block-service';
@@ -163,7 +163,7 @@ export async function getCoachAthleteView(
   // The week the coach previews: the one the athlete's next cycle drafts for,
   // a day early (17). Plan structure, so outside the visibility branch too.
   const weeklySessionDay = storedDayOf(athlete);
-  const pendingDraft = await getPendingWeekDraft(athleteId, draftDueWeek(todayKey, weeklySessionDay, HEAD_COACH_LEAD_DAYS));
+  const pendingDraft = await coachPreviewDraft(athleteId, athlete, todayKey);
 
   const calendarSessions = applyVisibilityToSessions(
     calendarRows.map(toSession),
@@ -220,8 +220,19 @@ export function awaitsReview(pending: WeekDraft | null): boolean {
   return pending !== null && !pending.approved;
 }
 
-/** A Head Coach sees the draft this many days before the athlete (Mads, 2026-09-14). */
-const HEAD_COACH_LEAD_DAYS = 1;
+/**
+ * The draft a Head Coach previews for this athlete today: the one due for the
+ * athlete's next cycle, read a day early and without the athlete's visibility
+ * filter (`/17`). The athlete row is passed in because both callers already
+ * hold it.
+ */
+async function coachPreviewDraft(
+  athleteId: string,
+  athlete: Awaited<ReturnType<typeof getAthleteById>>,
+  todayKey: string,
+): Promise<WeekDraft | null> {
+  return getPendingWeekDraft(athleteId, draftDueWeek(todayKey, storedDayOf(athlete), HEAD_COACH_LEAD_DAYS));
+}
 
 /** A Roster row, plus whether a drafted week is waiting for this coach's eye. */
 export type RosterEntryWithReview = RosterEntry & { awaitingReview: boolean };
@@ -236,8 +247,7 @@ export async function getRosterWithReviews(coachId: string, todayKey: string): P
   return Promise.all(
     roster.map(async (entry) => {
       const athlete = await getAthleteById(entry.athleteId);
-      const day = storedDayOf(athlete);
-      const pending = await getPendingWeekDraft(entry.athleteId, draftDueWeek(todayKey, day, HEAD_COACH_LEAD_DAYS));
+      const pending = await coachPreviewDraft(entry.athleteId, athlete, todayKey);
       return { ...entry, awaitingReview: awaitsReview(pending) };
     }),
   );

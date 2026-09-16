@@ -9,7 +9,8 @@
  * so a client component could not reach it.
  */
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/** The seven weekdays, Sunday first — the order `Date.getUTCDay()` counts in. One home; `week-draft.ts` indexes into it. */
+export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
  * The day the athlete's week turns on. A stored "Flexible" (retired

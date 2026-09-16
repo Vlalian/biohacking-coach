@@ -234,6 +234,17 @@ describe('withdrawPreviewDrafts — a link severed mid-preview', () => {
     expect(await withdrawPreviewDrafts(ATHLETE, '2026-09-16')).toBe(0);
     expect(insertValues).toEqual([]);
   });
+
+  it('reaches the draft two weeks out — the one a Sunday trigger stages for a Monday athlete', async () => {
+    // Sunday 2026-09-20, athlete's day Monday, lead one day: the cycle anchors
+    // on Monday the 21st, so the draft is for the week of the 28th — two weeks
+    // from this week's Monday, not one. Severed that Sunday it must not survive
+    // into the athlete's Monday as a draft the departed coach half-shaped.
+    const twoOut = { ...preview('2026-09-28'), payload: { ...preview('2026-09-28').payload, visibleFrom: '2026-09-21' } };
+    rowsQueue.push([], [], [twoOut]);
+    expect(await withdrawPreviewDrafts(ATHLETE, '2026-09-20')).toBe(1);
+    expect(insertValues[0]).toMatchObject({ type: 'week_draft_withdrawn', payload: { weekStart: '2026-09-28' } });
+  });
 });
 
 describe('getCalendarProposalState — what the athlete’s calendar shows (training-architecture/18)', () => {

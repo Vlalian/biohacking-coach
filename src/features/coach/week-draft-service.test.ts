@@ -21,6 +21,8 @@ const getPendingWeekDraft = vi.fn();
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
 const getLinkForAthlete = vi.fn();
+const getCoachByUserId = vi.fn();
+const getRoster = vi.fn();
 
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
@@ -38,9 +40,9 @@ vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft, recordWeekDraft }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
-vi.mock('./coach-repository', () => ({ getLinkForAthlete }));
+vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 
-const { ensureWeekDrafted, draftGate, groundingQuestion } = await import('./week-draft-service');
+const { ensureRosterDrafted, ensureWeekDrafted, draftGate, groundingQuestion } = await import('./week-draft-service');
 
 const ATHLETE = 'athlete-1';
 // 2026-09-16 is a Wednesday; the athlete's day is Wednesday, so next week is due.
@@ -283,6 +285,43 @@ describe('ensureWeekDrafted — a linked Head Coach sees the draft a day early (
   it('on the day itself a solo athlete’s draft is visible from that day', async () => {
     await ensureWeekDrafted(ATHLETE, TODAY);
     expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ visibleFrom: TODAY });
+  });
+});
+
+describe('ensureRosterDrafted — the Head Coach’s app-open drafts for every linked athlete (16, 17)', () => {
+  // Issue 16: "whoever opens the app first on or after the due day triggers
+  // it, coach or athlete." 17's whole point is that the coach sees the draft a
+  // day before the athlete, and on that day the athlete has no reason to open
+  // the app. So the coach's open has to be a trigger too, for each athlete on
+  // their roster — one draft per athlete, each through the same gate.
+  beforeEach(() => {
+    getCoachByUserId.mockResolvedValue({ id: 'coach_1' });
+    getRoster.mockResolvedValue([{ athleteId: ATHLETE }, { athleteId: 'athlete_2' }]);
+    getLinkForAthlete.mockResolvedValue({ headCoachName: 'Lars', link: { status: 'active' } });
+  });
+
+  it('runs the gate once per roster athlete and returns each outcome by athlete', async () => {
+    getPendingWeekDraft.mockImplementation(async (id: string) => (id === 'athlete_2' ? { id: 'd2' } : null));
+    const outcomes = await ensureRosterDrafted('user_coach', '2026-09-15');
+    expect(outcomes).toEqual({ [ATHLETE]: 'drafted', athlete_2: 'already-drafted' });
+    expect(recordWeekDraft).toHaveBeenCalledTimes(1);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ athleteId: ATHLETE, weekStart: NEXT_MON });
+  });
+
+  it('is nothing for a user with no coach row, and reads no roster', async () => {
+    getCoachByUserId.mockResolvedValue(undefined);
+    expect(await ensureRosterDrafted('user_plain', '2026-09-15')).toEqual({});
+    expect(getRoster).not.toHaveBeenCalled();
+  });
+
+  it('one athlete’s failure does not stop the next — the outcome names it and the loop goes on', async () => {
+    getAthleteById.mockImplementation(async (id: string) => {
+      if (id === ATHLETE) throw new Error('driver down');
+      return { id, profile: { weeklySessionDay: 'Wednesday', fixedConstraints: [] } };
+    });
+    const outcomes = await ensureRosterDrafted('user_coach', '2026-09-15');
+    expect(outcomes[ATHLETE]).toBe('coach-failed');
+    expect(outcomes.athlete_2).toBe('drafted');
   });
 });
 

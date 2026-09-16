@@ -2,7 +2,7 @@ import { addDays, weekStartOf } from '@/lib/date';
 import type { Citation } from '@/lib/citation';
 import { excludedBetween, hasAPlannableDay, type PlanningWindow } from './planning-window';
 import type { ProposedSession } from './weekly-session';
-import { effectiveWeeklySessionDay } from './weekly-offer';
+import { effectiveWeeklySessionDay, WEEKDAYS } from './weekly-offer';
 
 /**
  * The Coach drafting a week on its own (`training-architecture/16`) — the pure
@@ -129,7 +129,12 @@ export function pendingWeekDraft(events: WeekDraftEvent[], weekStart: string): W
 
 // ── Which week, and its window ────────────────────────────────────────────────
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/**
+ * How many days before the athlete's Weekly Session Day a linked Head Coach
+ * gets the draft (Mads, 2026-09-14). A ruling, so it lives here beside the
+ * cycle arithmetic it feeds and nowhere else.
+ */
+export const HEAD_COACH_LEAD_DAYS = 1;
 
 function weekdayIndex(key: string): number {
   return new Date(`${key}T00:00:00Z`).getUTCDay();

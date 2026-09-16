@@ -232,16 +232,20 @@ describe('logBlockAdjustmentRefused — the reason is a closed literal', () => {
 
 
 describe('logWeekDraftFailure — the after() boundary of the silent draft', () => {
-  it('writes one structured line with the event, the opaque id and the message', () => {
+  it('writes one structured line with the event, the opaque id and the error’s class — never its message', () => {
+    // The module's contract (see the header): a driver error echoing the
+    // INSERT it failed on would put the draft's payload — session notes —
+    // into a log line. The class is what a debugger needs; the message is not.
     const s = vi.spyOn(console, 'error').mockImplementation(() => {});
-    logWeekDraftFailure('a1', new Error('driver down'));
+    logWeekDraftFailure('a1', new Error('INSERT INTO events ... "note":"keep her sharp for Lars"'));
     expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
       event: 'week_draft_failed',
       athleteId: 'a1',
-      message: 'driver down',
+      errorType: 'error',
     });
+    expect(s.mock.calls[0][0]).not.toContain('Lars');
     logWeekDraftFailure('a1', 'plain string');
-    expect(JSON.parse(s.mock.calls[1][0] as string)).toMatchObject({ message: 'plain string' });
+    expect(JSON.parse(s.mock.calls[1][0] as string)).toMatchObject({ errorType: 'string' });
     s.mockRestore();
   });
 

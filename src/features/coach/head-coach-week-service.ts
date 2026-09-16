@@ -86,6 +86,9 @@ export async function approveWeekDraft(params: {
   const accepted = acceptedSessions(weekStart, today, sessions);
   if (!accepted) return { ok: false, reason: 'invalid' };
 
+  // `changed` is read before the coach's prose is stripped, so a note edit
+  // still counts as the coach shaping the week — that is what the athlete is
+  // told, and it is true even though the words themselves go no further.
   const changed = !sameSessions(pending.sessions, accepted);
   await recordWeekDraftApproval({
     athleteId,
@@ -93,7 +96,7 @@ export async function approveWeekDraft(params: {
     draftId,
     weekStart,
     visibleFrom: pending.visibleFrom,
-    sessions: accepted,
+    sessions: withoutCoachNotes(pending.sessions, accepted),
     citations: pending.citations,
     changed,
   });
@@ -110,6 +113,27 @@ function acceptedSessions(weekStart: string, today: string, sessions: unknown): 
   if (!window) return null;
   const validated = validateProposedPlan({ sessions }, window);
   return validated.ok ? validated.sessions : null;
+}
+
+/**
+ * The approved sessions with every note the coach wrote removed.
+ *
+ * **A Head Coach's note is never sent** (`prompts.ts:sessionNote`, Mads
+ * 2026-08-21): it is a third party's prose about the athlete, and a name in it
+ * is invisible to the identifier assertion. The approved sessions become the
+ * athlete's proposal — staged into a Weekly Session prompt on "discuss",
+ * written as `origin: 'coach'` rows on "accept" — and on both routes a note
+ * the coach typed would travel as if the Coach had written it, past a guard
+ * that keys on origin. So it is stripped here, at the one write, rather than
+ * filtered at two reads. A note is the coach's when it is not word-for-word
+ * the Coach's own note for that date and slot; the Coach's notes survive,
+ * even on a session the coach moved.
+ */
+function withoutCoachNotes(drafted: ProposedSession[], accepted: ProposedSession[]): ProposedSession[] {
+  // Null is a member on purpose: a session with no note is "the Coach's" and
+  // passes through, which is what lets the one condition below decide both.
+  const coachWrote = new Set<string | null>([null, ...drafted.map((s) => s.note)]);
+  return accepted.map((s) => (coachWrote.has(s.note) ? s : { ...s, note: null }));
 }
 
 /** Field-by-field, in order — a reordered week is a changed week. */
