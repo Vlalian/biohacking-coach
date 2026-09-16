@@ -133,7 +133,9 @@ describe('golden — the Weekly Session prompt, per arc', () => {
     expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
   });
 
-  it('renders identically when the Weekly Session Day is Flexible', () => {
+  it('renders identically when the stored Weekly Session Day is the retired Flexible — read as Sunday', () => {
+    // "Flexible" was retired on 2026-09-14 (CONTEXT.md): a stored one reads as
+    // Sunday, so the Coach is told the preferred day like everyone else's.
     const ctx = buildWeeklyContext(
       { ...BASE, weeklySessionNumber: 4, weeklySessionDay: 'Flexible' },
       [],
@@ -143,15 +145,15 @@ describe('golden — the Weekly Session prompt, per arc', () => {
       null,
       TODAY,
     );
-    expect(renderWeeklyPrompt(ctx)).not.toContain('PLANNING DAY');
+    expect(renderWeeklyPrompt(ctx)).toContain('PLANNING DAY: Preferred Sunday, today Tuesday');
     expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
   });
 
-  // showable-version/11. The PLANNING DAY line above is conditional on a
-  // preferred day being set, and 'Flexible' is one of four onboarding choices —
-  // so for a Flexible athlete the Coach used to be told nothing at all about
-  // which week it was planning. The window is told unconditionally.
-  it('tells a Flexible athlete which days the plan may cover', () => {
+  // showable-version/11. The window is told unconditionally — it was the only
+  // bound a Flexible athlete's Coach ever had, and it stays now that Flexible
+  // reads as Sunday, because a prompt line is a request and the window is what
+  // the server enforces.
+  it('tells an athlete on the retired Flexible which days the plan may cover', () => {
     const ctx = buildWeeklyContext(
       { ...BASE, weeklySessionNumber: 4, weeklySessionDay: 'Flexible' },
       [],
@@ -162,7 +164,6 @@ describe('golden — the Weekly Session prompt, per arc', () => {
       TODAY,
     );
     const prompt = renderWeeklyPrompt(ctx);
-    expect(prompt).not.toContain('PLANNING DAY');
     // 2026-08-18 is a Tuesday; its week ends Sunday 2026-08-23.
     expect(prompt).toContain('PLANNING WINDOW: 2026-08-18 to 2026-08-23');
   });

@@ -207,9 +207,22 @@ describe('getPendingNarrationEvents', () => {
     expect(params).toContain('coach_ai');
     expect(params).toContain('blocks_drafted');
     expect(params).toContain('race_flagged_unrealistic');
+    // The drafted week (`training-architecture/16`) joins the same (actor, type)
+    // allow-list; a `week_plan_proposed` — the conversation itself — still does not.
+    expect(params).toContain('week_drafted');
+    expect(params).not.toContain('week_plan_proposed');
+    // The Head Coach's day change and approval are pending like any of their
+    // actions — but an approval only when it changed something, decided in the
+    // same WHERE so an unchanged one is never read as pending.
+    expect(params).toContain('weekly_session_day_set');
+    expect(params).toContain('week_draft_approved');
+    expect(sql).toMatch(/"type" <> 'week_draft_approved' or .*"payload" ->> 'changed' = 'true'/i);
     expect(params).not.toContain('week_plan_proposed');
     // Two actor/type pairs, OR-ed — not one actor list beside one type list.
-    expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\) or \("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\)/);
+    // The head_coach half carries one more clause since training-architecture/17
+    // (an unchanged approval is not pending); the pairing of actor with its own
+    // type list is what this pins.
+    expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\) and \(.*\)\) or \("events"\."actor_type" = \$\d+ and "events"\."type" in \([^)]*\)\)/);
   });
 
   it('never narrates a lookup — a coach_ai act the athlete must not be told was "Your Head Coach"', async () => {

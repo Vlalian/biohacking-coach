@@ -2,6 +2,8 @@ import { loadCoachAthlete, NotACoach } from '../coach-athlete-guard';
 import { PrescribePanel } from '../prescribe-panel';
 import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
+import { WeeklyDayField } from '../weekly-day-field';
+import { WeekDraftReview } from '../week-draft-review';
 
 // Per-request: depends on the signed-in coach and the requested athlete.
 export const dynamic = 'force-dynamic';
@@ -39,6 +41,13 @@ export default async function CoachAthletePlanPage({
         athleteId={athleteId}
         set={view.blocks ?? null}
       />
+      {/* The drafted week, a day before the athlete sees it, and the day it
+          reaches them — both the Head Coach's while linked (training-architecture/17). */}
+      {/* Keyed by the draft: the panel copies the rows into state, and a
+          refresh that brought a different draft must not land in the old
+          rows (CodeRabbit, PR #69 — the same fix the block panel got). */}
+      <WeekDraftReview key={view.pendingDraft?.id ?? 'none'} athleteId={athleteId} draft={view.pendingDraft} />
+      <WeeklyDayField athleteId={athleteId} value={view.weeklySessionDay} />
       <CoachCalendar
         athleteId={athleteId}
         sessions={view.calendarSessions}

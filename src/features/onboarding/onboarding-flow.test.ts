@@ -384,6 +384,51 @@ describe('buildCommStyle', () => {
       buildCommStyle({ experienceLevel: 'veteran', trackedMetrics: ['None'] }),
     ).not.toContain('Tracks');
   });
+
+  // Each sentence is one closed branch; pinned word for word so a branch cannot
+  // silently fall through to its neighbour (the gate found every one of these
+  // could, 2026-09-15).
+  it('renders exactly one sentence per experience and motivation branch', () => {
+    const n = 'The athlete';
+    expect(buildCommStyle({ experienceLevel: 'beginner', motivation: 'Performance' })).toBe(
+      `${n} is a first-timer with a performance mindset. Be direct and explain the reasoning behind training choices.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'beginner', motivation: 'Community' })).toBe(
+      `${n} is motivated by the community experience. Keep coaching warm and encouraging while being clear about expectations.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'beginner', motivation: 'Completion' })).toBe(
+      `${n} is a first-time Ironman athlete. Keep coaching encouraging and process-focused. Avoid jargon. Celebrate effort and consistency.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'intermediate', hasHumanCoach: 'Yes' })).toBe(
+      `${n} has 2–4 Ironman finishes and works with a human coach. Respect their experience. Be direct and evidence-led. Focus on tactical adjustments rather than fundamentals.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'intermediate' })).toBe(
+      `${n} has 2–4 Ironman finishes. Respect their experience. Be direct and evidence-led. Focus on tactical adjustments rather than fundamentals.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'veteran', trackedMetrics: ['Power'] })).toBe(
+      `${n} is a veteran Ironman athlete. Tracks Power. Use data-aware language. Be direct and performance-focused. Skip beginner explanations entirely.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'veteran', trackedMetrics: [] })).toBe(
+      `${n} is a veteran Ironman athlete. Use data-aware language. Be direct and performance-focused. Skip beginner explanations entirely.`,
+    );
+    expect(buildCommStyle({ experienceLevel: 'veteran' })).not.toContain('Tracks');
+  });
+
+  it('says nothing for an unknown or missing experience level', () => {
+    expect(buildCommStyle({})).toBe('');
+    expect(buildCommStyle({ experienceLevel: 'elite' as never })).toBe('');
+  });
+});
+
+describe('applyAnswer — the adaptive step’s optional times', () => {
+  it('stores a given best time and drops an empty one rather than storing ""', () => {
+    const given = applyAnswer({}, {}, { step: 'adaptive', bestTime: '11:30', targetTime: '' });
+    expect(given?.answers.bestTime).toBe('11:30');
+    expect(given?.answers.targetTime).toBeUndefined();
+    expect('targetTime' in (given?.answers ?? {})).toBe(true);
+    const none = applyAnswer({}, {}, { step: 'adaptive' });
+    expect(none?.answers.bestTime).toBeUndefined();
+  });
 });
 
 // ── toCoachOnboarding / completeProfile ───────────────────────────────────────

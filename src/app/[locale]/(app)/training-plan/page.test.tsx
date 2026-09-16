@@ -34,6 +34,10 @@ vi.mock('next-intl/server', () => ({
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('next/server', () => ({ after }));
 vi.mock('@/features/coach/training-block-service', () => ({ ensureBlocksAdjusted, getResolvedBlocks }));
+// The drafted week the athlete has not decided on (training-architecture/18):
+// read here with today as `asOf`, passed to the calendar, never fetched by it.
+const getCalendarProposalState = vi.fn(() => Promise.resolve(null as unknown));
+vi.mock('@/features/coach/week-draft-repository', () => ({ getCalendarProposalState }));
 vi.mock('../../block-strip', () => ({ BlockStrip: () => null }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
@@ -144,5 +148,22 @@ describe('TrainingPlanPage — the Training Block adjustment trigger (training-a
     await render();
     expect(after).not.toHaveBeenCalled();
     expect(getResolvedBlocks).not.toHaveBeenCalled();
+  });
+});
+
+describe('TrainingPlanPage — the drafted week (training-architecture/18)', () => {
+  it('reads the calendar proposal state as the athlete, with today, for a signed-in athlete', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: {} });
+    await render();
+    expect(getCalendarProposalState).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it('reads nothing for a user with no athlete row', async () => {
+    getCalendarProposalState.mockClear();
+    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    getAthleteByUserId.mockResolvedValue(undefined);
+    await render();
+    expect(getCalendarProposalState).not.toHaveBeenCalled();
   });
 });

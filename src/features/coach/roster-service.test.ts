@@ -57,7 +57,13 @@ const { getResolvedBlocks } = vi.hoisted(() => ({
   getResolvedBlocks: vi.fn(async (): Promise<unknown> => ({ race: null, set: null, blocks: [] })),
 }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
+const getAthleteById = vi.fn(async (): Promise<unknown> => ({ id: 'a1', profile: { weeklySessionDay: 'Wednesday' } }));
+const getPendingWeekDraft = vi.fn<(athleteId: string, weekStart: string, options?: unknown) => Promise<unknown>>(async () => null);
+const getRoster = vi.fn(async (): Promise<unknown[]> => []);
+vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
+vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft }));
 vi.mock('./coach-repository', () => ({
+  getRoster,
   getActiveLink,
   getAthleteName,
   getSharedTranscripts,
@@ -385,5 +391,94 @@ describe('getCoachAthleteView — the editing surface starts today', () => {
     const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
 
     expect(view!.planSessions.map((p) => p.id)).toEqual(['today']);
+  });
+});
+
+describe('getCoachAthleteView — the drafted week and its day are the Head Coach’s (training-architecture/17)', () => {
+  const DRAFT = { id: 'd1', weekStart: '2026-09-21', visibleFrom: '2026-09-16', sessions: [], citations: [], approved: false, createdAt: new Date() };
+
+  beforeEach(() => {
+    calendarRows.value = [];
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+    getAthleteById.mockResolvedValue({ id: 'a1', profile: { weeklySessionDay: 'Wednesday' } });
+    getPendingWeekDraft.mockReset();
+    getPendingWeekDraft.mockResolvedValue(null);
+  });
+
+  it('carries the athlete’s day and the pending draft a day early, regardless of shareAthleteReports', async () => {
+    getPendingWeekDraft.mockResolvedValue(DRAFT);
+    for (const share of [true, false]) {
+      getActiveLink.mockResolvedValue(activeLink(share, false));
+      // Tuesday 2026-09-15, athlete's day Wednesday: with the coach's one-day
+      // lead the Wednesday cycle is current, so next week is what is reviewed.
+      const view = await getCoachAthleteView('coach_1', 'a1', '2026-09-15');
+      expect(view!.weeklySessionDay).toBe('Wednesday');
+      expect(view!.pendingDraft).toEqual(DRAFT);
+      expect(getPendingWeekDraft).toHaveBeenLastCalledWith('a1', '2026-09-21');
+    }
+  });
+
+  it('reads with no asOf — the coach sees the preview the athlete cannot yet', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    await getCoachAthleteView('coach_1', 'a1', '2026-09-15');
+    expect(getPendingWeekDraft.mock.calls[0]).toHaveLength(2);
+  });
+
+  it('is null day and null draft for an athlete with no profile and nothing pending', async () => {
+    getAthleteById.mockResolvedValue({ id: 'a1', profile: null });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(view!.weeklySessionDay).toBeNull();
+    expect(view!.pendingDraft).toBeNull();
+  });
+});
+
+describe('getRosterWithReviews', () => {
+  it('marks an athlete whose drafted week is still waiting for the coach, and not one already approved or with nothing pending', async () => {
+    const { getRosterWithReviews } = await import('./roster-service');
+    getRoster.mockResolvedValue([
+      { athleteId: 'a1', name: 'Anna', link: activeLink(true, false) },
+      { athleteId: 'a2', name: 'Bo', link: activeLink(true, false) },
+      { athleteId: 'a3', name: 'Cy', link: activeLink(true, false) },
+    ]);
+    getPendingWeekDraft.mockImplementation(async (athleteId: string) =>
+      athleteId === 'a1'
+        ? { id: 'd', weekStart: '2026-09-21', visibleFrom: '2026-09-16', sessions: [], citations: [], approved: false, createdAt: new Date() }
+        : athleteId === 'a2'
+          ? { id: 'a', weekStart: '2026-09-21', visibleFrom: '2026-09-16', sessions: [], citations: [], approved: true, createdAt: new Date() }
+          : null,
+    );
+    const roster = await getRosterWithReviews('coach_1', '2026-09-15');
+    expect(roster.map((r) => [r.name, r.awaitingReview])).toEqual([
+      ['Anna', true],
+      ['Bo', false],
+      ['Cy', false],
+    ]);
+  });
+});
+
+describe('storedDayOf / awaitsReview — the two small reads the roster leans on', () => {
+  it('reads the day through a missing row, a null profile and an unset field as null', async () => {
+    const { storedDayOf, awaitsReview } = await import('./roster-service');
+    expect(storedDayOf(undefined)).toBeNull();
+    expect(storedDayOf({ profile: null })).toBeNull();
+    expect(storedDayOf({ profile: {} })).toBeNull();
+    expect(storedDayOf({ profile: { weeklySessionDay: 'Friday' } })).toBe('Friday');
+    const base = { id: 'd', weekStart: '2026-09-21', visibleFrom: '2026-09-16', sessions: [], citations: [], createdAt: new Date() };
+    expect(awaitsReview(null)).toBe(false);
+    expect(awaitsReview({ ...base, approved: true })).toBe(false);
+    expect(awaitsReview({ ...base, approved: false })).toBe(true);
+  });
+
+  it('a roster entry whose athlete row is missing reads as Sunday and nothing waiting', async () => {
+    const { getRosterWithReviews } = await import('./roster-service');
+    getRoster.mockResolvedValue([{ athleteId: 'gone', name: 'Ghost', link: activeLink(true, false) }]);
+    getAthleteById.mockResolvedValue(undefined);
+    getPendingWeekDraft.mockResolvedValue(null);
+    const roster = await getRosterWithReviews('coach_1', '2026-09-15');
+    expect(roster[0].awaitingReview).toBe(false);
+    // Sunday cycle with a one-day lead on Tuesday the 15th: last Sunday's week — this one.
+    expect(getPendingWeekDraft).toHaveBeenLastCalledWith('gone', '2026-09-14');
   });
 });

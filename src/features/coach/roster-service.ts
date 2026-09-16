@@ -9,10 +9,15 @@ import { getUnavailableDates } from '@/features/availability/availability-reposi
 import {
   getActiveLink,
   getAthleteName,
+  getRoster,
   getSharedTranscripts,
   UNKNOWN_ATHLETE,
   type SharedTranscript,
 } from './coach-repository';
+import type { RosterEntry } from './coach';
+import { getAthleteById } from '@/features/athlete/athlete-repository';
+import { draftDueWeek, HEAD_COACH_LEAD_DAYS, type WeekDraft } from './week-draft';
+import { getPendingWeekDraft } from './week-draft-repository';
 import { canHeadCoachEditContent } from './head-coach-authority';
 import { getResolvedBlocks, type ResolvedBlocks } from './training-block-service';
 import { isStaleSet, type TrainingBlock } from './training-blocks';
@@ -104,6 +109,10 @@ export type CoachAthleteView = {
   planSessions: PlanSession[];
   /** Shared transcripts, or null when `share_ai_transcripts` is off. */
   sharedTranscripts: SharedTranscript[] | null;
+  /** The athlete's Weekly Session Day — the coach's to set while linked (`training-architecture/17`). */
+  weeklySessionDay: string | null;
+  /** The drafted week awaiting the coach's approval, read without the athlete's day-early filter; null when none. */
+  pendingDraft: WeekDraft | null;
   /**
    * The athlete's Injuries and Illnesses as calendar spans, or **null** when
    * `share_athlete_reports` is off (`training-architecture/06`). Null and never
@@ -128,7 +137,7 @@ export async function getCoachAthleteView(
   if (!link) return null;
   const { visibility } = link;
 
-  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }, horizon, health] =
+  const [athleteName, calendarRows, unavailableDates, sharedTranscripts, { rows, streams }, horizon, athlete, health] =
     await Promise.all([
       getAthleteName(athleteId),
       getDb()
@@ -145,11 +154,16 @@ export async function getCoachAthleteView(
       // The Training Blocks are the structure the calendar is built toward —
       // plan, not report — so they are read here, outside the visibility branch.
       getResolvedBlocks(athleteId, todayKey),
+      getAthleteById(athleteId),
       // Gated on share_athlete_reports: null (unfetched) when the flag is off.
       canSeeAthleteReports(visibility)
         ? getHealthHistory(athleteId).then((h) => spansFrom(h.injuries, h.illnesses))
         : Promise.resolve(null),
     ]);
+  // The week the coach previews: the one the athlete's next cycle drafts for,
+  // a day early (17). Plan structure, so outside the visibility branch too.
+  const weeklySessionDay = storedDayOf(athlete);
+  const pendingDraft = await coachPreviewDraft(athleteId, athlete, todayKey);
 
   const calendarSessions = applyVisibilityToSessions(
     calendarRows.map(toSession),
@@ -191,7 +205,52 @@ export async function getCoachAthleteView(
     health,
     dataset,
     blocks: blocksViewOf(horizon, todayKey),
+    weeklySessionDay,
+    pendingDraft,
   };
+}
+
+/** The athlete's stored Weekly Session Day, or null for a missing row or profile. */
+export function storedDayOf(athlete: { profile: { weeklySessionDay?: string } | null } | undefined): string | null {
+  return athlete?.profile?.weeklySessionDay ?? null;
+}
+
+/** A draft is waiting for the coach while it is the Coach's own and not yet their approved version. */
+export function awaitsReview(pending: WeekDraft | null): boolean {
+  return pending !== null && !pending.approved;
+}
+
+/**
+ * The draft a Head Coach previews for this athlete today: the one due for the
+ * athlete's next cycle, read a day early and without the athlete's visibility
+ * filter (`/17`). The athlete row is passed in because both callers already
+ * hold it.
+ */
+async function coachPreviewDraft(
+  athleteId: string,
+  athlete: Awaited<ReturnType<typeof getAthleteById>>,
+  todayKey: string,
+): Promise<WeekDraft | null> {
+  return getPendingWeekDraft(athleteId, draftDueWeek(todayKey, storedDayOf(athlete), HEAD_COACH_LEAD_DAYS));
+}
+
+/** A Roster row, plus whether a drafted week is waiting for this coach's eye. */
+export type RosterEntryWithReview = RosterEntry & { awaitingReview: boolean };
+
+/**
+ * The Roster with the one thing waiting for the coach that `training-architecture/17`
+ * adds: a drafted week they have not yet approved. One read per athlete — the
+ * Roster is a handful of people, and the read is one indexed query.
+ */
+export async function getRosterWithReviews(coachId: string, todayKey: string): Promise<RosterEntryWithReview[]> {
+  const roster = await getRoster(coachId);
+  return Promise.all(
+    roster.map(async (entry) => {
+      const athlete = await getAthleteById(entry.athleteId);
+      const pending = await coachPreviewDraft(entry.athleteId, athlete, todayKey);
+      return { ...entry, awaitingReview: awaitsReview(pending) };
+    }),
+  );
 }
 
 /**

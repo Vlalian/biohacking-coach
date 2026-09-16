@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { localWeekday, shouldOfferWeeklySession } from './weekly-offer';
+import { effectiveWeeklySessionDay, localWeekday, shouldOfferWeeklySession } from './weekly-offer';
 
 describe('shouldOfferWeeklySession', () => {
   const base = {
@@ -25,17 +25,31 @@ describe('shouldOfferWeeklySession', () => {
   // `(app)/layout.test.tsx`: this function takes no plan input, so a test here
   // could never fail it (review of 07, 2026-09-15).
 
-  it('never nudges an athlete who chose Flexible', () => {
-    // "Flexible" is a declared absence of a rhythm — ADR 0007 allows exactly one
-    // sanctioned nudge, and an athlete who named no day is not asking for it.
+  it('reads a stored Flexible as Sunday — the day is retired, not the nudge', () => {
+    // "Flexible" was a declared absence of a rhythm. Since 2026-09-14 the
+    // proposed week has to arrive on some day, so the stored value reads as
+    // Sunday until the athlete (or their Head Coach) picks one (CONTEXT.md).
     expect(
-      shouldOfferWeeklySession({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Flexible' }),
+      shouldOfferWeeklySession({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Sunday' }),
+    ).toBe(true);
+    expect(
+      shouldOfferWeeklySession({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Monday' }),
     ).toBe(false);
   });
 
-  it('never nudges when no day is stored at all', () => {
-    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: null })).toBe(false);
-    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: undefined })).toBe(false);
+  it('reads no stored day as Sunday too', () => {
+    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: null, todayWeekday: 'Sunday' })).toBe(true);
+    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: undefined, todayWeekday: 'Monday' })).toBe(false);
+  });
+});
+
+describe('effectiveWeeklySessionDay', () => {
+  it('passes a weekday through and maps Flexible, unset and garbage to Sunday', () => {
+    expect(effectiveWeeklySessionDay('Wednesday')).toBe('Wednesday');
+    expect(effectiveWeeklySessionDay('Flexible')).toBe('Sunday');
+    expect(effectiveWeeklySessionDay(null)).toBe('Sunday');
+    expect(effectiveWeeklySessionDay(undefined)).toBe('Sunday');
+    expect(effectiveWeeklySessionDay('Someday')).toBe('Sunday');
   });
 });
 

@@ -4,6 +4,7 @@ import {
   logNarrationFailure,
   logBlockAdjustmentRefused,
   logBlockAdjustmentFailure,
+  logWeekDraftFailure,
   logLookupFailure,
   logCoachDrift,
 } from './coach-log';
@@ -226,6 +227,34 @@ describe('logBlockAdjustmentRefused — the reason is a closed literal', () => {
     // @ts-expect-error — only a validator problem or 'malformed' is a reason.
     expect(() => logBlockAdjustmentRefused('a1', 'anything the model said')).not.toThrow();
     expect(() => logBlockAdjustmentRefused('a1', 'malformed')).not.toThrow();
+  });
+});
+
+
+describe('logWeekDraftFailure — the after() boundary of the silent draft', () => {
+  it('writes one structured line with the event, the opaque id and the error’s class — never its message', () => {
+    // The module's contract (see the header): a driver error echoing the
+    // INSERT it failed on would put the draft's payload — session notes —
+    // into a log line. The class is what a debugger needs; the message is not.
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logWeekDraftFailure('a1', new Error('INSERT INTO events ... "note":"keep her sharp for Lars"'));
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'week_draft_failed',
+      athleteId: 'a1',
+      errorType: 'error',
+    });
+    expect(s.mock.calls[0][0]).not.toContain('Lars');
+    logWeekDraftFailure('a1', 'plain string');
+    expect(JSON.parse(s.mock.calls[1][0] as string)).toMatchObject({ errorType: 'string' });
+    s.mockRestore();
+  });
+
+  it('never throws, even when console.error does', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {
+      throw new Error('no console');
+    });
+    expect(() => logWeekDraftFailure('a1', new Error('x'))).not.toThrow();
+    s.mockRestore();
   });
 });
 

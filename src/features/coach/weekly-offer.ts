@@ -9,6 +9,20 @@
  * so a client component could not reach it.
  */
 
+/** The seven weekdays, Sunday first — the order `Date.getUTCDay()` counts in. One home; `week-draft.ts` indexes into it. */
+export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * The day the athlete's week turns on. A stored "Flexible" (retired
+ * 2026-09-14) or nothing at all reads as Sunday — the week is drafted before it
+ * starts — until the athlete or their Head Coach picks a day. One reading of
+ * the column, shared by the nudge, the draft and the prompt, so the three can
+ * never disagree about which day it is.
+ */
+export function effectiveWeeklySessionDay(value: string | null | undefined): string {
+  return value && WEEKDAYS.includes(value) ? value : 'Sunday';
+}
+
 /** The half of the nudge decision the server can answer. */
 export interface WeeklyOfferInput {
   weeklySessionDay: string | null;
@@ -35,8 +49,9 @@ export function shouldOfferWeeklySession(params: {
   hasHeldWeeklySessionThisWeek: boolean;
 }): boolean {
   const { weeklySessionDay, todayWeekday, hasHeldWeeklySessionThisWeek } = params;
-  if (!weeklySessionDay || weeklySessionDay === 'Flexible') return false;
-  if (weeklySessionDay !== todayWeekday) return false;
+  // "Flexible" is retired and an unset day reads as Sunday (CONTEXT.md,
+  // 2026-09-14): every athlete has a day, so every athlete gets the offer.
+  if (effectiveWeeklySessionDay(weeklySessionDay) !== todayWeekday) return false;
   return !hasHeldWeeklySessionThisWeek;
 }
 

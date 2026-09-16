@@ -31,7 +31,7 @@ describe('answerText renders a line for every step', () => {
     expect(answerText({ step: 'adaptive' })).toBe('—');
   });
 
-  it('pairs the blocked days with the Weekly Session Day, defaulting to Flexible', () => {
+  it('pairs the blocked days with the Weekly Session Day, defaulting to Sunday', () => {
     expect(
       answerText({
         step: 'constraints',
@@ -39,7 +39,7 @@ describe('answerText renders a line for every step', () => {
         weeklySessionDay: 'Wednesday',
       }),
     ).toBe('Monday, Sunday · Wednesday');
-    expect(answerText({ step: 'constraints' })).toBe('— · Flexible');
+    expect(answerText({ step: 'constraints' })).toBe('— · Sunday');
   });
 });
 
@@ -53,13 +53,13 @@ describe('answerText survives a payload the flow has not yet refused', () => {
 
   it('does not throw on a string where an array belongs', () => {
     expect(raw({ step: 'adaptive', sportBackground: 'running' })).toBe('—');
-    expect(raw({ step: 'constraints', fixedConstraints: 'Monday' })).toBe('— · Flexible');
+    expect(raw({ step: 'constraints', fixedConstraints: 'Monday' })).toBe('— · Sunday');
   });
 
   it('treats an empty list the same as no list', () => {
     // An empty array is a legitimate answer ("no blocked days") and must
     // render as the dash, not as a blank before the separator.
-    expect(answerText({ step: 'constraints', fixedConstraints: [] })).toBe('— · Flexible');
+    expect(answerText({ step: 'constraints', fixedConstraints: [] })).toBe('— · Sunday');
     expect(answerText({ step: 'adaptive', sportBackground: [] })).toBe('—');
   });
 
