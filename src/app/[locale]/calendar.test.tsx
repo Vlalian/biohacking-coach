@@ -353,8 +353,10 @@ describe('Calendar — the drafted week the athlete has not decided on (training
     // The draft's week (24–30 Aug) is not the current week (19 Aug is a
     // Wednesday, week of the 17th), so it renders collapsed: one dashed dot per
     // proposed session, labelled as proposed — never as a session.
-    expect(markup.match(/aria-label="Endurance · proposedChip"/g)).toHaveLength(1);
-    expect(markup.match(/aria-label="Intensity · proposedChip"/g)).toHaveLength(1);
+    // The accessible name carries what the eye sees: type and minutes (a
+    // session with no duration names just the type). CodeRabbit, PR #69.
+    expect(markup.match(/aria-label="Endurance · 60 min · proposedChip"/g)).toHaveLength(1);
+    expect(markup.match(/aria-label="Intensity · 45 min · proposedChip"/g)).toHaveLength(1);
     expect(markup).not.toMatch(/<button[^>]*proposedChip/);
     expect(markup).not.toMatch(/draggable="true"[^>]*proposedChip/);
   });

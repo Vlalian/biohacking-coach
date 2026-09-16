@@ -75,11 +75,17 @@ export interface NewWeekDraft {
  * Stages a drafted week as the Coach — unless one is already pending for that
  * week.
  *
- * The check-and-claim for two tabs opening together: the insert is guarded by
- * `NOT EXISTS` over the same athlete's `week_drafted` rows for this `weekStart`
- * that no later written / declined / withdrawn event has resolved. One
- * statement, so there is no read-then-write window for a second run to slip
- * through; the loser learns it from the row count, not from an exception.
+ * The check-and-claim: the insert is guarded by `NOT EXISTS` over the same
+ * athlete's `week_drafted` rows for this `weekStart` that no later written /
+ * declined / withdrawn event has resolved, so a run that arrives after another
+ * has committed writes nothing and learns it from the row count. **Not
+ * exclusive under true concurrency**: two runs inside the same READ COMMITTED
+ * window each see a snapshot without the other's row and both insert
+ * (CodeRabbit, PR #69). What that costs is a second generation and a second
+ * `week_drafted` row for the week; nothing is lost, because `pendingWeekDraft`
+ * keeps the newest carrier and both are the same proposal. Closing it needs a
+ * partial unique index or an advisory lock, and joins the transaction work at
+ * post-testing entry 8.
  *
  * `actor_id` is null: the Coach has no id to name, and the narration for this
  * event names no human by construction (`narration.ts:coachClause`).

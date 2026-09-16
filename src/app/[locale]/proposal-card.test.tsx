@@ -19,7 +19,7 @@ vi.mock('./week-draft-actions', () => ({
   discussWeekDraftAction: vi.fn(),
 }));
 
-const { ProposalCard, outcomeKey } = await import('./proposal-card');
+const { ProposalCard, outcomeKey, isDecided } = await import('./proposal-card');
 
 const DRAFT = {
   id: 'd1',
@@ -64,6 +64,23 @@ describe('ProposalCard', () => {
   it('is a card, not a modal: no dialog role, and nothing decided on first render', () => {
     expect(html).not.toMatch(/role="dialog"|aria-modal/);
     expect(html).not.toMatch(/accepted|declined|replaced/);
+  });
+});
+
+describe('isDecided — when the card’s buttons go', () => {
+  it('is decided after accept, decline, and a replaced draft — a stale card must not keep submitting', () => {
+    // `replaced` means the server said not-found: the draft this card shows is
+    // gone. Leaving the buttons live let it keep submitting decisions against
+    // an id that no longer resolves (CodeRabbit, PR #69).
+    expect(isDecided({ kind: 'accepted', pastDays: 0 })).toBe(true);
+    expect(isDecided({ kind: 'declined' })).toBe(true);
+    expect(isDecided({ kind: 'replaced' })).toBe(true);
+  });
+
+  it('is not decided while idle, on a consent refusal, or on an error — the athlete may try again', () => {
+    expect(isDecided({ kind: 'idle' })).toBe(false);
+    expect(isDecided({ kind: 'consentRequired' })).toBe(false);
+    expect(isDecided({ kind: 'error', reason: 'x' })).toBe(false);
   });
 });
 

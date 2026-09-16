@@ -43,7 +43,10 @@ export default async function CoachAthletePlanPage({
       />
       {/* The drafted week, a day before the athlete sees it, and the day it
           reaches them — both the Head Coach's while linked (training-architecture/17). */}
-      <WeekDraftReview athleteId={athleteId} draft={view.pendingDraft} />
+      {/* Keyed by the draft: the panel copies the rows into state, and a
+          refresh that brought a different draft must not land in the old
+          rows (CodeRabbit, PR #69 — the same fix the block panel got). */}
+      <WeekDraftReview key={view.pendingDraft?.id ?? 'none'} athleteId={athleteId} draft={view.pendingDraft} />
       <WeeklyDayField athleteId={athleteId} value={view.weeklySessionDay} />
       <CoachCalendar
         athleteId={athleteId}

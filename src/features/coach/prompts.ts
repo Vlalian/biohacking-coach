@@ -610,6 +610,11 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   // `buildWeeklyCheckIn`. Idempotent — asserting twice costs a walk, missing it
   // once costs an identifier reaching Anthropic.
   assertNoDirectIdentifier(ctx.checkIn);
+  // The staged week's notes are the Coach's own by the time they arrive
+  // (approval strips the Head Coach's), but this is the boundary and it
+  // asserts on every input regardless of what the caller promised. Email and
+  // phone shapes; names are the origin guard's job (CodeRabbit, PR #69).
+  if (ctx.stagedProposal) assertNoDirectIdentifier(ctx.stagedProposal);
 
   const {
     patterns,

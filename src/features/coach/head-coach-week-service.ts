@@ -85,6 +85,12 @@ export async function approveWeekDraft(params: {
 
   const accepted = acceptedSessions(weekStart, today, sessions);
   if (!accepted) return { ok: false, reason: 'invalid' };
+  // All or nothing. The validator drops a bad row and keeps the rest, which is
+  // right for the Coach's model output and wrong for a person's edits: a coach
+  // who mistyped one day would have that session vanish from the athlete's
+  // week without a word. A count mismatch means a row was dropped, so the
+  // whole payload is refused and the panel says so (CodeRabbit, PR #69).
+  if (accepted.length !== sessionsArrayLength(sessions)) return { ok: false, reason: 'invalid' };
 
   // `changed` is read before the coach's prose is stripped, so a note edit
   // still counts as the coach shaping the week — that is what the athlete is
@@ -115,6 +121,11 @@ function acceptedSessions(weekStart: string, today: string, sessions: unknown): 
   return validated.ok ? validated.sessions : null;
 }
 
+/** How many rows the coach sent, or 0 when the input was not a list — the count the validator's survivors are held to. */
+function sessionsArrayLength(input: unknown): number {
+  return Array.isArray(input) ? input.length : 0;
+}
+
 /**
  * The approved sessions with every note the coach wrote removed.
  *
@@ -125,15 +136,22 @@ function acceptedSessions(weekStart: string, today: string, sessions: unknown): 
  * written as `origin: 'coach'` rows on "accept" — and on both routes a note
  * the coach typed would travel as if the Coach had written it, past a guard
  * that keys on origin. So it is stripped here, at the one write, rather than
- * filtered at two reads. A note is the coach's when it is not word-for-word
- * the Coach's own note for that date and slot; the Coach's notes survive,
- * even on a session the coach moved.
+ * filtered at two reads.
+ *
+ * A note is the Coach's only when *this* session's drafted counterpart carried
+ * exactly it. The panel keeps rows in the draft's order and appends added ones
+ * past the end, so the counterpart is the row at the same position; an added
+ * row has none and any note on it is the coach's. Matching by position rather
+ * than by text is what stops a coach from copying one session's note onto
+ * another and having it survive as the Coach's words for a session the Coach
+ * never wrote them for (CodeRabbit, PR #69). A moved session keeps its
+ * position, so its note survives.
  */
 function withoutCoachNotes(drafted: ProposedSession[], accepted: ProposedSession[]): ProposedSession[] {
-  // Null is a member on purpose: a session with no note is "the Coach's" and
-  // passes through, which is what lets the one condition below decide both.
-  const coachWrote = new Set<string | null>([null, ...drafted.map((s) => s.note)]);
-  return accepted.map((s) => (coachWrote.has(s.note) ? s : { ...s, note: null }));
+  // One comparison: a null note either matches a null draft note or is
+  // rebuilt to the same null, so a separate null guard would be a branch no
+  // test can tell apart.
+  return accepted.map((s, i) => (s.note === drafted[i]?.note ? s : { ...s, note: null }));
 }
 
 /** Field-by-field, in order — a reordered week is a changed week. */

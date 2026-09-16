@@ -30,6 +30,17 @@ export type CardOutcome =
   | { kind: 'error'; reason: string };
 
 /** The line the card shows for an outcome — pure, so the copy rules are testable without a click. */
+/**
+ * Once decided, the buttons go: the card says what happened and the page
+ * refresh replaces it. `replaced` counts — the server said the draft this card
+ * shows no longer exists, and a card that kept submitting decisions against
+ * that id was the stale-button bug (CodeRabbit, PR #69). A consent refusal or
+ * an error is not a decision; the athlete may try again.
+ */
+export function isDecided(outcome: CardOutcome): boolean {
+  return outcome.kind === 'accepted' || outcome.kind === 'declined' || outcome.kind === 'replaced';
+}
+
 export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record<string, string | number> } | null {
   switch (outcome.kind) {
     case 'idle':
@@ -53,9 +64,7 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
   const { setOpen, setWeeklySeed } = useCoachOverlay();
   const [pending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<CardOutcome>({ kind: 'idle' });
-  // Once decided, the buttons go: the card says what happened and the page
-  // refresh replaces it.
-  const decided = outcome.kind === 'accepted' || outcome.kind === 'declined';
+  const decided = isDecided(outcome);
 
   const settle = (result: { ok: true } | { ok: false; reason: string }, onOk: () => CardOutcome) => {
     if (result.ok) {

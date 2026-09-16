@@ -288,6 +288,17 @@ describe('ensureWeekDrafted — a linked Head Coach sees the draft a day early (
   });
 });
 
+describe('ensureWeekDrafted — the boundary holds to the last write', () => {
+  it('a throwing recordWeekDraft is coach-failed and logged, never a thrown promise', async () => {
+    // The service promises never to throw. The final insert sat outside the
+    // boundary; a dead driver there would have ended a roster loop at this
+    // athlete and reached the shell's after() as a rejection. CodeRabbit, PR #69.
+    recordWeekDraft.mockRejectedValueOnce(new Error('driver down'));
+    await expect(ensureWeekDrafted(ATHLETE, TODAY)).resolves.toBe('coach-failed');
+    expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ surface: 'week_draft', athleteId: ATHLETE }));
+  });
+});
+
 describe('ensureRosterDrafted — the Head Coach’s app-open drafts for every linked athlete (16, 17)', () => {
   // Issue 16: "whoever opens the app first on or after the due day triggers
   // it, coach or athlete." 17's whole point is that the coach sees the draft a
@@ -311,6 +322,17 @@ describe('ensureRosterDrafted — the Head Coach’s app-open drafts for every l
   it('is nothing for a user with no coach row, and reads no roster', async () => {
     getCoachByUserId.mockResolvedValue(undefined);
     expect(await ensureRosterDrafted('user_plain', '2026-09-15')).toEqual({});
+    expect(getRoster).not.toHaveBeenCalled();
+  });
+
+  it('a throwing roster read is nothing, not an unhandled rejection in the shell’s after()', async () => {
+    getRoster.mockRejectedValueOnce(new Error('driver down'));
+    await expect(ensureRosterDrafted('user_coach', '2026-09-15')).resolves.toEqual({});
+  });
+
+  it('a throwing coach lookup is nothing too', async () => {
+    getCoachByUserId.mockRejectedValueOnce(new Error('driver down'));
+    await expect(ensureRosterDrafted('user_coach', '2026-09-15')).resolves.toEqual({});
     expect(getRoster).not.toHaveBeenCalled();
   });
 

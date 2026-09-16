@@ -861,7 +861,7 @@ function WeekRow({
                     <span
                       key={`${p.date}-${i}`}
                       role="img"
-                      aria-label={`${p.type} · ${t('proposedChip')}`}
+                      aria-label={proposedLabel(p, t('proposedChip'))}
                       title={p.type}
                       className="-m-1.5 inline-flex items-center justify-center p-1.5"
                     >
@@ -890,6 +890,16 @@ function WeekRow({
  * muted tone so it reads as not-yet. Not draggable, no drawer, no rating — a
  * proposal is not a session, and every control a session has is withheld.
  */
+
+/**
+ * The accessible name of a proposed session, in either rendering: what the eye
+ * sees, type and minutes, then the "proposed" marker. One helper for the
+ * collapsed dot and the full chip so the two cannot drift (CodeRabbit, PR #69).
+ */
+function proposedLabel(session: ProposedSession, proposedWord: string): string {
+  return [session.type, session.durationMinutes ? `${session.durationMinutes} min` : null, proposedWord].filter(Boolean).join(' · ');
+}
+
 function ProposedChip({
   session,
   t,
@@ -900,7 +910,7 @@ function ProposedChip({
   return (
     <div
       role="note"
-      aria-label={`${session.type} · ${t('proposedChip')}`}
+      aria-label={proposedLabel(session, t('proposedChip'))}
       data-proposed=""
       className="block w-full border border-dashed border-muted-foreground/60 px-1.5 py-1 text-left"
     >

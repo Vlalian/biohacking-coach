@@ -108,14 +108,19 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
   const asked = await askCoach(athleteId, today, window, unavailableDates);
   if (typeof asked === 'string') return asked;
 
-  const outcome = await recordWeekDraft({
-    athleteId,
-    weekStart: dueWeek,
-    visibleFrom,
-    sessions: asked.sessions,
-    citations: asked.citations,
-    skeleton: asked.skeleton,
-  });
+  // The last write is inside the boundary too — the promise is "never
+  // throws", not "never throws until the insert" (CodeRabbit, PR #69).
+  const outcome = await guarded(athleteId, () =>
+    recordWeekDraft({
+      athleteId,
+      weekStart: dueWeek,
+      visibleFrom,
+      sessions: asked.sessions,
+      citations: asked.citations,
+      skeleton: asked.skeleton,
+    }),
+  );
+  if (outcome === 'coach-failed') return outcome;
   return outcome === 'drafted' ? 'drafted' : 'lost-race';
 }
 
@@ -132,9 +137,14 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
  * throws, like the entry point it fans out to.
  */
 export async function ensureRosterDrafted(coachUserId: string, today: string): Promise<Record<string, DraftOutcome>> {
-  const coach = await getCoachByUserId(coachUserId);
-  if (!coach) return {};
-  const roster = await getRoster(coach.id);
+  // The two reads that find the roster are outside any athlete's boundary, so
+  // they get their own: a dead driver here is nothing drafted, logged once
+  // under the coach's user id, never a rejection in the shell's after().
+  const roster = await guarded(coachUserId, async () => {
+    const coach = await getCoachByUserId(coachUserId);
+    return coach ? getRoster(coach.id) : [];
+  });
+  if (roster === 'coach-failed') return {};
   const outcomes: Record<string, DraftOutcome> = {};
   for (const entry of roster) {
     outcomes[entry.athleteId] = await ensureWeekDrafted(entry.athleteId, today);

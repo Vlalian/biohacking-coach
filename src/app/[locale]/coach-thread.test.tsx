@@ -40,6 +40,21 @@ describe('CoachThread — a seeded Weekly Session', () => {
     expect(render(null)).toContain('data-mode="chat"');
   });
 
+  it('clears the shared seed the moment it adopts it, so closing the overlay any other way cannot resurface it', () => {
+    // Before this the seed was cleared only on "Back to Chat". An athlete who
+    // declined the proposal and closed the overlay left the seed in the shell,
+    // and the next open showed the withdrawn plan again (CodeRabbit, PR #69).
+    const setWeeklySeed = vi.fn();
+    const seed: WeeklySeed = { conversationId: 'c1', weeklySessionNumber: 2, messages: [], proposal: { sessions: [] }, ended: false };
+    const html = renderToStaticMarkup(
+      <CoachOverlayContext.Provider value={{ ...base, weeklySeed: seed, setWeeklySeed }}>
+        <CoachThread chatInitial={null} weeklyInitial={null} />
+      </CoachOverlayContext.Provider>,
+    );
+    expect(html).toContain('data-conversation="c1"');
+    expect(setWeeklySeed).toHaveBeenCalledWith(null);
+  });
+
   it('opens in weekly mode on the seed’s conversation, proposal and all', () => {
     const html = render({
       conversationId: 'c1',

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 /**
  * `training-architecture/17` — the Head Coach's two new surfaces on the plan
@@ -68,6 +70,15 @@ describe('WeekDraftReview', () => {
     expect(html.match(/data-action="add"/g)).toHaveLength(1);
     expect(html.match(/data-action="approve"/g)).toHaveLength(1);
     expect(html).toContain('lead(week=2026-09-21)');
+  });
+
+  it('is keyed by the draft id where the plan page renders it, so a refreshed draft never inherits the old rows', () => {
+    // `router.refresh()` keeps client state across new props. Without a key,
+    // a replaced draft would arrive into the previous draft's edited rows and
+    // approve would send those rows under the new id (CodeRabbit, PR #69;
+    // the same fix the block panel got on PR #65).
+    const page = readFileSync(fileURLToPath(new URL('./plan/page.tsx', import.meta.url)), 'utf8');
+    expect(page).toMatch(/<WeekDraftReview[\s\S]*?key=\{[^}]*pendingDraft[^}]*\}/);
   });
 
   it('renders nothing when there is no draft, and nothing once the draft is the approved version', () => {

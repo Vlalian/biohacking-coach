@@ -115,6 +115,15 @@ describe('approveWeekDraft', () => {
     expect(recordWeekDraftApproval).not.toHaveBeenCalled();
   });
 
+  it('refuses the whole payload when one row is out of the week — a coach’s edit is never silently dropped', async () => {
+    // The Coach's rows are model output and a bad one is filtered; the coach's
+    // rows are a person's edits, and losing one without saying so is worse than
+    // refusing. CodeRabbit, PR #69.
+    const oneBad = [SESSIONS[0], { ...SESSIONS[1], date: '2026-10-05' }];
+    expect(await approve({ sessions: oneBad })).toEqual({ ok: false, reason: 'invalid' });
+    expect(recordWeekDraftApproval).not.toHaveBeenCalled();
+  });
+
   it('refuses invalid when the coach removed every session — an empty week never becomes the athlete’s proposal', async () => {
     // The panel lets the coach remove rows (Mads, 2026-09-16); removing all of
     // them is a refusal here, not a blank week the athlete is asked to accept.
@@ -205,6 +214,23 @@ describe('approveWeekDraft', () => {
       await approve({ sessions: mixed });
       const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
       expect(recorded.map((r: { note: string | null }) => r.note)).toEqual([null, 'long']);
+    });
+
+    it('matches a note to the session it came from, not to any session — copying B’s note onto A strips it', async () => {
+      // A global "did the Coach write these words anywhere" check let a coach
+      // move one session's note onto another and keep it, duplicating the
+      // Coach's words on a session it never wrote them for. CodeRabbit, PR #69.
+      const copied = [{ ...SESSIONS[0], note: 'long' }, SESSIONS[1]];
+      await approve({ sessions: copied });
+      const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(recorded.map((r: { note: string | null }) => r.note)).toEqual([null, 'long']);
+    });
+
+    it('keeps the Coach’s note on a session the coach moved to another day — the same session, a new date', async () => {
+      const moved = [{ ...SESSIONS[0], date: '2026-09-23' }, SESSIONS[1]];
+      await approve({ sessions: moved });
+      const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(recorded[0].note).toBe('easy');
     });
 
     it('a Coach draft with no notes at all gives the coach nothing to reuse — any note they add is stripped', async () => {

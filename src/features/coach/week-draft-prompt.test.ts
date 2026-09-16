@@ -162,6 +162,14 @@ describe('the Weekly Session prompt with a week brought in from the calendar (tr
     expect(out).toContain('tell them to confirm the proposal they already have');
   });
 
+  it('refuses a staged session whose note carries an identifier — the prompt boundary asserts on it like every other input', () => {
+    // The notes reaching here are the Coach's own after approval strips the
+    // coach's, but the builder is the boundary and asserts regardless
+    // (CodeRabbit, PR #69). Email and phone shapes only; names are the
+    // origin guard's job.
+    expect(() => weekly([{ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, zone: null, note: 'ask mads@example.com' }])).toThrow(/identifier/);
+  });
+
   it('renders each staged session with only the parts it has', () => {
     expect(stagedSessionLine({ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy spin' })).toBe('2026-09-22: Endurance 60min Z2 — easy spin');
     expect(stagedSessionLine({ date: '2026-09-22', type: 'Endurance', durationMinutes: null, zone: null, note: null })).toBe('2026-09-22: Endurance');

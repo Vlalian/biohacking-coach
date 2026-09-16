@@ -99,13 +99,21 @@ export function CoachThread({
   // shape as the Reference above. A new seed opens weekly mode on it; the
   // seed's conversation id is the WeeklySession's key, so a session already
   // showing is replaced rather than left holding stale state.
-  const seedId = weeklySeed?.conversationId ?? null;
-  const [seenSeedId, setSeenSeedId] = useState(seedId);
-  if (seedId !== seenSeedId) {
-    setSeenSeedId(seedId);
-    if (seedId) setMode('weekly');
+  // The seed is a transfer, not a home. The thread copies it into its own
+  // state the moment it sees it and clears the shared one right then, so
+  // closing the overlay any way at all — decline and close, not only "Back to
+  // Chat" — cannot leave a withdrawn plan waiting for the next open
+  // (CodeRabbit, PR #69). Adopted during render, as the mode switch already
+  // was; the clear is a parent-state set the same way.
+  const [adopted, setAdopted] = useState<WeeklySessionInitial | null>(null);
+  // Guarded on the id so a seed is adopted once, even if the parent has not
+  // re-rendered with it cleared yet — a render-time set with no guard loops.
+  if (weeklySeed && weeklySeed.conversationId !== adopted?.conversationId) {
+    setAdopted(weeklySeed as WeeklySessionInitial);
+    setMode('weekly');
+    setWeeklySeed(null);
   }
-  const weeklyStart = (weeklySeed as WeeklySessionInitial | null) ?? weeklyInitial;
+  const weeklyStart = adopted ?? weeklyInitial;
 
   if (mode === 'weekly') {
     return (
@@ -115,7 +123,7 @@ export function CoachThread({
         athleteFirstName={athleteFirstName}
         raceTarget={raceTarget}
         onExit={() => {
-          setWeeklySeed(null);
+          setAdopted(null);
           setMode('chat');
         }}
       />
