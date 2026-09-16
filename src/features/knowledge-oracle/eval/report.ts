@@ -1,4 +1,12 @@
-import { floorSeparation, hitRate, mrr, structural, type GenerationRecord, type RetrievalRecord } from './metrics';
+import {
+  floorSeparation,
+  hitRate,
+  mrr,
+  structural,
+  type GenerationRecord,
+  type RetrievalRecord,
+  type StructuralFailure,
+} from './metrics';
 
 /**
  * One run, as a Markdown file a human reads (`knowledge-oracle/06`).
@@ -17,7 +25,8 @@ export interface RunHeader {
   label: string;
   corpusSources: number;
   corpusChunks: number;
-  manifestCommit: string;
+  /** The checkout the run was made from — the code, not necessarily the ingested manifest. */
+  headCommit: string;
   minSimilarity: number;
   topK: number;
   model: string;
@@ -31,16 +40,27 @@ export interface RunInput {
   knownSourceIds: ReadonlySet<string>;
 }
 
-export function renderReport({ header, retrieval, generation, knownSourceIds }: RunInput): string {
-  const failures = generation.map((r) => ({ r, f: structural(r, knownSourceIds) }));
-  const unresolved = failures.filter((x) => x.f.includes('citation-unresolved'));
-  const lines: string[] = [];
+interface Graded {
+  r: GenerationRecord;
+  f: StructuralFailure[];
+}
 
-  lines.push(`Label: wayfinder:research`);
-  lines.push(`Status: run ${header.date} — \`${header.label}\``);
-  lines.push(`Parent: \`../issues/06-safe3-eval-suite.md\``);
-  lines.push('');
-  lines.push(`# SAFE-3 eval run, ${header.date} (${header.label})`);
+export function renderReport({ header, retrieval, generation, knownSourceIds }: RunInput): string {
+  const graded = generation.map((r) => ({ r, f: structural(r, knownSourceIds) }));
+  return [...renderHeader(header, graded), ...renderRetrieval(retrieval, header.topK), ...renderGeneration(graded)].join(
+    '\n',
+  );
+}
+
+function renderHeader(header: RunHeader, graded: readonly Graded[]): string[] {
+  const unresolved = graded.filter((x) => x.f.includes('citation-unresolved'));
+  const lines = [
+    `Label: wayfinder:research`,
+    `Status: run ${header.date} — \`${header.label}\``,
+    `Parent: \`../issues/06-safe3-eval-suite.md\``,
+    '',
+    `# SAFE-3 eval run, ${header.date} (${header.label})`,
+  ];
   if (unresolved.length > 0) {
     lines.push(
       `**FAIL — ${unresolved.length} citation(s) name a source that is not in the corpus:** ${unresolved
@@ -48,83 +68,90 @@ export function renderReport({ header, retrieval, generation, knownSourceIds }: 
         .join(', ')}. This is the one failure the ticket calls out by name; nothing below is worth reading until it is understood.`,
     );
   }
-  lines.push('');
   lines.push(
-    `**Corpus:** ${header.corpusSources} sources / ${fmt(header.corpusChunks)} chunks · manifest at \`${header.manifestCommit}\` · \`MIN_SIMILARITY = ${header.minSimilarity}\` · \`TOP_K = ${header.topK}\` · model \`${header.model}\``,
+    '',
+    `**Corpus:** ${header.corpusSources} sources / ${fmt(header.corpusChunks)} chunks · code at \`${header.headCommit}\` · \`MIN_SIMILARITY = ${header.minSimilarity}\` · \`TOP_K = ${header.topK}\` · model \`${header.model}\``,
   );
   for (const note of header.notes ?? []) lines.push(`- ${note}`);
   lines.push('');
+  return lines;
+}
 
-  // ── Retrieval ───────────────────────────────────────────────────────────────
-  if (retrieval.length > 0) {
-    const sep = floorSeparation(retrieval);
-    lines.push('## Retrieval');
+function renderRetrieval(retrieval: readonly RetrievalRecord[], topK: number): string[] {
+  if (retrieval.length === 0) return [];
+  const lines = ['## Retrieval', '', ...renderMetrics(retrieval, topK), ''];
+  for (const group of ['answerable', 'outside'] as const) {
+    const rows = retrieval.filter((r) => r.group === group);
+    if (rows.length === 0) continue;
+    lines.push(`### ${group}`, '', '| # | Question | Best | Worst kept | Top source | Expected hit |', '|---|---|---|---|---|---|');
+    for (const r of rows) lines.push(retrievalRow(r));
     lines.push('');
-    lines.push(`- hit rate @${header.topK}: **${hitRate(retrieval).toFixed(2)}** (an expected source among the kept citations)`);
-    lines.push(`- MRR: **${mrr(retrieval).toFixed(2)}**`);
-    if (sep) {
-      lines.push(
-        `- floor separation: worst kept in-corpus **${sep.worstKept.toFixed(2)}**, best outside **${sep.bestOutside.toFixed(2)}**, gap **${sep.gap.toFixed(2)}**${sep.gap < 0 ? ' — negative: the floor cannot separate these; a chunking finding, not a threshold one' : ''}`,
-      );
-    }
-    lines.push('');
-    for (const group of ['answerable', 'outside'] as const) {
-      const rows = retrieval.filter((r) => r.group === group);
-      if (rows.length === 0) continue;
-      lines.push(`### ${group}`);
-      lines.push('');
-      lines.push('| # | Question | Best | Worst kept | Top source | Expected hit |');
-      lines.push('|---|---|---|---|---|---|');
-      for (const r of rows) {
-        const best = r.raw[0]?.similarity;
-        const worstKept = r.kept.length > 0 ? r.kept[r.kept.length - 1].similarity : null;
-        const hit = group === 'answerable' ? (r.expected.some((s) => r.citations.includes(s)) ? '✓' : '✗') : r.citations.length > 0 ? `⚠ cited ${r.citations.length}` : '—';
-        lines.push(
-          `| ${r.id} | ${cell(r.question)} | ${num(best)} | ${num(worstKept)} | ${r.raw[0]?.slug ?? '—'} | ${hit} |`,
-        );
-      }
-      lines.push('');
-    }
   }
+  return lines;
+}
 
-  // ── Generation ──────────────────────────────────────────────────────────────
-  if (generation.length > 0) {
-    lines.push('## Generation');
-    lines.push('');
-    const total = failures.filter((x) => x.f.length > 0).length;
-    lines.push(`- ${generation.length} turns; ${total} with a structural failure; ${generation.filter((r) => r.toolCalls > 0).length} looked something up`);
-    lines.push('');
-    lines.push('| # | Turn | Group | Lookup | Citations | Mentions | Structural |');
-    lines.push('|---|---|---|---|---|---|---|');
-    for (const { r, f } of failures) {
-      lines.push(
-        `| ${r.id} | ${r.turn} | ${r.group} | ${r.toolCalls > 0 ? 'yes' : 'no'} | ${r.citations.map((c) => c.slug).join(', ') || '—'} | ${r.mentions.join(', ') || '—'} | ${f.join(', ') || 'ok'} |`,
-      );
-    }
-    lines.push('');
-
-    const human = failures.filter((x) => x.r.group !== 'answerable');
-    if (human.length > 0) {
-      lines.push('## Needs a human');
-      lines.push('');
-      lines.push(
-        'Whether the Coach declared uncertainty, or invented nothing under pressure, is a judgement about its prose. Read each reply and mark it: `PASS` / `FAIL` and one line why. This labelled run is the baseline every retrieval change is measured against.',
-      );
-      lines.push('');
-      for (const { r, f } of human) {
-        lines.push(`### ${r.id} · turn ${r.turn} · ${r.group}${f.length > 0 ? ` · ⚠ ${f.join(', ')}` : ''}`);
-        lines.push('');
-        lines.push(`**Q:** ${r.question}`);
-        lines.push('');
-        lines.push(`**Coach:** ${r.text.trim()}`);
-        lines.push('');
-        lines.push(`**Verdict:** _unmarked_`);
-        lines.push('');
-      }
-    }
+function renderMetrics(retrieval: readonly RetrievalRecord[], topK: number): string[] {
+  const lines = [
+    `- hit rate @${topK}: **${hitRate(retrieval).toFixed(2)}** (an expected source among the kept citations)`,
+    `- MRR: **${mrr(retrieval).toFixed(2)}**`,
+  ];
+  const sep = floorSeparation(retrieval);
+  if (sep) {
+    lines.push(
+      `- floor separation: worst kept in-corpus **${sep.worstKept.toFixed(2)}**, best outside **${sep.bestOutside.toFixed(2)}**, gap **${sep.gap.toFixed(2)}**${sep.gap < 0 ? ' — negative: the floor cannot separate these; a chunking finding, not a threshold one' : ''}`,
+    );
   }
+  return lines;
+}
 
-  return lines.join('\n');
+function retrievalRow(r: RetrievalRecord): string {
+  const best = r.raw[0]?.similarity;
+  const worstKept = r.kept.length > 0 ? r.kept[r.kept.length - 1].similarity : null;
+  return `| ${r.id} | ${cell(r.question)} | ${num(best)} | ${num(worstKept)} | ${r.raw[0]?.slug ?? '—'} | ${expectedHit(r)} |`;
+}
+
+function expectedHit(r: RetrievalRecord): string {
+  if (r.group === 'answerable') return r.expected.some((s) => r.citations.includes(s)) ? '✓' : '✗';
+  return r.citations.length > 0 ? `⚠ cited ${r.citations.length}` : '—';
+}
+
+function renderGeneration(graded: readonly Graded[]): string[] {
+  if (graded.length === 0) return [];
+  const failing = graded.filter((x) => x.f.length > 0).length;
+  const lookups = graded.filter((x) => x.r.toolCalls > 0).length;
+  const lines = [
+    '## Generation',
+    '',
+    `- ${graded.length} turns; ${failing} with a structural failure; ${lookups} looked something up`,
+    '',
+    '| # | Turn | Group | Lookup | Citations | Mentions | Structural |',
+    '|---|---|---|---|---|---|---|',
+  ];
+  for (const x of graded) lines.push(generationRow(x));
+  lines.push('');
+  return [...lines, ...renderHuman(graded.filter((x) => x.r.group !== 'answerable'))];
+}
+
+function generationRow({ r, f }: Graded): string {
+  return `| ${r.id} | ${r.turn} | ${r.group} | ${r.toolCalls > 0 ? 'yes' : 'no'} | ${r.citations.map((c) => c.slug).join(', ') || '—'} | ${r.mentions.join(', ') || '—'} | ${f.join(', ') || 'ok'} |`;
+}
+
+function renderHuman(human: readonly Graded[]): string[] {
+  if (human.length === 0) return [];
+  const lines = [
+    '## Needs a human',
+    '',
+    'Whether the Coach declared uncertainty, or invented nothing under pressure, is a judgement about its prose. Read each reply and mark it: `PASS` / `FAIL` and one line why. This labelled run is the baseline every retrieval change is measured against.',
+    '',
+  ];
+  for (const { r, f } of human) {
+    lines.push(`### ${r.id} · turn ${r.turn} · ${r.group}${f.length > 0 ? ` · ⚠ ${f.join(', ')}` : ''}`, '');
+    lines.push(`**Q:** ${r.question}`, '');
+    lines.push(`**Coach:** ${r.text.trim()}`, '');
+    if (r.passCondition) lines.push(`**Pass if:** ${r.passCondition}`, '');
+    lines.push(`**Verdict:** _unmarked_`, '');
+  }
+  return lines;
 }
 
 function cell(text: string): string {

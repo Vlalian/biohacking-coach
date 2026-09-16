@@ -1,10 +1,11 @@
-import type { CoachMessage, CoachReply, CoachTool, CoachToolCall } from '@/features/coach/coach-client';
+import type { CoachMessage, CoachReply, callCoach } from '@/features/coach/coach-client';
 import { createGrounding, type LookupRecord } from '@/features/coach/grounding';
 import type { Embedder } from '../embedder';
 import { sourceMentions } from '../lookup-tool';
-import { retrievePassages, MIN_SIMILARITY, TOP_K, type KnowledgeSearch } from '../retrieval';
-import { EVAL_SET, isConversation, questionOf, type EvalCase } from './eval-set';
-import type { GenerationRecord, RetrievalRecord } from './metrics';
+import { retrievePassages, MIN_SIMILARITY, type KnowledgeSearch, type RetrievalResult } from '../retrieval';
+import type { OracleQuery } from '../query';
+import { EVAL_SET, isConversation, questionOf, type EvalCase, type EvalQuestion } from './eval-set';
+import type { GenerationRecord, RankedHit, RetrievalRecord } from './metrics';
 
 /**
  * The two halves of a run, over ports (`knowledge-oracle/06`).
@@ -20,19 +21,22 @@ import type { GenerationRecord, RetrievalRecord } from './metrics';
 export interface RetrievalPorts {
   embedder: Embedder;
   search: KnowledgeSearch;
+  /** The fixture athlete's, folded into the query exactly as the Coach's lookup folds them. */
+  phase?: string | null;
+  experienceLevel?: string | null;
   minSimilarity?: number;
   topK?: number;
 }
 
 /**
- * One embedding per single-turn question. The search runs unfloored so the
- * record carries the raw ranking — where the weak matches score is what
- * decides the floor — and the floor is applied here to say what the Coach
- * would actually have read.
+ * One embedding per single-turn question — the same query the Coach's lookup
+ * would embed, phase and experience included, so the two halves of a run
+ * measure one vector. The search runs unfloored so the record carries the raw
+ * ranking — where the weak matches score is what decides the floor — and the
+ * floor is applied here to say what the Coach would actually have read.
  */
 export async function runRetrieval(set: readonly EvalCase[], ports: RetrievalPorts): Promise<RetrievalRecord[]> {
   const floor = ports.minSimilarity ?? MIN_SIMILARITY;
-  const topK = ports.topK ?? TOP_K;
   const records: RetrievalRecord[] = [];
 
   for (const c of set) {
@@ -40,40 +44,52 @@ export async function runRetrieval(set: readonly EvalCase[], ports: RetrievalPor
     const result = await retrievePassages({
       embedder: ports.embedder,
       search: ports.search,
-      query: { question: c.question },
-      topK,
+      query: queryFor(c.question, ports),
+      topK: ports.topK,
       minSimilarity: 0,
     });
-    const slugOf = new Map(result.citations.map((cite) => [cite.sourceId, cite.slug]));
-    const raw = result.passages.map((p) => ({
-      slug: slugOf.get(p.sourceId) ?? p.sourceId,
-      similarity: p.similarity,
-      ordinal: p.ordinal,
-    }));
-    const kept = raw.filter((h) => h.similarity >= floor);
-    records.push({
-      id: c.id,
-      group: c.group,
-      question: c.question,
-      expected: c.expected,
-      raw,
-      kept,
-      citations: [...new Set(kept.map((h) => h.slug))],
-    });
+    records.push(retrievalRecord(c, rankedHits(result), floor));
   }
   return records;
+}
+
+/** The query as the Coach's lookup would build it — the fixture's phase and experience folded in. */
+function queryFor(question: string, ports: RetrievalPorts): OracleQuery {
+  return {
+    question,
+    phase: ports.phase ?? undefined,
+    experienceLevel: ports.experienceLevel ?? undefined,
+  };
+}
+
+/** The raw ranking, each passage named by its source's slug. */
+function rankedHits(result: RetrievalResult): RankedHit[] {
+  const slugOf = new Map(result.citations.map((cite) => [cite.sourceId, cite.slug]));
+  return result.passages.map((p) => ({
+    // Stryker disable next-line LogicalOperator — every passage's source is in `citations` by RetrievalResult's contract; the fallback cannot be reached
+    slug: slugOf.get(p.sourceId) ?? p.sourceId,
+    similarity: p.similarity,
+    ordinal: p.ordinal,
+  }));
+}
+
+function retrievalRecord(c: EvalQuestion, raw: RankedHit[], floor: number): RetrievalRecord {
+  const kept = raw.filter((h) => h.similarity >= floor);
+  return {
+    id: c.id,
+    group: c.group,
+    question: c.question,
+    expected: c.expected,
+    raw,
+    kept,
+    citations: [...new Set(kept.map((h) => h.slug))],
+  };
 }
 
 export interface GenerationPorts {
   embedder: Embedder;
   search: KnowledgeSearch;
-  callCoach: (input: {
-    system: string;
-    messages: CoachMessage[];
-    maxTokens: number;
-    tools?: readonly CoachTool[];
-    resolveTool?: (call: CoachToolCall) => Promise<string>;
-  }) => Promise<CoachReply>;
+  callCoach: (input: Parameters<typeof callCoach>[0]) => Promise<CoachReply>;
   system: string;
   phase?: string | null;
   experienceLevel?: string | null;
@@ -93,7 +109,9 @@ const DEFAULT_MAX_TOKENS = 1400;
  * each turn — exactly one per turn, as production. An adversarial case is two
  * calls; the second carries the first exchange so the Coach is pressed on what
  * it actually said. A failed call is a record, not an abort: "the Coach said
- * nothing" is a result worth keeping.
+ * nothing" is a result worth keeping — but a case whose first turn failed is
+ * not pressed further, since an empty assistant turn is a malformed request,
+ * not a second failure of the Coach.
  */
 export async function runGeneration(
   set: readonly EvalCase[],
@@ -106,14 +124,19 @@ export async function runGeneration(
   const lookups: LookupRecord[] = [];
   const records: GenerationRecord[] = [];
 
-  const turn = async (
-    id: string,
-    group: GenerationRecord['group'],
-    question: string,
-    messages: CoachMessage[],
-    turnNo: 1 | 2,
-    expectNoLookup: boolean,
-  ): Promise<string> => {
+  interface Turn {
+    id: string;
+    group: GenerationRecord['group'];
+    question: string;
+    messages: CoachMessage[];
+    turnNo: 1 | 2;
+    expectNoLookup: boolean;
+    outsideCorpus: boolean;
+    passCondition?: string;
+  }
+
+  /** The reply text, or null when the call failed. */
+  const turn = async ({ id, group, question, messages, turnNo, expectNoLookup, outsideCorpus, passCondition }: Turn): Promise<string | null> => {
     const grounding = createGrounding({
       embedder: ports.embedder,
       search: ports.search,
@@ -144,8 +167,10 @@ export async function runGeneration(
         text: `*** CALL FAILED ***\n${error instanceof Error ? error.message : String(error)}`,
         failed: true,
         expectNoLookup,
+        outsideCorpus,
+        passCondition,
       });
-      return '';
+      return null;
     }
     records.push({
       id,
@@ -158,30 +183,51 @@ export async function runGeneration(
       text: reply.text,
       failed: false,
       expectNoLookup,
+      outsideCorpus,
+      passCondition,
     });
     return reply.text;
   };
 
   for (const c of set) {
     if (!isConversation(c)) {
-      await turn(c.id, c.group, c.question, [{ role: 'user', content: c.question }], 1, false);
+      await turn({
+        id: c.id,
+        group: c.group,
+        question: c.question,
+        messages: [{ role: 'user', content: c.question }],
+        turnNo: 1,
+        expectNoLookup: false,
+        outsideCorpus: c.group === 'outside',
+      });
       continue;
     }
     const first = questionOf(universe, c.turn1);
-    const reply1 = await turn(c.id, c.group, first, [{ role: 'user', content: first }], 1, c.expectNoLookup);
-    await turn(
-      c.id,
-      c.group,
-      c.turn2,
-      [
+    const shared = {
+      id: c.id,
+      group: c.group,
+      expectNoLookup: c.expectNoLookup,
+      outsideCorpus: opensOutside(universe, c.turn1),
+      passCondition: c.passCondition,
+    };
+    const reply1 = await turn({ ...shared, question: first, messages: [{ role: 'user', content: first }], turnNo: 1 });
+    if (reply1 === null) continue;
+    await turn({
+      ...shared,
+      question: c.turn2,
+      messages: [
         { role: 'user', content: first },
         { role: 'assistant', content: reply1 },
         { role: 'user', content: c.turn2 },
       ],
-      2,
-      c.expectNoLookup,
-    );
+      turnNo: 2,
+    });
   }
 
   return { records, lookups };
+}
+
+/** Whether an adversarial case's `turn1` reference names an outside question. */
+function opensOutside(universe: readonly EvalCase[], ref: string): boolean {
+  return universe.some((c) => c.id === ref && c.group === 'outside');
 }

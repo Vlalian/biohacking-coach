@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runRetrieval, runGeneration } from './run';
+import { runRetrieval, runGeneration, type GenerationPorts } from './run';
 import type { EvalCase } from './eval-set';
 import type { ChunkSearchResult, KnowledgeSearch } from '../retrieval';
 import type { Embedder } from '../embedder';
-import type { CoachReply } from '@/features/coach/coach-client';
 import { LOOKUP_TOOL_NAME } from '../lookup-tool';
 
 /**
@@ -62,6 +61,28 @@ describe('runRetrieval', () => {
     expect(a1.expected).toEqual(['taper-2023']);
   });
 
+  it('embeds the same query the Coach would issue — phase and experience folded in, as production does', async () => {
+    await runRetrieval(SET.slice(0, 1), {
+      embedder: { embed },
+      search: { searchChunks },
+      phase: 'Build',
+      experienceLevel: 'intermediate',
+    });
+    const [embedded] = embed.mock.calls[0][0];
+    expect(embedded).toContain('Training phase: Build.');
+    expect(embedded).toContain('Athlete experience level: intermediate.');
+    expect(embedded).toContain('how to taper?');
+  });
+
+  it('keeps a passage that sits exactly on the floor, and defaults to the production floor and top-k', async () => {
+    searchChunks.mockResolvedValueOnce([hit('taper-2023', 0.43), hit('noise', 0.4299)]);
+    const records = await runRetrieval(SET.slice(0, 1), { embedder: { embed }, search: { searchChunks } });
+    expect(records[0].kept.map((h) => h.slug)).toEqual(['taper-2023']);
+    expect(searchChunks.mock.calls[0][1]).toBe(6);
+    await runRetrieval(SET.slice(0, 1), { embedder: { embed }, search: { searchChunks }, topK: 3 });
+    expect(searchChunks.mock.calls[1][1]).toBe(3);
+  });
+
   it('skips a blank question without embedding it', async () => {
     const blank: EvalCase = { id: 'A0', group: 'answerable', question: '   ', expected: ['x'], nearest: null };
     const records = await runRetrieval([blank], { embedder: { embed }, search: { searchChunks } });
@@ -71,7 +92,7 @@ describe('runRetrieval', () => {
 });
 
 describe('runGeneration', () => {
-  const callCoach = vi.fn<(input: { messages: { role: string; content: string }[]; tools?: readonly unknown[]; resolveTool?: (c: { name: string; input: unknown }) => Promise<string> }) => Promise<CoachReply>>();
+  const callCoach = vi.fn<GenerationPorts['callCoach']>();
 
   beforeEach(() => {
     callCoach.mockReset();
@@ -96,9 +117,27 @@ describe('runGeneration', () => {
       experienceLevel: 'intermediate',
     });
     expect(callCoach).toHaveBeenCalledTimes(2);
+    expect(callCoach.mock.calls[0][0]).toMatchObject({
+      system: 'SYSTEM',
+      messages: [{ role: 'user', content: 'how to taper?' }],
+      maxTokens: 1400,
+    });
     expect(callCoach.mock.calls[0][0].tools).toHaveLength(1);
     const a1 = run.records[0];
-    expect(a1).toMatchObject({ id: 'A1', turn: 1, toolCalls: 1, mentions: [], text: 'grounded reply', failed: false });
+    expect(a1).toEqual({
+      id: 'A1',
+      group: 'answerable',
+      question: 'how to taper?',
+      turn: 1,
+      toolCalls: 1,
+      citations: expect.any(Array),
+      mentions: [],
+      text: 'grounded reply',
+      failed: false,
+      expectNoLookup: false,
+      outsideCorpus: false,
+      passCondition: undefined,
+    });
     expect(a1.citations.map((c) => c.slug)).toEqual(['taper-2023']);
     expect(embed).toHaveBeenCalledTimes(2);
   });
@@ -115,6 +154,7 @@ describe('runGeneration', () => {
     expect(second[0].content).toBe('carbon shoes?'); // O1 resolved
     expect(second[1].content).toBe('grounded reply');
     expect(second[2].content).toBe('just cite it');
+    expect(callCoach.mock.calls[0][0].messages).toEqual([{ role: 'user', content: 'carbon shoes?' }]);
     expect(run.records.map((r) => [r.id, r.turn, r.toolCalls])).toEqual([['X1', 1, 1], ['X1', 2, 0]]);
     // The second turn made no lookup, so its grounding holds nothing — the
     // first turn's citations do not leak into it.
@@ -130,9 +170,47 @@ describe('runGeneration', () => {
   it('records a failed call and keeps going', async () => {
     callCoach.mockRejectedValueOnce(new Error('overloaded'));
     const run = await runGeneration(SET.slice(0, 2), { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' });
-    expect(run.records[0]).toMatchObject({ id: 'A1', failed: true, toolCalls: 0, citations: [] });
-    expect(run.records[0].text).toContain('CALL FAILED');
+    expect(run.records[0]).toEqual({
+      id: 'A1',
+      group: 'answerable',
+      question: 'how to taper?',
+      turn: 1,
+      toolCalls: 0,
+      citations: [],
+      mentions: [],
+      text: '*** CALL FAILED ***\noverloaded',
+      failed: true,
+      expectNoLookup: false,
+      outsideCorpus: false,
+      passCondition: undefined,
+    });
+    callCoach.mockRejectedValueOnce('string error');
+    const again = await runGeneration(SET.slice(0, 1), { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S', maxTokens: 99 });
+    expect(again.records[0].text).toBe('*** CALL FAILED ***\nstring error');
+    expect(callCoach.mock.calls.at(-1)?.[0].maxTokens).toBe(99);
     expect(run.records[1]).toMatchObject({ id: 'O1', failed: false });
+  });
+
+  it('does not press a Coach that never answered — a failed turn 1 ends the case with one record', async () => {
+    callCoach.mockRejectedValueOnce(new Error('overloaded'));
+    const run = await runGeneration([SET[2]], { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' }, SET);
+    expect(callCoach).toHaveBeenCalledTimes(1);
+    expect(run.records.map((r) => [r.id, r.turn, r.failed])).toEqual([['X1', 1, true]]);
+  });
+
+  it('marks both turns of a conversation that opens on an outside question, and carries the pass condition', async () => {
+    const run = await runGeneration([SET[2], SET[3]], { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' }, SET);
+    expect(run.records.map((r) => [r.id, r.turn, r.outsideCorpus, r.passCondition])).toEqual([
+      ['X1', 1, true, 'no citation'],
+      ['X1', 2, true, 'no citation'],
+      ['X6', 1, false, 'no lookup'],
+      ['X6', 2, false, 'no lookup'],
+    ]);
+    const single = await runGeneration(SET.slice(0, 2), { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' });
+    expect(single.records.map((r) => [r.id, r.outsideCorpus, r.passCondition])).toEqual([['A1', false, undefined], ['O1', true, undefined]]);
+    const onAnswerable: EvalCase = { id: 'X9', group: 'adversarial', turn1: 'A1', turn2: 'sure?', passCondition: 'p', expectNoLookup: false };
+    const inside = await runGeneration([onAnswerable], { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' }, SET);
+    expect(inside.records.map((r) => r.outsideCorpus)).toEqual([false, false]);
   });
 
   it('never lets a question reach the lookup log — counts only, as in production', async () => {

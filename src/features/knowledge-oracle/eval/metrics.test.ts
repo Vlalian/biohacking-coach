@@ -46,6 +46,7 @@ const gen = (over: Partial<GenerationRecord>): GenerationRecord => ({
   text: 'reply',
   failed: false,
   expectNoLookup: false,
+  outsideCorpus: false,
   ...over,
 });
 
@@ -96,8 +97,27 @@ describe('floorSeparation — where the floor sits', () => {
     expect(floorSeparation(records)?.gap).toBeCloseTo(-0.06);
   });
 
+  it('takes the worst of the kept and the best of the outside, whatever order they arrive in', () => {
+    const records = [
+      ret({ kept: [hit('taper-2023', 0.5), hit('taper-2023', 0.7)] }),
+      ret({ id: 'A2', kept: [hit('taper-2023', 0.55)] }),
+      ret({ id: 'O1', group: 'outside', expected: [], raw: [hit('x', 0.3), hit('y', 0.41)] }),
+      ret({ id: 'O2', group: 'outside', expected: [], raw: [hit('x', 0.2)] }),
+    ];
+    expect(floorSeparation(records)).toEqual({ worstKept: 0.5, bestOutside: 0.41, gap: 0.09 });
+  });
+
+  it('reads only the answerable side for "kept" and only the outside side for "raw"', () => {
+    const records = [
+      ret({ kept: [hit('taper-2023', 0.6)], raw: [hit('taper-2023', 0.6), hit('z', 0.9)] }),
+      ret({ id: 'O1', group: 'outside', expected: [], raw: [hit('x', 0.4)], kept: [hit('x', 0.1)] }),
+    ];
+    expect(floorSeparation(records)).toEqual({ worstKept: 0.6, bestOutside: 0.4, gap: 0.2 });
+  });
+
   it('is null when either side is missing', () => {
     expect(floorSeparation([ret({ kept: [hit('a', 0.5)] })])).toBeNull();
+    expect(floorSeparation([ret({ id: 'O1', group: 'outside', expected: [], raw: [hit('x', 0.4)] })])).toBeNull();
     expect(floorSeparation([])).toBeNull();
   });
 });
@@ -118,9 +138,16 @@ describe('structural — the checks a machine can make', () => {
   });
 
   it('names a citation on an outside question — the floor let a passage through', () => {
-    expect(structural(gen({ group: 'outside', citations: [cite('s1')] }), known)).toEqual([
+    expect(structural(gen({ group: 'outside', outsideCorpus: true, citations: [cite('s1')] }), known)).toEqual([
       'citation-on-outside-question',
     ]);
+  });
+
+  it('names it just the same when the outside question opens an adversarial case — X1 is O7 under a different id', () => {
+    expect(structural(gen({ group: 'adversarial', outsideCorpus: true, citations: [cite('s1')] }), known)).toEqual([
+      'citation-on-outside-question',
+    ]);
+    expect(structural(gen({ group: 'adversarial', outsideCorpus: false, citations: [cite('s1')] }), known)).toEqual([]);
   });
 
   it('names a lookup on the case that must not look anything up', () => {
@@ -135,7 +162,7 @@ describe('structural — the checks a machine can make', () => {
   });
 
   it('reports every failure, not the first', () => {
-    const r = gen({ group: 'outside', citations: [cite('ghost')], mentions: ['as-cited'] });
+    const r = gen({ group: 'outside', outsideCorpus: true, citations: [cite('ghost')], mentions: ['as-cited'] });
     expect(structural(r, known)).toEqual(['citation-unresolved', 'source-mention', 'citation-on-outside-question']);
   });
 });

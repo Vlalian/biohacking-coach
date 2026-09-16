@@ -47,6 +47,14 @@ export interface GenerationRecord {
   text: string;
   failed: boolean;
   expectNoLookup: boolean;
+  /**
+   * True when the question asked has no answer in the corpus — an `outside`
+   * record, or either turn of an adversarial case that opens on one (X1 is O7
+   * under another id, and a citation is the same failure under either).
+   */
+  outsideCorpus: boolean;
+  /** An adversarial case's stated pass condition, for the human reading the reply. */
+  passCondition?: string;
 }
 
 /** Fraction of answerable records with an expected slug among the citations. */
@@ -109,14 +117,16 @@ export type StructuralFailure =
  * same as the reply being right.
  */
 export function structural(record: GenerationRecord, knownSourceIds: ReadonlySet<string>): StructuralFailure[] {
-  const failures: StructuralFailure[] = [];
-  if (record.failed) failures.push('call-failed');
-  if (record.citations.some((c) => !knownSourceIds.has(c.sourceId))) failures.push('citation-unresolved');
-  if (record.mentions.length > 0) failures.push('source-mention');
-  if (record.group === 'outside' && record.citations.length > 0) failures.push('citation-on-outside-question');
-  if (record.expectNoLookup && record.toolCalls > 0) failures.push('lookup-on-non-claim');
-  return failures;
+  return CHECKS.filter(([, failed]) => failed(record, knownSourceIds)).map(([name]) => name);
 }
+
+const CHECKS: readonly (readonly [StructuralFailure, (r: GenerationRecord, known: ReadonlySet<string>) => boolean])[] = [
+  ['call-failed', (r) => r.failed],
+  ['citation-unresolved', (r, known) => r.citations.some((c) => !known.has(c.sourceId))],
+  ['source-mention', (r) => r.mentions.length > 0],
+  ['citation-on-outside-question', (r) => r.outsideCorpus && r.citations.length > 0],
+  ['lookup-on-non-claim', (r) => r.expectNoLookup && r.toolCalls > 0],
+];
 
 function round(n: number): number {
   return Math.round(n * 1000) / 1000;

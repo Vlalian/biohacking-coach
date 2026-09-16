@@ -81,21 +81,27 @@ async function main(): Promise<void> {
   const embedder = openAiEmbedder();
   const search = knowledgeSearch();
 
-  // The corpus state and the manifest commit go in the header, so the run can
-  // be re-judged later against the corpus it actually saw.
+  // The corpus state and the checkout go in the header, so the run can be
+  // re-judged later against the corpus it actually saw. The commit is HEAD —
+  // the code that ran — not proof of which manifest Neon holds; the counts are.
   const db = getDb();
   const [{ sources }] = await db.select({ sources: count() }).from(knowledgeSources);
   const [{ chunks }] = await db.select({ chunks: count() }).from(knowledgeChunks);
   const knownSourceIds = new Set((await db.select({ id: knowledgeSources.id }).from(knowledgeSources)).map((r) => r.id));
-  let manifestCommit = 'unknown';
+  let headCommit = 'unknown';
   try {
-    manifestCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    headCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
   } catch {
     // Not a git checkout, or git missing: the header says so and the run still runs.
   }
 
   process.stdout.write(`retrieval: ${set.filter((c) => c.group !== 'adversarial').length} questions ... `);
-  const retrieval = await runRetrieval(set, { embedder, search });
+  const retrieval = await runRetrieval(set, {
+    embedder,
+    search,
+    phase: EVAL_ATHLETE.phase,
+    experienceLevel: EVAL_ATHLETE.experienceLevel,
+  });
   console.log('done');
 
   let generation: Awaited<ReturnType<typeof runGeneration>>['records'] = [];
@@ -125,7 +131,7 @@ async function main(): Promise<void> {
       label,
       corpusSources: sources,
       corpusChunks: chunks,
-      manifestCommit,
+      headCommit,
       minSimilarity: MIN_SIMILARITY,
       topK: TOP_K,
       model: retrievalOnly ? 'none (retrieval only)' : COACH_MODEL,

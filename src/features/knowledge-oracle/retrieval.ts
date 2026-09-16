@@ -14,9 +14,10 @@ import type { Citation } from '@/lib/citation';
 
 // ── Tuning knobs ──────────────────────────────────────────────────────────────
 //
-// One place, on purpose. These are defaults chosen WITHOUT having read the
-// corpus, which the ticket is explicit about: "do not tune against a corpus you
-// have not read." `npm run oracle:ask` exists to read it.
+// One place, on purpose. `TOP_K` is a default chosen without having read the
+// corpus; `MIN_SIMILARITY` was set from reading it (2026-09-15, below), which
+// is the order the ticket insisted on: "do not tune against a corpus you have
+// not read." `npm run oracle:ask` exists to read it.
 //
 // The number that actually matters is MIN_SIMILARITY, and the honest way to set
 // it is to ask something the corpus does NOT cover and see what that scores —
