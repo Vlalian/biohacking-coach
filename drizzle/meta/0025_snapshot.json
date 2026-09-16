@@ -1,5 +1,5 @@
 {
-  "id": "1564b0f1-da97-485e-ae0f-b6e2ff3866a5",
+  "id": "d723be4f-0ebf-4fe9-9ea4-18b7f8603775",
   "prevId": "01e4a496-eadd-4073-bca1-9aa423bd310a",
   "version": "7",
   "dialect": "postgresql",
@@ -1319,6 +1319,12 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+        },
+        "bother": {
+          "name": "bother",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1362,7 +1368,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "illness_bother_range": {
+          "name": "illness_bother_range",
+          "value": "\"illness\".\"bother\" IS NULL OR \"illness\".\"bother\" BETWEEN 1 AND 5"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.injury": {
@@ -1415,6 +1426,12 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
+        },
+        "bother": {
+          "name": "bother",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -1462,6 +1479,10 @@
         "injury_allowances_known": {
           "name": "injury_allowances_known",
           "value": "swim IN ('none', 'easy', 'full') AND bike IN ('none', 'easy', 'full') AND run IN ('none', 'easy', 'full')"
+        },
+        "injury_bother_range": {
+          "name": "injury_bother_range",
+          "value": "\"injury\".\"bother\" IS NULL OR \"injury\".\"bother\" BETWEEN 1 AND 5"
         }
       },
       "isRLSEnabled": false
@@ -2243,120 +2264,6 @@
           "value": "\"sessions\".\"feedback_mind\" IS NULL OR \"sessions\".\"feedback_mind\" BETWEEN 1 AND 5"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.training_block_set": {
-      "name": "training_block_set",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "athlete_id": {
-          "name": "athlete_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "race_id": {
-          "name": "race_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "start_date": {
-          "name": "start_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "blocks": {
-          "name": "blocks",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "training_block_set_one_per_race": {
-          "name": "training_block_set_one_per_race",
-          "columns": [
-            {
-              "expression": "athlete_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "race_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "training_block_set_athlete_id_athlete_id_fk": {
-          "name": "training_block_set_athlete_id_athlete_id_fk",
-          "tableFrom": "training_block_set",
-          "tableTo": "athlete",
-          "columnsFrom": [
-            "athlete_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "training_block_set_race_id_race_id_fk": {
-          "name": "training_block_set_race_id_race_id_fk",
-          "tableFrom": "training_block_set",
-          "tableTo": "race",
-          "columnsFrom": [
-            "race_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.unavailable_dates": {

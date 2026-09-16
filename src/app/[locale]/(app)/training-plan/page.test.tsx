@@ -40,6 +40,10 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
+const { getHealthHistory } = vi.hoisted(() => ({
+  getHealthHistory: vi.fn(async () => ({ injuries: [], illnesses: [] })),
+}));
+vi.mock('@/features/health/health-repository', () => ({ getHealthHistory }));
 vi.mock('@/features/garmin/detected-activity', () => ({
   listPendingActivities,
   listImportedSessionIds,
@@ -87,6 +91,8 @@ describe('TrainingPlanPage', () => {
     // much the athlete's own data as a session (ADR 0006).
     expect(listPendingActivities).toHaveBeenCalledWith('athlete_1');
     expect(listImportedSessionIds).toHaveBeenCalledWith('athlete_1');
+    // The health layer (training-architecture/06): their own rows only.
+    expect(getHealthHistory).toHaveBeenCalledWith('athlete_1');
   });
 
   it('a signed-in user without an athlete row gets empty state, not a crash', async () => {

@@ -36,11 +36,13 @@ const {
 
 vi.mock('./coach-repository', () => ({ getActiveLink, getSharedTranscripts }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
-vi.mock('@/features/race/race-repository', () => ({
+const { getTargetRace, getRaces } = vi.hoisted(() => ({
   // No Target Race: the Head Coach's briefing has to render an athlete with no
   // horizon, and the Training Phase is derived from it rather than stored.
-  getTargetRace: vi.fn(async () => null),
+  getTargetRace: vi.fn<() => Promise<unknown>>(async () => null),
+  getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
 }));
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
@@ -501,5 +503,52 @@ describe('the two remaining refusals and the opening log', () => {
       conversationId: null,
     });
     spy.mockRestore();
+  });
+});
+
+describe('startBriefing — the races reach the Head Coach (training-architecture/09)', () => {
+  const target = {
+    id: 't', athleteId: 'a1', name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full',
+    isTarget: true, createdAt: new Date('2026-06-01T10:00:00Z'),
+  };
+
+  beforeEach(() => {
+    getTargetRace.mockReset().mockResolvedValue(null);
+    getRaces.mockReset().mockResolvedValue([]);
+  });
+
+  it('lists the athlete’s future races when reports are shared, and omits ones already run', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getTargetRace.mockResolvedValue(target);
+    getRaces.mockResolvedValue([
+      target,
+      { ...target, id: 'r2', name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic', isTarget: false },
+      { ...target, id: 'past', name: 'Sprint Vejle', date: '2026-05-01', distance: 'Sprint', isTarget: false },
+    ]);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    const system = lastSystem();
+    expect(system).toContain('IM Copenhagen (Full) — target');
+    expect(system).toContain('Olympic Odense (Olympic) — tune-up');
+    expect(system).not.toContain('Sprint Vejle');
+    expect(system).not.toContain('No Target Race');
+  });
+
+  it('tells the Head Coach the athlete has No Target Race', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('No Target Race');
+  });
+
+  it('fetches no races at all when reports are not shared', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getRaces).not.toHaveBeenCalled();
+    expect(lastSystem()).not.toContain('No Target Race');
   });
 });

@@ -24,13 +24,25 @@ import { capacityStatement, type Capacity } from './capacity';
 export type NoteAuthor = 'athlete' | 'head_coach';
 
 /** Opens an Injury with what the athlete says it prevents. */
-export async function declareInjury(athleteId: string, capacity: Capacity): Promise<void> {
-  await getDb().insert(injuries).values({ athleteId, ...capacity });
+export async function declareInjury(
+  athleteId: string,
+  capacity: Capacity,
+  bother: Bother = null,
+): Promise<void> {
+  await getDb().insert(injuries).values({ athleteId, ...capacity, bother });
 }
 
+/**
+ * The Bother Rating, 1–5, or null for "did not say" (`training-architecture/06`).
+ * Human eyes only — never read on a prompt path (ADR 0011's detail-thread side;
+ * `detail-thread-never-prompts.test.ts` pins it). Validated at the action
+ * boundary; the database refuses anything outside 1–5 as well.
+ */
+export type Bother = number | null;
+
 /** Opens an Illness. It carries no capacity — it removes every discipline. */
-export async function declareIllness(athleteId: string): Promise<void> {
-  await getDb().insert(illnesses).values({ athleteId });
+export async function declareIllness(athleteId: string, bother: Bother = null): Promise<void> {
+  await getDb().insert(illnesses).values({ athleteId, bother });
 }
 
 /**
@@ -183,4 +195,45 @@ export async function capacityFor(athleteId: string): Promise<string | null> {
     })),
     openIllnesses.length > 0,
   );
+}
+
+/**
+ * Every Injury and Illness the athlete has had, open and closed, oldest first
+ * (`training-architecture/06`). The closed ones are the history the drawer
+ * shows collapsed; the open ones are what the calendar draws. Athlete id in the
+ * WHERE and nothing else — no `closedAt` filter, because closed *is* the point.
+ */
+export async function getHealthHistory(
+  athleteId: string,
+): Promise<{ injuries: InjuryRow[]; illnesses: IllnessRow[] }> {
+  const db = getDb();
+  const [injuryRows, illnessRows] = await Promise.all([
+    db.select().from(injuries).where(eq(injuries.athleteId, athleteId)).orderBy(asc(injuries.openedAt)),
+    db.select().from(illnesses).where(eq(illnesses.athleteId, athleteId)).orderBy(asc(illnesses.openedAt)),
+  ]);
+  return { injuries: injuryRows, illnesses: illnessRows };
+}
+
+/**
+ * Sets the Bother Rating on a record the athlete owns — the athlete id is in the
+ * WHERE beside the record id, so a guessed id changes nothing that is not theirs
+ * (ADR 0006). Null clears it.
+ */
+export async function setBother(
+  athleteId: string,
+  subject: { injuryId: string } | { illnessId: string },
+  bother: Bother,
+): Promise<void> {
+  const db = getDb();
+  if ('injuryId' in subject) {
+    await db
+      .update(injuries)
+      .set({ bother })
+      .where(and(eq(injuries.athleteId, athleteId), eq(injuries.id, subject.injuryId)));
+    return;
+  }
+  await db
+    .update(illnesses)
+    .set({ bother })
+    .where(and(eq(illnesses.athleteId, athleteId), eq(illnesses.id, subject.illnessId)));
 }

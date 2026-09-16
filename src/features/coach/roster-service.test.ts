@@ -7,6 +7,7 @@ const {
   getSharedTranscripts,
   getInformationViewInputs,
   getUnavailableDates,
+  getHealthHistory,
   calendarRows,
 } = vi.hoisted(() => ({
   getActiveLink: vi.fn(),
@@ -14,6 +15,17 @@ const {
   getSharedTranscripts: vi.fn((): Promise<unknown> => Promise.resolve(null)),
   getInformationViewInputs: vi.fn(),
   getUnavailableDates: vi.fn(() => Promise.resolve([] as string[])),
+  getHealthHistory: vi.fn(() =>
+    Promise.resolve({
+      injuries: [
+        {
+          id: 'inj_1', athleteId: 'a1', swim: 'full', bike: 'easy', run: 'none',
+          openedAt: new Date('2026-08-01T08:00:00Z'), closedAt: null, bother: 3,
+        },
+      ],
+      illnesses: [],
+    }),
+  ),
   calendarRows: { value: [] as unknown[] },
 }));
 
@@ -56,6 +68,7 @@ vi.mock('@/features/information-view/information-view-repository', () => ({
 vi.mock('@/features/availability/availability-repository', () => ({
   getUnavailableDates,
 }));
+vi.mock('@/features/health/health-repository', () => ({ getHealthHistory }));
 
 const { getCoachAthleteView } = await import('./roster-service');
 
@@ -111,7 +124,37 @@ beforeEach(() => {
   getUnavailableDates.mockResolvedValue([]);
   getSharedTranscripts.mockClear();
   getSharedTranscripts.mockResolvedValue(null);
+  getHealthHistory.mockClear();
   calendarRows.value = [];
+});
+
+describe('getCoachAthleteView — the health layer (training-architecture/06)', () => {
+  it('reports off: health is null and nothing is fetched — not fetched-then-hidden', async () => {
+    // Null, never `[]`: a coach who could tell "no injuries" from "not shared"
+    // could infer health state from absence. Same discipline as transcripts.
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: [] });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(view!.health).toBeNull();
+    expect(getHealthHistory).not.toHaveBeenCalled();
+  });
+
+  it('reports on: the spans reach the view, open and closed alike', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: [] });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+
+    expect(getHealthHistory).toHaveBeenCalledWith('a1');
+    expect(view!.health).toEqual([
+      {
+        kind: 'injury', id: 'inj_1', from: '2026-08-01', to: null,
+        capacity: { swim: 'full', bike: 'easy', run: 'none' }, bother: 3,
+      },
+    ]);
+  });
 });
 
 describe('getCoachAthleteView — the authorization gate', () => {

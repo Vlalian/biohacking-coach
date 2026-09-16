@@ -1,10 +1,24 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
 import type { Session } from '@/features/session/session';
-import type { NewSessionRow } from '@/db/schema';
-import { isValidDateKey } from '@/lib/date';
+import type { NewSessionRow, RaceRow } from '@/db/schema';
+import { dateKey, isValidDateKey } from '@/lib/date';
+import {
+  inTuneUpWindow,
+  racesEnteredAfterPlan,
+  tuneUpRaces,
+  tuneUpWindow,
+  TUNE_UP_EVE_EASY,
+} from '@/features/race/races';
 import type { PlanningWindow } from './planning-window';
-import { assertNoIdentity, type CheckIn, type Readiness, type SkippedSession, type WeekFeedbackEntry } from './check-in';
+import {
+  assertNoIdentity,
+  type CheckIn,
+  type RaceMention,
+  type Readiness,
+  type SkippedSession,
+  type WeekFeedbackEntry,
+} from './check-in';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
 import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
@@ -85,6 +99,16 @@ export function buildWeeklyCheckIn(
   /** The athlete's own sentence from this week's Check-in, or null. */
   notableSignal: string | null = null,
   /**
+   * Every Race the athlete has, and when this week's plan was written
+   * (`training-architecture/09`). Both default to "none", which renders none of
+   * slice 09's lines — the same shape as `targetRace: null`.
+   */
+  // Stryker disable next-line ArrayDeclaration: equivalent. `raceFactsFrom`
+  // finds the target by `isTarget`; an array of anything without that flag
+  // behaves exactly as an empty one.
+  races: readonly RaceRow[] = [],
+  planWrittenAt: Date | null = null,
+  /**
    * The athlete's Training Blocks, already resolved
    * (`training-block-service.ts:getResolvedBlocks`): the Coach-shaped set when
    * one exists, the arithmetic draft when not (`training-architecture/07`).
@@ -105,6 +129,7 @@ export function buildWeeklyCheckIn(
     ...(readiness ? { readiness } : {}),
     ...coachingFactsFrom(athlete),
     ...horizonFactsFrom(today, targetRace, blocks),
+    ...raceFactsFrom(today, races, planWrittenAt),
     ...(capacity ? { capacity } : {}),
     ...(notableSignal ? { notableSignal } : {}),
     ...constraintFactsFrom(athlete),
@@ -152,6 +177,56 @@ function horizonFactsFrom(
   // block without one cannot exist, and asking twice would suggest it could.
   const { week, weeks } = blockPosition(today, block);
   return { ...race, phase: block.name, blockWeek: `week ${week} of ${weeks}` };
+}
+
+/**
+ * The athlete's other races, as the prompt names them (`training-architecture/09`).
+ *
+ * The Target Race is found among `races` by its flag rather than taken from the
+ * `targetRace` parameter, because the pure race functions need its id and its
+ * `createdAt`, and the parameter carries neither. Empty lists are omitted, not
+ * rendered as "none": a plan without a tune-up is not deficient (glossary).
+ *
+ * The tune-up window is carried **only while today is inside it** — that is
+ * the whole nag-prevention (Mads, 2026-09-11, option b), decided here at the
+ * seam that knows today, so the prompt stays a pure renderer.
+ */
+function raceFactsFrom(
+  today: string,
+  races: readonly RaceRow[],
+  planWrittenAt: Date | null,
+): Pick<CheckIn, 'tuneUps' | 'lateRaces' | 'tuneUpWindow' | 'tuneUpEveEasy'> {
+  const target = races.find((r) => r.isTarget);
+  if (!target) return {};
+
+  const tuneUps = tuneUpRaces(today, races, target).map(mention);
+  const lateRaces = racesEnteredAfterPlan(races, target, planWrittenAt).map(mention);
+  return {
+    ...tuneUpFacts(tuneUps),
+    ...(lateRaces.length > 0 ? { lateRaces } : {}),
+    ...windowFacts(today, target, tuneUps.length),
+  };
+}
+
+const mention = (r: RaceRow) => ({ name: r.name, date: r.date, distance: r.distance });
+
+/** The tune-ups and the interview flag together, or neither. */
+function tuneUpFacts(tuneUps: RaceMention[]): Pick<CheckIn, 'tuneUps' | 'tuneUpEveEasy'> {
+  return tuneUps.length > 0 ? { tuneUps, tuneUpEveEasy: TUNE_UP_EVE_EASY } : {};
+}
+
+/**
+ * The window, only while today is inside it and only when no tune-up exists —
+ * once one is entered there is nothing left to suggest.
+ */
+function windowFacts(
+  today: string,
+  target: RaceRow,
+  tuneUpCount: number,
+): Pick<CheckIn, 'tuneUpWindow'> {
+  if (tuneUpCount > 0) return {};
+  const window = tuneUpWindow(dateKey(target.createdAt), target.date);
+  return inTuneUpWindow(today, window) ? { tuneUpWindow: window } : {};
 }
 
 /**
@@ -291,7 +366,10 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
           properties: {
             date: { type: 'string', description: 'Calendar date, YYYY-MM-DD.' },
             type: { type: 'string', enum: [...PLAN_TYPES] },
-            durationMinutes: { type: 'integer', description: 'Planned duration in minutes.' },
+            durationMinutes: {
+              type: 'integer',
+              description: 'Planned duration in minutes.',
+            },
             zone: { type: 'string', description: 'Intensity zone, e.g. Z2.' },
             note: { type: 'string', description: 'One short coaching line.' },
           },
@@ -313,14 +391,16 @@ function positiveMinutes(value: unknown): number | null {
   // Stryker disable next-line ConditionalExpression: equivalent. The typeof is
   // here to narrow for TypeScript; at runtime Number.isInteger already refuses
   // every non-number, so no behavioural test can tell the two apart.
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_SESSION_MINUTES
+  return typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= MAX_SESSION_MINUTES
     ? value
     : null;
 }
 
 export type ValidatePlanResult =
-  | { ok: true; sessions: ProposedSession[] }
-  | { ok: false; reason: 'malformed' | 'empty' };
+  { ok: true; sessions: ProposedSession[] } | { ok: false; reason: 'malformed' | 'empty' };
 
 /**
  * The server-authority gate over a proposed plan.
@@ -341,10 +421,7 @@ export type ValidatePlanResult =
  * request. The window's own `start` subsumes the past-date rule: it is never
  * earlier than today.
  */
-export function validateProposedPlan(
-  input: unknown,
-  window: PlanningWindow,
-): ValidatePlanResult {
+export function validateProposedPlan(input: unknown, window: PlanningWindow): ValidatePlanResult {
   const raw = sessionsArrayFrom(input);
   if (!raw) return { ok: false, reason: 'malformed' };
 
@@ -379,10 +456,7 @@ function sessionsArrayFrom(input: unknown): unknown[] | null {
  * that survive" and the surviving rules live in one place. A dropped row is
  * silent by design — the plan the athlete confirms is only ever what passed.
  */
-function proposedSessionFrom(
-  entry: unknown,
-  window: PlanningWindow,
-): ProposedSession | null {
+function proposedSessionFrom(entry: unknown, window: PlanningWindow): ProposedSession | null {
   // Stryker disable next-line ConditionalExpression: equivalent. Dropping the
   // typeof half changes nothing observable - a primitive's `.date` is undefined,
   // and isPlannableDay refuses that on the very next line. The guard earns its

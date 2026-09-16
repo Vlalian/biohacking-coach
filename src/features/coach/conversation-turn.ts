@@ -1,7 +1,9 @@
 import { refusalReason } from '@/lib/identifiers';
 import { logCoachFailure, type ModelSurface } from '@/lib/coach-log';
+import type { Citation } from '@/lib/citation';
 import type { ConversationKind } from '@/lib/conversation-kinds';
-import { callCoach } from './coach-client';
+import { noteSourceMentions } from './grounding';
+import { callCoach, type CoachTool, type CoachToolCall } from './coach-client';
 import {
   appendMessages,
   createConversation,
@@ -41,6 +43,19 @@ export interface PreparedTurn {
   /** The system prompt for this turn. */
   system: string;
   /**
+   * The tools the Coach may call this turn, and what answers a call
+   * (`knowledge-oracle/05`). Both optional: a surface with nothing to offer
+   * leaves them out and the adapter behaves as it always did.
+   */
+  tools?: readonly CoachTool[];
+  resolveTool?: (call: CoachToolCall) => Promise<string>;
+  /**
+   * The sources behind the reply, read **after** the model has answered — the
+   * resolver fills them in during the tool round-trip. Stored on the
+   * `coach_ai` message so the athlete can see them. None when absent.
+   */
+  citations?: () => Citation[];
+  /**
    * Run once the turn and the reply are stored, never before: work that records
    * something *about* a turn the conversation did not receive is work about
    * nothing. Given the conversation id, which on a first turn did not exist when
@@ -67,7 +82,10 @@ export interface ConversationTurn {
    * identifier assertion does, on app-assembled material — is reported as a
    * refusal rather than becoming an unhandled rejection.
    */
-  prepare: (storedTranscript: Message[]) => Promise<PreparedTurn>;
+  prepare: (
+    storedTranscript: Message[],
+    conversationId: string | null,
+  ) => Promise<PreparedTurn>;
 }
 
 export type ConversationTurnResult =
@@ -95,7 +113,13 @@ export async function takeConversationTurn(
   const answered = await askModel(turn, resumed, trimmed);
   if ('reason' in answered) return { ok: false, reason: answered.reason };
 
-  const id = await storeTurn(turn, resumed.conversationId, trimmed, answered.reply);
+  const id = await storeTurn(
+    turn,
+    resumed.conversationId,
+    trimmed,
+    answered.reply,
+    answered.prepared,
+  );
   if (!id) return { ok: false, reason: 'not-owner' };
 
   await runAfterStore(turn, answered.prepared, id);
@@ -186,14 +210,17 @@ async function askModel(
   | { reason: 'coach-unavailable' | 'unsafe-content' }
 > {
   try {
-    const prepared = await turn.prepare(resumed.transcript);
+    const prepared = await turn.prepare(resumed.transcript, resumed.conversationId);
     const { text } = await callCoach({
       system: prepared.system,
       // The athlete's turn joins the history here rather than being stored first
       // — the same messages the API would have seen, and no orphan on failure.
       messages: [...toApiMessages(resumed.transcript), { role: 'user', content: trimmed }],
       maxTokens: turn.maxTokens,
+      tools: prepared.tools,
+      resolveTool: prepared.resolveTool,
     });
+    noteSourceMentions(turn.surface, turn.athleteId, resumed.conversationId, text);
     return { reply: text, prepared };
   } catch (error) {
     const reason = refusalReason(error);
@@ -221,6 +248,7 @@ async function storeTurn(
   conversationId: string | null,
   trimmed: string,
   reply: string,
+  prepared: PreparedTurn,
 ): Promise<string | null> {
   const id =
     conversationId ??
@@ -228,8 +256,11 @@ async function storeTurn(
 
   const appended = await appendMessages(turn.athleteId, id, [
     { role: 'athlete', content: trimmed },
-    { role: 'coach_ai', content: reply },
+    // The sources exactly as retrieval supplied them, or none — never anything
+    // the model wrote (`citations.ts`).
+    { role: 'coach_ai', content: reply, citations: prepared.citations?.() ?? [] },
   ]);
 
   return appended ? id : null;
 }
+
