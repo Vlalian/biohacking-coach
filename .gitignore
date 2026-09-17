@@ -56,6 +56,8 @@ coverage/
 # real API output, never committed.
 .coach-say/
 .oracle-ask/
+# Eval runs from `npm run oracle:eval` — the durable copy goes to .scratch/.
+.oracle-eval/
 
 # Cached article XML for the Knowledge Oracle ingest. Fetched from PMC on
 # demand and re-fetchable, so it is a build artifact rather than source. Whether

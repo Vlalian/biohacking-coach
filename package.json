@@ -18,6 +18,7 @@
     "coach:say": "tsx --conditions=react-server scripts/coach-say.ts",
     "corpus:ingest": "tsx --conditions=react-server scripts/ingest-corpus.ts",
     "oracle:ask": "tsx --conditions=react-server scripts/oracle-ask.ts",
+    "oracle:eval": "tsx --conditions=react-server scripts/oracle-eval.ts",
     "quality": "tsx scripts/quality.ts"
   },
   "dependencies": {
