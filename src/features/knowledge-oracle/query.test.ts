@@ -11,33 +11,20 @@ import { buildOracleQuery, type OracleQuery } from './query';
  */
 
 describe('buildOracleQuery', () => {
-  it('renders the question, the phase and the experience level into one string', () => {
-    const query = buildOracleQuery({
-      question: 'How should long rides be paced?',
-      phase: 'build',
-      experienceLevel: 'veteran',
-    });
-
-    // Pinned exactly, not by `toContain`. What gets embedded is compared by
-    // cosine distance against prose, so the spacing between the context and the
-    // question is part of the string being measured — a join that lost its
-    // separator would glue two sentences together and shift the vector.
-    expect(query).toBe(
-      'Training phase: build. Athlete experience level: veteran. ' +
-        'How should long rides be paced?',
-    );
+  it('embeds the question and nothing else — exactly, since the string is what gets measured', () => {
+    // Until 2026-09-17 this prefixed "Training phase: … Athlete experience
+    // level: …". The SAFE-3 runs showed the prefix makes every question look
+    // like triathlon-training prose, so every outside question cleared the
+    // floor (20/20 against 13/20 bare) and the floor filtered nothing. Phase
+    // and experience reach the Coach through the prompt, where they belong;
+    // the search matches the question. Pinned with `toBe`, not `toContain`:
+    // one added word shifts the vector.
+    const query = buildOracleQuery({ question: 'How should long rides be paced?' });
+    expect(query).toBe('How should long rides be paced?');
   });
 
-  it('omits absent context rather than defaulting or emitting an empty label', () => {
-    const query = buildOracleQuery({ question: 'How long should a taper be?' });
-
-    expect(query).toBe('How long should a taper be?');
-    expect(query).not.toMatch(/phase/i);
-    expect(query).not.toMatch(/experience/i);
-    // Not `intermediate`. A prompt survives a wrong-but-plausible default; a
-    // query embedded with an invented experience level is a vector aimed at the
-    // wrong passages, and returns confidently wrong science.
-    expect(query).not.toContain('intermediate');
+  it('trims and collapses whitespace so the same question embeds the same way', () => {
+    expect(buildOracleQuery({ question: '  How long   should a taper be?\n' })).toBe('How long should a taper be?');
   });
 
   it('throws when the question carries an email shape', () => {
@@ -77,8 +64,8 @@ describe('the OracleQuery shape', () => {
     const noIdentityFields: Leaked extends never ? true : never = true;
     expect(noIdentityFields).toBe(true);
 
-    const keys: Array<keyof OracleQuery> = ['question', 'phase', 'experienceLevel'];
-    expect(keys).toHaveLength(3);
+    const keys: Array<keyof OracleQuery> = ['question'];
+    expect(keys).toHaveLength(1);
   });
 });
 

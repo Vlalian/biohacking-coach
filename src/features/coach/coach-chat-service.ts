@@ -93,7 +93,7 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
   conversationId: string | null = null,
-): Promise<{ system: string; phase: string | null; experienceLevel: string | null; window: PlanningWindow }> {
+): Promise<{ system: string; window: PlanningWindow }> {
   const [
     equipmentItems,
     weekSessions,
@@ -173,9 +173,6 @@ async function renderSystem(
       weekFrom(weekSessions, reference?.id),
       { window, stagedProposal: facts.staged },
     ),
-    // What the grounding folds into its query: where in the season the athlete
-    // is, and how experienced — the same facts the prompt just rendered.
-    ...groundingFactsOf(checkIn),
     window,
   };
 }
@@ -219,14 +216,6 @@ async function stageChatProposal(
   if (!validated.ok) return null;
   await recordProposal(athleteId, conversationId, validated.sessions);
   return { sessions: validated.sessions };
-}
-
-/** The two Check-in facts the grounding's query wants, absent rendered as null. */
-function groundingFactsOf(checkIn: {
-  phase?: string;
-  experienceLevel?: string;
-}): { phase: string | null; experienceLevel: string | null } {
-  return { phase: checkIn.phase ?? null, experienceLevel: checkIn.experienceLevel ?? null };
 }
 
 export interface CoachChatState {
@@ -305,7 +294,7 @@ export async function sendCoachChatMessage(
     content,
     maxTokens: CHAT_MAX_TOKENS,
     prepare: async (_transcript, conversationId) => {
-      const { system, phase, experienceLevel, window } = await renderSystem(
+      const { system, window } = await renderSystem(
         athlete,
         today,
         language,
@@ -318,8 +307,6 @@ export async function sendCoachChatMessage(
         athleteId: athlete.id,
         surface: 'coach_chat',
         conversationId,
-        phase,
-        experienceLevel,
       });
       return {
         system,

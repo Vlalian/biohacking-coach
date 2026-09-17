@@ -719,12 +719,13 @@ describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracl
     await expect(params.resolveTool({ name: 'propose_week_plan', input: {} })).resolves.toBe(PROPOSAL_ACK);
   });
 
-  it('threads the phase and experience level from the Check-in into the grounding', async () => {
+  it('hands the grounding only what it needs: who, which surface, which conversation — no athlete facts', async () => {
+    // Phase and experience used to be threaded in here for the query prefix,
+    // retired 2026-09-17 (see knowledge-oracle/query.ts). They still reach the
+    // Coach through the prompt; the search gets the question alone.
     getTargetRace.mockResolvedValue({ name: 'IM', date: '2027-08-15' });
     await sendCoachChatMessage(ATHLETE, 'conv_1', 'how much Z2?', '2026-08-12');
-    expect(productionGrounding).toHaveBeenCalledWith(
-      expect.objectContaining({ experienceLevel: 'intermediate', phase: expect.stringMatching(/^Block \d of \d$/) }),
-    );
+    expect(productionGrounding).toHaveBeenCalledWith({ athleteId: 'athlete_1', surface: 'coach_chat', conversationId: 'conv_1' });
     getTargetRace.mockResolvedValue(null);
   });
 

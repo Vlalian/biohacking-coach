@@ -46,8 +46,6 @@ function grounding(over: Partial<Parameters<typeof createGrounding>[0]> = {}) {
   return createGrounding({
     embedder: { embed },
     search: { searchChunks },
-    phase: 'Block 2 of 4',
-    experienceLevel: 'intermediate',
     record,
     ...over,
   });
@@ -78,16 +76,15 @@ describe('createGrounding — the tool and its cost', () => {
     expect(record).not.toHaveBeenCalled();
   });
 
-  it('embeds and searches exactly once per call, with the phase and experience in the query', async () => {
+  it('embeds and searches exactly once per call, and embeds the lookup question alone', async () => {
     const g = grounding();
     const text = await g.resolve(call());
 
     expect(embed).toHaveBeenCalledTimes(1);
     expect(searchChunks).toHaveBeenCalledTimes(1);
-    const query = embed.mock.calls[0][0][0];
-    expect(query).toContain('why is Thursday easy?');
-    expect(query).toContain('Block 2 of 4');
-    expect(query).toContain('intermediate');
+    // The question as the Coach wrote it — no phase or experience prefix
+    // (2026-09-17; see query.test.ts for why).
+    expect(embed.mock.calls[0][0]).toEqual(['why is Thursday easy?']);
     expect(text).toContain('[1] Seiler S (2010) — Most sessions below the first threshold.');
   });
 
@@ -155,6 +152,9 @@ describe('createGrounding — one lookup per turn, even when the model asks twic
     const [first, second] = await Promise.all([g.resolve(call('why easy?')), g.resolve(call('how hard?'))]);
     expect(first).toContain('[1]');
     expect(second).toBe(LOOKUP_LIMIT_REACHED);
+    // The constant compared to itself proves nothing about its words; the
+    // model reads this sentence, so pin what it says.
+    expect(second).toBe('Lookup already performed this turn. Answer from the passages you were given.');
     expect(embed).toHaveBeenCalledTimes(1);
     expect(searchChunks).toHaveBeenCalledTimes(1);
     expect(recorded).toHaveLength(1);
