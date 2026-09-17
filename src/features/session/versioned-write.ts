@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events, sessions } from '@/db/schema';
 import { describeConflict, type AttemptedChange, type SessionConflict } from './conflict';
@@ -34,9 +34,17 @@ import { toSession } from './session';
  * every call site; revisit if the event log ever becomes load-bearing.
  */
 
-/** The columns a versioned write may set. Closed on purpose. */
+/**
+ * The columns a versioned write may set. Closed on purpose.
+ *
+ * `parkedByDate` is not contested content — it rides here only because a
+ * Session Move has to carry a day-parked session's provenance to its new day
+ * in the same statement as the date, and does so as SQL over the column so a
+ * day-park landing between the read and the write is not overwritten.
+ */
 export type SessionContentColumns = {
   date?: string;
+  parkedByDate?: SQL;
   type?: string;
   duration?: number | null;
   zone?: string | null;

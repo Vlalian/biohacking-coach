@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SessionRow } from '@/db/schema';
+import { boundPairs } from '@/test/drizzle-bound-pairs';
 
 // The DB is mocked so the authority logic can be tested without Postgres: the
 // select returns a fixed row, and the update's `.returning()` decides whether
@@ -91,6 +92,32 @@ describe('moveSession — server authority', () => {
         type: 'session_moved',
       }),
     );
+  });
+
+  // A parked session is not draggable in the calendar, but the server is the
+  // authority and does not refuse the move, so the row can still land on
+  // another day. Its provenance has to land with it: a session day D parked,
+  // moved to D2 and still naming D, would be restored by clearing neither day
+  // (clearing D wants `date = D`, clearing D2 wants `parked_by_date = D2`).
+  // Decided in SQL, not from the row read a statement earlier — a day-park does
+  // not bump the version, so the compare-and-set would not catch one landing in
+  // between. Found by CodeRabbit on PR #77.
+  it('carries a day-parked session’s provenance to the day it moves to; null stays null', async () => {
+    limit.mockResolvedValue([sessionRow()]);
+
+    await moveSession({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 1,
+    });
+
+    const written: unknown = (updateSet.mock.calls as unknown[][])[0][0];
+    // The written value is a CASE over the column, bound to the new day.
+    expect(boundPairs((written as { parkedByDate: unknown }).parkedByDate)).toEqual([
+      ['parked_by_date', '2026-07-18'],
+    ]);
   });
 
   it('refuses a move against a stale version and logs nothing', async () => {
