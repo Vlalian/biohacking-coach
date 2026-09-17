@@ -69,11 +69,13 @@ describe('ErrorFallback', () => {
 });
 
 describe('Thinking', () => {
-  it('renders the label and three dots, politely live', () => {
+  it('is a status region whose announcement is the label, with three decorative dots', () => {
     const html = renderToStaticMarkup(<Thinking label="Coach is thinking" />);
-    expect(html).toContain('Coach is thinking');
+    // The label sits inside the status region, so mounting announces it;
+    // the dots are hidden from assistive technology.
+    expect(html).toMatch(/^<div[^>]*role="status"[^>]*>[\s\S]*Coach is thinking/);
     expect(html.match(/data-slot="thinking-dot"/g)).toHaveLength(3);
-    expect(html).toContain('aria-live="polite"');
+    expect(html).toMatch(/aria-hidden="true"[^>]*>(?:[\s\S](?!<\/div>))*data-slot="thinking-dot"/);
   });
 
   it('defaults to the signal tone and takes muted', () => {

@@ -34,13 +34,17 @@ function Thinking({
   return (
     <div
       data-slot="thinking"
+      // The whole block is the live region, so the label is what a screen
+      // reader hears when it mounts; the dots alone would announce nothing
+      // (CodeRabbit, PR #72).
+      role="status"
       className={cn(thinkingVariants({ tone }), className)}
       {...props}
     >
       <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
         {label}
       </div>
-      <div className="flex items-center gap-1.5" aria-live="polite">
+      <div className="flex items-center gap-1.5" aria-hidden="true">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
