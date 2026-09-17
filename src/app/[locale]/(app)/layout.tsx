@@ -25,6 +25,7 @@ import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { weekStartOf, today } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
+import { chatStateOf } from '@/features/coach/coach-chat-service';
 import type { WeeklySessionInitial } from '../weekly-session';
 
 // The Views this port has real pages for. Glossary joins this list as its own
@@ -137,9 +138,9 @@ export default async function AppShellLayout({
     ]);
     const { weeklySession: open, coachChat: openChat } =
       selectOpenConversations(openConversations);
-    const chat = openChat
-      ? { conversationId: openChat.id, messages: await getMessages(openChat.id) }
-      : null;
+    // The transcript and the week awaiting a decision, if the chat holds one —
+    // a refresh mid-decision must not lose the card (`training-architecture/20`).
+    const chat = openChat ? await chatStateOf(athlete.id, openChat.id) : null;
     // The tester's own thumbs, restored with the transcript so a flag left last
     // week is still there on load (`showable-version/05`, item 3). Read here
     // rather than per row: one query for the thread, not one per message.
@@ -180,6 +181,7 @@ export default async function AppShellLayout({
           citations: m.citations,
           rating: chatRatings[m.id] ?? null,
         })),
+        proposal: chat.proposal,
       };
     }
 

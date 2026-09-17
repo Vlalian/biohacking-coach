@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
+import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { useRouter } from '@/i18n/navigation';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import type { WeekDraft } from '@/features/coach/week-draft';
@@ -15,9 +16,15 @@ import { acceptWeekDraftAction, declineWeekDraftAction, discussWeekDraftAction }
  * tap commits; a typed "yes" never does.
  *
  * Accept writes the whole week as drafted, including days already gone, and
- * says how many (Mads, 2026-09-15). Discuss hands the draft to a fresh Weekly
- * Session — the overlay opens on it with the same confirm/cancel card the
- * Weekly Session has always had — and the card here becomes a pointer.
+ * says how many (Mads, 2026-09-15). Discuss hands the draft to the athlete's
+ * Coach Chat (`/20`) — the overlay opens on it with the same confirm/cancel
+ * card — and the card here becomes a pointer.
+ *
+ * The sessions are listed on the card (grill on the PR #71 smoke run,
+ * 2026-09-17, decision 7): it said only "5 sessions for the week of …" and the
+ * ghosts in the calendar could not be opened, so the athlete accepted a week
+ * they could not read. The card is the proposal. Same line as the chat's
+ * popup: day · type · minutes · zone, note under.
  */
 
 /** What the card is showing after a decision, or nothing yet. */
@@ -60,8 +67,10 @@ export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record
 
 export function ProposalCard({ draft }: { draft: WeekDraft }) {
   const t = useTranslations('ProposalCard');
+  const tWeekly = useTranslations('WeeklySession');
+  const format = useFormatter();
   const router = useRouter();
-  const { setOpen, setWeeklySeed } = useCoachOverlay();
+  const { setOpen, setChatSeed } = useCoachOverlay();
   const [pending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<CardOutcome>({ kind: 'idle' });
   const decided = isDecided(outcome);
@@ -92,13 +101,13 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
     startTransition(async () => {
       const result = await discussWeekDraftAction(draft.id);
       if (result.ok) {
-        // The seed is the server's Weekly Session state; the thread opens on it.
-        setWeeklySeed({
+        // The seed is the server's Coach Chat state with the draft as its
+        // pending proposal; the thread opens in chat on it (`/20`).
+        setChatSeed({
           conversationId: result.conversationId,
-          weeklySessionNumber: result.weeklySessionNumber,
           messages: result.messages,
           proposal: result.proposal,
-          ended: result.endedAt !== null,
+          seededAt: Date.now(),
         });
         setOpen(true);
         router.refresh();
@@ -108,6 +117,13 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
     });
 
   const line = outcomeKey(outcome);
+
+  function sessionLine(s: WeekDraft['sessions'][number]): string {
+    const day = format.dateTime(new Date(`${s.date}T00:00:00`), { weekday: 'short', day: 'numeric', month: 'short' });
+    return [day, s.type, s.durationMinutes != null ? tWeekly('minutes', { count: s.durationMinutes }) : null, s.zone]
+      .filter(Boolean)
+      .join(' · ');
+  }
 
   return (
     <section
@@ -119,6 +135,20 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
       <p className="mt-1 font-body text-sm text-muted-foreground">
         {t('lead', { count: draft.sessions.length, week: draft.weekStart })}
       </p>
+      <ul className="mt-3 divide-y divide-rule border-y border-rule">
+        {draft.sessions.map((s, i) => (
+          <li key={`${s.date}-${i}`} className="flex gap-3 py-2" data-session={s.date}>
+            <span
+              className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: TYPE_COLORS[s.type] ?? DEFAULT_TYPE_COLOR }}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="font-body text-sm text-foreground">{sessionLine(s)}</div>
+              {s.note && <div className="mt-0.5 font-body text-xs text-muted-foreground">{s.note}</div>}
+            </div>
+          </li>
+        ))}
+      </ul>
       {!decided && (
         <div className="mt-3 flex flex-wrap gap-2">
           <button

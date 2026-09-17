@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildWeeklyContext, renderWeeklyPrompt, buildChatPrompt } from './prompts';
+import { planningWindow } from './planning-window';
 import type { CheckIn, SessionContext } from './check-in';
 import type { WeekSession } from './week';
 
@@ -149,6 +150,17 @@ describe('golden — the Weekly Session prompt, per arc', () => {
     expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
   });
 
+  // training-architecture/20: the day is stated, the week is not asked about.
+  // "Plan rest of this week or from next Sunday?" offered a week the server
+  // refused (PR #57 bounded the write to this week's remainder on purpose).
+  it('states the preferred day but no longer asks which week to plan', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TODAY);
+    const prompt = renderWeeklyPrompt(ctx);
+    expect(prompt).toContain('PLANNING DAY: Preferred Monday, today Tuesday');
+    expect(prompt).not.toContain('from next');
+    expect(prompt).not.toContain('Plan rest of this week');
+  });
+
   // showable-version/11. The window is told unconditionally — it was the only
   // bound a Flexible athlete's Coach ever had, and it stays now that Flexible
   // reads as Sunday, because a prompt line is a request and the window is what
@@ -226,6 +238,26 @@ describe('golden — the Weekly Session prompt, per arc', () => {
 describe('golden — the Coach Chat prompt', () => {
   it('renders identically with no Reference', () => {
     expect(buildChatPrompt(BASE, TODAY)).toMatchSnapshot();
+  });
+
+  // training-architecture/20: the one conversation may agree a week. The bound
+  // and the staged week render exactly as the Weekly Session renders them.
+  it('renders identically with a planning window and a staged week', () => {
+    const staged = [
+      { date: '2026-08-20', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: 'keep it easy' },
+      { date: '2026-08-22', type: 'Intensity' as const, durationMinutes: 45, zone: 'Z4', note: null },
+    ];
+    const prompt = buildChatPrompt(BASE, TODAY, null, [], { window: planningWindow(TODAY), stagedProposal: staged });
+    expect(prompt).toContain('PLANNING WINDOW: 2026-08-18 to 2026-08-23');
+    expect(prompt).toContain('PROPOSED WEEK');
+    expect(prompt).toContain('SAVING THE PLAN');
+    expect(prompt).toMatchSnapshot();
+  });
+
+  it('renders no planning lines at all when the chat was given no window', () => {
+    const prompt = buildChatPrompt(BASE, TODAY);
+    expect(prompt).not.toContain('PLANNING WINDOW');
+    expect(prompt).not.toContain('SAVING THE PLAN');
   });
 
   it('renders identically with a Reference and every optional field', () => {

@@ -1,9 +1,9 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { replaceCoachPlanForDateRange } from '@/features/session/session-repository';
-import { proposedToNewSessionRows, validateProposedPlan, type ProposedSession } from './weekly-session';
-import { startWeeklySession, type StartWeeklySessionResult } from './weekly-session-service';
-import { recordProposal } from './plan-proposal-repository';
+import { fixedConstraintsOf, proposedToNewSessionRows, validateProposedPlan, type ProposedSession } from './weekly-session';
+import { createConversation, getLatestOpenConversation, getMessages } from './conversation-repository';
+import type { Message } from './conversation';
 import { wholeWeekWindow } from './week-draft';
 import {
   getCalendarProposalState,
@@ -26,10 +26,11 @@ import {
  *     the calendar and the Coach already know — and the athlete may still mark
  *     one complete. Nothing is clipped, nothing is re-shaped without approval,
  *     and nothing is written as `skipped`: a skip is the athlete's own act.
- *   - **Discuss hands the draft to the conversation.** A fresh Weekly Session
- *     is started with the draft as its pending proposal, and the draft is
- *     withdrawn from the calendar — one pending proposal at a time (Action
- *     Proposal), so a "yes" is never ambiguous about its target.
+ *   - **Discuss hands the draft to the conversation.** The athlete's Coach
+ *     Chat — the one conversation (`training-architecture/20`; it used to be a
+ *     fresh Weekly Session) — takes the draft as its pending proposal, and the
+ *     draft is withdrawn from the calendar — one pending proposal at a time
+ *     (Action Proposal), so a "yes" is never ambiguous about its target.
  *
  * Every entry point takes the athlete resolved from the authenticated session
  * upstream, never an id from the request (ADR 0006).
@@ -53,7 +54,7 @@ export async function acceptWeekDraft(athlete: Athlete, draftId: string, today: 
   // days are still refused: a session on a day the athlete ruled out was never
   // valid, late or not.
   const unavailableDates = await getUnavailableDates(athlete.id);
-  const window = wholeWeekWindow(draft.weekStart, athlete.profile?.fixedConstraints ?? [], unavailableDates);
+  const window = wholeWeekWindow(draft.weekStart, fixedConstraintsOf(athlete), unavailableDates);
   const validated = validateProposedPlan({ sessions: draft.sessions }, window);
   if (!validated.ok || validated.sessions.length !== draft.sessions.length) return { ok: false, reason: 'invalid' };
 
@@ -90,35 +91,45 @@ export async function declineWeekDraft(athlete: Athlete, draftId: string, today:
   return { ok: true };
 }
 
-export type DiscussResult = StartWeeklySessionResult | { ok: false; reason: 'not-found' };
+export type DiscussResult =
+  | { ok: true; conversationId: string; messages: Message[]; proposal: { sessions: ProposedSession[] } }
+  | { ok: false; reason: 'not-found' };
 
 /**
- * Starts a Weekly Session with the draft as its pending proposal, and withdraws
- * the draft from the calendar. The Coach opens knowing the week is on the
- * table (`stagedProposal` reaches its prompt); the existing confirm/cancel card
- * carries the sessions; cancelling there leaves the week as it was — the same
- * outcome as declining here.
+ * Hands the draft to Coach Chat as its pending proposal, and withdraws the
+ * draft from the calendar. The athlete's open chat is reused; one is minted
+ * when they have never spoken to the Coach. No Coach call is made: the chat is
+ * athlete-led and the proposal card carries the week, so the Coach is told the
+ * week is on the table (`PROPOSED WEEK`) on the athlete's next turn rather
+ * than opening with a line of its own. Cancelling on the card leaves the week
+ * as it was — the same outcome as declining here.
  */
 export async function discussWeekDraft(
   athlete: Athlete,
   draftId: string,
   today: string,
-  language?: string,
 ): Promise<DiscussResult> {
   const draft = await visibleDraft(athlete, draftId, today);
   if (!draft) return { ok: false, reason: 'not-found' };
 
-  const started = await startWeeklySession(athlete, today, language, { stagedProposal: draft.sessions });
-  if (!started.ok) return started;
+  const open = await getLatestOpenConversation(athlete.id, 'coach_chat');
+  const conversationId = open?.id ?? (await createConversation({ athleteId: athlete.id, kind: 'coach_chat' })).id;
 
-  await recordProposal(athlete.id, started.conversationId, draft.sessions);
+  // One write: the proposal staged on the chat and the draft withdrawn from
+  // the calendar land together, or not at all.
   await recordWeekDraftDiscussed({
     athleteId: athlete.id,
     weekStart: draft.weekStart,
     draftId,
-    conversationId: started.conversationId,
+    conversationId,
+    sessions: draft.sessions,
   });
-  return { ...started, proposal: { sessions: draft.sessions } };
+  return {
+    ok: true,
+    conversationId,
+    messages: await getMessages(conversationId),
+    proposal: { sessions: draft.sessions },
+  };
 }
 
 export type { CalendarProposalState };

@@ -1,4 +1,4 @@
-import { refusalReason } from '@/lib/identifiers';
+import { refusalReason, type RefusalReason } from '@/lib/identifiers';
 import { logCoachFailure } from '@/lib/coach-log';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import {
@@ -169,7 +169,7 @@ export interface BriefingState {
 
 export type StartBriefingResult =
   | ({ ok: true } & BriefingState)
-  | { ok: false; reason: 'not-linked' | 'failed' | 'coach-unavailable' | 'unsafe-content' };
+  | { ok: false; reason: 'not-linked' | 'failed' | RefusalReason };
 
 /**
  * Opens — or resumes — a briefing about a linked athlete. Refuses when no active
@@ -245,7 +245,7 @@ export async function startBriefing(
 
 export type ContinueBriefingResult =
   | { ok: true; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'not-linked' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
+  | { ok: false; reason: 'not-owner' | 'not-linked' | 'empty' | RefusalReason };
 
 /**
  * Adds the Head Coach's turn and the Coach's reply to a briefing this coach

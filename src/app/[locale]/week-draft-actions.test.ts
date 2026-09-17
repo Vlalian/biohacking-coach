@@ -33,7 +33,7 @@ beforeEach(() => {
   assertAiCoachingConsent.mockResolvedValue({ ok: true });
   acceptWeekDraft.mockResolvedValue({ ok: true, written: 3, pastDays: 0, start: '2026-09-21', end: '2026-09-27' });
   declineWeekDraft.mockResolvedValue({ ok: true });
-  discussWeekDraft.mockResolvedValue({ ok: true, conversationId: 'c1', weeklySessionNumber: 2, messages: [], proposal: { sessions: [] }, endedAt: null });
+  discussWeekDraft.mockResolvedValue({ ok: true, conversationId: 'c1', messages: [], proposal: { sessions: [] } });
 });
 
 describe('the three actions resolve the athlete from the session and take only a draft id', () => {
@@ -49,9 +49,9 @@ describe('the three actions resolve the athlete from the session and take only a
     expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
-  it('discuss: passes the athlete’s language, and refreshes so the card becomes a pointer', async () => {
-    expect(await discussWeekDraftAction('d1')).toMatchObject({ ok: true, conversationId: 'c1' });
-    expect(discussWeekDraft).toHaveBeenCalledWith(ATHLETE, 'd1', expect.stringMatching(TODAY), 'da');
+  it('discuss: hands back the chat to open, and refreshes so the card becomes a pointer', async () => {
+    expect(await discussWeekDraftAction('d1')).toEqual({ ok: true, conversationId: 'c1', messages: [], proposal: { sessions: [] } });
+    expect(discussWeekDraft).toHaveBeenCalledWith(ATHLETE, 'd1', expect.stringMatching(TODAY));
     expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 

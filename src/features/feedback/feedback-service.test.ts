@@ -309,6 +309,16 @@ describe('what the tester is told when a turn is refused', () => {
     expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
   });
 
+  it('folds a reply cut off at the token limit into coach-unavailable — no tools here, so a retry is the right advice', async () => {
+    callCoach.mockRejectedValue(
+      Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
+    );
+
+    const result = await sendFeedbackTurn('athlete_1', 'conv_1', 'the plan was wrong');
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+  });
+
   it('passes every other refusal through as it is', async () => {
     const result = await sendFeedbackTurn('athlete_1', 'conv_1', '   ');
 

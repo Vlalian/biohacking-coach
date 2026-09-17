@@ -119,6 +119,8 @@ vi.mock('./plan-proposal-repository', () => ({
   recordProposal,
 }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
+const { getDiscussedWeek } = vi.hoisted(() => ({ getDiscussedWeek: vi.fn(async (): Promise<string | null> => null) }));
+vi.mock('./week-draft-repository', () => ({ getDiscussedWeek }));
 const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
@@ -156,7 +158,8 @@ beforeEach(() => {
   createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
   deleteOwnedConversation.mockClear();
   getMessages.mockReset().mockResolvedValue([]);
-  getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', weeklySessionNumber: 2 });
+  getOwnedConversation.mockReset().mockResolvedValue({ id: 'conv_1', kind: 'weekly_session', weeklySessionNumber: 2 });
+  getDiscussedWeek.mockReset().mockResolvedValue(null);
   recordProposal.mockClear();
   getPendingProposal.mockReset();
   recordPlanCommitted.mockClear();
@@ -703,6 +706,61 @@ describe('commitWeeklyPlan — what it refuses', () => {
     expect(recordPlanCommitted).toHaveBeenCalled();
     // The ritual is over once the week is agreed — the thread does not stay open.
     expect(endConversation).toHaveBeenCalled();
+    // And its window is this week's remainder, never a discussed week's: the
+    // handoff read belongs to Coach Chat alone (training-architecture/20).
+    expect(getDiscussedWeek).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The same commit path, reached from Coach Chat (`training-architecture/20`):
+ * the window is the conversation's — the whole of a week brought in to
+ * discuss, else this week's remainder — and the chat is never ended.
+ */
+describe('commitWeeklyPlan from Coach Chat', () => {
+  // 2026-09-16 is a Wednesday: this week is 09-14..09-20, next is 09-21..09-27.
+  const WED = '2026-09-16';
+  const NEXT_WEEK_SESSION = { date: '2026-09-22', type: 'Endurance', durationMinutes: 40, zone: 'Z2', note: null };
+
+  beforeEach(() => {
+    getOwnedConversation.mockResolvedValue({ id: 'c1', kind: 'coach_chat', weeklySessionNumber: null });
+    getDiscussedWeek.mockResolvedValue('2026-09-21');
+    getPendingProposal.mockResolvedValue({ conversationId: 'c1', sessions: [NEXT_WEEK_SESSION] });
+  });
+
+  it('validates against the discussed week whole and clears that whole week', async () => {
+    const result = await commitWeeklyPlan(ATHLETE, 'c1', WED);
+
+    expect(result).toMatchObject({ ok: true, start: '2026-09-21', end: '2026-09-27', sessionCount: 1 });
+    expect(getDiscussedWeek).toHaveBeenCalledWith(ATHLETE.id, 'c1');
+    expect(replaceCoachPlanForDateRange).toHaveBeenCalledWith(ATHLETE.id, '2026-09-21', '2026-09-27', expect.any(Array));
+  });
+
+  it('does not end a Coach Chat — it is the resting conversation', async () => {
+    await commitWeeklyPlan(ATHLETE, 'c1', WED);
+
+    expect(endConversation).not.toHaveBeenCalled();
+    expect(recordPlanCommitted).toHaveBeenCalledWith(ATHLETE.id, 'c1', expect.any(Array));
+  });
+
+  it('a current-week draft confirmed mid-week is written whole, past days included', async () => {
+    getDiscussedWeek.mockResolvedValue('2026-09-14');
+    getPendingProposal.mockResolvedValue({
+      conversationId: 'c1',
+      sessions: [
+        { ...NEXT_WEEK_SESSION, date: '2026-09-14' },
+        { ...NEXT_WEEK_SESSION, date: '2026-09-19' },
+      ],
+    });
+
+    expect(await commitWeeklyPlan(ATHLETE, 'c1', WED)).toMatchObject({ ok: true, sessionCount: 2, start: '2026-09-14' });
+  });
+
+  it('a chat with no discussed week is bounded to this week’s remainder, as before', async () => {
+    getDiscussedWeek.mockResolvedValue(null);
+
+    expect(await commitWeeklyPlan(ATHLETE, 'c1', WED)).toEqual({ ok: false, reason: 'stale' });
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
   });
 });
 

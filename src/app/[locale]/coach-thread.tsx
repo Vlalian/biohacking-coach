@@ -47,7 +47,7 @@ export function CoachThread({
   weeklyOffer?: WeeklyOfferInput | null;
 }) {
   const t = useTranslations('CoachThread');
-  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, weeklySeed, setWeeklySeed } = useCoachOverlay();
+  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, chatSeed, setChatSeed } = useCoachOverlay();
 
   // Decided on the client only. The server and the browser can disagree about
   // what day it is — no timezone is stored on the profile — so answering this
@@ -77,9 +77,9 @@ export function CoachThread({
   // a warm one hid it, because the component was already mounted in chat).
   // A seed present at mount wins outright: the overlay was closed when the
   // athlete tapped "Discuss" on the calendar, and it mounts straight onto the
-  // session that tap started (training-architecture/18).
+  // chat that tap handed the week to (training-architecture/18, /20).
   const [mode, setMode] = useState<'chat' | 'weekly'>(
-    weeklySeed ? 'weekly' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
+    chatSeed ? 'chat' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
   );
 
   // And the same rule while already mounted: a *new* Reference arriving (the
@@ -94,44 +94,50 @@ export function CoachThread({
     if (referenceId) setMode('chat');
   }
 
-  // A Weekly Session seeded from the calendar ("Discuss with the Coach" on a
-  // drafted week, `training-architecture/18`): the same adjust-state-on-prop
-  // shape as the Reference above. A new seed opens weekly mode on it; the
-  // seed's conversation id is the WeeklySession's key, so a session already
-  // showing is replaced rather than left holding stale state.
+  // A Coach Chat seeded from the calendar ("Discuss with the Coach" on a
+  // drafted week, `training-architecture/18`, into the one conversation since
+  // `/20`): the same adjust-state-on-prop shape as the Reference above. A new
+  // seed opens chat mode on it; the seed's conversation id is the CoachChat's
+  // key, so a chat already showing is replaced rather than left holding stale
+  // state — the seed carries the proposal the restored one did not.
   // The seed is a transfer, not a home. The thread copies it into its own
   // state the moment it sees it and clears the shared one right then, so
-  // closing the overlay any way at all — decline and close, not only "Back to
-  // Chat" — cannot leave a withdrawn plan waiting for the next open
+  // closing the overlay any way at all — cancel and close, not only a later
+  // send — cannot leave a withdrawn plan waiting for the next open
   // (CodeRabbit, PR #69). Adopted during render, as the mode switch already
   // was; the clear is a parent-state set the same way.
-  const [adopted, setAdopted] = useState<WeeklySessionInitial | null>(null);
-  // Guarded on the id so a seed is adopted once, even if the parent has not
-  // re-rendered with it cleared yet — a render-time set with no guard loops.
-  if (weeklySeed && weeklySeed.conversationId !== adopted?.conversationId) {
-    setAdopted(weeklySeed as WeeklySessionInitial);
-    setMode('weekly');
-    setWeeklySeed(null);
+  const [adopted, setAdopted] = useState<(CoachChatInitial & { seededAt: number }) | null>(null);
+  // Guarded on the handoff time, not the id: Discuss reuses the open chat, so a
+  // second handoff into the same conversation must still be adopted — and a
+  // render-time set with no guard loops.
+  if (chatSeed && chatSeed.seededAt !== adopted?.seededAt) {
+    setAdopted(chatSeed as CoachChatInitial & { seededAt: number });
+    setMode('chat');
+    setChatSeed(null);
   }
-  const weeklyStart = adopted ?? weeklyInitial;
+  const chatStart = adopted ?? chatInitial;
+  // The chat remounts on every handoff, so its state is read fresh from the
+  // seed — the proposal included — even when the overlay sat open on that chat.
+  const chatKey = adopted ? `${adopted.conversationId}:${adopted.seededAt}` : (chatInitial?.conversationId ?? 'fresh');
 
-  if (mode === 'weekly') {
-    return (
-      <WeeklySession
-        key={weeklyStart?.conversationId ?? 'fresh'}
-        initial={weeklyStart}
-        athleteFirstName={athleteFirstName}
-        raceTarget={raceTarget}
-        onExit={() => {
-          setAdopted(null);
-          setMode('chat');
-        }}
-      />
-    );
-  }
-
+  // The chat stays mounted underneath the Weekly Session, hidden, so a turn in
+  // flight is not thrown away by the switch: on Mads's smoke run of PR #71 a
+  // "Plan my week" tap mid-thought lost the message from view until reload
+  // (the server had stored it). The Weekly Session is on its way out (21);
+  // until then it is a layer over the chat, not a replacement of it.
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <>
+      {mode === 'weekly' && (
+        <WeeklySession
+          key={weeklyInitial?.conversationId ?? 'fresh'}
+          initial={weeklyInitial}
+          athleteFirstName={athleteFirstName}
+          raceTarget={raceTarget}
+          onExit={() => setMode('chat')}
+        />
+      )}
+      {/* A class, not the `hidden` attribute: the utility's display:flex would win over the attribute. */}
+      <div className={mode === 'weekly' ? 'hidden' : 'flex h-full min-h-0 flex-col bg-background'} data-chat-hidden={mode === 'weekly' ? 'true' : undefined}>
       <header className="shrink-0 border-b border-border px-5 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-display text-2xl leading-none tracking-[0.04em] text-foreground">
@@ -185,8 +191,9 @@ export function CoachThread({
       )}
 
       <div className="min-h-0 flex-1">
-        <CoachChat initial={chatInitial} />
+        <CoachChat key={chatKey} initial={chatStart} />
       </div>
-    </div>
+      </div>
+    </>
   );
 }

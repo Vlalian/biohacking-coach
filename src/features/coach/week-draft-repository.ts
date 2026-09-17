@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import { pendingWeekDraft, visibleTo, WEEK_DRAFT_EVENT, type SkeletonDay, type WeekDraft } from './week-draft';
 import { getPendingProposal } from './plan-proposal-repository';
+import { PLAN_EVENT } from './plan-proposal';
 import { addDays, weekStartOf } from '@/lib/date';
 import type { ProposedSession } from './weekly-session';
 
@@ -239,6 +240,53 @@ async function latestDiscussedHandoff(
   return { conversationId: payload.conversationId, weekStart: payload.weekStart };
 }
 
+/**
+ * The week a conversation is about, or null (`training-architecture/20`): the
+ * `weekStart` of the newest draft handed to *this* conversation, **while the
+ * athlete has not yet decided it**. The conversation-keyed twin of
+ * {@link latestDiscussedHandoff}.
+ *
+ * A handoff closes on the athlete's first decision after it — the week written
+ * or the proposal cancelled on the card — not on the proposal's pendingness:
+ * the Coach re-proposing the same week keeps the handoff open (nothing was
+ * decided), and a proposal the Coach makes *after* a cancel is about this
+ * week's remainder again, so the handoff must already be closed by then. The
+ * review of this slice found the window outliving the draft it was chosen for.
+ * Whether an open handoff's week is still current is `conversationWindow`'s
+ * question, not this read's.
+ */
+export async function getDiscussedWeek(athleteId: string, conversationId: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ payload: events.payload, createdAt: events.createdAt })
+    .from(events)
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        eq(events.type, WEEK_DRAFT_EVENT.withdrawn),
+        sql`${events.payload} ->> 'reason' = ${DISCUSSED}`,
+        sql`${events.payload} ->> 'conversationId' = ${conversationId}`,
+      ),
+    )
+    .orderBy(desc(events.createdAt))
+    .limit(1);
+  const payload = (row?.payload ?? null) as { weekStart?: unknown } | null;
+  if (typeof payload?.weekStart !== 'string') return null;
+
+  const [decided] = await getDb()
+    .select({ createdAt: events.createdAt })
+    .from(events)
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        inArray(events.type, [PLAN_EVENT.written, PLAN_EVENT.declined]),
+        sql`${events.payload} ->> 'conversationId' = ${conversationId}`,
+        gt(events.createdAt, row.createdAt),
+      ),
+    )
+    .limit(1);
+  return decided ? null : payload.weekStart;
+}
+
 async function discussingState(athleteId: string, weeks: string[]): Promise<CalendarProposalState | null> {
   const handoff = await latestDiscussedHandoff(athleteId, weeks);
   if (!handoff) return null;
@@ -266,19 +314,39 @@ export async function recordWeekDraftDecision(decision: {
   });
 }
 
-/** The draft moved into a Weekly Session: withdrawn from the calendar, the conversation owns it now. */
+/**
+ * The draft moved into a conversation (`/18`, into Coach Chat since `/20`):
+ * staged as that conversation's pending proposal and withdrawn from the
+ * calendar, in one batch. Two statements used to go separately, and a failure
+ * between them left the proposal pending with the calendar draft still
+ * actionable — two places to say yes (CodeRabbit, PR #71). `db.batch` is the
+ * driver's one transactional write; both rows land or neither does.
+ *
+ * The proposal row is the Coach's (`coach_ai`, as `recordProposal` writes it):
+ * the Coach drafted the week. The withdrawal is the athlete's act.
+ */
 export async function recordWeekDraftDiscussed(handoff: {
   athleteId: string;
   weekStart: string;
   draftId: string;
   conversationId: string;
+  sessions: ProposedSession[];
 }): Promise<void> {
-  const { athleteId, weekStart, draftId, conversationId } = handoff;
-  await getDb().insert(events).values({
-    athleteId,
-    actorType: 'athlete',
-    actorId: athleteId,
-    type: WEEK_DRAFT_EVENT.withdrawn,
-    payload: { weekStart, draftId, reason: 'discussed', conversationId },
-  });
+  const { athleteId, weekStart, draftId, conversationId, sessions } = handoff;
+  const db = getDb();
+  await db.batch([
+    db.insert(events).values({
+      athleteId,
+      actorType: 'coach_ai',
+      type: PLAN_EVENT.proposed,
+      payload: { conversationId, sessions },
+    }),
+    db.insert(events).values({
+      athleteId,
+      actorType: 'athlete',
+      actorId: athleteId,
+      type: WEEK_DRAFT_EVENT.withdrawn,
+      payload: { weekStart, draftId, reason: 'discussed', conversationId },
+    }),
+  ]);
 }

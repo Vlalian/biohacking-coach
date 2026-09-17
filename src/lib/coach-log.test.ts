@@ -44,8 +44,10 @@ describe('logCoachFailure', () => {
   });
 
   it('carries the stop reason when the Coach returned an empty reply', () => {
-    // This bug has been seen in the wild once (`fix/coach-empty-reply`). The
-    // stop reason is the only thing that says which kind of empty it was.
+    // This bug has been seen in the wild once (`fix/coach-empty-reply`), and
+    // four times on Mads's smoke run of PR #71. The stop reason says which kind
+    // of empty it was, and since 2026-09-17 a max_tokens empty is its own
+    // refusal — the athlete is asked for less, not to send the same again.
     logCoachFailure({
       surface: 'weekly_session',
       athleteId: 'a1',
@@ -54,7 +56,7 @@ describe('logCoachFailure', () => {
     });
 
     expect(JSON.parse(written[0])).toMatchObject({
-      reason: 'coach-unavailable',
+      reason: 'ran-out-of-room',
       stopReason: 'max_tokens',
     });
   });

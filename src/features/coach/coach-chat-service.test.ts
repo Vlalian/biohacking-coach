@@ -73,7 +73,15 @@ const { getTargetRace, getRaces, getLatestPlanWrittenAt, getLatestOpenConversati
   getLatestOpenConversation: vi.fn(async (): Promise<unknown> => null),
 }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
-vi.mock('./plan-proposal-repository', () => ({ getLatestPlanWrittenAt }));
+const { recordProposal, getPendingProposal, getDiscussedWeek, getUnavailableDates } = vi.hoisted(() => ({
+  recordProposal: vi.fn(async () => undefined),
+  getPendingProposal: vi.fn(async (): Promise<unknown> => null),
+  getDiscussedWeek: vi.fn(async (): Promise<string | null> => null),
+  getUnavailableDates: vi.fn(async (): Promise<string[]> => []),
+}));
+vi.mock('./plan-proposal-repository', () => ({ getLatestPlanWrittenAt, recordProposal, getPendingProposal }));
+vi.mock('./week-draft-repository', () => ({ getDiscussedWeek }));
+vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('./training-block-repository', () => ({ getBlockSet: vi.fn(async () => null) }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/session/session-repository', () => ({
@@ -87,6 +95,7 @@ const { sendCoachChatMessage, getOpenCoachChat } = await import('./coach-chat-se
 // shared module rather than re-exported by the service, so the test asserts the
 // behaviour Coach Chat actually gets.
 const { toApiMessages } = await import('./conversation');
+const { PROPOSAL_ACK } = await import('./proposal-tools');
 
 const ATHLETE = {
   id: 'athlete_1',
@@ -162,6 +171,23 @@ describe('sendCoachChatMessage', () => {
     expect(result).toMatchObject({ ok: true, conversationId: 'conv_1' });
   });
 
+  it('refuses a wordless tool-only reply as coach-unavailable and writes nothing', async () => {
+    // The adapter allows a wordless tool call because it cannot know whether a
+    // card will follow; here we do know, and the answer is the same as the
+    // Weekly Session's: a proposal with no explanation is not a turn, and an
+    // empty Coach message must not be stored and replayed as history.
+    callCoach.mockResolvedValue({
+      text: '',
+      toolCalls: [{ name: 'propose_week_plan', input: { sessions: [] } }],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, null, 'plan my week', '2026-08-12');
+
+    expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(appendMessages).not.toHaveBeenCalled();
+  });
+
   it('reports coach-unavailable when the Coach call rejects', async () => {
     getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     callCoach.mockRejectedValue(new Error('upstream 529'));
@@ -169,6 +195,25 @@ describe('sendCoachChatMessage', () => {
     const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'should I ride?', '2026-08-12');
 
     expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
+  });
+
+  it('reports ran-out-of-room when the reply was cut off at the token limit, and logs it as such', async () => {
+    // Mads's smoke run of PR #71: four "not sent" errors were this. The athlete
+    // is told to ask for less, not to send the same long turn again.
+    callCoach.mockRejectedValue(
+      Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
+    );
+
+    const result = await sendCoachChatMessage(ATHLETE, null, 'plan my whole month', '2026-08-12');
+
+    expect(result).toEqual({ ok: false, reason: 'ran-out-of-room' });
+    expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ reason: 'ran-out-of-room' }));
+    expect(appendMessages).not.toHaveBeenCalled();
+  });
+
+  it('gives the Coach room for a whole-week proposal and a paragraph', async () => {
+    await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12');
+    expect(callCoach.mock.calls[0][0].maxTokens).toBe(2500);
   });
 
   it('names Coach Chat as the surface in the failure log', async () => {
@@ -319,6 +364,106 @@ describe('sendCoachChatMessage', () => {
 });
 
 // code-health/07 — Coach Chat held its own copy of the same invented baseline.
+describe('Coach Chat proposes a week (training-architecture/20)', () => {
+  // 2026-09-16 is a Wednesday: this week is 09-14..09-20, next is 09-21..09-27.
+  const TODAY = '2026-09-16';
+  const PLAN = {
+    sessions: [{ date: '2026-09-18', type: 'Endurance', durationMinutes: 40, zone: 'Z2', note: null }],
+  };
+
+  beforeEach(() => {
+    callCoach.mockReset();
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    getOwnedConversation.mockReset().mockResolvedValue({ id: 'c1', kind: 'coach_chat' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    recordProposal.mockClear();
+    getPendingProposal.mockReset().mockResolvedValue(null);
+    getDiscussedWeek.mockReset().mockResolvedValue(null);
+    logCoachFailure.mockClear();
+  });
+
+  it('stages a proposal inside this week’s remainder once the turn is stored, and returns it', async () => {
+    callCoach.mockResolvedValue({
+      text: 'Here is the week.',
+      toolCalls: [{ name: 'propose_week_plan', input: PLAN }],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: { sessions: PLAN.sessions } });
+    expect(recordProposal).toHaveBeenCalledWith('athlete_1', 'c1', PLAN.sessions);
+    // Stored first, staged second: a proposal must never outlive a turn that
+    // failed to persist.
+    expect(appendMessages.mock.invocationCallOrder[0]).toBeLessThan(recordProposal.mock.invocationCallOrder[0]);
+  });
+
+  it('with a discussed next-week handoff, a next-week proposal is staged and the prompt names that window and the staged week', async () => {
+    getDiscussedWeek.mockResolvedValue('2026-09-21');
+    const staged = [{ ...PLAN.sessions[0], date: '2026-09-22', note: 'the drafted note' }];
+    getPendingProposal.mockResolvedValue({ conversationId: 'c1', sessions: staged });
+    const nextWeek = { sessions: [{ ...PLAN.sessions[0], date: '2026-09-23' }] };
+    callCoach.mockResolvedValue({ text: 'Revised.', toolCalls: [{ name: 'propose_week_plan', input: nextWeek }] });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'more swim', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: { sessions: nextWeek.sessions } });
+    expect(getDiscussedWeek).toHaveBeenCalledWith('athlete_1', 'c1');
+    const system = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('PLANNING WINDOW: 2026-09-21 to 2026-09-27');
+    expect(system).toContain('PROPOSED WEEK');
+    expect(system).toContain('2026-09-22: Endurance 40min Z2 — the drafted note');
+    expect(system).toContain('SAVING THE PLAN');
+    expect(system).not.toMatch(/from next \w+day\?/);
+  });
+
+  it('a first turn reads no handoff and no pending proposal, and plans this week’s remainder', async () => {
+    callCoach.mockResolvedValue({ text: 'Hi.', toolCalls: [] });
+
+    await sendCoachChatMessage(ATHLETE, null, 'hi', TODAY);
+
+    expect(getDiscussedWeek).not.toHaveBeenCalled();
+    expect(getPendingProposal).not.toHaveBeenCalled();
+    const system = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('PLANNING WINDOW: 2026-09-16 to 2026-09-20');
+    expect(system).not.toContain('PROPOSED WEEK');
+  });
+
+  it('stages nothing when the Coach called no tool at all — and nothing fails after the store', async () => {
+    callCoach.mockResolvedValue({ text: 'Just talking.', toolCalls: [] });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'hi', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(recordProposal).not.toHaveBeenCalled();
+    expect(logCoachFailure).not.toHaveBeenCalled();
+  });
+
+  it('only the proposal tool stages — a lookup call carrying a sessions array is not a proposal', async () => {
+    callCoach.mockResolvedValue({
+      text: 'Looked it up.',
+      toolCalls: [{ name: 'look_up_training_science', input: PLAN }],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'why?', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(recordProposal).not.toHaveBeenCalled();
+  });
+
+  it('stages nothing, but still stores the turn, when the plan falls outside the window', async () => {
+    // Next week, and no draft was brought in to discuss: not this chat's to write.
+    const outside = { sessions: [{ ...PLAN.sessions[0], date: '2026-09-23' }] };
+    callCoach.mockResolvedValue({ text: 'Here.', toolCalls: [{ name: 'propose_week_plan', input: outside }] });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(recordProposal).not.toHaveBeenCalled();
+    expect(appendMessages).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the Coach Chat system prompt carries no invented readiness', () => {
   it('sends no readiness scores when the athlete has never given a Check-in', async () => {
     await sendCoachChatMessage(ATHLETE, null, 'how should I pace Sunday?', '2026-08-12');
@@ -517,15 +662,28 @@ describe('getOpenCoachChat — resume, never mint', () => {
     expect(createConversation).not.toHaveBeenCalled();
   });
 
-  it('returns the open conversation with its transcript', async () => {
+  it('returns the open conversation with its transcript, and no proposal when nothing is staged', async () => {
     getLatestOpenConversation.mockResolvedValue({ id: 'conv_9', kind: 'coach_chat' });
     getMessages.mockReset().mockResolvedValue([{ id: 'm1', role: 'athlete', content: 'hi', seq: 0 }]);
+    getPendingProposal.mockReset().mockResolvedValue(null);
 
     expect(await getOpenCoachChat(ATHLETE.id)).toEqual({
       conversationId: 'conv_9',
       messages: [{ id: 'm1', role: 'athlete', content: 'hi', seq: 0 }],
+      proposal: null,
     });
     expect(getMessages).toHaveBeenCalledWith('conv_9');
+  });
+
+  // training-architecture/20: a refresh mid-decision must not lose the card.
+  it('restores the pending proposal with the transcript', async () => {
+    getLatestOpenConversation.mockResolvedValue({ id: 'conv_9', kind: 'coach_chat' });
+    getMessages.mockReset().mockResolvedValue([]);
+    const sessions = [{ date: '2026-09-18', type: 'Endurance', durationMinutes: 40, zone: 'Z2', note: null }];
+    getPendingProposal.mockReset().mockResolvedValue({ conversationId: 'conv_9', sessions });
+
+    expect(await getOpenCoachChat(ATHLETE.id)).toEqual({ conversationId: 'conv_9', messages: [], proposal: { sessions } });
+    expect(getPendingProposal).toHaveBeenCalledWith(ATHLETE.id, 'conv_9');
   });
 });
 
@@ -540,7 +698,7 @@ describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracl
     logCoachDrift.mockClear();
   });
 
-  it('offers the lookup tool on every turn, with its resolver, built for this athlete and surface', async () => {
+  it('offers the week proposal and the lookup on every turn, and routes each call to its answer (training-architecture/20)', async () => {
     await sendCoachChatMessage(ATHLETE, 'conv_1', 'why is Thursday easy?', '2026-08-12');
 
     expect(productionGrounding).toHaveBeenCalledTimes(1);
@@ -548,8 +706,17 @@ describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracl
       expect.objectContaining({ athleteId: 'athlete_1', surface: 'coach_chat', conversationId: 'conv_1' }),
     );
     const params = callCoach.mock.calls[0][0];
-    expect(params.tools.map((t: { name: string }) => t.name)).toEqual(['look_up_training_science']);
-    expect(params.resolveTool).toBe(groundingResolve);
+    expect(params.tools.map((t: { name: string }) => t.name)).toEqual([
+      'propose_week_plan',
+      'look_up_training_science',
+    ]);
+    // One resolver answers both: the lookup goes to the grounding, the proposal
+    // gets the fixed acknowledgement — the Weekly Session's exact wiring.
+    await expect(params.resolveTool({ name: 'look_up_training_science', input: { question: 'q' } })).resolves.toBe(
+      '[1] passage',
+    );
+    expect(groundingResolve).toHaveBeenCalledWith({ name: 'look_up_training_science', input: { question: 'q' } });
+    await expect(params.resolveTool({ name: 'propose_week_plan', input: {} })).resolves.toBe(PROPOSAL_ACK);
   });
 
   it('threads the phase and experience level from the Check-in into the grounding', async () => {

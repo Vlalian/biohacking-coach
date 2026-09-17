@@ -3,22 +3,13 @@
 import type { MessageRating } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import { CoachMessageFooter } from './coach-message-footer';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-  type FormEvent,
-} from 'react';
-import { useFormatter, useTranslations } from 'next-intl';
-import { useRouter, Link } from '@/i18n/navigation';
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { AlertTriangle, Check, ChevronLeft, CornerDownLeft, Loader2 } from 'lucide-react';
-import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
-import { useDialogFocus } from '@/lib/use-dialog-focus';
+import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
+import { usePlanDecision } from './use-plan-decision';
 import {
-  commitWeeklyPlanAction,
-  declineWeeklyPlanAction,
   sendWeeklyMessageAction,
   saveCheckInAction,
   startWeeklySessionAction,
@@ -46,18 +37,9 @@ export interface UiMessage {
   rating?: { rating: MessageRating; comment: string | null } | null;
 }
 
-/** One proposed session, as the confirmation popup shows it. */
-export interface UiPlanSession {
-  date: string;
-  type: string;
-  durationMinutes: number | null;
-  zone: string | null;
-  note: string | null;
-}
-
-export interface UiPlanProposal {
-  sessions: UiPlanSession[];
-}
+// The proposal shapes moved to `plan-proposal-card.tsx` with the card
+// (`training-architecture/20`); re-exported so existing importers keep working.
+export type { UiPlanProposal, UiPlanSession } from './plan-proposal-card';
 
 export interface WeeklySessionInitial {
   conversationId: string;
@@ -72,6 +54,7 @@ type Notice =
   | { kind: 'error' }
   | { kind: 'consentRequired' }
   | { kind: 'coachUnavailable' }
+  | { kind: 'ranOutOfRoom' }
   | { kind: 'unsafeContent' }
   | { kind: 'stale' }
   | { kind: 'planned'; count: number };
@@ -80,6 +63,7 @@ type Notice =
 type FailureReason =
   | 'consent-required'
   | 'coach-unavailable'
+  | 'ran-out-of-room'
   | 'unsafe-content'
   | 'not-authenticated'
   | 'not-owner'
@@ -107,6 +91,11 @@ function failureNotice(reason: FailureReason): Notice {
       return { kind: 'consentRequired' };
     case 'coach-unavailable':
       return { kind: 'coachUnavailable' };
+    // The reply hit the token budget and came back empty (Mads, 2026-09-17).
+    // Told apart from unreachable: resending the same long turn fails the same
+    // way, so the athlete is asked for less rather than for the same again.
+    case 'ran-out-of-room':
+      return { kind: 'ranOutOfRoom' };
     case 'unsafe-content':
       return { kind: 'unsafeContent' };
     case 'stale':
@@ -167,8 +156,6 @@ export function WeeklySession({
   onExit?: () => void;
 }) {
   const t = useTranslations('WeeklySession');
-  const format = useFormatter();
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -182,15 +169,21 @@ export function WeeklySession({
   // both move past it - a resumed session is already past it too.
   const [checkInDone, setCheckInDone] = useState<boolean>(Boolean(initial?.conversationId));
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
-  const [proposal, setProposal] = useState<UiPlanProposal | null>(initial?.proposal ?? null);
-  const [popupOpen, setPopupOpen] = useState<boolean>(Boolean(initial?.proposal));
-  // Dismissing the popup drops to the persistent bar, never to a dead end — so
-  // Escape closes the popup rather than the conversation. Bound only while the
-  // popup is up, since this component is mounted throughout the session.
-  const proposalRef = useDialogFocus(
-    useCallback(() => setPopupOpen(false), []),
-    Boolean(proposal) && popupOpen,
-  );
+  // The athlete's decision on a proposed week: state and server calls shared
+  // with Coach Chat (`use-plan-decision.ts`). The ritual is over once the week
+  // is agreed — the thread does not stay open.
+  const decision = usePlanDecision({
+    conversationId,
+    initial: initial?.proposal,
+    onCommitted: () => setEnded(true),
+  });
+  // The host's own notice wins; a decision's outcome shows when the host has none.
+  const visibleNotice: Notice = notice.kind !== 'none' ? notice : decision.notice;
+  // One thing at a time — a send while a decision is in flight could stage a
+  // proposal the decision then applies to (CodeRabbit, PR #71).
+  const busy = pending || decision.pending;
+  const confirm = () => { setNotice({ kind: 'none' }); decision.confirm(); };
+  const cancel = () => { setNotice({ kind: 'none' }); decision.cancel(); };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -204,8 +197,7 @@ export function WeeklySession({
         setConversationId(result.conversationId);
         setMessages(result.messages);
         setEnded(false);
-        setProposal(null);
-        setPopupOpen(false);
+        decision.reset();
       } else {
         setNotice(failureNotice(result.reason));
       }
@@ -215,73 +207,18 @@ export function WeeklySession({
   function send(e: FormEvent) {
     e.preventDefault();
     const content = draft.trim();
-    if (!content || !conversationId) return;
+    if (!content || !conversationId || busy) return;
     setNotice({ kind: 'none' });
     startTransition(async () => {
       const result = await sendWeeklyMessageAction(conversationId, content);
       if (result.ok) {
         setMessages(result.messages);
         setDraft('');
-        // A fresh proposal supersedes any earlier one and reopens the popup.
-        if (result.proposal) {
-          setProposal(result.proposal);
-          setPopupOpen(true);
-        }
+        decision.receive(result.proposal);
       } else {
         setNotice(failureNotice(result.reason));
       }
     });
-  }
-
-  function confirmPlan() {
-    if (!conversationId) return;
-    setNotice({ kind: 'none' });
-    startTransition(async () => {
-      const result = await commitWeeklyPlanAction(conversationId);
-      if (result.ok) {
-        setProposal(null);
-        setPopupOpen(false);
-        setEnded(true);
-        setNotice({ kind: 'planned', count: result.sessionCount });
-        router.refresh();
-      } else if (!result.ok && result.reason === 'stale') {
-        // The plan crossed into a new day. Keep it visible so the athlete can
-        // cancel and ask for a fresh one, rather than committing a shrunken week.
-        setPopupOpen(false);
-        setNotice({ kind: 'stale' });
-      } else {
-        setNotice({ kind: 'error' });
-      }
-    });
-  }
-
-  function cancelPlan() {
-    if (!conversationId) return;
-    setNotice({ kind: 'none' });
-    startTransition(async () => {
-      const result = await declineWeeklyPlanAction(conversationId);
-      if (result.ok) {
-        setProposal(null);
-        setPopupOpen(false);
-      } else {
-        setNotice({ kind: 'error' });
-      }
-    });
-  }
-
-  function planLine(s: UiPlanSession): string {
-    const day = format.dateTime(new Date(`${s.date}T00:00:00`), {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-    const bits = [
-      day,
-      s.type,
-      s.durationMinutes != null ? t('minutes', { count: s.durationMinutes }) : null,
-      s.zone,
-    ].filter(Boolean);
-    return bits.join(' · ');
   }
 
   return (
@@ -369,35 +306,30 @@ export function WeeklySession({
         )}
       </div>
 
-      {/* Persistent bar: a pending plan can always be reviewed, saved, or
-          cancelled here even if the popup was dismissed. */}
-      {proposal && !popupOpen && (
-        <div className="shrink-0 border-t border-signal/40 bg-signal/5 px-4 py-3">
-          <p className="font-body text-sm text-foreground">
-            {t('proposalPending', { count: proposal.sessions.length })}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <GhostButton onClick={() => setPopupOpen(true)} disabled={pending}>
-              {t('reviewPlan')}
-            </GhostButton>
-            <GhostButton onClick={cancelPlan} disabled={pending}>
-              {t('cancelPlan')}
-            </GhostButton>
-            <PrimaryButton onClick={confirmPlan} disabled={pending}>
-              {t('savePlan')}
-            </PrimaryButton>
-          </div>
-        </div>
+      {/* The Action Proposal card: the popup, or the persistent bar it drops to
+          when dismissed — a pending plan can always be reviewed, saved or
+          cancelled. One mount: the bar takes this place in the column and the
+          popup overlays the whole component from the same spot. */}
+      {decision.proposal && (
+        <PlanProposalCard
+          proposal={decision.proposal}
+          pending={busy}
+          popupOpen={decision.popupOpen}
+          onReview={decision.review}
+          onKeepTalking={decision.keepTalking}
+          onConfirm={confirm}
+          onCancel={cancel}
+        />
       )}
 
-      {notice.kind !== 'none' && (
+      {visibleNotice.kind !== 'none' && (
         <div className="shrink-0 px-4 pt-2">
-          {notice.kind === 'planned' && (
+          {visibleNotice.kind === 'planned' && (
             <Banner tone="signal" icon={Check}>
-              {t('planned', { count: notice.count })}
+              {t('planned', { count: visibleNotice.count })}
             </Banner>
           )}
-          {notice.kind === 'consentRequired' && (
+          {visibleNotice.kind === 'consentRequired' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('consentRequired')}{' '}
               <Link href="/privacy" className="underline">
@@ -405,22 +337,27 @@ export function WeeklySession({
               </Link>
             </Banner>
           )}
-          {notice.kind === 'stale' && (
+          {visibleNotice.kind === 'stale' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('proposalStale')}
             </Banner>
           )}
-          {notice.kind === 'coachUnavailable' && (
+          {visibleNotice.kind === 'coachUnavailable' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('coachUnavailable')}
             </Banner>
           )}
-          {notice.kind === 'unsafeContent' && (
+          {visibleNotice.kind === 'ranOutOfRoom' && (
+            <Banner tone="warn" icon={AlertTriangle}>
+              {t('ranOutOfRoom')}
+            </Banner>
+          )}
+          {visibleNotice.kind === 'unsafeContent' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('unsafeContent')}
             </Banner>
           )}
-          {notice.kind === 'error' && (
+          {visibleNotice.kind === 'error' && (
             <Banner tone="destructive" icon={AlertTriangle}>
               {t('error')}
             </Banner>
@@ -448,13 +385,13 @@ export function WeeklySession({
                     send(e);
                   }
                 }}
-                disabled={pending}
+                disabled={busy}
                 placeholder={t('placeholder')}
                 className="max-h-32 min-h-9 flex-1 resize-none border border-border bg-panel px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
               />
               <button
                 type="submit"
-                disabled={pending || draft.trim().length === 0}
+                disabled={busy || draft.trim().length === 0}
                 className="flex shrink-0 items-center gap-1.5 bg-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity disabled:opacity-35"
               >
                 {t('send')}
@@ -465,67 +402,6 @@ export function WeeklySession({
         </footer>
       )}
 
-      {/* The confirmation popup — the athlete decides whether this plan touches
-          their calendar. Save and Cancel are both present; dismissing the popup
-          drops to the persistent bar above, never to a dead end. */}
-      {proposal && popupOpen && (
-        <div
-          className="absolute inset-0 z-10 flex items-center justify-center bg-foreground/20 p-4 backdrop-blur-[1px]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="plan-proposal-title"
-        >
-          <div
-            ref={proposalRef}
-            tabIndex={-1}
-            className="flex max-h-[80%] w-full max-w-sm flex-col border border-border bg-panel shadow-2xl outline-none"
-          >
-            <div className="border-b border-rule px-5 py-4">
-              <h3
-                id="plan-proposal-title"
-                className="font-display text-xl tracking-[0.03em] text-foreground"
-              >
-                {t('proposalTitle')}
-              </h3>
-              <p className="mt-1 font-body text-sm text-muted-foreground">{t('proposalIntro')}</p>
-            </div>
-
-            <ul className="min-h-0 flex-1 divide-y divide-rule overflow-y-auto">
-              {proposal.sessions.map((s, i) => {
-                const color = TYPE_COLORS[s.type] ?? DEFAULT_TYPE_COLOR;
-                return (
-                  <li key={`${s.date}-${i}`} className="flex gap-3 px-5 py-3">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-body text-sm text-foreground">{planLine(s)}</div>
-                      {s.note && (
-                        <div className="mt-0.5 font-body text-xs text-muted-foreground">
-                          {s.note}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="flex flex-wrap justify-end gap-2 border-t border-rule px-5 py-4">
-              <GhostButton onClick={cancelPlan} disabled={pending}>
-                {t('cancelPlan')}
-              </GhostButton>
-              <GhostButton onClick={() => setPopupOpen(false)} disabled={pending}>
-                {t('keepTalking')}
-              </GhostButton>
-              <PrimaryButton onClick={confirmPlan} disabled={pending}>
-                {t('savePlan')}
-              </PrimaryButton>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -570,48 +446,6 @@ function MessageRow({
       </p>
       <CoachMessageFooter message={message} t={t} />
     </div>
-  );
-}
-
-function GhostButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-40"
-    >
-      {children}
-    </button>
-  );
-}
-
-function PrimaryButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="bg-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-    >
-      {children}
-    </button>
   );
 }
 

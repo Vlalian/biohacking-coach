@@ -186,6 +186,14 @@ describe('the propose_week_plan tool contract', () => {
     expect(PROPOSE_WEEK_PLAN_TOOL_NAME).toBe('propose_week_plan');
     expect(PROPOSE_WEEK_PLAN_TOOL.name).toBe('propose_week_plan');
   });
+
+  // training-architecture/20: the server picks the window and refuses the rest,
+  // so the tool must not describe a range it cannot deliver — it used to offer
+  // "from today into next week" while the window was this week's remainder.
+  it('does not offer a range beyond the window the Coach was told', () => {
+    expect(PROPOSE_WEEK_PLAN_TOOL.description).not.toContain('into next week');
+    expect(PROPOSE_WEEK_PLAN_TOOL.description).toMatch(/PLANNING WINDOW/);
+  });
 });
 
 describe('skippedFrom', () => {

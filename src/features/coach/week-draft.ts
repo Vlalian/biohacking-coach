@@ -1,6 +1,6 @@
 import { addDays, weekStartOf } from '@/lib/date';
 import type { Citation } from '@/lib/citation';
-import { excludedBetween, hasAPlannableDay, type PlanningWindow } from './planning-window';
+import { excludedBetween, hasAPlannableDay, planningWindow, type PlanningWindow } from './planning-window';
 import type { ProposedSession } from './weekly-session';
 import { effectiveWeeklySessionDay, WEEKDAYS } from './weekly-offer';
 
@@ -214,6 +214,35 @@ export function wholeWeekWindow(
     excludedDates: excludedBetween(weekStart, end, fixedConstraints, unavailableDates),
     fellThrough: false,
   };
+}
+
+/**
+ * The window a *conversation* may write (`training-architecture/20`): the whole
+ * of the week a draft was brought in to discuss, when that week is this one or
+ * the next; otherwise the remainder of this week, exactly as `planningWindow`
+ * has always bounded it.
+ *
+ * Whole, not from today — the same ruling as a late accept from the calendar
+ * (Mads, 2026-09-15: the week is written whole, as drafted). A current-week
+ * draft discussed on Wednesday still carries its Monday session, and a window
+ * that dropped it would refuse the very proposal the athlete came to confirm.
+ *
+ * A handoff for a week already gone, or further out than next week, is ignored
+ * rather than honoured: Coach Chat is the resting conversation and lives for
+ * months, so "the week it once discussed" must stop being its window once that
+ * week is no longer current.
+ */
+export function conversationWindow(
+  today: string,
+  discussedWeekStart: string | null,
+  fixedConstraints: string[],
+  unavailableDates: string[],
+): PlanningWindow {
+  const thisWeek = weekStartOf(today);
+  const current = discussedWeekStart === thisWeek || discussedWeekStart === addDays(thisWeek, 7);
+  return current
+    ? wholeWeekWindow(discussedWeekStart, fixedConstraints, unavailableDates)
+    : planningWindow(today, fixedConstraints, unavailableDates);
 }
 
 /** The week after today's, as a window — the common case for a draft. */

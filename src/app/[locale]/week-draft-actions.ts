@@ -41,15 +41,16 @@ export async function declineWeekDraftAction(draftId: string): Promise<DeclineRe
 }
 
 /**
- * Starts a Weekly Session around the draft. Gated on AI consent like every
- * path that opens a conversation with the Coach (`startWeeklySessionAction`).
+ * Hands the draft to the athlete's Coach Chat (`training-architecture/20`).
+ * Gated on AI consent like every path that opens a conversation with the
+ * Coach, even though this one makes no Coach call: the next turn will.
  */
 export async function discussWeekDraftAction(draftId: string): Promise<DiscussResult | AuthFailure | ConsentFailure> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
   const gate = await assertAiCoachingConsent(resolved.athlete.id);
   if (!gate.ok) return { ok: false, reason: 'consent-required' };
-  const result = await discussWeekDraft(resolved.athlete, draftId, today(), resolved.language);
+  const result = await discussWeekDraft(resolved.athlete, draftId, today());
   // The proposal left the calendar for the conversation — the card becomes a pointer.
   if (result.ok) revalidatePath('/', 'layout');
   return result;

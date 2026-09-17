@@ -41,23 +41,28 @@ export const CoachOverlayContext = createContext<{
   weeklyOfferDismissed: boolean;
   dismissWeeklyOffer: () => void;
   /**
-   * A Weekly Session started somewhere other than the overlay — "Discuss with
-   * the Coach" on a drafted week (`training-architecture/18`) — handed to the
-   * thread to open in weekly mode. The thread takes it and clears it; nothing
-   * else reads it. Typed loosely here so the shell does not import the
-   * conversation's UI shape.
+   * A Coach Chat handed a drafted week somewhere other than the overlay —
+   * "Discuss with the Coach" on the calendar (`training-architecture/18`, into
+   * the one conversation since `/20`) — for the thread to open in chat mode on.
+   * The thread takes it and clears it; nothing else reads it. Typed loosely
+   * here so the shell does not import the conversation's UI shape.
    */
-  weeklySeed: WeeklySeed | null;
-  setWeeklySeed: (seed: WeeklySeed | null) => void;
+  chatSeed: ChatSeed | null;
+  setChatSeed: (seed: ChatSeed | null) => void;
 } | null>(null);
 
-/** The server's Weekly Session state, as `weekly-session.tsx` restores it. */
-export type WeeklySeed = {
+/** The server's Coach Chat state, as `coach-chat.tsx` restores it. */
+export type ChatSeed = {
   conversationId: string;
-  weeklySessionNumber: number;
   messages: { id: string; role: string; content: string; rating?: unknown; citations?: unknown }[];
   proposal: { sessions: unknown[] } | null;
-  ended: boolean;
+  /**
+   * When the seed was handed over. Discuss reuses the athlete's open chat, so
+   * the conversation id alone no longer tells a new handoff from the one the
+   * thread already adopted — an overlay left open on that chat would keep its
+   * state and never show the card (the review of `training-architecture/20`).
+   */
+  seededAt: number;
 };
 
 /** Throws outside ShellChrome on purpose: every View renders inside it. */
