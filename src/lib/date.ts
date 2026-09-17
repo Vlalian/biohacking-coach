@@ -13,6 +13,25 @@ export function dateKey(d: Date): string {
 }
 
 /**
+ * Today's day key, the one place the app asks what day it is.
+ *
+ * Every server-side "today" — the calendar's highlighted cell, the Move rules,
+ * the Weekly Session's week, the Coach's planning window — routes through here
+ * so that a test can pin the date. `COACH_TODAY=YYYY-MM-DD` does that, outside
+ * production only: the full-page snapshots (frontend-quality/05) would
+ * otherwise change every midnight, and the calendar would have to stay
+ * masked. In production the variable is ignored even if set, so a stray
+ * deploy-time value can never freeze real athletes on one day.
+ */
+export function today(): string {
+  const pinned = process.env.COACH_TODAY;
+  if (pinned && process.env.NODE_ENV !== 'production' && isValidDateKey(pinned)) {
+    return pinned;
+  }
+  return dateKey(new Date());
+}
+
+/**
  * True only for a canonical 'YYYY-MM-DD' that names a real calendar day.
  *
  * The Move rules compare date keys as strings, and the seam trusts that shape;
@@ -20,6 +39,10 @@ export function dateKey(d: Date): string {
  * both malformed strings ('2026-7-5') and impossible days ('2026-02-30').
  */
 export function isValidDateKey(value: string): boolean {
+  // Stryker disable next-line ConditionalExpression,Regex — the shape check is
+  // a readable first refusal, not the load-bearing one: V8 parses no string
+  // that fails it into a Date whose key round-trips to the same string, so no
+  // input distinguishes the guard from its absence (frontend-quality/06).
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00`);
   return !Number.isNaN(parsed.getTime()) && dateKey(parsed) === value;

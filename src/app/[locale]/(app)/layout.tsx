@@ -20,7 +20,7 @@ import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
 import { logNarrationFailure } from '@/lib/coach-log';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
-import { dateKey, weekStartOf } from '@/lib/date';
+import { weekStartOf, today } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import type { WeeklySessionInitial } from '../weekly-session';
@@ -89,7 +89,7 @@ export default async function AppShellLayout({
   let weeklyOffer: WeeklyOfferInput | null = null;
 
   if (athlete) {
-    const today = dateKey(new Date());
+    const todayKey = today();
 
     // Narration runs *before* the transcript is read, so anything the Head
     // Coach did while the athlete was away is already in the thread this render
@@ -131,7 +131,7 @@ export default async function AppShellLayout({
     // (`selectOpenConversations`).
     const [openConversations, heldWeeklySession] = await Promise.all([
       getOpenConversations(athlete.id),
-      hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(today)),
+      hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(todayKey)),
     ]);
     const { weeklySession: open, coachChat: openChat } =
       selectOpenConversations(openConversations);

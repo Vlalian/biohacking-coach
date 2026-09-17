@@ -22,12 +22,16 @@ const roles = [
 
 for (const role of roles) {
   setup(`sign in as ${role.name}`, async ({ page }) => {
-    await page.goto('/en/sign-in');
+    // The dev server is cold on the first sign-in: the form must be hydrated
+    // before it is clicked, or the click lands on static markup and nothing
+    // happens. Wait for the network to settle, and give the auth route time
+    // to compile on its first request.
+    await page.goto('/en/sign-in', { waitUntil: 'networkidle' });
     await page.locator('input[type="email"]').fill(requireEnv(role.email));
     await page.locator('input[type="password"]').fill(requireEnv(role.password));
     await page.locator('button[type="submit"]').click();
     // The form pushes to `/` on success; anything still on sign-in is a failure.
-    await expect(page).not.toHaveURL(/sign-in/, { timeout: 30_000 });
+    await expect(page).not.toHaveURL(/sign-in/, { timeout: 90_000 });
     await page.context().storageState({ path: `e2e/.auth/${role.name}.json` });
   });
 }

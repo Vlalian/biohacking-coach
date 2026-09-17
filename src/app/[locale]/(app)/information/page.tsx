@@ -13,7 +13,7 @@ import { buildDataset } from '@/features/information-view/build-dataset';
 import { getInformationViewInputs } from '@/features/information-view/information-view-repository';
 import { parseLayout } from '@/features/information-view/layout';
 import { PANEL_IDS } from '@/features/information-view/panels';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 import { InformationView } from './information-view';
 import { saveLayoutAction } from './layout-actions';
 
@@ -49,7 +49,7 @@ export default async function InformationPage({
       getInformationViewInputs(athlete.id),
       getInformationViewLayout(athlete.id),
     ]);
-    const dataset = buildDataset(rows, streams, dateKey(new Date()));
+    const dataset = buildDataset(rows, streams, today());
     const layout = parseLayout(storedLayout, PANEL_IDS);
     view = (
       <InformationView

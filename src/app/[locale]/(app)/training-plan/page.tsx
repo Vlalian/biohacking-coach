@@ -11,7 +11,7 @@ import { getSessionsForAthlete } from '@/features/session/session-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { getHealthHistory } from '@/features/health/health-repository';
 import { spansFrom } from '@/features/health/health-layer';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
 import { BlockStrip } from '../../block-strip';
@@ -68,7 +68,7 @@ export default async function TrainingPlanPage({
   // completing is otherwise one-directional (session-status-rules.ts).
   const importedSessionIds = athlete ? await listImportedSessionIds(athlete.id) : [];
 
-  const todayKey = dateKey(new Date());
+  const todayKey = today();
 
   // The athlete's Training Blocks — the Coach-shaped set when one exists, the
   // arithmetic draft when not (`training-architecture/07`). Same resolver the

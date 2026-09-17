@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { calendarMasks, settled, snapshot } from './settled';
+import { settled, snapshot } from './settled';
 
 /**
  * The Head Coach's pages, signed in as the seed coach. The athlete pages are
@@ -33,6 +33,6 @@ for (const sub of athletePages) {
     const id = await firstRosterAthlete(page);
     await page.goto(`/en/coach/athlete/${id}/${sub}`);
     await settled(page);
-    await snapshot(page, sub === 'plan' ? calendarMasks(page) : []);
+    await snapshot(page);
   });
 }

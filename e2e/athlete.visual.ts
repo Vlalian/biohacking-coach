@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { calendarMasks, settled, snapshot } from './settled';
+import { settled, snapshot } from './settled';
 
 /**
  * The athlete's pages, signed in as the seed athlete. Layout only: anything
@@ -24,6 +24,6 @@ for (const route of pages) {
   test(route, async ({ page }) => {
     await page.goto(`/en/${route}`);
     await settled(page);
-    await snapshot(page, route === 'training-plan' ? calendarMasks(page) : []);
+    await snapshot(page);
   });
 }

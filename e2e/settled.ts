@@ -15,18 +15,6 @@ export async function settled(page: Page): Promise<void> {
   await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
 }
 
-/**
- * What to hide on a page that renders the calendar. The server decides "today"
- * (`dateKey(new Date())`, 23 call sites), so the highlighted cell moves every
- * day, the past/future styling of every cell with it, and the visible month
- * every month. Pinning the browser clock does not reach that. Until the server
- * has a clock seam (frontend-quality/06), the month label and the day grid are
- * masked and the page around them — header, controls, legend, upload — is
- * what the baseline guards.
- */
-export function calendarMasks(page: Page) {
-  return [page.locator('[data-calendar-month]'), page.locator('[aria-busy] .grid')];
-}
 
 /**
  * The whole page, top to bottom. The app shell is a fixed-height frame whose
