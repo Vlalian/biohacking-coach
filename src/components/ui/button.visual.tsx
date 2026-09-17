@@ -49,7 +49,7 @@ for (const theme of themes) {
     for (const variant of variants) {
       test(`variant ${variant}`, async ({ mount }) => {
         const component = await mount(
-          <div className={`${theme} inline-block bg-background p-4`}>
+          <div className={`${theme} inline-block bg-background p-4 text-foreground`}>
             <Button variant={variant}>Save week</Button>
           </div>,
         );
@@ -61,7 +61,7 @@ for (const theme of themes) {
       test(`size ${size}`, async ({ mount }) => {
         const iconOnly = size.startsWith('icon');
         const component = await mount(
-          <div className={`${theme} inline-block bg-background p-4`}>
+          <div className={`${theme} inline-block bg-background p-4 text-foreground`}>
             <Button size={size}>{iconOnly ? glyph : 'Save week'}</Button>
           </div>,
         );
@@ -71,7 +71,7 @@ for (const theme of themes) {
 
     test('disabled', async ({ mount }) => {
       const component = await mount(
-        <div className={`${theme} inline-block bg-background p-4`}>
+        <div className={`${theme} inline-block bg-background p-4 text-foreground`}>
           <Button disabled>Save week</Button>
         </div>,
       );
@@ -80,7 +80,7 @@ for (const theme of themes) {
 
     test('focus-visible', async ({ mount, page }) => {
       const component = await mount(
-        <div className={`${theme} inline-block bg-background p-4`}>
+        <div className={`${theme} inline-block bg-background p-4 text-foreground`}>
           <Button>Save week</Button>
         </div>,
       );

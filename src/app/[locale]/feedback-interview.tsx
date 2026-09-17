@@ -7,6 +7,7 @@ import { Link } from '@/i18n/navigation';
 import type { FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
 import type { UiMessage } from './weekly-session';
+import { Thinking } from '@/components/ui/thinking';
 
 /**
  * The Feedback Interview surface (`showable-version/07`).
@@ -119,22 +120,7 @@ export function FeedbackInterview({
             messages.map((m) => <InterviewRow key={m.id} message={m} t={t} />)
           )}
 
-          {pending && (
-            <div className="flex flex-col gap-2 border-l-2 border-muted-foreground/40 pl-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                {t('thinking')}
-              </div>
-              <div className="flex items-center gap-1.5" aria-live="polite">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground"
-                    style={{ animationDelay: `${i * 160}ms` }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          {pending && <Thinking label={t('thinking')} tone="muted" />}
           <div ref={endRef} />
         </div>
 
