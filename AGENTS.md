@@ -120,6 +120,21 @@ gives a session the code but **not** `CONTEXT.md`, `OVERVIEW.md`, or the `.scrat
 Run both from the main folder. The junctions and generated `CLAUDE.md` are gitignored, so
 they never enter a PR.
 
+### If several unrelated routes 404 at once, it is the build cache
+
+A single page returning 404 is a bug in that page. **Every authenticated route
+returning 404 at once — `/da/training-plan` and a coach page and the rest — is
+not a bug, it is a stale `.next`.** Delete it and restart the dev server before
+reading any code:
+
+    Remove-Item -Recurse -Force .next    # PowerShell; `rm -rf .next` in bash
+    npm run dev
+
+The discriminator is the point: *one* route failing points at the code, *all*
+of them failing points at the cache. On 2026-09-04 the smoke run lost an hour
+because the dev log had said "404 for every route" from the start and the code
+was read first (`code-health/10`).
+
 ## Code standards
 
 ### Coding conventions
