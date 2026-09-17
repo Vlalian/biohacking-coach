@@ -275,15 +275,22 @@ describe('callCoach — COACH_DISABLED (frontend-quality/07)', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it('calls as normal when the switch is unset', async () => {
-    vi.stubEnv('COACH_DISABLED', '');
+  it('calls as normal when the switch is unset, or set to anything but 1', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('COACH_DISABLED', '0');
     create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: {} });
     await callCoach(input);
-    expect(create).toHaveBeenCalledTimes(1);
+    vi.stubEnv('COACH_DISABLED', '');
+    await callCoach(input);
+    expect(create).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('callCoach — the client and the empty-reply error, pinned', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('refuses to build a client without a key, and says where the key goes', async () => {
     vi.resetModules();
     vi.stubEnv('ANTHROPIC_API_KEY', '');
@@ -298,7 +305,6 @@ describe('callCoach — the client and the empty-reply error, pinned', () => {
     expect((error as Error).message).toContain('Vercel environment variable');
     expect((error as Error).message).toContain('never ship to the browser');
     expect(create).not.toHaveBeenCalled();
-    vi.unstubAllEnvs();
   });
 
   it('names the stop reason and the rule in the empty-reply error', async () => {
@@ -324,6 +330,26 @@ describe('callCoach — the client and the empty-reply error, pinned', () => {
     expect((error as Error).message).toContain('stop_reason: unknown');
   });
 
+  it('drops a tool_use block from the text and keeps the words around it', async () => {
+    create
+      .mockResolvedValueOnce({
+        content: [
+          { type: 'text', text: 'Before ' },
+          { type: 'tool_use', id: 't1', name: 'propose_week', input: {} },
+          { type: 'text', text: ' after' },
+        ],
+        usage: {},
+      })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'closing' }], usage: {} });
+    const reply = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 10,
+    });
+    expect(reply.toolCalls).toHaveLength(1);
+    expect(reply.text).not.toContain('undefined');
+  });
+
   it('joins only the text blocks, in order, and trims the result', async () => {
     // The filter is by block *type*, not by whether a block happens to carry
     // `text`: a non-text block with a text field must not leak into the reply.
@@ -345,6 +371,10 @@ describe('callCoach — the client and the empty-reply error, pinned', () => {
 });
 
 describe('callCoach — one client per process, built with the timeout and retry policy', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('constructs the SDK client once, with the key, a 60 s timeout and one retry', async () => {
     vi.resetModules();
     vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-test-key');
@@ -357,26 +387,6 @@ describe('callCoach — one client per process, built with the timeout and retry
     await fresh.callCoach(input);
     expect(constructed).toHaveBeenCalledTimes(1);
     expect(constructed).toHaveBeenCalledWith({ apiKey: 'sk-ant-test-key', timeout: 60_000, maxRetries: 1 });
-    vi.unstubAllEnvs();
   });
 
-  it('drops a tool_use block from the text and keeps the words around it', async () => {
-    create
-      .mockResolvedValueOnce({
-        content: [
-          { type: 'text', text: 'Before ' },
-          { type: 'tool_use', id: 't1', name: 'propose_week', input: {} },
-          { type: 'text', text: ' after' },
-        ],
-        usage: {},
-      })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'closing' }], usage: {} });
-    const reply = await callCoach({
-      system: 'S',
-      messages: [{ role: 'user', content: 'hi' }],
-      maxTokens: 10,
-    });
-    expect(reply.toolCalls).toHaveLength(1);
-    expect(reply.text).not.toContain('undefined');
-  });
 });

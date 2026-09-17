@@ -33,7 +33,8 @@ vi.mock('@/features/consent/consent-gate', () => ({ assertAiCoachingConsent }));
 vi.mock('@/features/knowledge-oracle/embedder', () => ({ openAiEmbedder }));
 vi.mock('@/features/knowledge-oracle/knowledge-repository', () => ({ knowledgeSearch }));
 vi.mock('@/features/knowledge-oracle/retrieval', () => ({ retrievePassages }));
-vi.mock('./coach-client', () => ({ callCoach }));
+const isCoachDisabled = vi.fn(() => false);
+vi.mock('./coach-client', () => ({ callCoach, isCoachDisabled }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('./conversation-repository', () => ({ hasHeldWeeklySessionInWeek }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
@@ -137,6 +138,17 @@ describe('ensureWeekDrafted — the cheap gate calls neither the Coach nor the e
     });
     expect(await ensureWeekDrafted(ATHLETE, TODAY)).toBe('no-window');
     expect(callCoach).not.toHaveBeenCalled();
+  });
+});
+
+describe('ensureWeekDrafted — a disabled Coach is an outcome, not a failure (frontend-quality/07)', () => {
+  it('returns coach-disabled before grounding or asking, and logs nothing', async () => {
+    isCoachDisabled.mockReturnValueOnce(true);
+    expect(await ensureWeekDrafted(ATHLETE, TODAY)).toBe('coach-disabled');
+    expect(openAiEmbedder).not.toHaveBeenCalled();
+    expect(callCoach).not.toHaveBeenCalled();
+    expect(recordWeekDraft).not.toHaveBeenCalled();
+    expect(logCoachFailure).not.toHaveBeenCalled();
   });
 });
 

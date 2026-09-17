@@ -152,7 +152,7 @@ concluding anything; the page suite's `settled()` does exactly that.
 
 ### A primitive ships with its snapshot
 
-A component in `src/components/ui` is covered by a `*.visual.tsx` in that folder (its own file, or a case in `primitives.visual.tsx`), and any change to one — or to `globals.css` — is run through `npm run test:visual` before commit; a full-page change through `npm run test:e2e` (needs the dev database and the seed accounts in `.env.local`). Baselines are committed `-win32` PNGs under `__snapshots__/`, regenerated with the matching `:update` script only when the change in appearance was the point. Rationale and the platform ruling: `.scratch/frontend-quality/`.
+A component in `src/components/ui` is covered by a `*.visual.tsx` in that folder (its own file, or a case in `primitives.visual.tsx`), and any change to one — or to `globals.css` — is run through `npm run test:visual` before commit; a full-page change through `npm run test:e2e` (runs on its own Neon branch `test/e2e` — `E2E_DATABASE_URL` in `.env.local`, `neon connection-string test/e2e` — reseeded every run, with the Coach switched off by `COACH_DISABLED=1`; it starts its own dev server on 3001, so stop a hand-started one first). Baselines are committed `-win32` PNGs under `__snapshots__/`, regenerated with the matching `:update` script only when the change in appearance was the point. Rationale and the platform ruling: `.scratch/frontend-quality/`.
 
 ### Definition of done
 
@@ -202,3 +202,13 @@ Using the default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context — one `CONTEXT.md` at the repo root and `docs/adr/`. See `docs/agents/domain.md`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

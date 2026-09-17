@@ -25,7 +25,8 @@ vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
-vi.mock('./coach-client', () => ({ callCoach }));
+const isCoachDisabled = vi.fn(() => false);
+vi.mock('./coach-client', () => ({ callCoach, isCoachDisabled }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logBlockAdjustmentRefused }));
 vi.mock('./coach-repository', () => ({ getActiveLink }));
 
@@ -84,6 +85,14 @@ beforeEach(() => {
 });
 
 describe('ensureBlocksAdjusted — the cheap gate, no Coach call', () => {
+  it('returns coach-disabled without asking or logging when the switch is set (frontend-quality/07)', async () => {
+    isCoachDisabled.mockReturnValueOnce(true);
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('coach-disabled');
+    expect(callCoach).not.toHaveBeenCalled();
+    expect(insertBlockSet).not.toHaveBeenCalled();
+    expect(logCoachFailure).not.toHaveBeenCalled();
+  });
+
   it('does nothing for an athlete with no Target Race', async () => {
     getTargetRace.mockResolvedValue(null);
 
