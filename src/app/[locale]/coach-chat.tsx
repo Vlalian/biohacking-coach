@@ -5,11 +5,10 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from 'reac
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, CornerDownLeft, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
-import { useRouter } from '@/i18n/navigation';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import { sendCoachChatMessageAction } from './chat-actions';
-import { commitWeeklyPlanAction, declineWeeklyPlanAction } from './weekly-actions';
 import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
+import { usePlanDecision } from './use-plan-decision';
 import type { UiMessage } from './weekly-session';
 
 /**
@@ -50,7 +49,6 @@ type Notice =
 export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   const t = useTranslations('CoachChat');
   const tWeekly = useTranslations('WeeklySession');
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
   const { reference, setReference } = useCoachOverlay();
@@ -61,8 +59,10 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   const [messages, setMessages] = useState<UiMessage[]>(initial?.messages ?? []);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
-  const [proposal, setProposal] = useState<UiPlanProposal | null>(initial?.proposal ?? null);
-  const [popupOpen, setPopupOpen] = useState<boolean>(Boolean(initial?.proposal));
+  // The athlete's decision on a proposed week: state and server calls shared
+  // with the Weekly Session (`use-plan-decision.ts`). The chat is never ended.
+  const decision = usePlanDecision({ conversationId, initial: initial?.proposal });
+  const visibleNotice: Notice = notice.kind !== 'none' ? notice : decision.notice;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -102,49 +102,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
       setConversationId(result.conversationId);
       setMessages(result.messages);
       setReference(null);
-      // A fresh proposal supersedes any earlier one and reopens the popup, as
-      // in the Weekly Session; a turn with none leaves a pending one as it was.
-      if (result.proposal) {
-        setProposal(result.proposal);
-        setPopupOpen(true);
-      }
-    });
-  }
-
-  function confirmPlan() {
-    if (!conversationId) return;
-    setNotice({ kind: 'none' });
-    startTransition(async () => {
-      const result = await commitWeeklyPlanAction(conversationId);
-      if (result.ok) {
-        setProposal(null);
-        setPopupOpen(false);
-        setNotice({ kind: 'planned', count: result.sessionCount });
-        router.refresh();
-      } else if (result.reason === 'stale') {
-        // The plan crossed into a new day. Keep it visible so the athlete can
-        // cancel and ask for a fresh one, rather than committing a shrunken week.
-        setPopupOpen(false);
-        setNotice({ kind: 'stale' });
-      } else {
-        setNotice({ kind: 'error' });
-      }
-    });
-  }
-
-  function cancelPlan() {
-    if (!conversationId) return;
-    setNotice({ kind: 'none' });
-    startTransition(async () => {
-      const result = await declineWeeklyPlanAction(conversationId);
-      if (result.ok) {
-        setProposal(null);
-        setPopupOpen(false);
-        // The calendar's "being discussed" pointer has nothing to point at now.
-        router.refresh();
-      } else {
-        setNotice({ kind: 'error' });
-      }
+      decision.receive(result.proposal);
     });
   }
 
@@ -185,28 +143,28 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
         )}
       </div>
 
-      {proposal && !popupOpen && (
+      {decision.proposal && (
         <PlanProposalCard
-          proposal={proposal}
-          pending={pending}
-          popupOpen={false}
-          onReview={() => setPopupOpen(true)}
-          onKeepTalking={() => setPopupOpen(false)}
-          onConfirm={confirmPlan}
-          onCancel={cancelPlan}
+          proposal={decision.proposal}
+          pending={pending || decision.pending}
+          popupOpen={decision.popupOpen}
+          onReview={decision.review}
+          onKeepTalking={decision.keepTalking}
+          onConfirm={decision.confirm}
+          onCancel={decision.cancel}
         />
       )}
 
-      {notice.kind === 'planned' && (
+      {visibleNotice.kind === 'planned' && (
         <div className="shrink-0 px-4 pt-2">
           <div className="flex items-start gap-2 border-l-2 border-signal bg-panel px-3 py-2 text-sm text-foreground">
             <Check className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
-            <span>{tWeekly('planned', { count: notice.count })}</span>
+            <span>{tWeekly('planned', { count: visibleNotice.count })}</span>
           </div>
         </div>
       )}
 
-      {notice.kind !== 'none' && notice.kind !== 'planned' && (
+      {visibleNotice.kind !== 'none' && visibleNotice.kind !== 'planned' && (
         // role="alert" so the failure is announced: the notice appears far from
         // the composer the athlete is looking at, and a screen-reader user
         // otherwise gets no signal that their message did not send.
@@ -214,16 +172,16 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
           <div className="flex items-start gap-2 border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-foreground">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
             <span>
-              {notice.kind === 'consentRequired' ? (
+              {visibleNotice.kind === 'consentRequired' ? (
                 <>
                   {t('consentRequired')}{' '}
                   <Link href="/privacy" className="underline">
                     {t('consentRequiredLink')}
                   </Link>
                 </>
-              ) : notice.kind === 'unsafeContent' ? (
+              ) : visibleNotice.kind === 'unsafeContent' ? (
                 t('unsafeContent')
-              ) : notice.kind === 'stale' ? (
+              ) : visibleNotice.kind === 'stale' ? (
                 tWeekly('proposalStale')
               ) : (
                 t('error')
@@ -276,18 +234,6 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
           </button>
         </form>
       </footer>
-
-      {proposal && popupOpen && (
-        <PlanProposalCard
-          proposal={proposal}
-          pending={pending}
-          popupOpen
-          onReview={() => setPopupOpen(true)}
-          onKeepTalking={() => setPopupOpen(false)}
-          onConfirm={confirmPlan}
-          onCancel={cancelPlan}
-        />
-      )}
     </div>
   );
 }

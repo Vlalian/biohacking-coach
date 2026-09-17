@@ -57,6 +57,14 @@ function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
   return out;
 }
 
+/** Every Date bound anywhere in a drizzle condition tree. */
+function datesIn(node: unknown, seen = new Set<unknown>()): Date[] {
+  if (node instanceof Date) return [node];
+  if (node === null || typeof node !== 'object' || seen.has(node)) return [];
+  seen.add(node);
+  return Object.values(node as Record<string, unknown>).flatMap((v) => datesIn(v, seen));
+}
+
 const ATHLETE = '11111111-1111-4111-8111-111111111111';
 const WEEK = '2026-09-21';
 const SESSION = { date: '2026-09-22', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: 'easy' };
@@ -311,21 +319,43 @@ describe('getCalendarProposalState — what the athlete’s calendar shows (trai
 });
 
 describe('getDiscussedWeek — which week a conversation is about (training-architecture/20)', () => {
-  it('returns the week of the newest discussed handoff for this conversation, scoped in SQL and reading only the payload', async () => {
-    nextRows = [{ payload: { weekStart: '2026-09-21', draftId: 'd', reason: 'discussed', conversationId: 'c1' } }];
+  const HANDED_AT = new Date('2026-09-16T10:00:00Z');
+  const HANDOFF = { payload: { weekStart: '2026-09-21', draftId: 'd', reason: 'discussed', conversationId: 'c1' }, createdAt: HANDED_AT };
+
+  it('returns the week of the newest discussed handoff for this conversation, scoped in SQL, while no decision has followed it', async () => {
+    rowsQueue.push([HANDOFF], []);
     expect(await getDiscussedWeek(ATHLETE, 'c1')).toBe('2026-09-21');
-    const bound = boundValues(whereArgs.at(-1));
-    expect(bound).toContain(ATHLETE);
-    expect(bound).toContain('week_draft_withdrawn');
-    expect(bound).toContain('discussed');
-    expect(bound).toContain('c1');
-    expect(Object.keys(selectArgs.at(-1) as object)).toEqual(['payload']);
+    const handoffWhere = boundValues(whereArgs.at(-2));
+    expect(handoffWhere).toContain(ATHLETE);
+    expect(handoffWhere).toContain('week_draft_withdrawn');
+    expect(handoffWhere).toContain('discussed');
+    expect(handoffWhere).toContain('c1');
+    expect(Object.keys(selectArgs.at(-2) as object)).toEqual(['payload', 'createdAt']);
   });
 
-  it('returns null with no handoff, and null for a row with no readable week', async () => {
-    nextRows = [];
+  // The review's finding: the window outlived the draft it was chosen for. Once
+  // the athlete has decided the handed-over week — confirmed or cancelled — the
+  // conversation is about this week's remainder again, whatever the Coach
+  // proposes next.
+  it('returns null once a written or declined decision for this conversation is newer than the handoff', async () => {
+    rowsQueue.push([HANDOFF], [{ createdAt: new Date('2026-09-16T11:00:00Z') }]);
     expect(await getDiscussedWeek(ATHLETE, 'c1')).toBeNull();
-    nextRows = [{ payload: { reason: 'discussed', conversationId: 'c1' } }];
+    const decisionWhere = boundValues(whereArgs.at(-1));
+    expect(decisionWhere).toContain(ATHLETE);
+    expect(decisionWhere).toContain('week_plan_written');
+    expect(decisionWhere).toContain('week_plan_declined');
+    expect(decisionWhere).toContain('c1');
+    expect(Object.keys(selectArgs.at(-1) as object)).toEqual(['createdAt']);
+    // Bounded to decisions after the handoff, not before it: the Date is the
+    // one bound value `boundValues` cannot flatten, so it is found directly.
+    expect(datesIn(whereArgs.at(-1))).toContainEqual(HANDED_AT);
+  });
+
+  it('returns null with no handoff, reading no decisions, and null for a row with no readable week', async () => {
+    rowsQueue.push([]);
+    expect(await getDiscussedWeek(ATHLETE, 'c1')).toBeNull();
+    expect(whereArgs).toHaveLength(1);
+    rowsQueue.push([{ payload: { reason: 'discussed', conversationId: 'c1' }, createdAt: HANDED_AT }]);
     expect(await getDiscussedWeek(ATHLETE, 'c1')).toBeNull();
   });
 });

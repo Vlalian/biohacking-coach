@@ -35,9 +35,15 @@ Consent fatigue is the failure mode this ADR is designed against.
 - **Authority still tracks authorship.** An Action Proposal against a Head-Coach-authored Prescribed
   Session is refused server-side — the AI explains and holds (ADR 0003). Session authorship therefore
   has to reach the prompt, or the Coach will offer changes it is forbidden to make.
-- **One session at a time.** A whole Week Plan is never a Coach Action; asked for in the overlay, the
+- ~~**One session at a time.** A whole Week Plan is never a Coach Action; asked for in the overlay, the
   Coach hands off to the Weekly Session (one tap, same surface, ADR 0007). Exactly one code path ever
-  writes a week.
+  writes a week.~~ **Reversed 2026-09-16** (ADR 0007's amendment; built as `training-architecture/20`,
+  2026-09-17): with the Weekly Session retired as a behavior, the one conversation proposes a whole
+  week through the same `propose_week_plan` tool and the same card. The bound moved from "one session"
+  to "the window the server chose" — a draft brought in from the calendar → that week; otherwise this
+  week's remainder. Still one code path writes a week (`commitWeeklyPlan`), whichever conversation
+  proposed it. This bullet was wrong from 2026-09-16 until the review of that build found it
+  unamended.
 
 ## Consequences
 

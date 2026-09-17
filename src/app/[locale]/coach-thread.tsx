@@ -106,15 +106,19 @@ export function CoachThread({
   // send — cannot leave a withdrawn plan waiting for the next open
   // (CodeRabbit, PR #69). Adopted during render, as the mode switch already
   // was; the clear is a parent-state set the same way.
-  const [adopted, setAdopted] = useState<CoachChatInitial | null>(null);
-  // Guarded on the id so a seed is adopted once, even if the parent has not
-  // re-rendered with it cleared yet — a render-time set with no guard loops.
-  if (chatSeed && chatSeed.conversationId !== adopted?.conversationId) {
-    setAdopted(chatSeed as CoachChatInitial);
+  const [adopted, setAdopted] = useState<(CoachChatInitial & { seededAt: number }) | null>(null);
+  // Guarded on the handoff time, not the id: Discuss reuses the open chat, so a
+  // second handoff into the same conversation must still be adopted — and a
+  // render-time set with no guard loops.
+  if (chatSeed && chatSeed.seededAt !== adopted?.seededAt) {
+    setAdopted(chatSeed as CoachChatInitial & { seededAt: number });
     setMode('chat');
     setChatSeed(null);
   }
   const chatStart = adopted ?? chatInitial;
+  // The chat remounts on every handoff, so its state is read fresh from the
+  // seed — the proposal included — even when the overlay sat open on that chat.
+  const chatKey = adopted ? `${adopted.conversationId}:${adopted.seededAt}` : (chatInitial?.conversationId ?? 'fresh');
 
   if (mode === 'weekly') {
     return (
@@ -183,7 +187,7 @@ export function CoachThread({
       )}
 
       <div className="min-h-0 flex-1">
-        <CoachChat key={chatStart?.conversationId ?? 'fresh'} initial={chatStart} />
+        <CoachChat key={chatKey} initial={chatStart} />
       </div>
     </div>
   );

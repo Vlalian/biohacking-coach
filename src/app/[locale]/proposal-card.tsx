@@ -98,6 +98,7 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
           conversationId: result.conversationId,
           messages: result.messages,
           proposal: result.proposal,
+          seededAt: Date.now(),
         });
         setOpen(true);
         router.refresh();

@@ -52,7 +52,7 @@ describe('CoachThread — a drafted week seeded into the chat', () => {
     // and closed the overlay must not find the withdrawn week waiting on the
     // next open (CodeRabbit, PR #69).
     const setChatSeed = vi.fn();
-    const html = render({ conversationId: 'c1', messages: [], proposal: { sessions: [{ date: '2026-09-22' }] } }, setChatSeed);
+    const html = render({ conversationId: 'c1', messages: [], proposal: { sessions: [{ date: '2026-09-22' }] }, seededAt: 1 }, setChatSeed);
     expect(html).toContain('data-mode="chat"');
     expect(html).toContain('data-conversation="c1"');
     expect(html).toContain('data-has-proposal="true"');
@@ -61,7 +61,7 @@ describe('CoachThread — a drafted week seeded into the chat', () => {
 
   it('a seed wins over a restored Weekly Session — the athlete tapped Discuss, so that is where they land', () => {
     const html = renderToStaticMarkup(
-      <CoachOverlayContext.Provider value={{ ...base, chatSeed: { conversationId: 'c1', messages: [], proposal: null } }}>
+      <CoachOverlayContext.Provider value={{ ...base, chatSeed: { conversationId: 'c1', messages: [], proposal: null, seededAt: 1 } }}>
         <CoachThread
           chatInitial={null}
           weeklyInitial={{ conversationId: 'w1', weeklySessionNumber: 1, messages: [], proposal: null, ended: false }}

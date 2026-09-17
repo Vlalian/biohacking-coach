@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 const getUnavailableDates = vi.fn();
 const replaceCoachPlanForDateRange = vi.fn();
-const startWeeklySession = vi.fn();
 const recordProposal = vi.fn();
 const getCalendarProposalState = vi.fn();
 const recordWeekDraftDecision = vi.fn();
@@ -15,7 +14,6 @@ const getMessages = vi.fn();
 
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/features/session/session-repository', () => ({ replaceCoachPlanForDateRange }));
-vi.mock('./weekly-session-service', () => ({ startWeeklySession }));
 vi.mock('./plan-proposal-repository', () => ({ recordProposal }));
 vi.mock('./conversation-repository', () => ({ getLatestOpenConversation, createConversation, getMessages }));
 vi.mock('./week-draft-repository', () => ({ getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed }));
@@ -151,7 +149,6 @@ describe('discussWeekDraft — the draft goes to the one conversation (training-
     expect(recordProposal).toHaveBeenCalledWith('athlete_1', 'chat1', SESSIONS);
     expect(recordWeekDraftDiscussed).toHaveBeenCalledWith({ athleteId: 'athlete_1', weekStart: WEEK, draftId: 'd1', conversationId: 'chat1' });
     expect(createConversation).not.toHaveBeenCalled();
-    expect(startWeeklySession).not.toHaveBeenCalled();
     expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
   });
 
@@ -178,6 +175,9 @@ describe('the one writer', () => {
     const here = fileURLToPath(new URL('.', import.meta.url));
     const read = (f: string) => readFileSync(`${here}/${f}`, 'utf8');
     expect(read('week-draft-decision-service.ts')).toMatch(/replaceCoachPlanForDateRange/);
+    // And it never calls the Coach: Discuss hands the draft over, the next
+    // turn is the athlete's (training-architecture/20).
+    expect(read('week-draft-decision-service.ts')).not.toMatch(/weekly-session-service|callCoach|coach-client/);
     for (const f of ['week-draft.ts', 'week-draft-repository.ts', 'week-draft-service.ts', 'head-coach-week-service.ts']) {
       expect(read(f), f).not.toMatch(/replaceCoachPlanForDateRange/);
     }

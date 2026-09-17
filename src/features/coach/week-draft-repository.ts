@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import { pendingWeekDraft, visibleTo, WEEK_DRAFT_EVENT, type SkeletonDay, type WeekDraft } from './week-draft';
 import { getPendingProposal } from './plan-proposal-repository';
+import { PLAN_EVENT } from './plan-proposal';
 import { addDays, weekStartOf } from '@/lib/date';
 import type { ProposedSession } from './weekly-session';
 
@@ -241,13 +242,22 @@ async function latestDiscussedHandoff(
 
 /**
  * The week a conversation is about, or null (`training-architecture/20`): the
- * `weekStart` of the newest draft handed to *this* conversation. The
- * conversation-keyed twin of {@link latestDiscussedHandoff}. Whether that week
- * is still current is `conversationWindow`'s question, not this read's.
+ * `weekStart` of the newest draft handed to *this* conversation, **while the
+ * athlete has not yet decided it**. The conversation-keyed twin of
+ * {@link latestDiscussedHandoff}.
+ *
+ * A handoff closes on the athlete's first decision after it — the week written
+ * or the proposal cancelled on the card — not on the proposal's pendingness:
+ * the Coach re-proposing the same week keeps the handoff open (nothing was
+ * decided), and a proposal the Coach makes *after* a cancel is about this
+ * week's remainder again, so the handoff must already be closed by then. The
+ * review of this slice found the window outliving the draft it was chosen for.
+ * Whether an open handoff's week is still current is `conversationWindow`'s
+ * question, not this read's.
  */
 export async function getDiscussedWeek(athleteId: string, conversationId: string): Promise<string | null> {
   const [row] = await getDb()
-    .select({ payload: events.payload })
+    .select({ payload: events.payload, createdAt: events.createdAt })
     .from(events)
     .where(
       and(
@@ -260,7 +270,21 @@ export async function getDiscussedWeek(athleteId: string, conversationId: string
     .orderBy(desc(events.createdAt))
     .limit(1);
   const payload = (row?.payload ?? null) as { weekStart?: unknown } | null;
-  return typeof payload?.weekStart === 'string' ? payload.weekStart : null;
+  if (typeof payload?.weekStart !== 'string') return null;
+
+  const [decided] = await getDb()
+    .select({ createdAt: events.createdAt })
+    .from(events)
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        inArray(events.type, [PLAN_EVENT.written, PLAN_EVENT.declined]),
+        sql`${events.payload} ->> 'conversationId' = ${conversationId}`,
+        gt(events.createdAt, row.createdAt),
+      ),
+    )
+    .limit(1);
+  return decided ? null : payload.weekStart;
 }
 
 async function discussingState(athleteId: string, weeks: string[]): Promise<CalendarProposalState | null> {

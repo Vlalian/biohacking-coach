@@ -238,12 +238,22 @@ export interface CoachChatState {
  */
 export async function getOpenCoachChat(athleteId: string): Promise<CoachChatState | null> {
   const open = await getLatestOpenConversation(athleteId, 'coach_chat');
-  if (!open) return null;
+  return open ? chatStateOf(athleteId, open.id) : null;
+}
+
+/**
+ * A known Coach Chat, as the overlay restores it: the transcript and the week
+ * awaiting a decision, read together. The app shell already knows which chat
+ * is open from its one cross-kind query, so it calls this rather than
+ * {@link getOpenCoachChat}; both read the same shape from one place (the
+ * review of `training-architecture/20` found it written twice).
+ */
+export async function chatStateOf(athleteId: string, conversationId: string): Promise<CoachChatState> {
   const [messages, pending] = await Promise.all([
-    getMessages(open.id),
-    getPendingProposal(athleteId, open.id),
+    getMessages(conversationId),
+    getPendingProposal(athleteId, conversationId),
   ]);
-  return { conversationId: open.id, messages, proposal: pending ? { sessions: pending.sessions } : null };
+  return { conversationId, messages, proposal: pending ? { sessions: pending.sessions } : null };
 }
 
 export type SendChatResult =

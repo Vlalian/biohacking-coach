@@ -5,12 +5,11 @@ import type { Citation } from '@/lib/citation';
 import { CoachMessageFooter } from './coach-message-footer';
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { useRouter, Link } from '@/i18n/navigation';
+import { Link } from '@/i18n/navigation';
 import { AlertTriangle, Check, ChevronLeft, CornerDownLeft, Loader2 } from 'lucide-react';
 import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
+import { usePlanDecision } from './use-plan-decision';
 import {
-  commitWeeklyPlanAction,
-  declineWeeklyPlanAction,
   sendWeeklyMessageAction,
   saveCheckInAction,
   startWeeklySessionAction,
@@ -149,7 +148,6 @@ export function WeeklySession({
   onExit?: () => void;
 }) {
   const t = useTranslations('WeeklySession');
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -163,8 +161,16 @@ export function WeeklySession({
   // both move past it - a resumed session is already past it too.
   const [checkInDone, setCheckInDone] = useState<boolean>(Boolean(initial?.conversationId));
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
-  const [proposal, setProposal] = useState<UiPlanProposal | null>(initial?.proposal ?? null);
-  const [popupOpen, setPopupOpen] = useState<boolean>(Boolean(initial?.proposal));
+  // The athlete's decision on a proposed week: state and server calls shared
+  // with Coach Chat (`use-plan-decision.ts`). The ritual is over once the week
+  // is agreed — the thread does not stay open.
+  const decision = usePlanDecision({
+    conversationId,
+    initial: initial?.proposal,
+    onCommitted: () => setEnded(true),
+  });
+  // The host's own notice wins; a decision's outcome shows when the host has none.
+  const visibleNotice: Notice = notice.kind !== 'none' ? notice : decision.notice;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -178,8 +184,7 @@ export function WeeklySession({
         setConversationId(result.conversationId);
         setMessages(result.messages);
         setEnded(false);
-        setProposal(null);
-        setPopupOpen(false);
+        decision.reset();
       } else {
         setNotice(failureNotice(result.reason));
       }
@@ -196,49 +201,9 @@ export function WeeklySession({
       if (result.ok) {
         setMessages(result.messages);
         setDraft('');
-        // A fresh proposal supersedes any earlier one and reopens the popup.
-        if (result.proposal) {
-          setProposal(result.proposal);
-          setPopupOpen(true);
-        }
+        decision.receive(result.proposal);
       } else {
         setNotice(failureNotice(result.reason));
-      }
-    });
-  }
-
-  function confirmPlan() {
-    if (!conversationId) return;
-    setNotice({ kind: 'none' });
-    startTransition(async () => {
-      const result = await commitWeeklyPlanAction(conversationId);
-      if (result.ok) {
-        setProposal(null);
-        setPopupOpen(false);
-        setEnded(true);
-        setNotice({ kind: 'planned', count: result.sessionCount });
-        router.refresh();
-      } else if (!result.ok && result.reason === 'stale') {
-        // The plan crossed into a new day. Keep it visible so the athlete can
-        // cancel and ask for a fresh one, rather than committing a shrunken week.
-        setPopupOpen(false);
-        setNotice({ kind: 'stale' });
-      } else {
-        setNotice({ kind: 'error' });
-      }
-    });
-  }
-
-  function cancelPlan() {
-    if (!conversationId) return;
-    setNotice({ kind: 'none' });
-    startTransition(async () => {
-      const result = await declineWeeklyPlanAction(conversationId);
-      if (result.ok) {
-        setProposal(null);
-        setPopupOpen(false);
-      } else {
-        setNotice({ kind: 'error' });
       }
     });
   }
@@ -345,28 +310,28 @@ export function WeeklySession({
 
       {/* The Action Proposal card: the popup, or the persistent bar it drops to
           when dismissed — a pending plan can always be reviewed, saved or
-          cancelled. Rendered here for the bar's place in the column; the popup
-          overlays the whole component. */}
-      {proposal && !popupOpen && (
+          cancelled. One mount: the bar takes this place in the column and the
+          popup overlays the whole component from the same spot. */}
+      {decision.proposal && (
         <PlanProposalCard
-          proposal={proposal}
-          pending={pending}
-          popupOpen={false}
-          onReview={() => setPopupOpen(true)}
-          onKeepTalking={() => setPopupOpen(false)}
-          onConfirm={confirmPlan}
-          onCancel={cancelPlan}
+          proposal={decision.proposal}
+          pending={pending || decision.pending}
+          popupOpen={decision.popupOpen}
+          onReview={decision.review}
+          onKeepTalking={decision.keepTalking}
+          onConfirm={decision.confirm}
+          onCancel={decision.cancel}
         />
       )}
 
-      {notice.kind !== 'none' && (
+      {visibleNotice.kind !== 'none' && (
         <div className="shrink-0 px-4 pt-2">
-          {notice.kind === 'planned' && (
+          {visibleNotice.kind === 'planned' && (
             <Banner tone="signal" icon={Check}>
-              {t('planned', { count: notice.count })}
+              {t('planned', { count: visibleNotice.count })}
             </Banner>
           )}
-          {notice.kind === 'consentRequired' && (
+          {visibleNotice.kind === 'consentRequired' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('consentRequired')}{' '}
               <Link href="/privacy" className="underline">
@@ -374,22 +339,22 @@ export function WeeklySession({
               </Link>
             </Banner>
           )}
-          {notice.kind === 'stale' && (
+          {visibleNotice.kind === 'stale' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('proposalStale')}
             </Banner>
           )}
-          {notice.kind === 'coachUnavailable' && (
+          {visibleNotice.kind === 'coachUnavailable' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('coachUnavailable')}
             </Banner>
           )}
-          {notice.kind === 'unsafeContent' && (
+          {visibleNotice.kind === 'unsafeContent' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('unsafeContent')}
             </Banner>
           )}
-          {notice.kind === 'error' && (
+          {visibleNotice.kind === 'error' && (
             <Banner tone="destructive" icon={AlertTriangle}>
               {t('error')}
             </Banner>
@@ -434,17 +399,6 @@ export function WeeklySession({
         </footer>
       )}
 
-      {proposal && popupOpen && (
-        <PlanProposalCard
-          proposal={proposal}
-          pending={pending}
-          popupOpen
-          onReview={() => setPopupOpen(true)}
-          onKeepTalking={() => setPopupOpen(false)}
-          onConfirm={confirmPlan}
-          onCancel={cancelPlan}
-        />
-      )}
     </div>
   );
 }

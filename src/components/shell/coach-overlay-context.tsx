@@ -56,6 +56,13 @@ export type ChatSeed = {
   conversationId: string;
   messages: { id: string; role: string; content: string; rating?: unknown; citations?: unknown }[];
   proposal: { sessions: unknown[] } | null;
+  /**
+   * When the seed was handed over. Discuss reuses the athlete's open chat, so
+   * the conversation id alone no longer tells a new handoff from the one the
+   * thread already adopted — an overlay left open on that chat would keep its
+   * state and never show the card (the review of `training-architecture/20`).
+   */
+  seededAt: number;
 };
 
 /** Throws outside ShellChrome on purpose: every View renders inside it. */
