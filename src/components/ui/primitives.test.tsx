@@ -84,7 +84,13 @@ describe('Thinking', () => {
   });
 });
 
-/** Walks the element tree ErrorFallback returns and finds its Button. */
+/**
+ * Walks the element tree ErrorFallback returns and finds its Button.
+ *
+ * Coupled to the render tree on purpose: Vitest runs in `environment: 'node'`
+ * here, so there is no DOM to click. If a DOM test environment is ever
+ * adopted, replace this with a render-and-click through the public surface.
+ */
 function findButton(element: React.ReactElement): React.ReactElement<{ onClick: () => void }> {
   const rendered = (element.type as (p: unknown) => React.ReactElement)(element.props);
   const children = collectChildren(rendered);
