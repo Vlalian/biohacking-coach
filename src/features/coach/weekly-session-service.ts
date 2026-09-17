@@ -165,17 +165,12 @@ async function renderSystem(
   );
   return {
     system: renderWeeklyPrompt(stagedProposal ? { ...ctx, stagedProposal } : ctx),
-    // What the grounding folds into its query (`knowledge-oracle/05`).
-    phase: checkIn.phase ?? null,
-    experienceLevel: checkIn.experienceLevel ?? null,
   };
 }
 
-/** The rendered prompt plus the two facts the grounding's query wants. */
+/** The rendered prompt. */
 interface RenderedSystem {
   system: string;
-  phase: string | null;
-  experienceLevel: string | null;
 }
 
 /**
@@ -233,7 +228,7 @@ export async function startWeeklySession(
   try {
     // Prompt rendering inside the boundary with the call — it asserts on free
     // text and throws, same as in `continueWeeklySession`.
-    const { system, phase, experienceLevel } = await renderSystem(
+    const { system } = await renderSystem(
       athlete,
       weeklySessionNumber,
       today,
@@ -246,8 +241,6 @@ export async function startWeeklySession(
       athleteId: athlete.id,
       surface: 'weekly_session',
       conversationId: null,
-      phase,
-      experienceLevel,
     });
     reply = await callCoach({
       system,
@@ -377,7 +370,7 @@ async function askCoach(params: {
     // A week brought in from the calendar (`/18`) is this conversation's
     // pending proposal; the Coach is told so on every turn, not only the first.
     const staged = await getPendingProposal(athlete.id, conversationId);
-    const { system, phase, experienceLevel } = await renderSystem(
+    const { system } = await renderSystem(
       athlete,
       weeklySessionNumber ?? 1,
       today,
@@ -389,8 +382,6 @@ async function askCoach(params: {
       athleteId: athlete.id,
       surface: 'weekly_session',
       conversationId,
-      phase,
-      experienceLevel,
     });
     const reply = await callCoach({
       system,

@@ -23,35 +23,26 @@ import { assertNoDirectIdentifier } from '@/lib/identifiers';
 export interface OracleQuery {
   /** What the athlete (or a prompt builder acting for them) wants to know. */
   question: string;
-  /** Training Phase, in the Coach's own vocabulary — `base`, `build`, `peak`. */
-  phase?: string;
-  /** Experience level, as the Athlete Profile records it. */
-  experienceLevel?: string;
 }
 
 /**
- * Renders an {@link OracleQuery} into the text that gets embedded.
+ * Renders an {@link OracleQuery} into the text that gets embedded: the
+ * question, whitespace-normalised, and nothing else.
  *
- * **Prose, not the `phase=build xp=veteran` tag syntax `stateBlock` uses for the
- * Coach prompt.** The two have opposite jobs: a prompt tells a model what is
- * true and terseness is a virtue, while this string is compared by cosine
- * distance against passages of published training science. Tag syntax appears
- * nowhere in a journal article, so it embeds as noise and pushes the vector away
- * from the very passages it is meant to find. The concepts are the same ones
- * `stateBlock` names; only the rendering differs, and it differs on purpose.
- *
- * Absent context is omitted rather than defaulted. `stateBlock` can afford
- * `xp=intermediate` as a fallback because a prompt with a wrong-but-plausible
- * value still reads sensibly; a query embedded with an invented experience level
- * is a vector aimed at the wrong place, and returns confidently wrong passages.
+ * **Why nothing else (2026-09-17).** Until the first SAFE-3 runs this prefixed
+ * the athlete's Training Phase and experience level as prose, on the theory
+ * that a taper question from a peaking athlete should pull taper passages.
+ * Measured against the corpus, the prefix made *every* question read as
+ * triathlon-training prose: 20 of 20 outside questions cleared the 0.43 floor
+ * (13 of 20 bare), carbon-plated shoes scored 0.43 against an injury paper,
+ * and the floor filtered nothing — so an athlete asking about swim technique
+ * got "no grounding for this" above a reference list. Phase and experience
+ * still reach the Coach, through the system prompt, where a wrong value reads
+ * as a wrong sentence instead of a vector aimed at the wrong passages. If
+ * phase-aware retrieval is wanted later, it belongs in a reranker over the
+ * candidates (post-testing §14), not in the query.
  */
 export function buildOracleQuery(input: OracleQuery): string {
   assertNoDirectIdentifier(input);
-
-  const context = [
-    input.phase ? `Training phase: ${input.phase}.` : null,
-    input.experienceLevel ? `Athlete experience level: ${input.experienceLevel}.` : null,
-  ].filter((part): part is string => part !== null);
-
-  return [...context, input.question].join(' ');
+  return input.question.replace(/\s+/g, ' ').trim();
 }

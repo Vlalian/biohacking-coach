@@ -359,9 +359,11 @@ async function ground(athleteId: string, facts: GroundingFacts): Promise<Retriev
     return await retrievePassages({
       embedder: openAiEmbedder(),
       search: knowledgeSearch(),
-      // Rendered to the embedded string by `retrievePassages` itself, which
-      // is also where the identifier assertion on it lives.
-      query: { question, phase: facts.phase, experienceLevel: facts.experienceLevel },
+      // The question already names the distance and the block where they
+      // matter (`groundingQuestion`); nothing is prefixed onto it. Rendered to
+      // the embedded string by `retrievePassages`, where the identifier
+      // assertion on it lives.
+      query: { question },
     });
   } catch (error) {
     logCoachFailure({ surface: 'week_draft', athleteId, conversationId: null, error });

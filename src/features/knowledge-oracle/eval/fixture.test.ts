@@ -16,7 +16,7 @@ describe('the eval athlete', () => {
     expect(evalSystemPrompt()).toContain('GROUNDING');
   });
 
-  it('carries a phase and an experience level, which fold into every lookup query', () => {
+  it('carries a phase and an experience level, which reach the Coach through the prompt', () => {
     expect(EVAL_ATHLETE.phase).toBeTruthy();
     expect(EVAL_ATHLETE.experienceLevel).toBeTruthy();
   });

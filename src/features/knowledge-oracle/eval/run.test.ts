@@ -61,17 +61,9 @@ describe('runRetrieval', () => {
     expect(a1.expected).toEqual(['taper-2023']);
   });
 
-  it('embeds the same query the Coach would issue — phase and experience folded in, as production does', async () => {
-    await runRetrieval(SET.slice(0, 1), {
-      embedder: { embed },
-      search: { searchChunks },
-      phase: 'Build',
-      experienceLevel: 'intermediate',
-    });
-    const [embedded] = embed.mock.calls[0][0];
-    expect(embedded).toContain('Training phase: Build.');
-    expect(embedded).toContain('Athlete experience level: intermediate.');
-    expect(embedded).toContain('how to taper?');
+  it('embeds the question alone, as the Coach\'s lookup does', async () => {
+    await runRetrieval(SET.slice(0, 1), { embedder: { embed }, search: { searchChunks } });
+    expect(embed.mock.calls[0][0]).toEqual(['how to taper?']);
   });
 
   it('keeps a passage that sits exactly on the floor, and defaults to the production floor and top-k', async () => {
@@ -120,8 +112,6 @@ describe('runGeneration', () => {
       search: { searchChunks },
       callCoach,
       system: 'SYSTEM',
-      phase: 'Build',
-      experienceLevel: 'intermediate',
     });
     expect(callCoach).toHaveBeenCalledTimes(2);
     expect(callCoach.mock.calls[0][0]).toMatchObject({
