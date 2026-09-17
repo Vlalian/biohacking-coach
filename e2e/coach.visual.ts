@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { settled, snapshot } from './settled';
+import { settled, shellHeader, snapshot } from './settled';
 
 /**
  * The Head Coach's pages, signed in as the seed coach. The athlete pages are
@@ -20,6 +20,11 @@ test('the session is a coach with a roster', async ({ page }) => {
   await page.goto('/en/coach');
   await settled(page);
   await expect(page.locator('a[href*="/coach/athlete/"]').first()).toBeVisible();
+  // Coach Riley holds a coach row and no athlete row (scripts/seed.ts). The
+  // header proves it is her session and not the dual-role athlete's, whose
+  // own coach row would make the Roster pass this test too.
+  await expect(shellHeader(page)).toContainText('Coach Riley', { ignoreCase: true });
+  await expect(shellHeader(page)).not.toContainText('Mads', { ignoreCase: true });
 });
 
 test('roster', async ({ page }) => {

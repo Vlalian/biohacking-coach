@@ -27,6 +27,15 @@ for (const theme of themes) {
   test.describe(theme, () => {
     const frame = `${theme} inline-block w-[480px] bg-background p-4 text-foreground`;
 
+    test('skeleton: default', async ({ mount }) => {
+      const component = await mount(
+        <div className={frame}>
+          <Skeleton className="h-4 w-48" />
+        </div>,
+      );
+      await expect(component).toHaveScreenshot();
+    });
+
     test('skeleton: session card', async ({ mount }) => {
       const component = await mount(
         <div className={frame}>

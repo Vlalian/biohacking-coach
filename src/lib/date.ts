@@ -15,9 +15,11 @@ export function dateKey(d: Date): string {
 /**
  * Today's day key, the one place the app asks what day it is.
  *
- * Every server-side "today" — the calendar's highlighted cell, the Move rules,
- * the Weekly Session's week, the Coach's planning window — routes through here
- * so that a test can pin the date. `COACH_TODAY=YYYY-MM-DD` does that, outside
+ * Every page and server action that needs "today" — the calendar's highlighted
+ * cell, the Move rules, the Weekly Session's week — routes through here so
+ * that a test can pin the date. (The prompt builders in
+ * `features/coach/prompts.ts` keep a UTC default parameter for callers that
+ * pass nothing; every production caller passes this value in.) `COACH_TODAY=YYYY-MM-DD` does that, outside
  * production only: the full-page snapshots (frontend-quality/05) would
  * otherwise change every midnight, and the calendar would have to stay
  * masked. In production the variable is ignored even if set, so a stray

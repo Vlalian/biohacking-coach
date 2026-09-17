@@ -2,8 +2,9 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * A page is ready to photograph when its loading states have left and nothing
- * is still in flight. The skeletons all carry `animate-pulse` (the four
- * hand-rolled ones today, the Skeleton primitive after frontend-quality/02).
+ * is still in flight. Everything transient pulses: the Thinking dots while a
+ * reply is pending, a Skeleton while data loads, the calendar's refused-drop
+ * bounce. `animate-pulse` is the one class they share.
  */
 export async function settled(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle');
@@ -14,7 +15,6 @@ export async function settled(page: Page): Promise<void> {
   // server's mood (compiling, errors) and would fail every baseline.
   await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
 }
-
 
 /**
  * The whole page, top to bottom. The app shell is a fixed-height frame whose
@@ -30,4 +30,12 @@ export async function snapshot(page: Page, mask: Locator[] = []): Promise<void> 
   const viewport = page.viewportSize() ?? { width: 1280, height: 800 };
   await page.setViewportSize({ width: viewport.width, height: Math.max(viewport.height, Math.ceil(height)) });
   await expect(page).toHaveScreenshot({ fullPage: true, mask });
+}
+
+/**
+ * The app shell's header bar, which names who is signed in. Pages carry their
+ * own `<header>` too (the calendar's title row), so "first" is the shell's.
+ */
+export function shellHeader(page: Page): Locator {
+  return page.locator('header').first();
 }
