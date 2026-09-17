@@ -14,40 +14,65 @@ describe('startGenerationPoll', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('calls refresh every interval until the limit, then onGiveUp once and nothing more', () => {
-    const refresh = vi.fn();
+  // The tick asks whether the result has landed; false means keep waiting.
+  const waiting = () => vi.fn(async () => false);
+
+  it('asks every interval until the limit, then onGiveUp once and nothing more', async () => {
+    const tick = waiting();
     const onGiveUp = vi.fn();
-    startGenerationPoll(refresh, onGiveUp, { intervalMs: 10_000, limitMs: 30_000 });
-    vi.advanceTimersByTime(9_999);
-    expect(refresh).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    startGenerationPoll(tick, onGiveUp, { intervalMs: 10_000, limitMs: 30_000 });
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(tick).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(tick).toHaveBeenCalledTimes(1);
     expect(onGiveUp).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(20_000);
-    expect(refresh).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(tick).toHaveBeenCalledTimes(3);
     expect(onGiveUp).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(60_000);
-    expect(refresh).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(tick).toHaveBeenCalledTimes(3);
     expect(onGiveUp).toHaveBeenCalledTimes(1);
   });
 
-  it('the returned stop cancels the next tick, so an unmounted card refreshes nothing', () => {
-    const refresh = vi.fn();
+  it('a tick that reports the result landed ends the poll: no further tick, no give-up', async () => {
+    // The review of PR-batch 24+29 found the poll re-triggering the very
+    // generation it waited on; the tick now reads and only the landing refreshes.
+    const tick = vi.fn(async () => tick.mock.calls.length >= 2);
     const onGiveUp = vi.fn();
-    const stop = startGenerationPoll(refresh, onGiveUp, { intervalMs: 10_000, limitMs: 30_000 });
-    vi.advanceTimersByTime(10_000);
+    startGenerationPoll(tick, onGiveUp, { intervalMs: 10_000, limitMs: 120_000 });
+    await vi.advanceTimersByTimeAsync(200_000);
+    expect(tick).toHaveBeenCalledTimes(2);
+    expect(onGiveUp).not.toHaveBeenCalled();
+  });
+
+  it('the returned stop cancels the next tick, so an unmounted card asks nothing more', async () => {
+    const tick = waiting();
+    const onGiveUp = vi.fn();
+    const stop = startGenerationPoll(tick, onGiveUp, { intervalMs: 10_000, limitMs: 30_000 });
+    await vi.advanceTimersByTimeAsync(10_000);
     stop();
-    vi.advanceTimersByTime(60_000);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(tick).toHaveBeenCalledTimes(1);
     expect(onGiveUp).not.toHaveBeenCalled();
   });
 
-  it('the last tick inside the limit still refreshes before giving up', () => {
-    const refresh = vi.fn();
+  it('a stop during a slow tick lets that read finish and schedules nothing after it', async () => {
+    const tick = vi.fn(() => new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5_000)));
     const onGiveUp = vi.fn();
-    startGenerationPoll(refresh, onGiveUp, { intervalMs: 10_000, limitMs: 10_000 });
-    vi.advanceTimersByTime(10_000);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    const stop = startGenerationPoll(tick, onGiveUp, { intervalMs: 10_000, limitMs: 30_000 });
+    await vi.advanceTimersByTimeAsync(11_000);
+    stop();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(tick).toHaveBeenCalledTimes(1);
+    expect(onGiveUp).not.toHaveBeenCalled();
+  });
+
+  it('the last tick inside the limit is still asked before giving up', async () => {
+    const tick = waiting();
+    const onGiveUp = vi.fn();
+    startGenerationPoll(tick, onGiveUp, { intervalMs: 10_000, limitMs: 10_000 });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(tick).toHaveBeenCalledTimes(1);
     expect(onGiveUp).toHaveBeenCalledTimes(1);
   });
 });

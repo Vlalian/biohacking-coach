@@ -2,6 +2,7 @@ import { addDays, weekStartOf } from '@/lib/date';
 import type { Citation } from '@/lib/citation';
 import { excludedBetween, hasAPlannableDay, planningWindow, type PlanningWindow } from './planning-window';
 import type { ProposedSession } from './weekly-session';
+import { PLAN_EVENT } from './plan-proposal';
 import { effectiveWeeklySessionDay, WEEKDAYS } from './weekly-offer';
 
 /**
@@ -29,10 +30,6 @@ export const WEEK_DRAFT_EVENT = {
   approved: 'week_draft_approved',
   withdrawn: 'week_draft_withdrawn',
 } as const;
-
-/** The two events that are the athlete's answer to a draft, by name. */
-const WRITTEN = 'week_plan_written';
-const DECLINED = 'week_plan_declined';
 
 /** A drafted week, as staged — or as a Head Coach approved it (`/17`). */
 export interface WeekDraft {
@@ -153,8 +150,8 @@ function nextHistory(history: WeekDraftHistory, event: WeekDraftEvent, weekStart
 
 /** The outcome a resolving event names for the pending draft before it, or null for an unrelated event. */
 function resolutionOf(event: WeekDraftEvent): WeekDraftHistory | null {
-  if (event.type === WRITTEN) return { kind: 'written' };
-  if (event.type === DECLINED) return { kind: 'declined' };
+  if (event.type === PLAN_EVENT.written) return { kind: 'written' };
+  if (event.type === PLAN_EVENT.declined) return { kind: 'declined' };
   return event.type === WEEK_DRAFT_EVENT.withdrawn ? withdrawnOutcome(event) : null;
 }
 

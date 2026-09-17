@@ -2,6 +2,7 @@ import { mergeAthleteProfile, getAthleteById } from '@/features/athlete/athlete-
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import { getActiveLink } from './coach-repository';
+import { draftLanded } from './week-draft-service';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { validateProposedPlan, type ProposedSession } from './weekly-session';
 import { weekWindow } from './week-draft';
@@ -167,4 +168,15 @@ function sameSessions(a: ProposedSession[], b: ProposedSession[]): boolean {
       x.note === y.note
     );
   });
+}
+
+/**
+ * The coach page's poll read (`training-architecture/29`): whether the
+ * previewed week's draft has landed, behind the same link gate as every
+ * Head Coach act — an unlinked coach is told "not yet" and nothing is read.
+ */
+export async function coachDraftLanded(headCoachId: string, athleteId: string, weekStart: string): Promise<boolean> {
+  const link = await getActiveLink(headCoachId, athleteId);
+  if (!link) return false;
+  return draftLanded(athleteId, weekStart);
 }

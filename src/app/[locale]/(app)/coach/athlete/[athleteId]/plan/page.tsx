@@ -4,7 +4,7 @@ import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
 import { WeeklyDayField } from '../weekly-day-field';
 import { WeekDraftReview } from '../week-draft-review';
-import { DraftingCard } from '@/components/ui/drafting-card';
+import { DraftingCard } from '@/app/[locale]/drafting-card';
 
 // Per-request: depends on the signed-in coach and the requested athlete.
 export const dynamic = 'force-dynamic';
@@ -51,7 +51,9 @@ export default async function CoachAthletePlanPage({
       {/* The same slot while that draft is still being written by the shell's
           after(): says so, and re-reads until the review panel above has a
           draft to show (training-architecture/29). */}
-      {view.draftInFlight && <DraftingCard weekStart={view.draftInFlight.weekStart} />}
+      {view.draftInFlight && (
+        <DraftingCard weekStart={view.draftInFlight.weekStart} waiter={{ side: 'coach', athleteId }} />
+      )}
       <WeeklyDayField athleteId={athleteId} value={view.weeklySessionDay} />
       <CoachCalendar
         athleteId={athleteId}

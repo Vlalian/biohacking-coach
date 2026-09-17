@@ -13,8 +13,10 @@ vi.mock('@/db', () => ({ getDb: () => ({ insert: () => ({ values: insertValues }
 vi.mock('./coach-repository', () => ({ getActiveLink }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById, mergeAthleteProfile }));
 vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft, recordWeekDraftApproval }));
+const draftLanded = vi.fn(async () => true);
+vi.mock('./week-draft-service', () => ({ draftLanded }));
 
-const { setWeeklySessionDayAsHeadCoach, approveWeekDraft } = await import('./head-coach-week-service');
+const { setWeeklySessionDayAsHeadCoach, approveWeekDraft, coachDraftLanded } = await import('./head-coach-week-service');
 
 const COACH = 'coach_1';
 const ATHLETE = 'athlete_1';
@@ -256,5 +258,16 @@ describe('approval never reaches the calendar', () => {
     const source = readFileSync(fileURLToPath(new URL('./head-coach-week-service.ts', import.meta.url)), 'utf8');
     expect(source).not.toMatch(/replaceCoachPlanForDateRange/);
     expect(source).not.toMatch(/\bsessions\b[^\n]*from '@\/db\/schema'/);
+  });
+});
+
+describe('coachDraftLanded — the coach page’s poll read (training-architecture/29, review)', () => {
+  it('answers only behind an active link; an unlinked coach learns nothing and reads nothing', async () => {
+    getActiveLink.mockResolvedValue(null);
+    expect(await coachDraftLanded('hc1', 'a1', '2026-09-21')).toBe(false);
+    expect(draftLanded).not.toHaveBeenCalled();
+    getActiveLink.mockResolvedValue({ id: 'l1' });
+    expect(await coachDraftLanded('hc1', 'a1', '2026-09-21')).toBe(true);
+    expect(draftLanded).toHaveBeenCalledWith('a1', '2026-09-21');
   });
 });

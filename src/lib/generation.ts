@@ -19,30 +19,41 @@ export const GENERATION_POLL_MS = 10_000;
 export const GENERATION_POLL_LIMIT_MS = 120_000;
 
 /**
- * Re-reads on a fixed interval until the limit, then gives up once. `refresh`
- * fires at every multiple of `intervalMs` up to and including `limitMs`;
- * `onGiveUp` follows the last one. The returned function stops the poll — the
- * card's unmount, when the draft has landed and the parent renders it instead.
+ * Asks on a fixed interval whether the result has landed, until it has or the
+ * limit passes. `tick` resolves true when it has — the poll ends there, with
+ * no give-up; false keeps it waiting. `tick` runs at every multiple of
+ * `intervalMs` up to and including `limitMs`, and `onGiveUp` follows the last
+ * false. The returned function stops the poll — the card's unmount.
+ *
+ * The tick is a *read*, never a page refresh: a refresh re-renders the app
+ * shell, whose `after()` would start the very generation being waited on
+ * again (review of the 24+29 batch, 2026-09-17). The caller refreshes once,
+ * on the landing.
  *
  * Framework-free on purpose: the one timer in the app, testable with fake
  * timers and no component harness.
  */
 export function startGenerationPoll(
-  refresh: () => void,
+  tick: () => Promise<boolean>,
   onGiveUp: () => void,
   { intervalMs, limitMs }: { intervalMs: number; limitMs: number },
 ): () => void {
   let elapsed = 0;
+  let stopped = false;
   let handle: ReturnType<typeof setTimeout> | undefined;
-  const tick = () => {
+  const ask = async () => {
     elapsed += intervalMs;
-    refresh();
+    const landed = await tick();
+    if (landed || stopped) return;
     if (elapsed >= limitMs) {
       onGiveUp();
       return;
     }
-    handle = setTimeout(tick, intervalMs);
+    handle = setTimeout(ask, intervalMs);
   };
-  handle = setTimeout(tick, intervalMs);
-  return () => clearTimeout(handle);
+  handle = setTimeout(ask, intervalMs);
+  return () => {
+    stopped = true;
+    clearTimeout(handle);
+  };
 }

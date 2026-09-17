@@ -10,7 +10,7 @@ import {
   type DeclineResult,
   type DiscussResult,
 } from '@/features/coach/week-draft-decision-service';
-import { redraftWeek, type DraftOutcome, type RedraftRefusal } from '@/features/coach/week-draft-service';
+import { draftLanded, redraftWeek, type DraftOutcome, type RedraftRefusal } from '@/features/coach/week-draft-service';
 import { today } from '@/lib/date';
 import { resolveAthleteWithLanguage as currentAthlete, type AuthFailure } from './current-actor';
 
@@ -77,4 +77,16 @@ export async function redraftWeekAction(weekStart: string): Promise<RedraftResul
   // The new draft's card belongs in the calendar now.
   revalidatePath('/', 'layout');
   return { ok: true, outcome };
+}
+
+/**
+ * The waiting card's read (`training-architecture/29`): has the week's draft
+ * landed? A read, never a refresh — the card refreshes the page once, when
+ * this says yes. A signed-out caller is told "not yet", not refused: the card
+ * has nothing to do with the answer but wait.
+ */
+export async function draftLandedAction(weekStart: string): Promise<boolean> {
+  const resolved = await currentAthlete();
+  if (!resolved.ok) return false;
+  return draftLanded(resolved.athlete.id, weekStart);
 }

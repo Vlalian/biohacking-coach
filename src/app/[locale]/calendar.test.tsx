@@ -34,7 +34,7 @@ vi.mock('./session-drawer', () => ({ SessionDrawer: () => null }));
 vi.mock('./redraft-card', () => ({
   RedraftCard: ({ weekStart }: { weekStart: string }) => <div data-redraft-card={weekStart} />,
 }));
-vi.mock('@/components/ui/drafting-card', () => ({
+vi.mock('./drafting-card', () => ({
   DraftingCard: ({ weekStart }: { weekStart: string }) => <div data-drafting-card={weekStart} />,
 }));
 vi.mock('./proposal-card', () => ({

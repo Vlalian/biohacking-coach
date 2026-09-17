@@ -156,6 +156,18 @@ export async function draftInFlight(athleteId: string, today: string): Promise<D
   return { weekStart: facts.dueWeek, visibleFrom: facts.visibleFrom, expectedSeconds: COACH_EXPECTED_SECONDS };
 }
 
+/**
+ * The waiting card's read (`/29`): whether any draft is now recorded for the
+ * week. A read and nothing else — the card polls this, not the page, because
+ * a page refresh re-renders the shell whose `after()` would start the very
+ * draft being waited on again (review of the 24+29 batch). A dead driver is
+ * "not yet", logged.
+ */
+export async function draftLanded(athleteId: string, weekStart: string): Promise<boolean> {
+  const history = await guarded(athleteId, () => getWeekDraftHistory(athleteId, weekStart));
+  return history !== 'coach-failed' && history.kind !== 'never';
+}
+
 /** What the calendar's card slot shows: a proposal state, or that the draft is on its way. */
 export type CalendarSlotState = CalendarProposalState | { kind: 'drafting'; weekStart: string };
 

@@ -15,7 +15,7 @@ import { RatingModal } from './rating-modal';
 import { SessionDrawer, type DrawerState } from './session-drawer';
 import { ProposalCard } from './proposal-card';
 import { RedraftCard } from './redraft-card';
-import { DraftingCard } from '@/components/ui/drafting-card';
+import { DraftingCard } from './drafting-card';
 import type { CalendarSlotState } from '@/features/coach/week-draft-service';
 import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
@@ -421,7 +421,7 @@ export function Calendar({
         // The draft is being written this very request, by the shell's
         // after(); the slot says so and re-reads until it lands (29).
         <div className="mt-5">
-          <DraftingCard weekStart={proposal.weekStart} />
+          <DraftingCard weekStart={proposal.weekStart} waiter={{ side: 'athlete' }} />
         </div>
       )}
       {proposal?.kind === 'redraft-offer' && (

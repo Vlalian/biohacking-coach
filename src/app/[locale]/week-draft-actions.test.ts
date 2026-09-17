@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { currentAthlete, assertAiCoachingConsent, acceptWeekDraft, declineWeekDraft, discussWeekDraft, redraftWeek, revalidatePath } = vi.hoisted(
+const { currentAthlete, assertAiCoachingConsent, acceptWeekDraft, declineWeekDraft, discussWeekDraft, redraftWeek, draftLanded, revalidatePath } = vi.hoisted(
   () => ({
     currentAthlete: vi.fn(),
     assertAiCoachingConsent: vi.fn(),
@@ -8,6 +8,7 @@ const { currentAthlete, assertAiCoachingConsent, acceptWeekDraft, declineWeekDra
     declineWeekDraft: vi.fn(),
     discussWeekDraft: vi.fn(),
     redraftWeek: vi.fn(),
+    draftLanded: vi.fn(),
     revalidatePath: vi.fn(),
   }),
 );
@@ -16,9 +17,10 @@ vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('./current-actor', () => ({ resolveAthleteWithLanguage: currentAthlete }));
 vi.mock('@/features/consent/consent-gate', () => ({ assertAiCoachingConsent }));
 vi.mock('@/features/coach/week-draft-decision-service', () => ({ acceptWeekDraft, declineWeekDraft, discussWeekDraft }));
-vi.mock('@/features/coach/week-draft-service', () => ({ redraftWeek }));
+vi.mock('@/features/coach/week-draft-service', () => ({ redraftWeek, draftLanded }));
 
-const { acceptWeekDraftAction, declineWeekDraftAction, discussWeekDraftAction, redraftWeekAction } = await import('./week-draft-actions');
+const { acceptWeekDraftAction, declineWeekDraftAction, discussWeekDraftAction, redraftWeekAction, draftLandedAction } =
+  await import('./week-draft-actions');
 
 /**
  * `training-architecture/18` — the athlete's three answers to a drafted week.
@@ -98,5 +100,17 @@ describe('the three actions resolve the athlete from the session and take only a
     acceptWeekDraft.mockResolvedValue({ ok: false, reason: 'not-found' });
     expect(await acceptWeekDraftAction('d1')).toEqual({ ok: false, reason: 'not-found' });
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe('draftLandedAction — the waiting card’s read (training-architecture/29, review)', () => {
+  it('asks as the resolved athlete for the named week and revalidates nothing; a signed-out caller is told not yet', async () => {
+    draftLanded.mockResolvedValue(true);
+    expect(await draftLandedAction('2026-09-21')).toBe(true);
+    expect(draftLanded).toHaveBeenCalledWith(ATHLETE.id, '2026-09-21');
+    expect(revalidatePath).not.toHaveBeenCalled();
+    currentAthlete.mockResolvedValue({ ok: false, reason: 'not-signed-in' });
+    expect(await draftLandedAction('2026-09-21')).toBe(false);
+    expect(draftLanded).toHaveBeenCalledTimes(1);
   });
 });

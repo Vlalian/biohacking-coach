@@ -225,20 +225,10 @@ export function awaitsReview(pending: WeekDraft | null): boolean {
 }
 
 /**
- * The draft a Head Coach previews for this athlete today: the one due for the
- * athlete's next cycle, read a day early and without the athlete's visibility
- * filter (`/17`). The athlete row is passed in because both callers already
- * hold it.
+ * The week a Head Coach previews for this athlete today: the athlete's next
+ * cycle, a day early (`/17`). Read without the athlete's visibility filter.
+ * The athlete row is passed in because both callers already hold it.
  */
-async function coachPreviewDraft(
-  athleteId: string,
-  athlete: Awaited<ReturnType<typeof getAthleteById>>,
-  todayKey: string,
-): Promise<WeekDraft | null> {
-  return getPendingWeekDraft(athleteId, previewWeekOf(athlete, todayKey));
-}
-
-/** The week the coach previews: the athlete's next cycle, a day early (`/17`). */
 function previewWeekOf(athlete: Awaited<ReturnType<typeof getAthleteById>>, todayKey: string): string {
   return draftDueWeek(todayKey, storedDayOf(athlete), HEAD_COACH_LEAD_DAYS);
 }
@@ -256,7 +246,7 @@ async function coachPreview(
   todayKey: string,
 ): Promise<{ pendingDraft: WeekDraft | null; draftInFlight: { weekStart: string } | null }> {
   const previewWeek = previewWeekOf(athlete, todayKey);
-  const pendingDraft = await coachPreviewDraft(athleteId, athlete, todayKey);
+  const pendingDraft = await getPendingWeekDraft(athleteId, previewWeek);
   if (pendingDraft) return { pendingDraft, draftInFlight: null };
   const inFlight = await draftInFlight(athleteId, todayKey);
   return { pendingDraft, draftInFlight: inFlight?.weekStart === previewWeek ? { weekStart: previewWeek } : null };
@@ -275,7 +265,7 @@ export async function getRosterWithReviews(coachId: string, todayKey: string): P
   return Promise.all(
     roster.map(async (entry) => {
       const athlete = await getAthleteById(entry.athleteId);
-      const pending = await coachPreviewDraft(entry.athleteId, athlete, todayKey);
+      const pending = await getPendingWeekDraft(entry.athleteId, previewWeekOf(athlete, todayKey));
       return { ...entry, awaitingReview: awaitsReview(pending) };
     }),
   );

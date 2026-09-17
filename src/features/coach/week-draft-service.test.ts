@@ -43,7 +43,7 @@ vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 
-const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState } =
+const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState, draftLanded } =
   await import(
   './week-draft-service',
 );
@@ -567,5 +567,18 @@ describe('calendarSlotState — the slot says a draft is coming (29)', () => {
     expect(getAthleteById).not.toHaveBeenCalled();
     getCalendarProposalState.mockResolvedValue(null);
     expect(await calendarSlotState(ATHLETE, TODAY)).toEqual({ kind: 'drafting', weekStart: NEXT_MON });
+  });
+});
+
+describe('draftLanded — the poll’s read (29, review)', () => {
+  it('true once any draft is recorded for the week, false while none is, and false on a dead driver', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'pending', draft: DRAFT });
+    expect(await draftLanded(ATHLETE, NEXT_MON)).toBe(true);
+    expect(getWeekDraftHistory).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    expect(await draftLanded(ATHLETE, NEXT_MON)).toBe(false);
+    getWeekDraftHistory.mockRejectedValueOnce(new Error('driver down'));
+    expect(await draftLanded(ATHLETE, NEXT_MON)).toBe(false);
+    expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ surface: 'week_draft', athleteId: ATHLETE }));
   });
 });

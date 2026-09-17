@@ -83,7 +83,7 @@ describe('WeekDraftReview', () => {
 
   it('the plan page renders the drafting card off view.draftInFlight, below the review panel (training-architecture/29)', () => {
     const page = readFileSync(fileURLToPath(new URL('./plan/page.tsx', import.meta.url)), 'utf8');
-    expect(page).toContain('view.draftInFlight && <DraftingCard weekStart={view.draftInFlight.weekStart} />');
+    expect(page).toMatch(/view\.draftInFlight && \(\s*<DraftingCard weekStart=\{view\.draftInFlight\.weekStart\} waiter=\{\{ side: 'coach', athleteId \}\} \/>/);
     expect(page.indexOf('<WeekDraftReview')).toBeLessThan(page.indexOf('<DraftingCard'));
   });
 

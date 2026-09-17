@@ -18,10 +18,13 @@ import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
  * refreshes when the action returns — nothing to poll.
  */
 
+/** Why the action said no — the action's own union, so a new refusal in the service is a type error here, not a silent fall to `error`. */
+export type RedraftReason = Extract<Awaited<ReturnType<typeof redraftWeekAction>>, { ok: false }>['reason'];
+
 export type RedraftOutcome =
   | { kind: 'idle' }
   | { kind: 'drafting' }
-  | { kind: 'refused'; reason: string };
+  | { kind: 'refused'; reason: RedraftReason };
 
 /** The line the card shows for an outcome — pure, so the copy rules are testable without a click. */
 export function redraftOutcomeKey(outcome: RedraftOutcome): { key: string; values?: Record<string, string | number> } | null {
@@ -35,7 +38,8 @@ export function redraftOutcomeKey(outcome: RedraftOutcome): { key: string; value
   }
 }
 
-const REFUSAL_KEYS: Record<string, string> = {
+/** The refusals with a line of their own; the rest (a failed or malformed Coach call, a lost race) share the generic one. */
+const REFUSAL_KEYS: Partial<Record<RedraftReason, string>> = {
   'already-planned': 'alreadyPlanned',
   'draft-pending': 'draftPending',
   'not-declined': 'notDeclined',
@@ -43,7 +47,7 @@ const REFUSAL_KEYS: Record<string, string> = {
   'consent-required': 'consentRequired',
 };
 
-function refusalKey(reason: string): { key: string; values?: Record<string, string> } {
+function refusalKey(reason: RedraftReason): { key: string; values?: Record<string, string> } {
   const key = REFUSAL_KEYS[reason];
   return key ? { key } : { key: 'error', values: { reason } };
 }
