@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Generates `CONTEXT-BRIEF.md` — the per-session digest of `OVERVIEW.md` and
  * `CONTEXT.md` that `CLAUDE.md` imports in their place.
