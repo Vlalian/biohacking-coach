@@ -8,7 +8,7 @@ import { auth } from '@/lib/auth';
 import { getCoachByUserId } from '@/features/coach/coach-repository';
 import { getCoachAthleteView, type CoachAthleteView } from '@/features/coach/roster-service';
 import type { Coach } from '@/features/coach/coach';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 
 /**
  * The guard every tab of the Head Coach's athlete surface runs for itself.
@@ -47,7 +47,7 @@ export async function loadCoachAthlete(
   // Not a coach at all: not a 404 (the page exists), just not theirs.
   if (!coach) return { ok: false };
 
-  const todayKey = dateKey(new Date());
+  const todayKey = today();
   const view = await getCoachAthleteView(coach.id, athleteId, todayKey);
   if (!view) {
     notFound();

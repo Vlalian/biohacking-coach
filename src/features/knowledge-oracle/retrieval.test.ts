@@ -13,9 +13,9 @@ import {
  * costs an API call or needs Postgres.
  *
  * What that does *not* prove is that pgvector ranks sensibly against the real
- * corpus. No test can: relevance is a judgement, and the corpus is 1,583 chunks
- * of real training science. That is what `npm run oracle:ask` is for, and why
- * `MIN_SIMILARITY` is left at a documented default rather than tuned here.
+ * corpus. No test can: relevance is a judgement, and the corpus is 1,815 chunks
+ * of real training science. That is what `npm run oracle:ask` is for, and where
+ * `MIN_SIMILARITY` was set from (2026-09-15) rather than tuned here.
  */
 
 function source(over: Partial<KnowledgeSourceRow> = {}): KnowledgeSourceRow {

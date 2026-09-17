@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { resolveAthleteId } from './current-actor';
 import { moveSession, type MoveResult } from '@/features/session/session-move';
-import { dateKey, isValidDateKey } from '@/lib/date';
+import { isValidDateKey, today } from '@/lib/date';
 
 /**
  * Server action for a Session Move.
@@ -31,7 +31,7 @@ export async function moveSessionAction(
     athleteId,
     sessionId,
     targetDate,
-    today: dateKey(new Date()),
+    today: today(),
     expectedVersion,
   });
 

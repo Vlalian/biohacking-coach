@@ -14,6 +14,7 @@ import {
   saveCheckInAction,
   startWeeklySessionAction,
 } from './weekly-actions';
+import { Thinking } from '@/components/ui/thinking';
 
 /** The lean message shape the transcript renders — no server-only fields. */
 export interface UiMessage {
@@ -299,22 +300,7 @@ export function WeeklySession({
               <MessageRow key={m.id} message={m} t={t} />
             ))}
 
-            {pending && (
-              <div className="flex flex-col gap-2 border-l-2 border-signal/40 pl-3">
-                <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                  {t('thinking')}
-                </div>
-                <div className="flex items-center gap-1.5" aria-live="polite">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal"
-                      style={{ animationDelay: `${i * 160}ms` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {pending && <Thinking label={t('thinking')} />}
             <div ref={endRef} />
           </div>
         )}

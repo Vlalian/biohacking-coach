@@ -18,7 +18,12 @@
     "coach:say": "tsx --conditions=react-server scripts/coach-say.ts",
     "corpus:ingest": "tsx --conditions=react-server scripts/ingest-corpus.ts",
     "oracle:ask": "tsx --conditions=react-server scripts/oracle-ask.ts",
-    "quality": "tsx scripts/quality.ts"
+    "oracle:eval": "tsx --conditions=react-server scripts/oracle-eval.ts",
+    "quality": "tsx scripts/quality.ts",
+    "test:visual": "playwright test -c playwright-ct.config.ts",
+    "test:visual:update": "playwright test -c playwright-ct.config.ts --update-snapshots",
+    "test:e2e": "playwright test -c playwright-e2e.config.ts",
+    "test:e2e:update": "playwright test -c playwright-e2e.config.ts --update-snapshots"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.47",
@@ -45,6 +50,8 @@
   },
   "devDependencies": {
     "@neon/config": "^1.4.2",
+    "@playwright/experimental-ct-react": "1.62.1",
+    "@playwright/test": "1.62.1",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@tailwindcss/postcss": "^4",

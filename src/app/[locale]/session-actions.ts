@@ -15,7 +15,7 @@ import {
   type CreateAthleteSessionResult,
   type AthleteSessionWriteResult,
 } from '@/features/session/athlete-session';
-import { dateKey, isValidDateKey } from '@/lib/date';
+import { isValidDateKey, today } from '@/lib/date';
 
 /**
  * Server actions for the Session Drawer's status controls (Mark complete,
@@ -33,7 +33,7 @@ export async function markCompleteAction(
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  const result = await completeSession({ athleteId, sessionId, today: dateKey(new Date()) });
+  const result = await completeSession({ athleteId, sessionId, today: today() });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
@@ -44,7 +44,7 @@ export async function toggleSkipAction(
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  const result = await toggleSkipSession({ athleteId, sessionId, today: dateKey(new Date()) });
+  const result = await toggleSkipSession({ athleteId, sessionId, today: today() });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
@@ -58,7 +58,7 @@ export async function toggleUnavailableAction(
   const result = await toggleUnavailableSession({
     athleteId,
     sessionId,
-    today: dateKey(new Date()),
+    today: today(),
   });
   if (result.ok) revalidatePath('/', 'layout');
   return result;
@@ -83,7 +83,7 @@ export async function createAthleteSessionAction(input: {
     durationMin: input.durationMin,
     isTraining: input.isTraining,
     note: input.note,
-    today: dateKey(new Date()),
+    today: today(),
   });
   if (result.ok) revalidatePath('/', 'layout');
   return result;

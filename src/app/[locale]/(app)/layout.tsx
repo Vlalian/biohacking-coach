@@ -22,7 +22,7 @@ import { narratePendingEvents } from '@/features/coach/narration-service';
 import { logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
-import { dateKey, weekStartOf } from '@/lib/date';
+import { weekStartOf, today } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import { chatStateOf } from '@/features/coach/coach-chat-service';
@@ -92,7 +92,7 @@ export default async function AppShellLayout({
   let weeklyOffer: WeeklyOfferInput | null = null;
 
   if (athlete) {
-    const today = dateKey(new Date());
+    const todayKey = today();
 
     // Narration runs *before* the transcript is read, so anything the Head
     // Coach did while the athlete was away is already in the thread this render
@@ -134,7 +134,7 @@ export default async function AppShellLayout({
     // (`selectOpenConversations`).
     const [openConversations, heldWeeklySession] = await Promise.all([
       getOpenConversations(athlete.id),
-      hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(today)),
+      hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(todayKey)),
     ]);
     const { weeklySession: open, coachChat: openChat } =
       selectOpenConversations(openConversations);
@@ -204,7 +204,7 @@ export default async function AppShellLayout({
     const athleteId = athlete.id;
     after(async () => {
       try {
-        await ensureWeekDrafted(athleteId, today);
+        await ensureWeekDrafted(athleteId, todayKey);
       } catch (error) {
         logWeekDraftFailure(athleteId, error);
       }
@@ -221,7 +221,7 @@ export default async function AppShellLayout({
     const coachUserId = session!.user.id;
     after(async () => {
       try {
-        await ensureRosterDrafted(coachUserId, dateKey(new Date()));
+        await ensureRosterDrafted(coachUserId, today());
       } catch (error) {
         // The log line's id field names an athlete; the roster fan-out has none
         // to name at this level, and a user id is not an athlete id.

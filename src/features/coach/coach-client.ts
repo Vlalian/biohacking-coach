@@ -56,7 +56,7 @@ function getClient(): Anthropic {
 }
 
 /** The Coach model, overridable per environment; a current Sonnet by default. */
-const COACH_MODEL = process.env.COACH_MODEL || 'claude-sonnet-5';
+export const COACH_MODEL = process.env.COACH_MODEL || 'claude-sonnet-5';
 
 /**
  * Inference runs in the United States, always (slice 15, route 09 / GDPR).

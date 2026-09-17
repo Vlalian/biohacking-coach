@@ -11,7 +11,7 @@ import {
   type PrescriptionInput,
 } from '@/features/coach/head-coach-service';
 import type { MoveResult } from '@/features/session/session-move';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 
 /**
  * Server actions for the Head Coach's plan edits — the seam the lean coach UI
@@ -39,7 +39,7 @@ export async function prescribeSessionAction(
     input,
     // The server's clock, like edit and move below: whether the target week is
     // already closed must not be judged against a browser's idea of today.
-    today: dateKey(new Date()),
+    today: today(),
   });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
@@ -62,7 +62,7 @@ export async function editPrescribedSessionAction(
     expectedVersion,
     // The server's clock, like the move action below: the record's
     // immutability must not be judged against a browser's idea of today.
-    today: dateKey(new Date()),
+    today: today(),
   });
   // 'layout' is main's: the edited session shows on more than this page, so a
   // page-scoped revalidate left the other tabs stale.
@@ -85,7 +85,7 @@ export async function deletePrescribedSessionAction(
     expectedVersion,
     // The server's clock, like the move action below: the record's
     // immutability must not be judged against a browser's idea of today.
-    today: dateKey(new Date()),
+    today: today(),
   });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
@@ -116,7 +116,7 @@ export async function moveSessionAsCoachAction(
     sessionId,
     targetDate,
     expectedVersion,
-    today: dateKey(new Date()),
+    today: today(),
   });
 
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');

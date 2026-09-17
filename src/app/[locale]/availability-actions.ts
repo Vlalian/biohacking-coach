@@ -6,7 +6,7 @@ import {
   markUnavailableDate,
   clearUnavailableDate,
 } from '@/features/availability/unavailable-date';
-import { dateKey, isValidDateKey } from '@/lib/date';
+import { isValidDateKey, today } from '@/lib/date';
 
 /**
  * The outcome the client sees. Beyond the feature's own result it can fail on
@@ -34,7 +34,7 @@ export async function markUnavailableDateAction(
   const result = await markUnavailableDate({
     athleteId,
     date,
-    today: dateKey(new Date()),
+    today: today(),
   });
 
   if (result.ok) revalidatePath('/', 'layout');
@@ -57,7 +57,7 @@ export async function clearUnavailableDateAction(
   const result = await clearUnavailableDate({
     athleteId,
     date,
-    today: dateKey(new Date()),
+    today: today(),
   });
 
   if (result.ok) revalidatePath('/', 'layout');

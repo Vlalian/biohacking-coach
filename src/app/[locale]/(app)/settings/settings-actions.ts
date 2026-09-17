@@ -28,7 +28,7 @@ import {
   updateLinkVisibility,
 } from '@/features/coach/coach-repository';
 import { withdrawPreviewDrafts } from '@/features/coach/week-draft-repository';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 import type { LinkVisibility } from '@/features/coach/link-visibility';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { setUiLanguage } from '@/features/user-prefs/user-prefs-repository';
@@ -347,6 +347,6 @@ export async function severCoachingLinkAction(): Promise<SettingsActionResult> {
   await severLinkForAthlete(athlete.id);
   // A draft still in the departed coach's preview is discarded, not delivered
   // half-shaped (Mads, 2026-09-14); the next app-open drafts afresh.
-  await withdrawPreviewDrafts(athlete.id, dateKey(new Date()));
+  await withdrawPreviewDrafts(athlete.id, today());
   return { ok: true };
 }

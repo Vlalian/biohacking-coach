@@ -1,7 +1,7 @@
 'use server';
 
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 import { resolveAthleteWithLanguage, type AuthFailure } from './current-actor';
 import {
   sendCoachChatMessage,
@@ -40,7 +40,7 @@ export async function sendCoachChatMessageAction(input: {
     resolved.athlete,
     input.conversationId,
     input.content,
-    dateKey(new Date()),
+    today(),
     resolved.language,
     input.referenceSessionId ?? null,
   );
