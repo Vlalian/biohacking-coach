@@ -43,7 +43,7 @@ type DeployEnv = {
     | 'VERCEL_PROJECT_PRODUCTION_URL']?: string | undefined;
 } & { [key: string]: string | undefined };
 
-function resolveBaseURL(env: DeployEnv): string | undefined {
+export function resolveBaseURL(env: DeployEnv): string | undefined {
   if (env.BETTER_AUTH_URL) return env.BETTER_AUTH_URL;
   // VERCEL_PROJECT_PRODUCTION_URL holds the *production* origin on every
   // deployment, previews included — so a preview must use its own VERCEL_URL,
