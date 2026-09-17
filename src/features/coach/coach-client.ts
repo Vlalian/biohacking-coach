@@ -133,6 +133,27 @@ export interface CoachReply {
  * which is why the stop reason travels with the error, where it is the one thing
  * that makes the failure diagnosable.
  */
+/**
+ * The Coach is switched off for this process: `COACH_DISABLED=1`, honoured
+ * outside production only. Every call site already treats a thrown Coach call
+ * as a failed turn that writes nothing, so nothing downstream needs to know.
+ *
+ * For the page snapshot suite (frontend-quality/07), which loads athlete pages
+ * whose layout drafts next week in `after()`: without this, every run spent
+ * tokens and wrote a draft that changed the next picture. Also handy for local
+ * work without a key.
+ */
+export class CoachDisabledError extends Error {
+  constructor() {
+    super('The Coach is disabled (COACH_DISABLED is set).');
+    this.name = 'CoachDisabledError';
+  }
+}
+
+function coachDisabled(): boolean {
+  return Boolean(process.env.COACH_DISABLED) && process.env.NODE_ENV !== 'production';
+}
+
 export class EmptyCoachReplyError extends Error {
   constructor(readonly stopReason: string | null) {
     super(
@@ -183,6 +204,12 @@ export async function callCoach(input: {
   toolResult?: string;
   resolveTool?: (call: CoachToolCall) => Promise<string>;
 }): Promise<CoachReply> {
+  if (coachDisabled()) throw new CoachDisabledError();
+  return callCoachLive(input);
+}
+
+/** The real call, split from the switch so neither is harder to read for the other. */
+async function callCoachLive(input: Parameters<typeof callCoach>[0]): Promise<CoachReply> {
   const client = getClient();
   const first = await client.messages.create(
     withInferenceGeo({
