@@ -152,6 +152,7 @@
     "category_other": "Other"
   },
   "Settings": {
+    "weeklySessionDayLinked": "Your Head Coach sets this while you are linked.",
     "eyebrow": "View",
     "title": "Settings",
     "lede": "Durable preferences your Coach reads every time it plans for you.",
@@ -184,7 +185,6 @@
     "communicationStylePlaceholder": "e.g. Direct and to the point — I don't need reassurance, just the plan.",
     "weeklySessionDayLabel": "Weekly planning day",
     "weeklySessionDayNote": "When your Coach opens next week's plan for you to look over.",
-    "optFlexible": "Flexible",
     "fixedConstraintsLabel": "Days you can never train",
     "fixedConstraintsNote": "Your Coach plans around these automatically, every week.",
     "dayMonday": "Monday",
@@ -232,6 +232,7 @@
     "raceDateLabel": "Race date"
   },
   "Roster": {
+    "weekToReview": "Week to review",
     "title": "Roster",
     "subtitle": "The athletes you coach.",
     "empty": "No athletes linked yet.",
@@ -296,6 +297,8 @@
     "error": "That didn't work. Check your details and try again."
   },
   "Calendar": {
+    "proposedChip": "proposed",
+    "discussing": "Next week is being discussed with the Coach — open the Coach to finish.",
     "empty": "No sessions planned yet.",
     "rate": "Rate {type} session",
     "markUnavailable": "Mark {date} unavailable",
@@ -493,7 +496,6 @@
     "optPower": "Power",
     "optHRV": "HRV",
     "optPace": "Pace",
-    "optFlexible": "Flexible",
     "dayMonday": "Monday",
     "dayTuesday": "Tuesday",
     "dayWednesday": "Wednesday",
@@ -622,6 +624,17 @@
     "yourHeadCoach": "Your Head Coach",
     "recently": "recently",
     "blocksDrafted": "I've shaped your training toward {race}: {blocks}",
+    "weekDrafted": "I've drafted next week for you — have a look at your plan when you're ready",
+    "weeklyDaySet": "{coach} moved your weekly planning day to {day}",
+    "weeklyDaySetNoDetail": "{coach} changed your weekly planning day",
+    "weekDraftShaped": "{coach} shaped next week's plan before it reached you",
+    "dayMonday": "Monday",
+    "dayTuesday": "Tuesday",
+    "dayWednesday": "Wednesday",
+    "dayThursday": "Thursday",
+    "dayFriday": "Friday",
+    "daySaturday": "Saturday",
+    "daySunday": "Sunday",
     "blocksDraftedNoDetail": "I've shaped the blocks of your training toward your race",
     "raceUnrealistic": "Honestly: {race} looks out of reach on this timeline — {reason}. Worth talking about",
     "yourRace": "your race",
@@ -674,6 +687,40 @@
     "save": "Save",
     "stale": "These blocks no longer match the race date — the Coach will redraw them. Nothing to edit here yet.",
     "conflict": "Changed by someone else — this is the current set.",
+    "error": "That didn't work ({reason})."
+  },
+  "CoachDay": {
+    "label": "Athlete's weekly planning day",
+    "note": "When next week reaches them. You see the draft the day before.",
+    "error": "That didn't work ({reason})."
+  },
+  "WeekDraftReview": {
+    "title": "Next week, drafted",
+    "lead": "The Coach drafted this for the week of {week}. Change, move, remove or add sessions as you see fit, then approve.",
+    "day": "Day",
+    "add": "Add a session",
+    "remove": "Remove",
+    "type": "Type",
+    "duration": "Minutes",
+    "zone": "Zone",
+    "note": "Note",
+    "approve": "Approve for the athlete",
+    "approved": "Approved. It reaches the athlete on their planning day.",
+    "approvedChanged": "Approved with your changes. The athlete will be told you shaped it.",
+    "stale": "This draft was replaced. Reload to see the current one.",
+    "error": "That didn't work ({reason})."
+  },
+  "ProposalCard": {
+    "title": "Next week is drafted",
+    "lead": "{count, plural, one {# session} other {# sessions}} for the week of {week}. Accept it, talk it over with the Coach, or leave the week as it is.",
+    "accept": "Accept",
+    "discuss": "Discuss with the Coach",
+    "decline": "Not this week",
+    "accepted": "Saved.",
+    "acceptedPast": "Saved — {count, plural, one {# of these days has} other {# of these days have}} already passed.",
+    "declined": "Left as it is.",
+    "replaced": "This draft was replaced — reload to see the current one.",
+    "consentRequired": "To talk it over, first allow AI coaching under Privacy.",
     "error": "That didn't work ({reason})."
   },
   "HealthDrawer": {

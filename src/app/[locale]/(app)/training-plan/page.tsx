@@ -14,6 +14,7 @@ import { spansFrom } from '@/features/health/health-layer';
 import { today } from '@/lib/date';
 import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
+import { getCalendarProposalState } from '@/features/coach/week-draft-repository';
 import { BlockStrip } from '../../block-strip';
 import { Calendar } from '../../calendar';
 import { GarminUpload } from '../../garmin-upload';
@@ -75,6 +76,12 @@ export default async function TrainingPlanPage({
   // Coach's own prompts read, so the strip and the Coach never disagree.
   const horizon = athlete ? await getResolvedBlocks(athlete.id, todayKey) : { race: null, blocks: [] };
 
+  // The week the Coach drafted, if one is waiting for the athlete's decision —
+  // or a pointer to the conversation it moved into (training-architecture/18).
+  // Read with today as `asOf`: a linked Head Coach's day-early preview is not
+  // the athlete's to see yet (17).
+  const proposal = athlete ? await getCalendarProposalState(athlete.id, todayKey) : null;
+
   // Stage 2 runs here, **after the response is sent**. The page renders now;
   // the ~20 s Coach call runs once the athlete has their calendar, and the next
   // navigation shows the result with the narration firing from the shell. The
@@ -110,6 +117,7 @@ export default async function TrainingPlanPage({
         unavailableDates={unavailableDates}
         importedSessionIds={importedSessionIds}
         todayKey={todayKey}
+        proposal={proposal}
         health={health}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />

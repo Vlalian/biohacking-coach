@@ -6,6 +6,7 @@ import { callCoach } from '../src/features/coach/coach-client';
 import { toApiMessages } from '../src/features/coach/conversation';
 import type { Message } from '../src/features/coach/conversation';
 import type { CheckIn } from '../src/features/coach/check-in';
+import { EVAL_ATHLETE, EVAL_TODAY } from '../src/features/knowledge-oracle/eval/fixture';
 import type { WeekSession } from '../src/features/coach/week';
 
 /**
@@ -61,28 +62,9 @@ import type { WeekSession } from '../src/features/coach/week';
 // supplied scores would have this tool — the one thing a human reads before and
 // after a prompt change — exercising the one branch nobody is on
 // (code-health/07).
-const FIXTURE: CheckIn = {
-  phase: 'Build',
-  sessionCount: 8,
-  commStyle: 'direct, technical, no reassurance',
-  experienceLevel: 'intermediate',
-  language: 'English',
-  weeklySessionDay: 'Monday',
-  fixedConstraints: ['Thursday'],
-  weeklySessionNumber: 9,
-  raceTarget: 'Ironman Copenhagen, 17 August 2027',
-  equipment: [
-    { id: 'e1', category: 'bike', name: 'Canyon Speedmax', details: 'CF SLX, Quarq power meter', addedDate: '2026-01-04' },
-    { id: 'e2', category: 'watch', name: 'Garmin Fenix 8', details: null, addedDate: '2026-02-11' },
-  ],
-  onboarding: {
-    sportBackground: 'running',
-    availableHours: '13–16h',
-    motivation: 'finish under 11 hours',
-    weakestDiscipline: 'swim',
-    hasHumanCoach: 'no',
-  },
-};
+// The same athlete the SAFE-3 eval suite speaks as (`knowledge-oracle/06`),
+// so a human reading this tool and a human reading an eval run see one Coach.
+const FIXTURE: CheckIn = EVAL_ATHLETE;
 
 // A week that gives the Coach something to actually react to: a hard session
 // that went badly, a good one, and a skip. A flat week produces a bland reply
@@ -94,7 +76,7 @@ const WEEK_FEEDBACK = [
 ];
 
 const SKIPPED = [{ date: '2026-08-16', sessionType: 'Endurance' }];
-const TODAY = '2026-08-17';
+const TODAY = EVAL_TODAY;
 
 // The current week, as Coach Chat now sees it.
 //

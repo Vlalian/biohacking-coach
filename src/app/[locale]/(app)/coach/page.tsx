@@ -5,7 +5,9 @@ import { notFound } from 'next/navigation';
 import { Link, redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
-import { getCoachByUserId, getRoster } from '@/features/coach/coach-repository';
+import { getCoachByUserId } from '@/features/coach/coach-repository';
+import { getRosterWithReviews } from '@/features/coach/roster-service';
+import { today } from '@/lib/date';
 
 // Per-request: the page depends on who is signed in, so it is never prerendered.
 export const dynamic = 'force-dynamic';
@@ -40,7 +42,7 @@ export default async function CoachRosterPage({
     );
   }
 
-  const roster = await getRoster(coach.id);
+  const roster = await getRosterWithReviews(coach.id, today());
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6 sm:p-8">
@@ -61,6 +63,11 @@ export default async function CoachRosterPage({
               >
                 <span className="font-medium">{entry.name}</span>
                 <span className="flex gap-2 text-xs text-neutral-500">
+                  {entry.awaitingReview && (
+                    <span className="rounded-full border border-signal px-2 py-0.5 text-signal">
+                      {t('weekToReview')}
+                    </span>
+                  )}
                   {!entry.link.visibility.shareAthleteReports && (
                     <span className="rounded-full border px-2 py-0.5">
                       {t('reportsWithheld')}

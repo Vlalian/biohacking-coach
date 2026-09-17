@@ -47,7 +47,7 @@ export function CoachThread({
   weeklyOffer?: WeeklyOfferInput | null;
 }) {
   const t = useTranslations('CoachThread');
-  const { reference, weeklyOfferDismissed, dismissWeeklyOffer } = useCoachOverlay();
+  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, weeklySeed, setWeeklySeed } = useCoachOverlay();
 
   // Decided on the client only. The server and the browser can disagree about
   // what day it is — no timezone is stored on the profile — so answering this
@@ -75,8 +75,11 @@ export function CoachThread({
   // to. Missing that was a real bug: with a Weekly Session open, the overlay
   // reopened in weekly mode and the chip was unreachable (caught in a fresh tab;
   // a warm one hid it, because the component was already mounted in chat).
+  // A seed present at mount wins outright: the overlay was closed when the
+  // athlete tapped "Discuss" on the calendar, and it mounts straight onto the
+  // session that tap started (training-architecture/18).
   const [mode, setMode] = useState<'chat' | 'weekly'>(
-    reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
+    weeklySeed ? 'weekly' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
   );
 
   // And the same rule while already mounted: a *new* Reference arriving (the
@@ -91,13 +94,38 @@ export function CoachThread({
     if (referenceId) setMode('chat');
   }
 
+  // A Weekly Session seeded from the calendar ("Discuss with the Coach" on a
+  // drafted week, `training-architecture/18`): the same adjust-state-on-prop
+  // shape as the Reference above. A new seed opens weekly mode on it; the
+  // seed's conversation id is the WeeklySession's key, so a session already
+  // showing is replaced rather than left holding stale state.
+  // The seed is a transfer, not a home. The thread copies it into its own
+  // state the moment it sees it and clears the shared one right then, so
+  // closing the overlay any way at all — decline and close, not only "Back to
+  // Chat" — cannot leave a withdrawn plan waiting for the next open
+  // (CodeRabbit, PR #69). Adopted during render, as the mode switch already
+  // was; the clear is a parent-state set the same way.
+  const [adopted, setAdopted] = useState<WeeklySessionInitial | null>(null);
+  // Guarded on the id so a seed is adopted once, even if the parent has not
+  // re-rendered with it cleared yet — a render-time set with no guard loops.
+  if (weeklySeed && weeklySeed.conversationId !== adopted?.conversationId) {
+    setAdopted(weeklySeed as WeeklySessionInitial);
+    setMode('weekly');
+    setWeeklySeed(null);
+  }
+  const weeklyStart = adopted ?? weeklyInitial;
+
   if (mode === 'weekly') {
     return (
       <WeeklySession
-        initial={weeklyInitial}
+        key={weeklyStart?.conversationId ?? 'fresh'}
+        initial={weeklyStart}
         athleteFirstName={athleteFirstName}
         raceTarget={raceTarget}
-        onExit={() => setMode('chat')}
+        onExit={() => {
+          setAdopted(null);
+          setMode('chat');
+        }}
       />
     );
   }

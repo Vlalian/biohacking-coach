@@ -54,7 +54,7 @@ export function answerText(payload: StepAnswer): string {
     }
     case 'constraints': {
       const days = listed(payload.fixedConstraints) ?? '—';
-      return `${days} · ${payload.weeklySessionDay ?? 'Flexible'}`;
+      return `${days} · ${payload.weeklySessionDay ?? 'Sunday'}`;
     }
   }
 }

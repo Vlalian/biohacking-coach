@@ -87,7 +87,7 @@ export function planningWindow(
  * range instead of stopping at the first day that survives. A day is listed
  * once however many ways it is ruled out.
  */
-function excludedBetween(
+export function excludedBetween(
   from: string,
   to: string,
   fixedConstraints: string[],
@@ -117,7 +117,7 @@ function excludedBetween(
  * by the `NO TRAINING ON:` line. Conflating the two would put the window in the
  * business of composing the week.
  */
-function hasAPlannableDay(
+export function hasAPlannableDay(
   from: string,
   to: string,
   fixedConstraints: string[],

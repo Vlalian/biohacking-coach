@@ -1,0 +1,4 @@
+# Node runs .mjs scripts as-is, and vitest imports them untransformed: a CRLF
+# checkout (core.autocrlf on Windows) breaks `scripts/context-brief.mjs` with
+# "Invalid or unexpected token". Found on 2026-09-15 in a fresh worktree.
+*.mjs text eol=lf

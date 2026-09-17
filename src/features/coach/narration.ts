@@ -16,7 +16,7 @@
  */
 
 /** The Coach's own two announcements (`training-architecture/07`). */
-export type CoachNarratableType = 'blocks_drafted' | 'race_flagged_unrealistic';
+export type CoachNarratableType = 'blocks_drafted' | 'race_flagged_unrealistic' | 'week_drafted';
 
 /** The Head Coach's session actions — the events {@link clause} renders. */
 export type HeadCoachNarratableType =
@@ -28,6 +28,9 @@ export type HeadCoachNarratableType =
 /** A Head Coach's Training Block edit (`training-architecture/08`) — rendered by {@link blockClause}. */
 export type BlockNarratableType = 'block_edited';
 
+/** A Head Coach's hand on the drafted week or its day (`training-architecture/17`). */
+export type WeekNarratableType = 'weekly_session_day_set' | 'week_draft_approved';
+
 /** A plan change by another hand worth telling the athlete about. */
 export interface NarratableEvent {
   id: string;
@@ -36,7 +39,7 @@ export interface NarratableEvent {
    * which have no actor to name — and null for malformed Head Coach history.
    */
   actorId: string | null;
-  type: HeadCoachNarratableType | BlockNarratableType | CoachNarratableType;
+  type: HeadCoachNarratableType | BlockNarratableType | WeekNarratableType | CoachNarratableType;
   /** `jsonb`, so genuinely unknown until narrowed. */
   payload: unknown;
   createdAt: Date;
@@ -126,7 +129,11 @@ function blockNames(payload: unknown): string[] | undefined {
 function isCoachEvent(
   event: NarratableEvent,
 ): event is NarratableEvent & { type: CoachNarratableType } {
-  return event.type === 'blocks_drafted' || event.type === 'race_flagged_unrealistic';
+  return (
+    event.type === 'blocks_drafted' ||
+    event.type === 'race_flagged_unrealistic' ||
+    event.type === 'week_drafted'
+  );
 }
 
 /**
@@ -137,16 +144,30 @@ function isCoachEvent(
  * been attributed to a person who did nothing.
  */
 function coachClause(event: NarratableEvent, t: Translate): string {
-  const race = field(event.payload, 'raceName');
-  // No weekday here, unlike every session clause: a race is months out and its
-  // weekday says nothing, so the sentence names the race and the reason only.
-  if (event.type === 'race_flagged_unrealistic') {
-    return t('raceUnrealistic', {
-      race: race ?? t('yourRace'),
-      reason: field(event.payload, 'reason') ?? t('noReason'),
-    });
+  switch (event.type) {
+    // A drafted week (`training-architecture/16`): one sentence, no detail —
+    // the proposal itself is on the calendar, and a list of sessions here
+    // would be a second copy of it. Malformed or not, the sentence is the same.
+    case 'week_drafted':
+      return t('weekDrafted');
+    case 'race_flagged_unrealistic':
+      return unrealisticClause(event.payload, t);
+    default:
+      return blocksDraftedClause(event.payload, t);
   }
-  const names = blockNames(event.payload);
+}
+
+/** No weekday here, unlike every session clause: a race is months out and its weekday says nothing. */
+function unrealisticClause(payload: unknown, t: Translate): string {
+  return t('raceUnrealistic', {
+    race: field(payload, 'raceName') ?? t('yourRace'),
+    reason: field(payload, 'reason') ?? t('noReason'),
+  });
+}
+
+function blocksDraftedClause(payload: unknown, t: Translate): string {
+  const race = field(payload, 'raceName');
+  const names = blockNames(payload);
   if (!race || !names) return t('blocksDraftedNoDetail');
   return t('blocksDrafted', { race, blocks: names.join(' · ') });
 }
@@ -258,6 +279,19 @@ function blockClause(
 }
 
 /**
+ * The Head Coach moved the athlete's Weekly Session Day, or shaped the drafted
+ * week before it reached them (`training-architecture/17`). Attributed like
+ * every other human clause. The day is rendered through the catalogue's own
+ * weekday keys, never the stored English name.
+ */
+function weekClause(event: NarratableEvent, coachFirstNames: Record<string, string>, t: Translate): string {
+  const coach = (event.actorId ? coachFirstNames[event.actorId] : undefined) ?? t('yourHeadCoach');
+  if (event.type === 'week_draft_approved') return t('weekDraftShaped', { coach });
+  const to = field(event.payload, 'to');
+  return to ? t('weeklyDaySet', { coach, day: t(`day${to}`) }) : t('weeklyDaySetNoDetail', { coach });
+}
+
+/**
  * Everything the Head Coach has done since the athlete was last told, as **one**
  * message.
  *
@@ -280,6 +314,9 @@ export function composeNarration(
   // is copy, not logic.
   const clauses = events.map((e) => {
     if (isCoachEvent(e)) return coachClause(e, t);
+    if (e.type === 'weekly_session_day_set' || e.type === 'week_draft_approved') {
+      return weekClause(e, coachFirstNames, t);
+    }
     if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
     return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
   });

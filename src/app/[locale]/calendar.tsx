@@ -13,6 +13,9 @@ import { moveSessionAction } from './move-actions';
 import { markUnavailableDateAction, clearUnavailableDateAction } from './availability-actions';
 import { RatingModal } from './rating-modal';
 import { SessionDrawer, type DrawerState } from './session-drawer';
+import { ProposalCard } from './proposal-card';
+import type { CalendarProposalState } from '@/features/coach/week-draft-repository';
+import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
 import { glanceParts, layerForWeek, type HealthSpan } from '@/features/health/health-layer';
 
@@ -118,6 +121,8 @@ type Day = {
   isPast: boolean;
   isUnavailableDate: boolean;
   sessions: Session[];
+  /** The drafted week's sessions on this day — a proposal, not a session (training-architecture/18). */
+  proposed: ProposedSession[];
 };
 
 type Week = {
@@ -130,6 +135,7 @@ function buildWeeks(
   todayKey: string,
   byDate: Map<string, Session[]>,
   unavailable: Set<string>,
+  byDateProposed: Map<string, ProposedSession[]> = new Map(),
 ): Week[] {
   const year = reference.getFullYear();
   const month = reference.getMonth();
@@ -148,6 +154,7 @@ function buildWeeks(
       isPast: key < todayKey,
       isUnavailableDate: unavailable.has(key),
       sessions: byDate.get(key) ?? [],
+      proposed: byDateProposed.get(key) ?? [],
     });
   };
 
@@ -197,6 +204,7 @@ export function Calendar({
   readOnly = false,
   onMove,
   coachAthleteId,
+  proposal = null,
   health = [],
 }: {
   sessions: Session[];
@@ -242,6 +250,13 @@ export function Calendar({
    * record they are meant to judge the plan against (showable-version/20).
    */
   coachAthleteId?: string;
+  /**
+   * The week the Coach drafted and the athlete has not decided on, or a pointer
+   * to the conversation it moved into (`training-architecture/18`). Only the
+   * athlete's own calendar passes this; the Head Coach's review is their own
+   * panel (17). Absent, the calendar renders exactly as it did before 18.
+   */
+  proposal?: CalendarProposalState | null;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -273,7 +288,17 @@ export function Calendar({
     else byDate.set(s.date, [s]);
   }
   const unavailable = new Set(unavailableDates);
-  const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable);
+  // Ghosted onto the days they would land on — only the draft's own week can
+  // carry them, because that is the only week a draft names.
+  const byDateProposed = new Map<string, ProposedSession[]>();
+  if (proposal?.kind === 'proposal') {
+    for (const p of proposal.draft.sessions) {
+      const list = byDateProposed.get(p.date);
+      if (list) list.push(p);
+      else byDateProposed.set(p.date, [p]);
+    }
+  }
+  const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable, byDateProposed);
   const allExpanded = weeks.length > 0 && weeks.every((w) => expanded.includes(w.isoWeekStart));
   const hasAnySession = sessions.length > 0;
 
@@ -384,6 +409,22 @@ export function Calendar({
           )}
         </div>
       </header>
+
+      {proposal?.kind === 'proposal' && (
+        <div className="mt-5">
+          <ProposalCard draft={proposal.draft} />
+        </div>
+      )}
+      {proposal?.kind === 'discussing' && (
+        // Not a second proposal: the week is in the conversation now, and this
+        // says where it went (decided 2026-09-15).
+        <p
+          className="mt-5 border border-dashed border-signal/40 bg-signal/5 px-4 py-2 font-body text-sm text-muted-foreground"
+          data-discussing={proposal.conversationId}
+        >
+          {t('discussing')}
+        </p>
+      )}
 
       {!hasAnySession && (
         // A note, not a replacement for the grid: the grid stays reachable
@@ -768,6 +809,9 @@ function WeekRow({
                       {t('double')}
                     </span>
                   )}
+                  {day.proposed.map((p, i) => (
+                    <ProposedChip key={`${p.date}-${i}`} session={p} t={t} />
+                  ))}
                 </div>
               ) : (
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -813,6 +857,17 @@ function WeekRow({
                       </button>
                     ),
                   )}
+                  {day.proposed.map((p, i) => (
+                    <span
+                      key={`${p.date}-${i}`}
+                      role="img"
+                      aria-label={proposedLabel(p, t('proposedChip'))}
+                      title={p.type}
+                      className="-m-1.5 inline-flex items-center justify-center p-1.5"
+                    >
+                      <span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-muted-foreground" />
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -825,6 +880,46 @@ function WeekRow({
           {t(bounce.messageKey)}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * A proposed session, ghosted where it would land (`training-architecture/18`).
+ * The size of a Session Chip so the row does not jump; a dashed border and a
+ * muted tone so it reads as not-yet. Not draggable, no drawer, no rating — a
+ * proposal is not a session, and every control a session has is withheld.
+ */
+
+/**
+ * The accessible name of a proposed session, in either rendering: what the eye
+ * sees, type and minutes, then the "proposed" marker. One helper for the
+ * collapsed dot and the full chip so the two cannot drift (CodeRabbit, PR #69).
+ */
+function proposedLabel(session: ProposedSession, proposedWord: string): string {
+  return [session.type, session.durationMinutes ? `${session.durationMinutes} min` : null, proposedWord].filter(Boolean).join(' · ');
+}
+
+function ProposedChip({
+  session,
+  t,
+}: {
+  session: ProposedSession;
+  t: ReturnType<typeof useTranslations<'Calendar'>>;
+}) {
+  return (
+    <div
+      role="note"
+      aria-label={proposedLabel(session, t('proposedChip'))}
+      data-proposed=""
+      className="block w-full border border-dashed border-muted-foreground/60 px-1.5 py-1 text-left"
+    >
+      <span className="block truncate font-body text-[11px] font-medium leading-tight text-muted-foreground">
+        {session.type}
+      </span>
+      <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+        {session.durationMinutes ? `${session.durationMinutes} min` : t('proposedChip')}
+      </span>
     </div>
   );
 }
