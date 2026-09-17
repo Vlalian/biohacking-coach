@@ -1,7 +1,7 @@
 'use server';
 
 import { resolveHeadCoachWithLanguage } from '../../../../current-actor';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 import {
   continueBriefing,
   startBriefing,
@@ -30,7 +30,7 @@ export async function startBriefingAction(
   return startBriefing(
     resolved.coachId,
     athleteId,
-    dateKey(new Date()),
+    today(),
     resolved.language,
   );
 }
@@ -46,7 +46,7 @@ export async function sendBriefingMessageAction(
     resolved.coachId,
     conversationId,
     content,
-    dateKey(new Date()),
+    today(),
     resolved.language,
   );
 }

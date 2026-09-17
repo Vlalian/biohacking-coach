@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { resolveHeadCoachId } from '../../../../current-actor';
 import { approveWeekDraft, type ApproveResult } from '@/features/coach/head-coach-week-service';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 
 /**
  * The Head Coach approves a drafted week, as drafted or as they edited it
@@ -30,7 +30,7 @@ export async function approveWeekDraftAction(
     weekStart,
     sessions,
     // The server's clock, like every other Head Coach action.
-    today: dateKey(new Date()),
+    today: today(),
   });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;

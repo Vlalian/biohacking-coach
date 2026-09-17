@@ -7,7 +7,7 @@ import {
   type EditBlockResult,
 } from '@/features/coach/training-block-service';
 import type { BlockEditInput } from '@/features/coach/training-blocks';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 
 /**
  * The one server action behind the Head Coach's Training Block edits
@@ -38,7 +38,7 @@ export async function editBlockAction(
     expectedVersion,
     // The server's clock, like every other Head Coach action: a materialised
     // draft starts today by the server's reckoning, not a browser's.
-    today: dateKey(new Date()),
+    today: today(),
   });
   // 'layout': the blocks show on the plan tab and in the Briefing's material,
   // so a page-scoped revalidate would leave the other tab stale.

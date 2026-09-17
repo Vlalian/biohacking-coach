@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { saveCheckIn } from '@/features/coach/check-in-repository';
-import { dateKey, weekStartOf } from '@/lib/date';
+import { weekStartOf, today } from '@/lib/date';
 import {
   resolveAthleteWithLanguage as currentAthlete,
   type AuthFailure,
@@ -83,7 +83,7 @@ export async function saveCheckInAction(report: {
   if (notableSignal === undefined) return { ok: false, reason: 'invalid' };
 
   try {
-    await saveCheckIn(resolved.athlete.id, weekStartOf(dateKey(new Date())), {
+    await saveCheckIn(resolved.athlete.id, weekStartOf(today()), {
       ...report,
       notableSignal,
     });
@@ -106,7 +106,7 @@ export async function startWeeklySessionAction(): Promise<StartWeeklyResult> {
     return { ok: false, reason: 'consent-required' };
   }
 
-  return startWeeklySession(resolved.athlete, dateKey(new Date()), resolved.language);
+  return startWeeklySession(resolved.athlete, today(), resolved.language);
 }
 
 export async function sendWeeklyMessageAction(
@@ -123,7 +123,7 @@ export async function sendWeeklyMessageAction(
     resolved.athlete,
     conversationId,
     content,
-    dateKey(new Date()),
+    today(),
     resolved.language,
   );
 }
@@ -138,7 +138,7 @@ export async function commitWeeklyPlanAction(
   const result = await commitWeeklyPlan(
     resolved.athlete,
     conversationId,
-    dateKey(new Date()),
+    today(),
   );
   // The confirmed plan lands in the calendar — refresh it so the new week shows.
   if (result.ok) revalidatePath('/', 'layout');

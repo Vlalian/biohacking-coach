@@ -7,7 +7,7 @@ import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getCoachByUserId } from '@/features/coach/coach-repository';
 import { getRosterWithReviews } from '@/features/coach/roster-service';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 
 // Per-request: the page depends on who is signed in, so it is never prerendered.
 export const dynamic = 'force-dynamic';
@@ -42,7 +42,7 @@ export default async function CoachRosterPage({
     );
   }
 
-  const roster = await getRosterWithReviews(coach.id, dateKey(new Date()));
+  const roster = await getRosterWithReviews(coach.id, today());
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6 sm:p-8">

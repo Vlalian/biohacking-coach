@@ -10,7 +10,7 @@ import {
   type DeclineResult,
   type DiscussResult,
 } from '@/features/coach/week-draft-decision-service';
-import { dateKey } from '@/lib/date';
+import { today } from '@/lib/date';
 import { resolveAthleteWithLanguage as currentAthlete, type AuthFailure } from './current-actor';
 
 /**
@@ -26,7 +26,7 @@ type ConsentFailure = { ok: false; reason: 'consent-required' };
 export async function acceptWeekDraftAction(draftId: string): Promise<AcceptResult | AuthFailure> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
-  const result = await acceptWeekDraft(resolved.athlete, draftId, dateKey(new Date()));
+  const result = await acceptWeekDraft(resolved.athlete, draftId, today());
   // The accepted week lands in the calendar — refresh it so the sessions show.
   if (result.ok) revalidatePath('/', 'layout');
   return result;
@@ -35,7 +35,7 @@ export async function acceptWeekDraftAction(draftId: string): Promise<AcceptResu
 export async function declineWeekDraftAction(draftId: string): Promise<DeclineResult | AuthFailure> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
-  const result = await declineWeekDraft(resolved.athlete, draftId, dateKey(new Date()));
+  const result = await declineWeekDraft(resolved.athlete, draftId, today());
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
@@ -49,7 +49,7 @@ export async function discussWeekDraftAction(draftId: string): Promise<DiscussRe
   if (!resolved.ok) return resolved;
   const gate = await assertAiCoachingConsent(resolved.athlete.id);
   if (!gate.ok) return { ok: false, reason: 'consent-required' };
-  const result = await discussWeekDraft(resolved.athlete, draftId, dateKey(new Date()), resolved.language);
+  const result = await discussWeekDraft(resolved.athlete, draftId, today(), resolved.language);
   // The proposal left the calendar for the conversation — the card becomes a pointer.
   if (result.ok) revalidatePath('/', 'layout');
   return result;

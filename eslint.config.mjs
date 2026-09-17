@@ -17,6 +17,11 @@ const eslintConfig = defineConfig([
     // require() and is not held to the app's lint rules — linting it only
     // reports the very patterns the port exists to replace.
     "poc/**",
+    // Playwright's component harness bundles React itself into this folder;
+    // linting the bundle reports React's own internals as hook violations.
+    "playwright/.cache/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
   // Fixture modules build invented data byte by byte so the decode and render
   // paths can be tested without a real export. Both carry a "TEST FIXTURES
