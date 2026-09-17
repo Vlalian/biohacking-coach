@@ -28,9 +28,16 @@ function matching(condition: unknown): Row[] {
   return rows.filter((row) => pairs.every(([column, value]) => row[column] === value));
 }
 
-/** A statement that runs when awaited directly, via `.returning()`, or in a batch. */
+/**
+ * A statement that runs once, whichever way the repository executes it: awaited
+ * directly (it is a thenable), via `.returning()`, or inside `batch()`.
+ */
 function statement<T>(run: () => T) {
-  return { run, returning: async () => run() };
+  return {
+    run,
+    returning: async () => run(),
+    then: (resolve: (value: T) => void) => resolve(run()),
+  };
 }
 
 const noop = statement(() => undefined);

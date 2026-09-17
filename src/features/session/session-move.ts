@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions } from '@/db/schema';
 import { classifyMove } from './move-rules';
@@ -116,14 +116,7 @@ export async function applyMove(params: {
     athleteId,
     sessionId,
     expectedVersion,
-    set: {
-      date: targetDate,
-      // A day-parked session keeps naming the day it is on, so clearing that
-      // day still restores it; a session-parked one (null) stays null. Decided
-      // in SQL because a day-park does not bump the version, so a row read as
-      // unparked may be parked by the time this lands.
-      parkedByDate: sql`CASE WHEN ${sessions.parkedByDate} IS NULL THEN NULL ELSE ${sql.param(targetDate)} END`,
-    },
+    set: { date: targetDate },
     attempted: { date: targetDate },
     event: {
       actorType: actor.type,
