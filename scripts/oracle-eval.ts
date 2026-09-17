@@ -76,6 +76,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const retrievalOnly = hasFlag('retrieval-only');
+  // A run is a record; a second run today under the same label is a new
+  // label, not a replacement. Refuse before any money is spent.
+  const date = new Date().toISOString().slice(0, 10);
+  const localDir = join(process.cwd(), '.oracle-eval');
+  const localPath = join(localDir, `${date}-${label}.md`);
+  if (existsSync(localPath)) {
+    console.error(`${localPath} already exists — pick another --label; runs are never overwritten.`);
+    process.exit(1);
+  }
 
   const set = group ? EVAL_SET.filter((c) => c.group === group) : EVAL_SET;
   const embedder = openAiEmbedder();
@@ -120,7 +129,6 @@ async function main(): Promise<void> {
     console.log(`done (${run.lookups.length} lookups)`);
   }
 
-  const date = new Date().toISOString().slice(0, 10);
   const notes = [
     `run: ${group ?? 'all groups'}${retrievalOnly ? ', retrieval only' : ''}`,
     `athlete: the eval fixture (phase ${EVAL_ATHLETE.phase}, ${EVAL_ATHLETE.experienceLevel})`,
@@ -142,9 +150,7 @@ async function main(): Promise<void> {
     knownSourceIds,
   });
 
-  const localDir = join(process.cwd(), '.oracle-eval');
   mkdirSync(localDir, { recursive: true });
-  const localPath = join(localDir, `${date}-${label}.md`);
   writeFileSync(localPath, report, 'utf8');
   console.log(`Written to ${localPath}`);
 

@@ -46,6 +46,9 @@ export async function runRetrieval(set: readonly EvalCase[], ports: RetrievalPor
       search: ports.search,
       query: queryFor(c.question, ports),
       topK: ports.topK,
+      // Production caps distinct sources at MAX_CITATIONS and drops the rest;
+      // the raw ranking must keep every top-k source or MRR and the floor lie.
+      maxCitations: ports.topK,
       minSimilarity: 0,
     });
     records.push(retrievalRecord(c, rankedHits(result), floor));
@@ -137,6 +140,7 @@ export async function runGeneration(
 
   /** The reply text, or null when the call failed. */
   const turn = async ({ id, group, question, messages, turnNo, expectNoLookup, outsideCorpus, passCondition }: Turn): Promise<string | null> => {
+    let lookupFailed = false;
     const grounding = createGrounding({
       embedder: ports.embedder,
       search: ports.search,
@@ -144,6 +148,12 @@ export async function runGeneration(
       experienceLevel: ports.experienceLevel,
       record: async (entry) => {
         lookups.push(entry);
+      },
+      // An outage on the embedder or the corpus reaches the Coach as "lookup
+      // unavailable" and it answers anyway — which must not be read as the
+      // Coach declining. Flag the turn so the report says what happened.
+      failed: () => {
+        lookupFailed = true;
       },
     });
     let reply: CoachReply;
@@ -166,6 +176,7 @@ export async function runGeneration(
         mentions: [],
         text: `*** CALL FAILED ***\n${error instanceof Error ? error.message : String(error)}`,
         failed: true,
+        lookupFailed,
         expectNoLookup,
         outsideCorpus,
         passCondition,
@@ -182,6 +193,7 @@ export async function runGeneration(
       mentions: sourceMentions(reply.text),
       text: reply.text,
       failed: false,
+      lookupFailed,
       expectNoLookup,
       outsideCorpus,
       passCondition,

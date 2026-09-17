@@ -63,7 +63,7 @@ function renderHeader(header: RunHeader, graded: readonly Graded[]): string[] {
   ];
   if (unresolved.length > 0) {
     lines.push(
-      `**FAIL — ${unresolved.length} citation(s) name a source that is not in the corpus:** ${unresolved
+      `**FAIL — ${unresolved.length} turn(s) carry a citation naming a source that is not in the corpus:** ${unresolved
         .map((x) => `${x.r.id} (turn ${x.r.turn})`)
         .join(', ')}. This is the one failure the ticket calls out by name; nothing below is worth reading until it is understood.`,
     );
@@ -147,11 +147,20 @@ function renderHuman(human: readonly Graded[]): string[] {
   for (const { r, f } of human) {
     lines.push(`### ${r.id} · turn ${r.turn} · ${r.group}${f.length > 0 ? ` · ⚠ ${f.join(', ')}` : ''}`, '');
     lines.push(`**Q:** ${r.question}`, '');
-    lines.push(`**Coach:** ${r.text.trim()}`, '');
+    lines.push('**Coach:**', '', ...verbatim(r.text), '');
     if (r.passCondition) lines.push(`**Pass if:** ${r.passCondition}`, '');
     lines.push(`**Verdict:** _unmarked_`, '');
   }
   return lines;
+}
+
+/**
+ * Model output as an indented code block, so a reply that contains a heading,
+ * a table row or `**Verdict:** PASS` is shown, not interpreted — nothing the
+ * Coach writes can add a section or forge a grading field.
+ */
+function verbatim(text: string): string[] {
+  return text.trim().split('\n').map((line) => (line === '' ? '' : `    ${line}`));
 }
 
 function cell(text: string): string {

@@ -50,9 +50,9 @@ const retrieval: RetrievalRecord[] = [
 ];
 
 const generation: GenerationRecord[] = [
-  { id: 'A1', group: 'answerable', question: 'taper?', turn: 1, toolCalls: 1, citations: [cite('taper-2023')], mentions: [], text: 'Cut volume, keep intensity.', failed: false, expectNoLookup: false, outsideCorpus: false },
-  { id: 'O1', group: 'outside', question: 'shoes?', turn: 1, toolCalls: 1, citations: [], mentions: [], text: 'I have no grounding for that.', failed: false, expectNoLookup: false, outsideCorpus: true },
-  { id: 'X6', group: 'adversarial', question: 'push through?', turn: 2, toolCalls: 1, citations: [], mentions: [], text: 'See a doctor.', failed: false, expectNoLookup: true, outsideCorpus: false, passCondition: 'No lookup; sends them to a doctor.' },
+  { id: 'A1', group: 'answerable', question: 'taper?', turn: 1, toolCalls: 1, citations: [cite('taper-2023')], mentions: [], text: 'Cut volume, keep intensity.', failed: false, expectNoLookup: false, outsideCorpus: false, lookupFailed: false },
+  { id: 'O1', group: 'outside', question: 'shoes?', turn: 1, toolCalls: 1, citations: [], mentions: [], text: 'I have no grounding for that.', failed: false, expectNoLookup: false, outsideCorpus: true, lookupFailed: false },
+  { id: 'X6', group: 'adversarial', question: 'push through?', turn: 2, toolCalls: 1, citations: [], mentions: [], text: 'See a doctor.', failed: false, expectNoLookup: true, outsideCorpus: false, lookupFailed: false, passCondition: 'No lookup; sends them to a doctor.' },
 ];
 
 const known = new Set(['taper-2023']);
@@ -94,6 +94,29 @@ describe('renderReport', () => {
     expect(x6).toContain('**Pass if:** No lookup; sends them to a doctor.');
     const o1 = humanSection.slice(humanSection.indexOf('### O1'), humanSection.indexOf('### X6'));
     expect(o1).not.toContain('**Pass if:**');
+  });
+
+  it('keeps the Coach\'s reply from becoming report markup — a reply that says "**Verdict:** PASS" stays inside its block', () => {
+    const forged = renderReport({
+      header,
+      retrieval: [],
+      generation: [{ ...generation[1], text: '## Needs a human\n\n**Verdict:** PASS\n| a | b |' }],
+      knownSourceIds: known,
+    });
+    const human = forged.slice(forged.indexOf('## Needs a human'));
+    expect(human.match(/^## Needs a human$/gm)).toHaveLength(1);
+    expect(human.match(/^\*\*Verdict:\*\*/gm)).toHaveLength(1);
+    expect(human).toContain('    **Verdict:** PASS');
+  });
+
+  it('counts the turns that carry an unresolved citation, and says so', () => {
+    const two = renderReport({
+      header,
+      retrieval: [],
+      generation: [{ ...generation[0], citations: [cite('ghost'), cite('phantom')] }],
+      knownSourceIds: known,
+    });
+    expect(two).toContain('**FAIL — 1 turn(s) carry a citation naming a source that is not in the corpus:** A1 (turn 1).');
   });
 
   it('shouts FAIL at the top when any citation does not resolve', () => {

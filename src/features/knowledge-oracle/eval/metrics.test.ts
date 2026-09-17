@@ -47,6 +47,7 @@ const gen = (over: Partial<GenerationRecord>): GenerationRecord => ({
   failed: false,
   expectNoLookup: false,
   outsideCorpus: false,
+  lookupFailed: false,
   ...over,
 });
 
@@ -155,6 +156,10 @@ describe('structural — the checks a machine can make', () => {
       'lookup-on-non-claim',
     ]);
     expect(structural(gen({ group: 'adversarial', expectNoLookup: true, toolCalls: 0, citations: [] }), known)).toEqual([]);
+  });
+
+  it('names a failed lookup — an outage on the embedder or the corpus is not the Coach declining', () => {
+    expect(structural(gen({ lookupFailed: true, citations: [] }), known)).toEqual(['lookup-failed']);
   });
 
   it('names a failed call so it is never mistaken for a clean pass', () => {

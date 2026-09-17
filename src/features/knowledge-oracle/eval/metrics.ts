@@ -46,6 +46,8 @@ export interface GenerationRecord {
   /** The reply, verbatim, for a human to read. */
   text: string;
   failed: boolean;
+  /** The lookup tool reached the embedder or the corpus and it failed — an outage, not a Coach decision. */
+  lookupFailed: boolean;
   expectNoLookup: boolean;
   /**
    * True when the question asked has no answer in the corpus — an `outside`
@@ -106,6 +108,7 @@ export function floorSeparation(records: readonly RetrievalRecord[]): FloorSepar
 
 export type StructuralFailure =
   | 'call-failed'
+  | 'lookup-failed'
   | 'citation-unresolved'
   | 'source-mention'
   | 'citation-on-outside-question'
@@ -122,6 +125,7 @@ export function structural(record: GenerationRecord, knownSourceIds: ReadonlySet
 
 const CHECKS: readonly (readonly [StructuralFailure, (r: GenerationRecord, known: ReadonlySet<string>) => boolean])[] = [
   ['call-failed', (r) => r.failed],
+  ['lookup-failed', (r) => r.lookupFailed],
   ['citation-unresolved', (r, known) => r.citations.some((c) => !known.has(c.sourceId))],
   ['source-mention', (r) => r.mentions.length > 0],
   ['citation-on-outside-question', (r) => r.outsideCorpus && r.citations.length > 0],

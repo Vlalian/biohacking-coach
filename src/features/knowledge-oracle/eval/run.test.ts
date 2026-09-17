@@ -83,6 +83,13 @@ describe('runRetrieval', () => {
     expect(searchChunks.mock.calls[1][1]).toBe(3);
   });
 
+  it('keeps every top-k source in the raw ranking, past the citation cap production applies', async () => {
+    searchChunks.mockResolvedValueOnce(Array.from({ length: 8 }, (_, i) => hit(`s${i}`, 0.9 - i * 0.01)));
+    const records = await runRetrieval(SET.slice(0, 1), { embedder: { embed }, search: { searchChunks }, topK: 8 });
+    expect(records[0].raw).toHaveLength(8);
+    expect(records[0].raw.map((h) => h.slug)).toEqual(['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7']);
+  });
+
   it('skips a blank question without embedding it', async () => {
     const blank: EvalCase = { id: 'A0', group: 'answerable', question: '   ', expected: ['x'], nearest: null };
     const records = await runRetrieval([blank], { embedder: { embed }, search: { searchChunks } });
@@ -137,6 +144,7 @@ describe('runGeneration', () => {
       expectNoLookup: false,
       outsideCorpus: false,
       passCondition: undefined,
+      lookupFailed: false,
     });
     expect(a1.citations.map((c) => c.slug)).toEqual(['taper-2023']);
     expect(embed).toHaveBeenCalledTimes(2);
@@ -183,6 +191,7 @@ describe('runGeneration', () => {
       expectNoLookup: false,
       outsideCorpus: false,
       passCondition: undefined,
+      lookupFailed: false,
     });
     callCoach.mockRejectedValueOnce('string error');
     const again = await runGeneration(SET.slice(0, 1), { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S', maxTokens: 99 });
@@ -211,6 +220,15 @@ describe('runGeneration', () => {
     const onAnswerable: EvalCase = { id: 'X9', group: 'adversarial', turn1: 'A1', turn2: 'sure?', passCondition: 'p', expectNoLookup: false };
     const inside = await runGeneration([onAnswerable], { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' }, SET);
     expect(inside.records.map((r) => r.outsideCorpus)).toEqual([false, false]);
+  });
+
+  it('marks a turn whose lookup failed on the embedder or the corpus, so an outage is never read as Coach behaviour', async () => {
+    embed.mockRejectedValueOnce(new Error('embedder down'));
+    const run = await runGeneration(SET.slice(0, 2), { embedder: { embed }, search: { searchChunks }, callCoach, system: 'S' });
+    expect(run.records.map((r) => [r.id, r.failed, r.lookupFailed])).toEqual([
+      ['A1', false, true],
+      ['O1', false, false],
+    ]);
   });
 
   it('never lets a question reach the lookup log — counts only, as in production', async () => {
