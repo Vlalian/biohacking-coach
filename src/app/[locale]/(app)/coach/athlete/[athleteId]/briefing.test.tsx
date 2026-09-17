@@ -18,9 +18,10 @@ describe('BriefingOpener', () => {
     expect(html).not.toContain('role="status"');
   });
 
-  it('pending: the button and a live status both read the week with the shared estimate', () => {
+  it('pending: the button goes quiet and the live status reads the week with the shared estimate — said once', () => {
     const html = renderToStaticMarkup(<BriefingOpener pending onStart={() => {}} />);
-    expect(html).toContain(`starting(seconds=${COACH_EXPECTED_SECONDS})`);
+    expect(html).toContain('opening()');
+    expect(html.split(`starting(seconds=${COACH_EXPECTED_SECONDS})`)).toHaveLength(2);
     expect(html).toContain('role="status"');
     expect(html).toContain('disabled=""');
   });

@@ -60,7 +60,7 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
 
   const redraft = () =>
     startTransition(async () => {
-      setOutcome({ kind: 'drafting' });
+      setOutcome({ kind: 'idle' });
       // A server action can reject outright (a dead driver, a network blip),
       // not only resolve to { ok: false }; without the catch the card would
       // sit on "drafting" with its button gone (CodeRabbit, PR #78).
@@ -73,7 +73,12 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
       setOutcome({ kind: 'refused', reason: result.reason });
     });
 
-  const line = redraftOutcomeKey(outcome);
+  // The drafting line follows the transition's own `pending`, not a state
+  // set inside it: React 19 holds every update made inside an async
+  // transition until the action resolves, so a "drafting" outcome set there
+  // never showed — the card sat silent for the whole Coach call (Mads's
+  // smoke run of PR #78, S17).
+  const line = redraftOutcomeKey(pending ? { kind: 'drafting' } : outcome);
 
   return (
     <section
@@ -83,7 +88,7 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
     >
       <h2 className="font-display text-xl tracking-[0.04em] text-foreground">{t('title')}</h2>
       <p className="mt-1 font-body text-sm text-muted-foreground">{t('lead', { week: weekStart })}</p>
-      {outcome.kind !== 'drafting' && (
+      {!pending && (
         <div className="mt-3">
           <button
             type="button"

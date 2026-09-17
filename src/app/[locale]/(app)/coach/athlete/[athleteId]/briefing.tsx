@@ -172,14 +172,15 @@ export function Briefing({
  */
 export function BriefingOpener({ pending, onStart }: { pending: boolean; onStart: () => void }) {
   const t = useTranslations('Briefing');
-  const starting = t('starting', { seconds: COACH_EXPECTED_SECONDS });
+  // Said once: the button goes quiet ("Opening…") and the status line under it
+  // carries the sentence with the estimate (Mads, PR #78 smoke run, S23).
   return (
     <div className="flex flex-col items-center gap-3 rounded border border-neutral-200 p-6 dark:border-neutral-800">
       <p className="text-sm text-neutral-500">{t('intro')}</p>
       <button type="button" onClick={onStart} disabled={pending} className={primaryBtn}>
-        {pending ? starting : t('start')}
+        {pending ? t('opening') : t('start')}
       </button>
-      {pending && <Thinking label={starting} tone="muted" />}
+      {pending && <Thinking label={t('starting', { seconds: COACH_EXPECTED_SECONDS })} tone="muted" />}
     </div>
   );
 }

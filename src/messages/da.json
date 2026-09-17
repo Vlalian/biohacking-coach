@@ -275,6 +275,7 @@
     "subtitle": "Spørg Coachen om denne atlet.",
     "intro": "Coachen har læst denne atlets data — åbn en briefing for at høre dens vurdering og stille spørgsmål.",
     "start": "Åbn briefing",
+    "opening": "Åbner…",
     "starting": "Læser ugen… cirka {seconds} sekunder",
     "thinking": "Coachen tænker…",
     "inputLabel": "Spørg Coachen om denne atlet",

@@ -275,6 +275,7 @@
     "subtitle": "Ask the Coach about this athlete.",
     "intro": "The Coach has read this athlete's data — open a briefing to hear its read and ask questions.",
     "start": "Open briefing",
+    "opening": "Opening…",
     "starting": "Reading the week… about {seconds} seconds",
     "thinking": "Coach is thinking…",
     "inputLabel": "Ask the Coach about this athlete",
