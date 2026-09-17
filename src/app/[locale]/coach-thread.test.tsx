@@ -59,6 +59,23 @@ describe('CoachThread — a drafted week seeded into the chat', () => {
     expect(setChatSeed).toHaveBeenCalledWith(null);
   });
 
+  it('a restored Weekly Session opens in weekly mode with the chat kept mounted underneath, hidden', () => {
+    // A "Plan my week" tap mid-thought used to unmount the chat and lose the
+    // turn in flight from view (Mads, smoke run of PR #71).
+    const html = renderToStaticMarkup(
+      <CoachOverlayContext.Provider value={base}>
+        <CoachThread
+          chatInitial={{ conversationId: 'c9', messages: [] }}
+          weeklyInitial={{ conversationId: 'w1', weeklySessionNumber: 1, messages: [], proposal: null, ended: false }}
+        />
+      </CoachOverlayContext.Provider>,
+    );
+    expect(html).toContain('data-mode="weekly"');
+    expect(html).toContain('data-mode="chat"');
+    expect(html).toContain('data-conversation="c9"');
+    expect(html).toContain('data-chat-hidden="true"');
+  });
+
   it('a seed wins over a restored Weekly Session — the athlete tapped Discuss, so that is where they land', () => {
     const html = renderToStaticMarkup(
       <CoachOverlayContext.Provider value={{ ...base, chatSeed: { conversationId: 'c1', messages: [], proposal: null, seededAt: 1 } }}>

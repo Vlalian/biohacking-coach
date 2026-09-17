@@ -13,6 +13,8 @@ let executeRows: unknown[] = [];
 let selectArgs: unknown[] = [];
 let insertValues: unknown[] = [];
 let rowsQueue: unknown[][] = [];
+/** Each `db.batch` call, as the number of statements it carried. */
+let batches: number[] = [];
 
 function chain() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,7 +28,17 @@ function chain() {
     whereArgs.push(arg);
     return c;
   };
-  c.insert = () => ({ values: (v: unknown) => insertValues.push(v) });
+  // `.values()` records the row whether awaited directly or handed to
+  // `db.batch`; the batch records only how many statements it carried.
+  c.insert = () => ({
+    values: (v: unknown) => {
+      insertValues.push(v);
+      return { __insert: v };
+    },
+  });
+  c.batch = async (statements: unknown[]) => {
+    batches.push(statements.length);
+  };
   c.then = (resolve: (rows: unknown[]) => unknown) =>
     Promise.resolve(rowsQueue.length > 0 ? (rowsQueue.shift() as unknown[]) : nextRows).then(resolve);
   return c;
@@ -77,6 +89,7 @@ beforeEach(() => {
   selectArgs = [];
   insertValues = [];
   rowsQueue = [];
+  batches = [];
   execute.mockClear();
 });
 
@@ -370,9 +383,14 @@ describe('the athlete’s own writes on a draft', () => {
     ]);
   });
 
-  it('recordWeekDraftDiscussed withdraws the draft as the athlete, naming the conversation it moved into', async () => {
-    await recordWeekDraftDiscussed({ athleteId: ATHLETE, weekStart: WEEK, draftId: 'd1', conversationId: 'c1' });
+  it('recordWeekDraftDiscussed stages the proposal and withdraws the draft in one batch — the conversation owns the week, or nothing changed', async () => {
+    // Two statements used to go separately; a failure between them left the
+    // proposal pending with the calendar draft still actionable (CodeRabbit,
+    // PR #71). One batch: both land, or neither.
+    await recordWeekDraftDiscussed({ athleteId: ATHLETE, weekStart: WEEK, draftId: 'd1', conversationId: 'c1', sessions: [SESSION] });
+    expect(batches).toEqual([2]);
     expect(insertValues).toEqual([
+      { athleteId: ATHLETE, actorType: 'coach_ai', type: 'week_plan_proposed', payload: { conversationId: 'c1', sessions: [SESSION] } },
       { athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'week_draft_withdrawn', payload: { weekStart: WEEK, draftId: 'd1', reason: 'discussed', conversationId: 'c1' } },
     ]);
   });

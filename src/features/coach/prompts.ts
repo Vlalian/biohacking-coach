@@ -666,7 +666,7 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   return assemble([
     openingBlock(language, 'Weekly Session — primary structured conversation, once per week.'),
 
-    'POSTURE: Confident, evidence-led, direct. Hold position unless athlete gives real reason. No markdown, lists, platitudes.',
+    `POSTURE: Confident, evidence-led, direct. ${HOLD_POSITION} No markdown, lists, platitudes.`,
 
     groundingBlock(),
 
@@ -842,7 +842,7 @@ export function buildChatPrompt(
       'Coach Chat — on-demand open conversation. Training, nutrition, equipment, race logistics, mindset, injury, anything.',
     ),
 
-    "POSTURE: Confident, evidence-led, direct. Real conversation — respond to what they're asking. One follow-up if needed. Concise. No markdown, no lists unless athlete asks for breakdown.",
+    `POSTURE: Confident, evidence-led, direct. Real conversation — respond to what they're asking. One follow-up if needed. Concise. ${HOLD_POSITION} No markdown, no lists unless athlete asks for breakdown.`,
 
     groundingBlock(),
 
@@ -1116,8 +1116,23 @@ export interface WeekDraftContext extends WeeklyContext {
 const DOUBLES =
   "DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.";
 
+/**
+ * The card is the only question (Mads, 2026-09-17, grill on the PR #71 smoke
+ * run). It used to say "call it only after agreement", and the Coach obeyed:
+ * it laid out a revised week in prose, asked "shall we go with this?", and the
+ * card still held the original draft — the athlete said yes, tapped Save, and
+ * got the old week. Two places to say yes. Now the tool call *is* the question.
+ */
 const SAVING_THE_PLAN =
-  'SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Every date must fall inside the PLANNING WINDOW above; dates outside it are dropped by the server.';
+  'SAVING THE PLAN: Whenever you lay out a full week, call the propose_week_plan tool with it — every session dated (YYYY-MM-DD), rest days omitted. The card that shows the athlete is the question; they confirm or cancel there. Never describe a week in prose and ask whether to go with it. This does NOT save. Keep discussing single changes in words; propose the week again, through the tool, when it changes. Every date must fall inside the PLANNING WINDOW above; dates outside it are dropped by the server.';
+
+/**
+ * The Coach holds a position it can ground (CONTEXT.md, Hyper Intelligence;
+ * ADR 0007 amended 2026-09-17). The line had lived in the Weekly Session's
+ * prompt only; Coach Chat dropped its week at the first push.
+ */
+const HOLD_POSITION =
+  'Hold position unless the athlete gives a reason you can act on — time, pain, fatigue, a constraint — or cannot follow your reasoning; never because they asked twice. When you hold, say why in one sentence, from the evidence you have. The athlete keeps the last word in the calendar, so holding costs them nothing.';
 
 /**
  * The week the athlete brought into the conversation from their calendar

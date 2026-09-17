@@ -53,6 +53,7 @@ type Notice =
   | { kind: 'error' }
   | { kind: 'consentRequired' }
   | { kind: 'coachUnavailable' }
+  | { kind: 'ranOutOfRoom' }
   | { kind: 'unsafeContent' }
   | { kind: 'stale' }
   | { kind: 'planned'; count: number };
@@ -61,6 +62,7 @@ type Notice =
 type FailureReason =
   | 'consent-required'
   | 'coach-unavailable'
+  | 'ran-out-of-room'
   | 'unsafe-content'
   | 'not-authenticated'
   | 'not-owner'
@@ -88,6 +90,11 @@ function failureNotice(reason: FailureReason): Notice {
       return { kind: 'consentRequired' };
     case 'coach-unavailable':
       return { kind: 'coachUnavailable' };
+    // The reply hit the token budget and came back empty (Mads, 2026-09-17).
+    // Told apart from unreachable: resending the same long turn fails the same
+    // way, so the athlete is asked for less rather than for the same again.
+    case 'ran-out-of-room':
+      return { kind: 'ranOutOfRoom' };
     case 'unsafe-content':
       return { kind: 'unsafeContent' };
     case 'stale':
@@ -171,6 +178,11 @@ export function WeeklySession({
   });
   // The host's own notice wins; a decision's outcome shows when the host has none.
   const visibleNotice: Notice = notice.kind !== 'none' ? notice : decision.notice;
+  // One thing at a time — a send while a decision is in flight could stage a
+  // proposal the decision then applies to (CodeRabbit, PR #71).
+  const busy = pending || decision.pending;
+  const confirm = () => { setNotice({ kind: 'none' }); decision.confirm(); };
+  const cancel = () => { setNotice({ kind: 'none' }); decision.cancel(); };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -194,7 +206,7 @@ export function WeeklySession({
   function send(e: FormEvent) {
     e.preventDefault();
     const content = draft.trim();
-    if (!content || !conversationId) return;
+    if (!content || !conversationId || busy) return;
     setNotice({ kind: 'none' });
     startTransition(async () => {
       const result = await sendWeeklyMessageAction(conversationId, content);
@@ -315,12 +327,12 @@ export function WeeklySession({
       {decision.proposal && (
         <PlanProposalCard
           proposal={decision.proposal}
-          pending={pending || decision.pending}
+          pending={busy}
           popupOpen={decision.popupOpen}
           onReview={decision.review}
           onKeepTalking={decision.keepTalking}
-          onConfirm={decision.confirm}
-          onCancel={decision.cancel}
+          onConfirm={confirm}
+          onCancel={cancel}
         />
       )}
 
@@ -347,6 +359,11 @@ export function WeeklySession({
           {visibleNotice.kind === 'coachUnavailable' && (
             <Banner tone="warn" icon={AlertTriangle}>
               {t('coachUnavailable')}
+            </Banner>
+          )}
+          {visibleNotice.kind === 'ranOutOfRoom' && (
+            <Banner tone="warn" icon={AlertTriangle}>
+              {t('ranOutOfRoom')}
             </Banner>
           )}
           {visibleNotice.kind === 'unsafeContent' && (
@@ -382,13 +399,13 @@ export function WeeklySession({
                     send(e);
                   }
                 }}
-                disabled={pending}
+                disabled={busy}
                 placeholder={t('placeholder')}
                 className="max-h-32 min-h-9 flex-1 resize-none border border-border bg-panel px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
               />
               <button
                 type="submit"
-                disabled={pending || draft.trim().length === 0}
+                disabled={busy || draft.trim().length === 0}
                 className="flex shrink-0 items-center gap-1.5 bg-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity disabled:opacity-35"
               >
                 {t('send')}

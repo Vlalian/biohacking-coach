@@ -43,6 +43,7 @@ type Notice =
   | { kind: 'error' }
   | { kind: 'consentRequired' }
   | { kind: 'unsafeContent' }
+  | { kind: 'ranOutOfRoom' }
   | { kind: 'planned'; count: number }
   | { kind: 'stale' };
 
@@ -58,11 +59,23 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   );
   const [messages, setMessages] = useState<UiMessage[]>(initial?.messages ?? []);
   const [draft, setDraft] = useState('');
+  // The message on its way to the Coach, shown in the thread the moment it is
+  // sent. Nothing is stored until the Coach has answered (conversation-turn),
+  // so without this the athlete's own words appeared only with the reply —
+  // "the Coach forgets" on Mads's smoke run of PR #71, 2026-09-17.
+  const [inFlight, setInFlight] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
   // The athlete's decision on a proposed week: state and server calls shared
   // with the Weekly Session (`use-plan-decision.ts`). The chat is never ended.
   const decision = usePlanDecision({ conversationId, initial: initial?.proposal });
   const visibleNotice: Notice = notice.kind !== 'none' ? notice : decision.notice;
+  // One thing at a time: a send while a decision is in flight could stage a
+  // proposal the decision then applies to (CodeRabbit, PR #71), and a decision
+  // during a send would decide a card the reply is about to replace.
+  const busy = pending || decision.pending;
+  // The host's notice would otherwise sit over the decision's outcome.
+  const confirm = () => { setNotice({ kind: 'none' }); decision.confirm(); };
+  const cancel = () => { setNotice({ kind: 'none' }); decision.cancel(); };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -71,12 +84,13 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   function send(e: FormEvent) {
     e.preventDefault();
     const content = draft.trim();
-    if (!content || pending) return;
+    if (!content || busy) return;
 
     // The Reference is consumed by this turn: clear it now so a follow-up
     // question isn't silently still "about" a session the athlete moved on from.
     const referenceSessionId = reference?.sessionId ?? null;
     setDraft('');
+    setInFlight(content);
     setNotice({ kind: 'none' });
 
     startTransition(async () => {
@@ -92,13 +106,17 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
             ? { kind: 'consentRequired' }
             : result.reason === 'unsafe-content'
               ? { kind: 'unsafeContent' }
-              : { kind: 'error' },
+              : result.reason === 'ran-out-of-room'
+                ? { kind: 'ranOutOfRoom' }
+                : { kind: 'error' },
         );
         // Hand the message back so a failure never eats what they typed.
+        setInFlight(null);
         setDraft(content);
         return;
       }
 
+      setInFlight(null);
       setConversationId(result.conversationId);
       setMessages(result.messages);
       setReference(null);
@@ -109,7 +127,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-background">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-        {messages.length === 0 && !pending ? (
+        {messages.length === 0 && !inFlight ? (
           <div className="flex flex-col items-center gap-2 border border-dashed border-border bg-panel px-5 py-8 text-center">
             <p className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
               {t('emptyTitle')}
@@ -122,7 +140,18 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
               <ChatRow key={m.id} message={m} t={t} />
             ))}
 
-            {pending && (
+            {inFlight && (
+              <div className="flex flex-col items-end gap-1" data-sending>
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  {t('youLabel')}
+                </span>
+                <p className="max-w-[85%] whitespace-pre-wrap border border-dashed border-border bg-panel px-3 py-2 text-sm leading-relaxed text-muted-foreground">
+                  {inFlight}
+                </p>
+              </div>
+            )}
+
+            {inFlight && (
               <div className="flex flex-col gap-2 border-l-2 border-signal/40 pl-3">
                 <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                   {t('thinking')}
@@ -146,12 +175,12 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
       {decision.proposal && (
         <PlanProposalCard
           proposal={decision.proposal}
-          pending={pending || decision.pending}
+          pending={busy}
           popupOpen={decision.popupOpen}
           onReview={decision.review}
           onKeepTalking={decision.keepTalking}
-          onConfirm={decision.confirm}
-          onCancel={decision.cancel}
+          onConfirm={confirm}
+          onCancel={cancel}
         />
       )}
 
@@ -181,6 +210,8 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
                 </>
               ) : visibleNotice.kind === 'unsafeContent' ? (
                 t('unsafeContent')
+              ) : visibleNotice.kind === 'ranOutOfRoom' ? (
+                t('ranOutOfRoom')
               ) : visibleNotice.kind === 'stale' ? (
                 tWeekly('proposalStale')
               ) : (
@@ -220,13 +251,13 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
                 send(e);
               }
             }}
-            disabled={pending}
+            disabled={busy}
             placeholder={t('placeholder')}
             className="max-h-32 min-h-9 flex-1 resize-none border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
           />
           <button
             type="submit"
-            disabled={pending || draft.trim().length === 0}
+            disabled={busy || draft.trim().length === 0}
             className="flex shrink-0 items-center gap-1.5 bg-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity disabled:opacity-35"
           >
             {t('send')}

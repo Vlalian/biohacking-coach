@@ -314,19 +314,39 @@ export async function recordWeekDraftDecision(decision: {
   });
 }
 
-/** The draft moved into a Weekly Session: withdrawn from the calendar, the conversation owns it now. */
+/**
+ * The draft moved into a conversation (`/18`, into Coach Chat since `/20`):
+ * staged as that conversation's pending proposal and withdrawn from the
+ * calendar, in one batch. Two statements used to go separately, and a failure
+ * between them left the proposal pending with the calendar draft still
+ * actionable — two places to say yes (CodeRabbit, PR #71). `db.batch` is the
+ * driver's one transactional write; both rows land or neither does.
+ *
+ * The proposal row is the Coach's (`coach_ai`, as `recordProposal` writes it):
+ * the Coach drafted the week. The withdrawal is the athlete's act.
+ */
 export async function recordWeekDraftDiscussed(handoff: {
   athleteId: string;
   weekStart: string;
   draftId: string;
   conversationId: string;
+  sessions: ProposedSession[];
 }): Promise<void> {
-  const { athleteId, weekStart, draftId, conversationId } = handoff;
-  await getDb().insert(events).values({
-    athleteId,
-    actorType: 'athlete',
-    actorId: athleteId,
-    type: WEEK_DRAFT_EVENT.withdrawn,
-    payload: { weekStart, draftId, reason: 'discussed', conversationId },
-  });
+  const { athleteId, weekStart, draftId, conversationId, sessions } = handoff;
+  const db = getDb();
+  await db.batch([
+    db.insert(events).values({
+      athleteId,
+      actorType: 'coach_ai',
+      type: PLAN_EVENT.proposed,
+      payload: { conversationId, sessions },
+    }),
+    db.insert(events).values({
+      athleteId,
+      actorType: 'athlete',
+      actorId: athleteId,
+      type: WEEK_DRAFT_EVENT.withdrawn,
+      payload: { weekStart, draftId, reason: 'discussed', conversationId },
+    }),
+  ]);
 }

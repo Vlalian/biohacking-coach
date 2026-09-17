@@ -97,7 +97,12 @@ export async function sendFeedbackTurn(
   if (!result.ok) {
     return {
       ok: false,
-      reason: result.reason === 'unsafe-content' ? 'coach-unavailable' : result.reason,
+      // A cut-off reply is folded in too: the interview offers no tools, so a
+      // reply that ran out of room is as retryable as one that never came.
+      reason:
+        result.reason === 'unsafe-content' || result.reason === 'ran-out-of-room'
+          ? 'coach-unavailable'
+          : result.reason,
     };
   }
   return result;

@@ -1,4 +1,4 @@
-import { refusalReason } from '@/lib/identifiers';
+import { refusalReason, type RefusalReason } from '@/lib/identifiers';
 import { logCoachFailure, type ModelSurface } from '@/lib/coach-log';
 import type { Citation } from '@/lib/citation';
 import type { ConversationKind } from '@/lib/conversation-kinds';
@@ -91,7 +91,7 @@ export interface ConversationTurn {
 
 export type ConversationTurnResult =
   | { ok: true; conversationId: string; messages: Message[] }
-  | { ok: false; reason: 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content' };
+  | { ok: false; reason: 'not-owner' | 'empty' | RefusalReason };
 
 /**
  * Takes the athlete's turn and returns the reply, creating the conversation on
@@ -218,7 +218,7 @@ async function askModel(
   trimmed: string,
 ): Promise<
   | { reply: CoachReply; prepared: PreparedTurn }
-  | { reason: 'coach-unavailable' | 'unsafe-content' }
+  | { reason: RefusalReason }
 > {
   try {
     const prepared = await turn.prepare(resumed.transcript, resumed.conversationId);

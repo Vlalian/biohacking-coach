@@ -1,4 +1,4 @@
-import { refusalReason } from '@/lib/identifiers';
+import { refusalReason, type RefusalReason } from '@/lib/identifiers';
 import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import type { Athlete } from '@/features/athlete/athlete';
@@ -204,7 +204,7 @@ export interface WeeklySessionState {
 
 export type StartWeeklySessionResult =
   | ({ ok: true } & WeeklySessionState)
-  | { ok: false; reason: 'coach-unavailable' | 'unsafe-content' | 'failed' };
+  | { ok: false; reason: RefusalReason | 'failed' };
 
 /**
  * Opens a new Weekly Session: the Coach speaks first, and it is persisted.
@@ -304,7 +304,7 @@ export async function startWeeklySession(
 }
 
 /** Why a continuing turn was refused. Named so the Coach-call boundary can return it. */
-export type ContinueRefusal = 'not-owner' | 'empty' | 'coach-unavailable' | 'unsafe-content';
+export type ContinueRefusal = 'not-owner' | 'empty' | RefusalReason;
 
 export type ContinueResult =
   | { ok: true; messages: Message[]; proposal: PlanProposal | null }

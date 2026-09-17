@@ -11,6 +11,7 @@ vi.mock('next-intl', () => ({
     `${key}(${Object.entries(values)
       .map(([k, v]) => `${k}=${v}`)
       .join(',')})`,
+  useFormatter: () => ({ dateTime: (d: Date) => d.toISOString().slice(0, 10) }),
 }));
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('./week-draft-actions', () => ({
@@ -59,6 +60,18 @@ describe('ProposalCard', () => {
     expect(html).toContain('data-decision="discuss"');
     expect(html).toContain('data-decision="decline"');
     expect(html).toContain('lead(count=2,week=2026-09-21)');
+  });
+
+  // Mads's smoke run of PR #71 (grill decision 7): the card said "2 sessions
+  // for the week of …" and nothing else, so the athlete accepted a week they
+  // could not read. The card is the proposal; it lists the week.
+  it('lists every drafted session with its type, minutes, zone and note', () => {
+    for (const s of DRAFT.sessions) expect(html).toContain(`data-session="${s.date}"`);
+    expect(html).toContain('Endurance');
+    expect(html).toContain('minutes(count=60)');
+    expect(html).toContain('minutes(count=150)');
+    expect(html).toContain('Z2');
+    expect(html).toContain('long');
   });
 
   it('is a card, not a modal: no dialog role, and nothing decided on first render', () => {

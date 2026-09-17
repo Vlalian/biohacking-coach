@@ -197,6 +197,25 @@ describe('sendCoachChatMessage', () => {
     expect(result).toEqual({ ok: false, reason: 'coach-unavailable' });
   });
 
+  it('reports ran-out-of-room when the reply was cut off at the token limit, and logs it as such', async () => {
+    // Mads's smoke run of PR #71: four "not sent" errors were this. The athlete
+    // is told to ask for less, not to send the same long turn again.
+    callCoach.mockRejectedValue(
+      Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
+    );
+
+    const result = await sendCoachChatMessage(ATHLETE, null, 'plan my whole month', '2026-08-12');
+
+    expect(result).toEqual({ ok: false, reason: 'ran-out-of-room' });
+    expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ reason: 'ran-out-of-room' }));
+    expect(appendMessages).not.toHaveBeenCalled();
+  });
+
+  it('gives the Coach room for a whole-week proposal and a paragraph', async () => {
+    await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12');
+    expect(callCoach.mock.calls[0][0].maxTokens).toBe(2500);
+  });
+
   it('names Coach Chat as the surface in the failure log', async () => {
     // The log exists so a churned tester can be told apart from one who simply
     // stopped caring (`showable-version/05`, item 2), and that only works if the

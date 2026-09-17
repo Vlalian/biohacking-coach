@@ -113,6 +113,28 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     expect(() => renderWeeklyPrompt({ ...ctx, stagedProposal: leakyStaged })).toThrow(/identifier/i);
   });
 
+  // Grill on the PR #71 smoke run (2026-09-17), decisions 2 and 3.
+  describe('the card is the only question, and the Coach holds its position', () => {
+    const window = { start: '2026-08-12', end: '2026-08-16', excludedDates: [], fellThrough: false };
+    const chat = buildChatPrompt(BASE, '2026-08-12', null, [], { window, stagedProposal: null });
+    const weekly = renderWeeklyPrompt(buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, '2026-08-12'));
+
+    it.each([
+      ['Coach Chat', chat],
+      ['Weekly Session', weekly],
+    ])('%s: a full week is always proposed through the tool, never asked about in prose', (_name, prompt) => {
+      expect(prompt).toMatch(/whenever you lay out a full week, call the propose_week_plan tool/i);
+      expect(prompt).toMatch(/never describe a week in prose and ask whether to go with it/i);
+      expect(prompt).not.toContain('Call it only after agreement');
+    });
+
+    it('Coach Chat holds a grounded position, the same posture the Weekly Session has always carried', () => {
+      expect(chat).toContain('Hold position unless the athlete gives a reason you can act on');
+      expect(chat).toContain('say why in one sentence');
+      expect(weekly).toContain('Hold position unless the athlete gives a reason you can act on');
+    });
+  });
+
   it('refuses a staged week whose note carries an email — Coach Chat', () => {
     const window = { start: '2026-08-12', end: '2026-08-16', excludedDates: [], fellThrough: false };
     expect(() => buildChatPrompt(BASE, '2026-08-12', null, [], { window, stagedProposal: leakyStaged })).toThrow(

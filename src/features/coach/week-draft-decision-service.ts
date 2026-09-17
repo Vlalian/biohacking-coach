@@ -4,7 +4,6 @@ import { replaceCoachPlanForDateRange } from '@/features/session/session-reposit
 import { fixedConstraintsOf, proposedToNewSessionRows, validateProposedPlan, type ProposedSession } from './weekly-session';
 import { createConversation, getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { recordProposal } from './plan-proposal-repository';
 import { wholeWeekWindow } from './week-draft';
 import {
   getCalendarProposalState,
@@ -116,12 +115,14 @@ export async function discussWeekDraft(
   const open = await getLatestOpenConversation(athlete.id, 'coach_chat');
   const conversationId = open?.id ?? (await createConversation({ athleteId: athlete.id, kind: 'coach_chat' })).id;
 
-  await recordProposal(athlete.id, conversationId, draft.sessions);
+  // One write: the proposal staged on the chat and the draft withdrawn from
+  // the calendar land together, or not at all.
   await recordWeekDraftDiscussed({
     athleteId: athlete.id,
     weekStart: draft.weekStart,
     draftId,
     conversationId,
+    sessions: draft.sessions,
   });
   return {
     ok: true,

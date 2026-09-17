@@ -91,7 +91,14 @@ export function isFreeOfShapedIdentifiers(value: unknown): boolean {
 }
 
 /** Why a Coach turn was refused, in the terms every caller reports upward. */
-export type RefusalReason = 'unsafe-content' | 'coach-unavailable';
+/**
+ * `ran-out-of-room` (2026-09-17): the Coach hit the turn's token budget and
+ * came back with nothing — mid-way through a whole-week proposal, on Mads's
+ * smoke run of PR #71. Told apart from `coach-unavailable` because "could not
+ * be reached, send it again" invites a retry of the same long turn; the
+ * athlete needs to know the reply was cut off and to ask for less.
+ */
+export type RefusalReason = 'unsafe-content' | 'coach-unavailable' | 'ran-out-of-room';
 
 /**
  * Which refusal a thrown Coach call is.
@@ -111,7 +118,19 @@ export type RefusalReason = 'unsafe-content' | 'coach-unavailable';
  * a rule is the moment to move it, before a fourth caller gets it subtly wrong.
  */
 export function refusalReason(error: unknown): RefusalReason {
-  return error instanceof DirectIdentifierError ? 'unsafe-content' : 'coach-unavailable';
+  if (error instanceof DirectIdentifierError) return 'unsafe-content';
+  return cutOffAtTokenLimit(error) ? 'ran-out-of-room' : 'coach-unavailable';
+}
+
+/**
+ * Whether a thrown Error carries the model's `max_tokens` stop reason — the
+ * adapter's empty-reply error is the one that does. Matched by the field
+ * rather than `instanceof`, because that class lives beside the Anthropic SDK
+ * and this module must not; the class name is not checked, because the field
+ * is the fact and a guard nothing can distinguish is a branch no test can hold.
+ */
+function cutOffAtTokenLimit(error: unknown): boolean {
+  return error instanceof Error && (error as { stopReason?: unknown }).stopReason === 'max_tokens';
 }
 
 /**

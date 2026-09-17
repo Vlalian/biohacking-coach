@@ -50,6 +50,26 @@ describe('refusalReason', () => {
     expect(refusalReason(new Error('fetch failed'))).toBe('coach-unavailable');
   });
 
+  // Mads's smoke run of PR #71, 2026-09-17: four "not sent" errors were the
+  // Coach hitting the chat's token budget mid-proposal and coming back with
+  // nothing. "Could not be reached" invites a retry of the same long turn; the
+  // athlete needs to know it ran out of room, and to ask for less.
+  it('calls a reply cut off at the token limit ran-out-of-room, by its shape, not its class', () => {
+    const cutOff = Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' });
+    expect(refusalReason(cutOff)).toBe('ran-out-of-room');
+  });
+
+  it('an empty reply that stopped for any other reason is still coach-unavailable', () => {
+    const empty = Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'end_turn' });
+    expect(refusalReason(empty)).toBe('coach-unavailable');
+    const noStop = Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: null });
+    expect(refusalReason(noStop)).toBe('coach-unavailable');
+  });
+
+  it('a plain object shaped like the cut-off error is not one — only a thrown Error counts', () => {
+    expect(refusalReason({ name: 'EmptyCoachReplyError', stopReason: 'max_tokens' })).toBe('coach-unavailable');
+  });
+
   it('is safe on a non-Error throw', () => {
     // Nothing guarantees a thrown value is an Error — a rejected fetch or a
     // stray `throw 'boom'` both land here, and both are retryable.

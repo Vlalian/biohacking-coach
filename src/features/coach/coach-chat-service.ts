@@ -50,7 +50,14 @@ import type { CoachReply } from './coach-client';
  * the resting conversation, so it stays open and is resumed on every visit.
  */
 
-const CHAT_MAX_TOKENS = 1200;
+/**
+ * Room for a whole-week proposal plus a paragraph. 1200 until 2026-09-17, when
+ * Mads's smoke run of PR #71 hit it four times: a `propose_week_plan` call for
+ * seven days is large, and a reply cut off mid-call comes back empty. Raised
+ * rather than retried — a retry doubles a twenty-second wait — and a cut-off is
+ * now its own refusal (`ran-out-of-room`) so the athlete is asked for less.
+ */
+const CHAT_MAX_TOKENS = 2500;
 
 /** The Reference the athlete brought into the thread, as the prompt sees it. */
 function toSessionContext(session: Session): SessionContext {

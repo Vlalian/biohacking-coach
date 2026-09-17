@@ -146,8 +146,15 @@ describe('discussWeekDraft — the draft goes to the one conversation (training-
 
     expect(getLatestOpenConversation).toHaveBeenCalledWith('athlete_1', 'coach_chat');
     expect(result).toEqual({ ok: true, conversationId: 'chat1', messages: transcript, proposal: { sessions: SESSIONS } });
-    expect(recordProposal).toHaveBeenCalledWith('athlete_1', 'chat1', SESSIONS);
-    expect(recordWeekDraftDiscussed).toHaveBeenCalledWith({ athleteId: 'athlete_1', weekStart: WEEK, draftId: 'd1', conversationId: 'chat1' });
+    // Staged and withdrawn in one repository write (CodeRabbit, PR #71).
+    expect(recordWeekDraftDiscussed).toHaveBeenCalledWith({
+      athleteId: 'athlete_1',
+      weekStart: WEEK,
+      draftId: 'd1',
+      conversationId: 'chat1',
+      sessions: SESSIONS,
+    });
+    expect(recordProposal).not.toHaveBeenCalled();
     expect(createConversation).not.toHaveBeenCalled();
     expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
   });
@@ -165,7 +172,6 @@ describe('discussWeekDraft — the draft goes to the one conversation (training-
     expect(await discussWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: false, reason: 'not-found' });
     expect(getLatestOpenConversation).not.toHaveBeenCalled();
     expect(createConversation).not.toHaveBeenCalled();
-    expect(recordProposal).not.toHaveBeenCalled();
     expect(recordWeekDraftDiscussed).not.toHaveBeenCalled();
   });
 });

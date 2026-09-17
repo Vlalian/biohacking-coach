@@ -120,20 +120,24 @@ export function CoachThread({
   // seed — the proposal included — even when the overlay sat open on that chat.
   const chatKey = adopted ? `${adopted.conversationId}:${adopted.seededAt}` : (chatInitial?.conversationId ?? 'fresh');
 
-  if (mode === 'weekly') {
-    return (
-      <WeeklySession
-        key={weeklyInitial?.conversationId ?? 'fresh'}
-        initial={weeklyInitial}
-        athleteFirstName={athleteFirstName}
-        raceTarget={raceTarget}
-        onExit={() => setMode('chat')}
-      />
-    );
-  }
-
+  // The chat stays mounted underneath the Weekly Session, hidden, so a turn in
+  // flight is not thrown away by the switch: on Mads's smoke run of PR #71 a
+  // "Plan my week" tap mid-thought lost the message from view until reload
+  // (the server had stored it). The Weekly Session is on its way out (21);
+  // until then it is a layer over the chat, not a replacement of it.
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <>
+      {mode === 'weekly' && (
+        <WeeklySession
+          key={weeklyInitial?.conversationId ?? 'fresh'}
+          initial={weeklyInitial}
+          athleteFirstName={athleteFirstName}
+          raceTarget={raceTarget}
+          onExit={() => setMode('chat')}
+        />
+      )}
+      {/* A class, not the `hidden` attribute: the utility's display:flex would win over the attribute. */}
+      <div className={mode === 'weekly' ? 'hidden' : 'flex h-full min-h-0 flex-col bg-background'} data-chat-hidden={mode === 'weekly' ? 'true' : undefined}>
       <header className="shrink-0 border-b border-border px-5 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-display text-2xl leading-none tracking-[0.04em] text-foreground">
@@ -189,6 +193,7 @@ export function CoachThread({
       <div className="min-h-0 flex-1">
         <CoachChat key={chatKey} initial={chatStart} />
       </div>
-    </div>
+      </div>
+    </>
   );
 }
