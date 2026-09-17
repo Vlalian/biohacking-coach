@@ -26,12 +26,9 @@ describe('auth plugins', () => {
   });
 });
 
-describe('trustedOrigins', () => {
-  // Vercel serves one preview deployment on two hosts: its unique URL
-  // (`VERCEL_URL`, what `baseURL` is built from) and the git-branch alias
-  // (`VERCEL_BRANCH_URL`, what the PR comment links to). Only the first was
-  // trusted, so sign-in on the linked preview failed with "Invalid origin"
-  // (found testing PR #77). Both hosts are the same deployment; trust both.
+// The origin rules for the three places this runs — local, a Vercel preview,
+// production. Why the alias is trusted is on `resolveTrustedOrigins`.
+describe('baseURL and trustedOrigins', () => {
   it('trusts the git-branch alias of a preview as well as its unique URL', () => {
     expect(
       resolveTrustedOrigins({
@@ -52,6 +49,16 @@ describe('trustedOrigins', () => {
         VERCEL_BRANCH_URL: 'app-git-my-branch-team.vercel.app',
       }),
     ).toBe('https://app-abc123-team.vercel.app');
+  });
+
+  it('does not trust a branch alias outside a preview — `vercel dev` or a pulled .env.local', () => {
+    expect(
+      resolveTrustedOrigins({
+        VERCEL_ENV: 'development',
+        VERCEL_URL: 'localhost:3000',
+        VERCEL_BRANCH_URL: 'app-git-my-branch-team.vercel.app',
+      }),
+    ).toEqual(['https://localhost:3000']);
   });
 
   it('trusts the unique host only when a preview has no branch alias', () => {
