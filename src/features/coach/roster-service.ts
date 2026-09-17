@@ -249,7 +249,10 @@ async function coachPreview(
   const pendingDraft = await getPendingWeekDraft(athleteId, previewWeek);
   if (pendingDraft) return { pendingDraft, draftInFlight: null };
   const inFlight = await draftInFlight(athleteId, todayKey);
-  return { pendingDraft, draftInFlight: inFlight?.weekStart === previewWeek ? { weekStart: previewWeek } : null };
+  if (inFlight?.weekStart === previewWeek) return { pendingDraft: null, draftInFlight: { weekStart: previewWeek } };
+  // Nothing in flight: the draft may have landed between the two reads, so
+  // read the preview once more before showing neither (CodeRabbit, PR #78).
+  return { pendingDraft: await getPendingWeekDraft(athleteId, previewWeek), draftInFlight: null };
 }
 
 /** A Roster row, plus whether a drafted week is waiting for this coach's eye. */

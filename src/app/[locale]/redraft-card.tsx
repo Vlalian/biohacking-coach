@@ -61,7 +61,10 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
   const redraft = () =>
     startTransition(async () => {
       setOutcome({ kind: 'drafting' });
-      const result = await redraftWeekAction(weekStart);
+      // A server action can reject outright (a dead driver, a network blip),
+      // not only resolve to { ok: false }; without the catch the card would
+      // sit on "drafting" with its button gone (CodeRabbit, PR #78).
+      const result = await redraftWeekAction(weekStart).catch(() => ({ ok: false as const, reason: 'coach-failed' as const }));
       if (result.ok) {
         // The new draft's card takes this card's place.
         router.refresh();

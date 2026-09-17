@@ -43,7 +43,10 @@ export function startGenerationPoll(
   let handle: ReturnType<typeof setTimeout> | undefined;
   const ask = async () => {
     elapsed += intervalMs;
-    const landed = await tick();
+    // A rejected read (a network blip on the action) is "not yet", never a
+    // frozen card: the poll goes on and still gives up at the limit.
+    // Stryker disable next-line ArrowFunction — `() => undefined` is the same falsy "not landed"; no test can tell them apart because nothing should.
+    const landed = await tick().catch(() => false);
     if (landed || stopped) return;
     if (elapsed >= limitMs) {
       onGiveUp();

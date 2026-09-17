@@ -67,6 +67,19 @@ describe('startGenerationPoll', () => {
     expect(onGiveUp).not.toHaveBeenCalled();
   });
 
+  it('a tick that rejects counts as not landed: the poll goes on and still gives up at the limit', async () => {
+    // A server action can reject on a network blip; the card must not freeze
+    // on "drafting" with no give-up (CodeRabbit, PR #78).
+    const tick = vi.fn(async () => {
+      throw new Error('network');
+    });
+    const onGiveUp = vi.fn();
+    startGenerationPoll(tick, onGiveUp, { intervalMs: 10_000, limitMs: 20_000 });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(tick).toHaveBeenCalledTimes(2);
+    expect(onGiveUp).toHaveBeenCalledTimes(1);
+  });
+
   it('the last tick inside the limit is still asked before giving up', async () => {
     const tick = waiting();
     const onGiveUp = vi.fn();

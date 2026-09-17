@@ -561,6 +561,16 @@ describe('calendarSlotState — the slot says a draft is coming (29)', () => {
     expect(slotStateFor(null, null, TODAY)).toBeNull();
   });
 
+  it('re-reads the proposal once when nothing is in flight, so a draft that landed between the two reads is not missed', async () => {
+    // Read 1: nothing. The after() lands the draft. Read 2 (the gate): already
+    // drafted → nothing in flight. Without a third read the slot would show
+    // neither card nor "drafting" (CodeRabbit, PR #78).
+    getCalendarProposalState.mockResolvedValueOnce(null).mockResolvedValueOnce({ kind: 'proposal', draft: DRAFT });
+    getWeekDraftHistory.mockResolvedValue({ kind: 'pending', draft: DRAFT });
+    expect(await calendarSlotState(ATHLETE, TODAY)).toEqual({ kind: 'proposal', draft: DRAFT });
+    expect(getCalendarProposalState).toHaveBeenCalledTimes(2);
+  });
+
   it('reads the proposal state first and asks the gate only when there is none', async () => {
     getCalendarProposalState.mockResolvedValue({ kind: 'discussing', conversationId: 'c1', weekStart: NEXT_MON });
     expect(await calendarSlotState(ATHLETE, TODAY)).toEqual({ kind: 'discussing', conversationId: 'c1', weekStart: NEXT_MON });

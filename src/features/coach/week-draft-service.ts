@@ -179,8 +179,13 @@ export type CalendarSlotState = CalendarProposalState | { kind: 'drafting'; week
  */
 export async function calendarSlotState(athleteId: string, today: string): Promise<CalendarSlotState | null> {
   const proposal = await getCalendarProposalState(athleteId, today);
-  const inFlight = proposal ? null : await draftInFlight(athleteId, today);
-  return slotStateFor(proposal, inFlight, today);
+  if (proposal) return proposal;
+  const inFlight = await draftInFlight(athleteId, today);
+  // Nothing in flight after nothing to show: the draft may have landed between
+  // the two reads (the shell's after() runs beside this render), so read once
+  // more rather than show an empty slot with no poll (CodeRabbit, PR #78).
+  if (!inFlight) return getCalendarProposalState(athleteId, today);
+  return slotStateFor(null, inFlight, today);
 }
 
 /**

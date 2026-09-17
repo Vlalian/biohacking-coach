@@ -469,6 +469,15 @@ describe('getCoachAthleteView.draftInFlight — the preview area says a draft is
     expect(draftInFlight).not.toHaveBeenCalled();
   });
 
+  it('re-reads the pending draft once when nothing is in flight, so a draft that landed between the reads is shown', async () => {
+    const landed = { id: 'd9', weekStart: PREVIEW_WEEK, visibleFrom: '2026-09-16', sessions: [], citations: [], approved: false, createdAt: new Date() };
+    getPendingWeekDraft.mockResolvedValueOnce(null).mockResolvedValueOnce(landed);
+    const view = await getCoachAthleteView('coach_1', 'a1', '2026-09-15');
+    expect(view!.pendingDraft).toEqual(landed);
+    expect(view!.draftInFlight).toBeNull();
+    expect(getPendingWeekDraft).toHaveBeenCalledTimes(2);
+  });
+
   it('null when nothing is in flight, and when the in-flight week is this week’s remainder, which the coach page does not preview', async () => {
     expect((await getCoachAthleteView('coach_1', 'a1', '2026-09-15'))!.draftInFlight).toBeNull();
     draftInFlight.mockResolvedValue({ weekStart: THIS_WEEK, visibleFrom: '2026-09-15', expectedSeconds: 30 });
