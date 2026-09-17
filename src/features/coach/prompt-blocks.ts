@@ -108,13 +108,18 @@ export function onboardingBlock(onboarding?: Onboarding | null): PromptBlock {
  * claim, answer from what came back, say so when nothing did, and stay silent
  * about sources — the app renders the reference list from what retrieval
  * supplied, so the reply must never carry a citation the model wrote (the
- * 2026-08-18 decision, reaffirmed by Mads 2026-09-11). Same text in Coach Chat
- * and the Weekly Session, which is the whole reason blocks exist.
+ * 2026-08-18 decision, reaffirmed by Mads 2026-09-11). The near-miss line was
+ * added 2026-09-17 after the first full SAFE-3 run: with the production query,
+ * every outside question retrieves *something*, so "returns none" almost never
+ * fires — the honest boundary has to be drawn when passages are adjacent, not
+ * absent. Same text in Coach Chat and the Weekly Session, which is the whole
+ * reason blocks exist.
  */
 export function groundingBlock(): PromptBlock {
   return (
     'GROUNDING: Before stating a training-science fact, call look_up_training_science. ' +
     'Answer from the passages it returns. If it returns none, say you do not have grounding for that claim and do not assert it. ' +
+    'If they are about something nearby but do not answer the question, say so first, and mark anything you add beyond them as your own coaching judgement, not science. ' +
     'Never write citations, footnotes or source names in your reply — the app lists your sources beneath it.'
   );
 }
