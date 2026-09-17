@@ -18,6 +18,7 @@ const getResolvedBlocks = vi.fn();
 // Every race the athlete has (slice 09). Empty by default: no tune-ups, no late races.
 const getRaces = vi.fn(async () => []);
 const getWeekDraftHistory = vi.fn();
+const getCalendarProposalState = vi.fn();
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
 const getLinkForAthlete = vi.fn();
@@ -38,11 +39,15 @@ vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('./conversation-repository', () => ({ hasHeldWeeklySessionInWeek }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
-vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft }));
+vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 
-const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion } = await import('./week-draft-service');
+const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState } =
+  await import(
+  './week-draft-service',
+);
+const { COACH_EXPECTED_SECONDS } = await import('@/lib/generation');
 
 const DRAFT = { id: 'd1', weekStart: '2026-09-21', visibleFrom: '2026-09-21', sessions: [], citations: [], approved: false, createdAt: new Date() };
 
@@ -96,6 +101,7 @@ beforeEach(() => {
   getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
   recordWeekDraft.mockResolvedValue('drafted');
   getLinkForAthlete.mockResolvedValue(undefined);
+  getCalendarProposalState.mockResolvedValue(null);
 });
 
 describe('draftGate — a week is drafted once (training-architecture/24)', () => {
@@ -499,5 +505,67 @@ describe('the draft never reaches the calendar', () => {
     expect(source).not.toMatch(/replaceCoachPlanForDateRange/);
     expect(source).not.toMatch(/\bsessions\b[^\n]*from '@\/db\/schema'/);
     expect(source).not.toMatch(/from '@\/db'/);
+  });
+});
+
+describe('draftInFlight — derived, never stored (training-architecture/29)', () => {
+  const MON = '2026-09-14';
+  const ALL_DAYS_OF_NEXT_WEEK = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26', '2026-09-27'];
+
+  it('names the due week and the estimate when the gate would draft and nothing is recorded, without calling the Coach', async () => {
+    expect(await draftInFlight(ATHLETE, TODAY)).toEqual({ weekStart: NEXT_MON, visibleFrom: TODAY, expectedSeconds: COACH_EXPECTED_SECONDS });
+    expect(callCoach).not.toHaveBeenCalled();
+    expect(recordWeekDraft).not.toHaveBeenCalled();
+  });
+
+  it('is this week, visible today, for a new athlete with an empty current week', async () => {
+    getSessionsForWeek.mockResolvedValue([]);
+    expect(await draftInFlight(ATHLETE, TODAY)).toMatchObject({ weekStart: MON, visibleFrom: TODAY });
+  });
+
+  it('null once a draft is recorded, decided or discussed — the gate would not draft', async () => {
+    for (const history of [
+      { kind: 'pending', draft: DRAFT },
+      { kind: 'declined' },
+      { kind: 'written' },
+      { kind: 'discussing', conversationId: 'c1' },
+    ] as const) {
+      getWeekDraftHistory.mockResolvedValue(history);
+      expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
+    }
+  });
+
+  it('null when consent is missing, the week is held, or no day can hold training', async () => {
+    assertAiCoachingConsent.mockResolvedValueOnce({ ok: false, missing: ['ai_coaching'] });
+    expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
+    hasHeldWeeklySessionInWeek.mockResolvedValueOnce(true);
+    expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
+    getUnavailableDates.mockResolvedValueOnce(ALL_DAYS_OF_NEXT_WEEK);
+    expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
+  });
+
+  it('a dead driver reads as nothing in flight, logged, never thrown', async () => {
+    getAthleteById.mockRejectedValueOnce(new Error('driver down'));
+    expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
+    expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ surface: 'week_draft', athleteId: ATHLETE }));
+  });
+});
+
+describe('calendarSlotState — the slot says a draft is coming (29)', () => {
+  it('slotStateFor: a proposal state wins; an in-flight draft the athlete may see is drafting; a lead-day draft is nothing', () => {
+    const proposal = { kind: 'redraft-offer', weekStart: NEXT_MON } as const;
+    const inFlight = { weekStart: NEXT_MON, visibleFrom: TODAY, expectedSeconds: 30 };
+    expect(slotStateFor(proposal, inFlight, TODAY)).toEqual(proposal);
+    expect(slotStateFor(null, inFlight, TODAY)).toEqual({ kind: 'drafting', weekStart: NEXT_MON });
+    expect(slotStateFor(null, { ...inFlight, visibleFrom: '2026-09-17' }, TODAY)).toBeNull();
+    expect(slotStateFor(null, null, TODAY)).toBeNull();
+  });
+
+  it('reads the proposal state first and asks the gate only when there is none', async () => {
+    getCalendarProposalState.mockResolvedValue({ kind: 'discussing', conversationId: 'c1', weekStart: NEXT_MON });
+    expect(await calendarSlotState(ATHLETE, TODAY)).toEqual({ kind: 'discussing', conversationId: 'c1', weekStart: NEXT_MON });
+    expect(getAthleteById).not.toHaveBeenCalled();
+    getCalendarProposalState.mockResolvedValue(null);
+    expect(await calendarSlotState(ATHLETE, TODAY)).toEqual({ kind: 'drafting', weekStart: NEXT_MON });
   });
 });

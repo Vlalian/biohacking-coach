@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 
 /**
  * `training-architecture/24` — the one way a week is drafted twice: the
@@ -32,7 +33,8 @@ describe('RedraftCard', () => {
 
   it('reports each outcome by its key, and nothing while idle', () => {
     expect(redraftOutcomeKey({ kind: 'idle' })).toBeNull();
-    expect(redraftOutcomeKey({ kind: 'drafting' })).toEqual({ key: 'drafting' });
+    // The line carries the shared estimate rather than a number in the string (training-architecture/29).
+    expect(redraftOutcomeKey({ kind: 'drafting' })).toEqual({ key: 'drafting', values: { seconds: COACH_EXPECTED_SECONDS } });
     expect(redraftOutcomeKey({ kind: 'refused', reason: 'already-planned' })).toEqual({ key: 'alreadyPlanned' });
     expect(redraftOutcomeKey({ kind: 'refused', reason: 'draft-pending' })).toEqual({ key: 'draftPending' });
     expect(redraftOutcomeKey({ kind: 'refused', reason: 'not-declined' })).toEqual({ key: 'notDeclined' });

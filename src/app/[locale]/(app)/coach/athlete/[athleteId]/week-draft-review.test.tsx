@@ -81,6 +81,12 @@ describe('WeekDraftReview', () => {
     expect(page).toMatch(/<WeekDraftReview[\s\S]*?key=\{[^}]*pendingDraft[^}]*\}/);
   });
 
+  it('the plan page renders the drafting card off view.draftInFlight, below the review panel (training-architecture/29)', () => {
+    const page = readFileSync(fileURLToPath(new URL('./plan/page.tsx', import.meta.url)), 'utf8');
+    expect(page).toContain('view.draftInFlight && <DraftingCard weekStart={view.draftInFlight.weekStart} />');
+    expect(page.indexOf('<WeekDraftReview')).toBeLessThan(page.indexOf('<DraftingCard'));
+  });
+
   it('renders nothing when there is no draft, and nothing once the draft is the approved version', () => {
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={null} />)).toBe('');
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, approved: true }} />)).toBe('');

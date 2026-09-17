@@ -34,6 +34,9 @@ vi.mock('./session-drawer', () => ({ SessionDrawer: () => null }));
 vi.mock('./redraft-card', () => ({
   RedraftCard: ({ weekStart }: { weekStart: string }) => <div data-redraft-card={weekStart} />,
 }));
+vi.mock('@/components/ui/drafting-card', () => ({
+  DraftingCard: ({ weekStart }: { weekStart: string }) => <div data-drafting-card={weekStart} />,
+}));
 vi.mock('./proposal-card', () => ({
   ProposalCard: ({ draft }: { draft: { id: string } }) => <div data-proposal-card={draft.id} />,
 }));
@@ -367,6 +370,13 @@ describe('Calendar — the drafted week the athlete has not decided on (training
   it('renders the re-draft offer in the card’s place for a declined week (training-architecture/24)', () => {
     const markup = render({ proposal: { kind: 'redraft-offer', weekStart: '2026-08-24' } });
     expect(markup).toContain('data-redraft-card="2026-08-24"');
+    expect(markup).not.toContain('data-proposal-card');
+    expect(markup).not.toContain('proposedChip');
+  });
+
+  it('a drafting slot shows the drafting card in the proposal card’s place, and no proposal card (training-architecture/29)', () => {
+    const markup = render({ proposal: { kind: 'drafting', weekStart: '2026-08-24' } });
+    expect(markup).toContain('data-drafting-card="2026-08-24"');
     expect(markup).not.toContain('data-proposal-card');
     expect(markup).not.toContain('proposedChip');
   });

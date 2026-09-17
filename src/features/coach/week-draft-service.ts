@@ -38,7 +38,14 @@ import {
   type SkeletonDay,
 } from './week-draft';
 import { getCoachByUserId, getLinkForAthlete, getRoster } from './coach-repository';
-import { getWeekDraftHistory, recordWeekDraft, type ResolvedWeekDraftHistory } from './week-draft-repository';
+import {
+  getCalendarProposalState,
+  getWeekDraftHistory,
+  recordWeekDraft,
+  type CalendarProposalState,
+  type ResolvedWeekDraftHistory,
+} from './week-draft-repository';
+import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 
 /**
  * The Coach drafts next week on its own (`training-architecture/16`) — the
@@ -129,6 +136,55 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
   );
   if (outcome === 'coach-failed') return outcome;
   return outcome === 'drafted' ? 'drafted' : 'lost-race';
+}
+
+/** A draft the gate would write now, and nothing recorded yet: what the waiting surfaces show. */
+export type DraftInFlight = { weekStart: string; visibleFrom: string; expectedSeconds: number };
+
+/**
+ * Whether a draft is in flight for this athlete — derived, never stored
+ * (`training-architecture/29`, triage 2026-09-17): the gate would draft the
+ * due week and nothing is recorded for it, which is exactly the state the
+ * shell's `after()` is drafting into while the page has already rendered. The
+ * same facts as {@link ensureWeekDrafted}'s gate and no Coach call. Never
+ * throws; a dead driver reads as nothing in flight, logged like the draft's
+ * own failures.
+ */
+export async function draftInFlight(athleteId: string, today: string): Promise<DraftInFlight | null> {
+  const facts = await guarded(athleteId, () => gateFacts(athleteId, today));
+  if (facts === 'coach-failed' || 'gated' in facts) return null;
+  return { weekStart: facts.dueWeek, visibleFrom: facts.visibleFrom, expectedSeconds: COACH_EXPECTED_SECONDS };
+}
+
+/** What the calendar's card slot shows: a proposal state, or that the draft is on its way. */
+export type CalendarSlotState = CalendarProposalState | { kind: 'drafting'; weekStart: string };
+
+/**
+ * The calendar's card slot, with the in-flight draft added to the repository's
+ * proposal states (`/29`). The proposal read comes first — a card, a pointer or
+ * an offer is never hidden behind "drafting" — and the gate is asked only when
+ * there is none.
+ */
+export async function calendarSlotState(athleteId: string, today: string): Promise<CalendarSlotState | null> {
+  const proposal = await getCalendarProposalState(athleteId, today);
+  const inFlight = proposal ? null : await draftInFlight(athleteId, today);
+  return slotStateFor(proposal, inFlight, today);
+}
+
+/**
+ * Pure: the proposal state wins; else an in-flight draft the athlete may see
+ * today is `drafting`. A Head Coach's lead-day draft (`/17`) is stamped
+ * visible from the athlete's own day, and until then it is not theirs to wait
+ * for — the slot shows nothing, as it would for the draft itself.
+ */
+export function slotStateFor(
+  proposal: CalendarProposalState | null,
+  inFlight: DraftInFlight | null,
+  today: string,
+): CalendarSlotState | null {
+  if (proposal) return proposal;
+  if (inFlight && inFlight.visibleFrom <= today) return { kind: 'drafting', weekStart: inFlight.weekStart };
+  return null;
 }
 
 /** Why the athlete's own ask for a second draft was refused. */

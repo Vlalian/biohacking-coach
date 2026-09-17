@@ -275,7 +275,7 @@
     "subtitle": "Spørg Coachen om denne atlet.",
     "intro": "Coachen har læst denne atlets data — åbn en briefing for at høre dens vurdering og stille spørgsmål.",
     "start": "Åbn briefing",
-    "starting": "Åbner…",
+    "starting": "Læser ugen… cirka {seconds} sekunder",
     "thinking": "Coachen tænker…",
     "inputLabel": "Spørg Coachen om denne atlet",
     "placeholder": "Spørg om søvn, belastning eller restitution",
@@ -712,11 +712,15 @@
     "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
     "error": "Det virkede ikke ({reason})."
   },
+  "DraftingCard": {
+    "drafting": "Coachen laver et udkast til ugen… cirka {seconds} sekunder.",
+    "notYet": "Ikke endnu — det er her, næste gang du åbner appen."
+  },
   "RedraftCard": {
     "title": "Ingen plan for den uge",
     "lead": "Du lod ugen fra {week} være, som den var. Coachen kan lave et udkast én gang til.",
     "redraft": "Lav et udkast til min uge",
-    "drafting": "Coachen laver et udkast til ugen — cirka 30 sekunder. Det dukker op her.",
+    "drafting": "Coachen laver et udkast til ugen — cirka {seconds} sekunder. Det dukker op her.",
     "alreadyPlanned": "Den uge har allerede en plan.",
     "draftPending": "Der venter allerede et udkast til den uge på dig.",
     "notDeclined": "Den uge blev ikke afvist, så der er ikke noget at lave om — spørg Coachen i stedet.",

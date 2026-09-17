@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { redraftWeekAction } from './week-draft-actions';
+import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 
 /**
  * The one way a week is drafted twice (`training-architecture/24`, Mads
@@ -12,9 +13,9 @@ import { redraftWeekAction } from './week-draft-actions';
  * calendar, never a modal (ADR 0007). One button; the draft that follows shows
  * as the ordinary proposal card on the next render.
  *
- * The "drafting" line is a placeholder: the ~20 s Coach call runs on the
- * server, and until `training-architecture/29` lands, the card only says so
- * and refreshes when the action returns.
+ * The "drafting" line quotes the shared estimate (`training-architecture/29`):
+ * the Coach call runs behind the awaited action, so the card says so and
+ * refreshes when the action returns — nothing to poll.
  */
 
 export type RedraftOutcome =
@@ -23,12 +24,12 @@ export type RedraftOutcome =
   | { kind: 'refused'; reason: string };
 
 /** The line the card shows for an outcome — pure, so the copy rules are testable without a click. */
-export function redraftOutcomeKey(outcome: RedraftOutcome): { key: string; values?: Record<string, string> } | null {
+export function redraftOutcomeKey(outcome: RedraftOutcome): { key: string; values?: Record<string, string | number> } | null {
   switch (outcome.kind) {
     case 'idle':
       return null;
     case 'drafting':
-      return { key: 'drafting' };
+      return { key: 'drafting', values: { seconds: COACH_EXPECTED_SECONDS } };
     case 'refused':
       return refusalKey(outcome.reason);
   }
