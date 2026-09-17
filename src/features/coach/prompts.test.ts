@@ -999,6 +999,18 @@ describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
       expect(prompt).toContain('the app lists your sources beneath it');
     }
   });
+
+  it('draws the line at near-miss passages — say so first, and mark what is beyond them as judgement', () => {
+    // The first full SAFE-3 run (2026-09-17): 11 of 40 replies answered from
+    // general knowledge when the passages were *near* the question but did not
+    // answer it, with no boundary drawn. Facts were right; the reader could not
+    // tell which sentences the sources carried. The rule the Coach already
+    // followed in 8 of 20 outside cases, made the rule.
+    for (const prompt of [weekly(), chat()]) {
+      expect(prompt).toContain('If they are about something nearby but do not answer the question, say so first');
+      expect(prompt).toContain('your own coaching judgement, not science');
+    }
+  });
 });
 
 // ── The horizon: Race Distance and the Target Race (training-architecture/02) ──
