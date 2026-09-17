@@ -712,6 +712,18 @@
     "stale": "This draft was replaced. Reload to see the current one.",
     "error": "That didn't work ({reason})."
   },
+  "RedraftCard": {
+    "title": "No plan for that week",
+    "lead": "You left the week of {week} as it was. The Coach can draft it once more.",
+    "redraft": "Draft my week",
+    "drafting": "The Coach is drafting the week — about 30 seconds. It will appear here.",
+    "alreadyPlanned": "That week already has a plan.",
+    "draftPending": "A draft for that week is already waiting for you.",
+    "notDeclined": "That week was not declined, so there is nothing to draft again — ask the Coach instead.",
+    "noWindow": "No day of that week can hold training.",
+    "consentRequired": "To draft a week, first allow AI coaching under Privacy.",
+    "error": "That didn't work ({reason})."
+  },
   "ProposalCard": {
     "title": "Next week is drafted",
     "lead": "{count, plural, one {# session} other {# sessions}} for the week of {week}. Accept it, talk it over with the Coach, or leave the week as it is.",

@@ -712,6 +712,18 @@
     "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
     "error": "Det virkede ikke ({reason})."
   },
+  "RedraftCard": {
+    "title": "Ingen plan for den uge",
+    "lead": "Du lod ugen fra {week} være, som den var. Coachen kan lave et udkast én gang til.",
+    "redraft": "Lav et udkast til min uge",
+    "drafting": "Coachen laver et udkast til ugen — cirka 30 sekunder. Det dukker op her.",
+    "alreadyPlanned": "Den uge har allerede en plan.",
+    "draftPending": "Der venter allerede et udkast til den uge på dig.",
+    "notDeclined": "Den uge blev ikke afvist, så der er ikke noget at lave om — spørg Coachen i stedet.",
+    "noWindow": "Ingen dag i den uge kan rumme træning.",
+    "consentRequired": "For at få et udkast skal du først tillade AI-coaching under Privatliv.",
+    "error": "Det virkede ikke ({reason})."
+  },
   "ProposalCard": {
     "title": "Næste uge er udkastet",
     "lead": "{count, plural, one {# session} other {# sessioner}} for ugen fra {week}. Accepter den, drøft den med Coachen, eller lad ugen være som den er.",

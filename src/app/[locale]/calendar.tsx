@@ -14,6 +14,7 @@ import { markUnavailableDateAction, clearUnavailableDateAction } from './availab
 import { RatingModal } from './rating-modal';
 import { SessionDrawer, type DrawerState } from './session-drawer';
 import { ProposalCard } from './proposal-card';
+import { RedraftCard } from './redraft-card';
 import type { CalendarProposalState } from '@/features/coach/week-draft-repository';
 import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
@@ -413,6 +414,13 @@ export function Calendar({
       {proposal?.kind === 'proposal' && (
         <div className="mt-5">
           <ProposalCard draft={proposal.draft} />
+        </div>
+      )}
+      {proposal?.kind === 'redraft-offer' && (
+        // A declined week with no plan: the one offer to draft it again
+        // (training-architecture/24). The card's place, not the calendar's.
+        <div className="mt-5">
+          <RedraftCard weekStart={proposal.weekStart} />
         </div>
       )}
       {proposal?.kind === 'discussing' && (
