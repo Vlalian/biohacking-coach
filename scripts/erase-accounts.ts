@@ -1,5 +1,5 @@
 import '../src/db/load-env';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../src/db';
 import { athlete, coach, coachingLink } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
@@ -40,15 +40,16 @@ async function main(argv: string[]): Promise<void> {
   }
 
   let refused = false;
-  const subjects = [];
+  const subjects: { athleteId: string | null; userId: string; coachId: string | null }[] = [];
   for (const u of users) {
     const [a] = await db.select({ id: athlete.id }).from(athlete).where(eq(athlete.userId, u.id));
     const [c] = await db.select({ id: coach.id }).from(coach).where(eq(coach.userId, u.id));
+    // Severed links stay for history; only an active one makes this a decision.
     const links = c
       ? await db
           .select({ id: coachingLink.id })
           .from(coachingLink)
-          .where(eq(coachingLink.coachId, c.id))
+          .where(and(eq(coachingLink.coachId, c.id), eq(coachingLink.status, 'active')))
       : [];
     const why =
       u.role === 'admin' ? 'is an admin' : links.length > 0 ? `coaches ${links.length} Coaching Link(s)` : null;
@@ -59,11 +60,7 @@ async function main(argv: string[]): Promise<void> {
       refused = true;
       continue;
     }
-    if (!a) {
-      console.error(`  no athlete row for ${u.id}; eraseAccount needs one — stopping`);
-      process.exit(1);
-    }
-    subjects.push({ athleteId: a.id, userId: u.id, coachId: c?.id ?? null });
+    subjects.push({ athleteId: a?.id ?? null, userId: u.id, coachId: c?.id ?? null });
   }
   if (refused) {
     console.error('refused at least one account; nothing erased');
@@ -74,7 +71,16 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   for (const s of subjects) {
-    await eraseAccount(s);
+    if (s.athleteId) {
+      await eraseAccount({ athleteId: s.athleteId, userId: s.userId, coachId: s.coachId });
+    } else {
+      // A user with no athlete row is a half-erased account: `eraseAccount`
+      // runs its deletes as separate statements (the neon-http client has no
+      // transaction), so a failure after the athlete delete leaves exactly
+      // this. Finish the job rather than refuse it (CodeRabbit, PR #75).
+      if (s.coachId) await db.delete(coach).where(eq(coach.id, s.coachId));
+      await db.delete(user).where(eq(user.id, s.userId));
+    }
     console.log(`erased user=${s.userId}`);
   }
   const left = await db.select({ name: user.name, role: user.role }).from(user);
