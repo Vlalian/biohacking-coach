@@ -284,12 +284,16 @@ function planningWindowLine(window: PlanningWindow): string {
 }
 
 /**
- * The question to ask when the athlete opened the Weekly Session off their
- * preferred day, or nothing when there is no question to ask.
+ * The athlete's Weekly Session Day and today's, when they differ; nothing on
+ * the day itself.
  *
- * Since 2026-09-14 every athlete has a day ("Flexible" is retired and reads as Sunday), so the only silence is on the day itself. It used to be: nothing when no preferred day is set — `Flexible`, or the question skipped at
- * onboarding — and nothing when today *is* the preferred day, which is the case
- * `CONTEXT.md` describes as planning the week ahead without asking.
+ * Since 2026-09-14 every athlete has a day ("Flexible" is retired and reads as
+ * Sunday), so the only silence is on the day itself. Until
+ * `training-architecture/20` this line ended with a question — "Plan rest of
+ * this week or from next Monday?" — that offered a week the server refused:
+ * PR #57 bounded the write to this week's remainder on purpose. The window is
+ * the server's to choose and the PLANNING WINDOW line above states it; this
+ * line now states the day and asks nothing.
  */
 function planningDayLine(today: string, weeklySessionDay?: string): string | null {
   const prefDay = effectiveWeeklySessionDay(weeklySessionDay);
@@ -301,7 +305,7 @@ function planningDayLine(today: string, weeklySessionDay?: string): string | nul
   });
   if (dayOfWeek === prefDay) return null;
 
-  return `PLANNING DAY: Preferred ${prefDay}, today ${dayOfWeek}. Ask: "Plan rest of this week or from next ${prefDay}?"`;
+  return `PLANNING DAY: Preferred ${prefDay}, today ${dayOfWeek}.`;
 }
 
 /**
@@ -613,8 +617,10 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
   // The staged week's notes are the Coach's own by the time they arrive
   // (approval strips the Head Coach's), but this is the boundary and it
   // asserts on every input regardless of what the caller promised. Email and
-  // phone shapes; names are the origin guard's job (CodeRabbit, PR #69).
-  if (ctx.stagedProposal) assertNoDirectIdentifier(ctx.stagedProposal);
+  // phone shapes; names are the origin guard's job (CodeRabbit, PR #69). No
+  // guard: the assertion no-ops on an absent value, and a guard nothing can
+  // distinguish is a branch no test can hold.
+  assertNoDirectIdentifier(ctx.stagedProposal);
 
   const {
     patterns,
@@ -702,9 +708,9 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     stagedProposalBlock(ctx.stagedProposal),
 
-    "DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.",
+    DOUBLES,
 
-    'SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Every date must fall inside the PLANNING WINDOW above; dates outside it are dropped by the server.',
+    SAVING_THE_PLAN,
 
     CONSTRAINT_SIGNALS,
 
@@ -782,11 +788,20 @@ function noTrainFragment(fixedConstraints?: string[]): string {
  * Reference: "discuss this session" is a behavior inside the one conversation,
  * not a mode of its own (CONTEXT.md, Session Negotiation, decided 2026-08-12).
  */
+/** What Coach Chat may write and what is already on the table (`training-architecture/20`). */
+export interface ChatPlanning {
+  /** The server-chosen window a proposal must fall inside. */
+  window: PlanningWindow;
+  /** The drafted week the athlete brought in to discuss, or null. */
+  stagedProposal: ProposedSession[] | null;
+}
+
 export function buildChatPrompt(
   checkIn: CheckIn,
   today: string = todayISO(),
   sessionContext: SessionContext | null = null,
   week: WeekSession[] = [],
+  planning: ChatPlanning | null = null,
 ): string {
   // Asserted here, at the prompt builder, because that is where AGENTS.md says
   // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
@@ -867,6 +882,11 @@ ${[
 
     onboardingBlock(onboarding),
 
+    // The one conversation may agree a week (`training-architecture/20`): the
+    // bound the server will enforce, the week already on the table if one was
+    // brought in, and the two lines the Weekly Session has always carried.
+    ...chatPlanningBlocks(planning),
+
     CONSTRAINT_SIGNALS,
 
     referenceBlock(sessionContext, phase),
@@ -875,6 +895,25 @@ ${[
 
     "PRIVACY: Never use athlete's name. Second person only. No PII reproduction.",
   ]);
+}
+
+/**
+ * The planning half of the chat prompt, in the order the Weekly Session renders
+ * the same lines; nothing at all when the chat was given no window.
+ *
+ * The staged week is the Coach's own by the time it arrives (approval strips
+ * the Head Coach's notes), but this is the boundary and it asserts on every
+ * input regardless of what the caller promised — as the weekly prompt does.
+ */
+function chatPlanningBlocks(planning: ChatPlanning | null): PromptBlock[] {
+  if (!planning) return [];
+  assertNoDirectIdentifier(planning.stagedProposal);
+  return [
+    planningWindowLine(planning.window),
+    stagedProposalBlock(planning.stagedProposal ?? undefined),
+    DOUBLES,
+    SAVING_THE_PLAN,
+  ];
 }
 
 /**
@@ -1067,6 +1106,18 @@ export interface WeekDraftContext extends WeeklyContext {
   passages: RetrievedPassage[];
   citations: Citation[];
 }
+
+/**
+ * The two lines every conversation that may propose a week carries — the
+ * Weekly Session's since its first proposal, Coach Chat's since
+ * `training-architecture/20`. One text, so the Coach is told the same rule
+ * whichever surface it is on.
+ */
+const DOUBLES =
+  "DOUBLES: In planning you may propose two sessions on one day (e.g. a main session plus a short recovery block) when the athlete's phase and load genuinely call for it. Never forced — most days hold one session.";
+
+const SAVING_THE_PLAN =
+  'SAVING THE PLAN: Once the athlete has agreed to the week, call the propose_week_plan tool with every session dated (YYYY-MM-DD). This does NOT save — it shows the plan for the athlete to confirm or cancel. Call it only after agreement, never while still offering options, and only once. Omit rest days. Every date must fall inside the PLANNING WINDOW above; dates outside it are dropped by the server.';
 
 /**
  * The week the athlete brought into the conversation from their calendar

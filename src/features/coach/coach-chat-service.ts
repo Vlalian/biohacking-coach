@@ -12,11 +12,24 @@ import type { Message } from './conversation';
 import { getRaces } from '@/features/race/race-repository';
 import { getLatestPlanWrittenAt } from './plan-proposal-repository';
 import { productionGrounding } from './grounding';
+import { proposalTurnTools } from './proposal-tools';
 import { capacityFor } from '@/features/health/health-repository';
 import { getResolvedBlocks } from './training-block-service';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
-import { buildWeeklyCheckIn } from './weekly-session';
+import {
+  buildWeeklyCheckIn,
+  fixedConstraintsOf,
+  validateProposedPlan,
+  PROPOSE_WEEK_PLAN_TOOL_NAME,
+  type ProposedSession,
+} from './weekly-session';
+import { getUnavailableDates } from '@/features/availability/availability-repository';
+import { getPendingProposal, recordProposal } from './plan-proposal-repository';
+import { getDiscussedWeek } from './week-draft-repository';
+import { conversationWindow } from './week-draft';
+import type { PlanningWindow } from './planning-window';
+import type { CoachReply } from './coach-client';
 
 /**
  * Coach Chat — the Coach Overlay's *baseline* mode (ADR 0007): the open-ended,
@@ -72,7 +85,8 @@ async function renderSystem(
   today: string,
   language?: string,
   referenceSessionId?: string | null,
-): Promise<{ system: string; phase: string | null; experienceLevel: string | null }> {
+  conversationId: string | null = null,
+): Promise<{ system: string; phase: string | null; experienceLevel: string | null; window: PlanningWindow }> {
   const [
     equipmentItems,
     weekSessions,
@@ -82,6 +96,8 @@ async function renderSystem(
     races,
     planWrittenAt,
     capacity,
+    unavailableDates,
+    facts,
   ] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
@@ -104,7 +120,17 @@ async function renderSystem(
     // the Weekly Session reads it (training-architecture/06; CodeRabbit on PR
     // #60 found Chat knew nothing of it). The detail thread has no reader here.
     capacityFor(athlete.id),
+    // The window the chat may write into needs the athlete's days off, the same
+    // list the Weekly Session reads (`training-architecture/20`).
+    getUnavailableDates(athlete.id),
+    conversationFacts(athlete.id, conversationId),
   ]);
+
+  // The week this conversation may propose: the whole of a week brought in to
+  // discuss, else this week's remainder. Chosen here, by the server, and told
+  // to the Coach as a bound — never offered as a question (ADR 0007, amended
+  // 2026-09-16).
+  const window = conversationWindow(today, facts.discussedWeek, fixedConstraintsOf(athlete), unavailableDates);
 
   // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
   // the Weekly Session's — how many Weekly Sessions have come before. Passing 1
@@ -138,11 +164,54 @@ async function renderSystem(
       today,
       reference ? toSessionContext(reference) : null,
       weekFrom(weekSessions, reference?.id),
+      { window, stagedProposal: facts.staged },
     ),
     // What the grounding folds into its query: where in the season the athlete
     // is, and how experienced — the same facts the prompt just rendered.
     ...groundingFactsOf(checkIn),
+    window,
   };
+}
+
+/**
+ * What an existing conversation already carries: the week a draft was brought
+ * in to discuss, and the proposal still awaiting a decision. A first turn has
+ * no conversation yet, so it carries neither and reads nothing.
+ */
+async function conversationFacts(
+  athleteId: string,
+  conversationId: string | null,
+): Promise<{ discussedWeek: string | null; staged: ProposedSession[] | null }> {
+  const [discussedWeek, pending] = await Promise.all([
+    conversationId ? getDiscussedWeek(athleteId, conversationId) : null,
+    conversationId ? getPendingProposal(athleteId, conversationId) : null,
+  ]);
+  return { discussedWeek, staged: pending ? pending.sessions : null };
+}
+
+/** The proposal a chat turn is awaiting a decision on, as the card shows it. */
+export interface ChatProposal {
+  sessions: ProposedSession[];
+}
+
+/**
+ * Stages the Coach's proposed week, when it proposed one the server accepts —
+ * called only once the turn is safely stored, the same rule as the Weekly
+ * Session's `stageProposal`. An invalid proposal is not staged; the Coach's
+ * text still shows and the conversation continues.
+ */
+async function stageChatProposal(
+  athleteId: string,
+  conversationId: string,
+  window: PlanningWindow,
+  reply: CoachReply,
+): Promise<ChatProposal | null> {
+  const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
+  if (!call) return null;
+  const validated = validateProposedPlan(call.input, window);
+  if (!validated.ok) return null;
+  await recordProposal(athleteId, conversationId, validated.sessions);
+  return { sessions: validated.sessions };
 }
 
 /** The two Check-in facts the grounding's query wants, absent rendered as null. */
@@ -156,20 +225,30 @@ function groundingFactsOf(checkIn: {
 export interface CoachChatState {
   conversationId: string;
   messages: Message[];
+  /** The week awaiting the athlete's decision, restored with the transcript (`/20`). */
+  proposal: ChatProposal | null;
 }
 
 /**
  * The athlete's open Coach Chat, resumed — or null if they have never opened
  * one. Read-only: opening the overlay must not mint a conversation or call the
- * API, so a chat is created lazily on the first message instead.
+ * API, so a chat is created lazily on the first message instead. A pending
+ * proposal comes back with the transcript, so a refresh mid-decision does not
+ * lose the card.
  */
 export async function getOpenCoachChat(athleteId: string): Promise<CoachChatState | null> {
   const open = await getLatestOpenConversation(athleteId, 'coach_chat');
   if (!open) return null;
-  return { conversationId: open.id, messages: await getMessages(open.id) };
+  const [messages, pending] = await Promise.all([
+    getMessages(open.id),
+    getPendingProposal(athleteId, open.id),
+  ]);
+  return { conversationId: open.id, messages, proposal: pending ? { sessions: pending.sessions } : null };
 }
 
-export type SendChatResult = ConversationTurnResult;
+export type SendChatResult =
+  | (Extract<ConversationTurnResult, { ok: true }> & { proposal: ChatProposal | null })
+  | Extract<ConversationTurnResult, { ok: false }>;
 
 /**
  * Sends the athlete's turn and returns the Coach's reply, creating the chat on
@@ -198,7 +277,10 @@ export async function sendCoachChatMessage(
   language?: string,
   referenceSessionId?: string | null,
 ): Promise<SendChatResult> {
-  return takeConversationTurn({
+  // What this turn staged, if anything — filled in after the store, read after
+  // the turn. Null on every turn where the Coach proposed nothing.
+  let proposal: ChatProposal | null = null;
+  const result = await takeConversationTurn({
     athleteId: athlete.id,
     kind: 'coach_chat',
     surface: 'coach_chat',
@@ -206,11 +288,12 @@ export async function sendCoachChatMessage(
     content,
     maxTokens: CHAT_MAX_TOKENS,
     prepare: async (_transcript, conversationId) => {
-      const { system, phase, experienceLevel } = await renderSystem(
+      const { system, phase, experienceLevel, window } = await renderSystem(
         athlete,
         today,
         language,
         referenceSessionId,
+        conversationId,
       );
       // One grounding per turn (`knowledge-oracle/05`): the lookup tool, its
       // resolver, and — after the model has answered — the citations it earned.
@@ -223,10 +306,15 @@ export async function sendCoachChatMessage(
       });
       return {
         system,
-        tools: [grounding.tool],
-        resolveTool: grounding.resolve,
+        // The week proposal beside the lookup (`training-architecture/20`): the
+        // one conversation may agree a week, and the athlete taps to decide.
+        ...proposalTurnTools(grounding),
         citations: () => grounding.citations(),
+        onStored: async (id, reply) => {
+          proposal = await stageChatProposal(athlete.id, id, window, reply);
+        },
       };
     },
   });
+  return result.ok ? { ...result, proposal } : result;
 }

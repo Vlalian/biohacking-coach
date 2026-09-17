@@ -9,11 +9,15 @@ const recordProposal = vi.fn();
 const getCalendarProposalState = vi.fn();
 const recordWeekDraftDecision = vi.fn();
 const recordWeekDraftDiscussed = vi.fn();
+const getLatestOpenConversation = vi.fn();
+const createConversation = vi.fn();
+const getMessages = vi.fn();
 
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/features/session/session-repository', () => ({ replaceCoachPlanForDateRange }));
 vi.mock('./weekly-session-service', () => ({ startWeeklySession }));
 vi.mock('./plan-proposal-repository', () => ({ recordProposal }));
+vi.mock('./conversation-repository', () => ({ getLatestOpenConversation, createConversation, getMessages }));
 vi.mock('./week-draft-repository', () => ({ getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed }));
 
 const { acceptWeekDraft, declineWeekDraft, discussWeekDraft, pastDaysOf } = await import('./week-draft-decision-service');
@@ -36,6 +40,9 @@ beforeEach(() => {
   recordWeekDraftDiscussed.mockResolvedValue(undefined);
   recordProposal.mockResolvedValue(undefined);
   getCalendarProposalState.mockResolvedValue({ kind: 'proposal', draft: DRAFT });
+  getLatestOpenConversation.mockResolvedValue(null);
+  createConversation.mockResolvedValue({ id: 'chat_new', kind: 'coach_chat' });
+  getMessages.mockResolvedValue([]);
 });
 
 describe('acceptWeekDraft', () => {
@@ -131,30 +138,38 @@ describe('declineWeekDraft', () => {
   });
 });
 
-describe('discussWeekDraft', () => {
-  const STARTED = { ok: true, conversationId: 'c1', weeklySessionNumber: 3, messages: [], proposal: null, endedAt: null };
+describe('discussWeekDraft — the draft goes to the one conversation (training-architecture/20)', () => {
+  it('reuses the open Coach Chat, stages the draft as its proposal, records the handoff against it, and calls no Coach', async () => {
+    getLatestOpenConversation.mockResolvedValue({ id: 'chat1', kind: 'coach_chat' });
+    const transcript = [{ id: 'm1', role: 'athlete', content: 'hi', seq: 1, citations: [], createdAt: new Date() }];
+    getMessages.mockResolvedValue(transcript);
 
-  it('starts a Weekly Session told about the week, stages the draft as its proposal, and withdraws it from the calendar', async () => {
-    startWeeklySession.mockResolvedValue(STARTED);
-    const result = await discussWeekDraft(ATHLETE, 'd1', '2026-09-18', 'da');
-    expect(startWeeklySession).toHaveBeenCalledWith(ATHLETE, '2026-09-18', 'da', { stagedProposal: SESSIONS });
-    expect(recordProposal).toHaveBeenCalledWith('athlete_1', 'c1', SESSIONS);
-    expect(recordWeekDraftDiscussed).toHaveBeenCalledWith({ athleteId: 'athlete_1', weekStart: WEEK, draftId: 'd1', conversationId: 'c1' });
-    expect(result).toEqual({ ...STARTED, proposal: { sessions: SESSIONS } });
+    const result = await discussWeekDraft(ATHLETE, 'd1', '2026-09-18');
+
+    expect(getLatestOpenConversation).toHaveBeenCalledWith('athlete_1', 'coach_chat');
+    expect(result).toEqual({ ok: true, conversationId: 'chat1', messages: transcript, proposal: { sessions: SESSIONS } });
+    expect(recordProposal).toHaveBeenCalledWith('athlete_1', 'chat1', SESSIONS);
+    expect(recordWeekDraftDiscussed).toHaveBeenCalledWith({ athleteId: 'athlete_1', weekStart: WEEK, draftId: 'd1', conversationId: 'chat1' });
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(startWeeklySession).not.toHaveBeenCalled();
     expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
   });
 
-  it('a failed start stages nothing and withdraws nothing — the card stays', async () => {
-    startWeeklySession.mockResolvedValue({ ok: false, reason: 'coach-unavailable' });
-    expect(await discussWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: false, reason: 'coach-unavailable' });
-    expect(recordProposal).not.toHaveBeenCalled();
-    expect(recordWeekDraftDiscussed).not.toHaveBeenCalled();
+  it('mints a Coach Chat when the athlete has none open', async () => {
+    const result = await discussWeekDraft(ATHLETE, 'd1', '2026-09-18');
+
+    expect(createConversation).toHaveBeenCalledWith({ athleteId: 'athlete_1', kind: 'coach_chat' });
+    expect(result).toMatchObject({ ok: true, conversationId: 'chat_new', messages: [] });
+    expect(recordWeekDraftDiscussed).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'chat_new' }));
   });
 
-  it('refuses not-found for a stale id before starting anything', async () => {
+  it('refuses not-found for a stale id before touching any conversation', async () => {
     getCalendarProposalState.mockResolvedValue(null);
     expect(await discussWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: false, reason: 'not-found' });
-    expect(startWeeklySession).not.toHaveBeenCalled();
+    expect(getLatestOpenConversation).not.toHaveBeenCalled();
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(recordProposal).not.toHaveBeenCalled();
+    expect(recordWeekDraftDiscussed).not.toHaveBeenCalled();
   });
 });
 

@@ -41,7 +41,7 @@ vi.mock('@/db', () => ({ getDb: () => Object.assign(chain(), { execute }) }));
 const getPendingProposal = vi.fn(async (): Promise<unknown> => null);
 vi.mock('./plan-proposal-repository', () => ({ getPendingProposal }));
 
-const { getPendingWeekDraft, recordWeekDraft, recordWeekDraftApproval, withdrawPreviewDrafts, getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed } =
+const { getPendingWeekDraft, recordWeekDraft, recordWeekDraftApproval, withdrawPreviewDrafts, getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed, getDiscussedWeek } =
   await import('./week-draft-repository');
 
 function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
@@ -307,6 +307,26 @@ describe('getCalendarProposalState — what the athlete’s calendar shows (trai
     rowsQueue.push([], [], [{ payload: { weekStart: '2026-09-21', reason: 'discussed' } }]);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toBeNull();
     expect(getPendingProposal).not.toHaveBeenCalled();
+  });
+});
+
+describe('getDiscussedWeek — which week a conversation is about (training-architecture/20)', () => {
+  it('returns the week of the newest discussed handoff for this conversation, scoped in SQL and reading only the payload', async () => {
+    nextRows = [{ payload: { weekStart: '2026-09-21', draftId: 'd', reason: 'discussed', conversationId: 'c1' } }];
+    expect(await getDiscussedWeek(ATHLETE, 'c1')).toBe('2026-09-21');
+    const bound = boundValues(whereArgs.at(-1));
+    expect(bound).toContain(ATHLETE);
+    expect(bound).toContain('week_draft_withdrawn');
+    expect(bound).toContain('discussed');
+    expect(bound).toContain('c1');
+    expect(Object.keys(selectArgs.at(-1) as object)).toEqual(['payload']);
+  });
+
+  it('returns null with no handoff, and null for a row with no readable week', async () => {
+    nextRows = [];
+    expect(await getDiscussedWeek(ATHLETE, 'c1')).toBeNull();
+    nextRows = [{ payload: { reason: 'discussed', conversationId: 'c1' } }];
+    expect(await getDiscussedWeek(ATHLETE, 'c1')).toBeNull();
   });
 });
 

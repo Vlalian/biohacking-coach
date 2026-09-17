@@ -3,19 +3,11 @@
 import type { MessageRating } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import { CoachMessageFooter } from './coach-message-footer';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-  type FormEvent,
-} from 'react';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, Link } from '@/i18n/navigation';
 import { AlertTriangle, Check, ChevronLeft, CornerDownLeft, Loader2 } from 'lucide-react';
-import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
-import { useDialogFocus } from '@/lib/use-dialog-focus';
+import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
 import {
   commitWeeklyPlanAction,
   declineWeeklyPlanAction,
@@ -45,18 +37,9 @@ export interface UiMessage {
   rating?: { rating: MessageRating; comment: string | null } | null;
 }
 
-/** One proposed session, as the confirmation popup shows it. */
-export interface UiPlanSession {
-  date: string;
-  type: string;
-  durationMinutes: number | null;
-  zone: string | null;
-  note: string | null;
-}
-
-export interface UiPlanProposal {
-  sessions: UiPlanSession[];
-}
+// The proposal shapes moved to `plan-proposal-card.tsx` with the card
+// (`training-architecture/20`); re-exported so existing importers keep working.
+export type { UiPlanProposal, UiPlanSession } from './plan-proposal-card';
 
 export interface WeeklySessionInitial {
   conversationId: string;
@@ -166,7 +149,6 @@ export function WeeklySession({
   onExit?: () => void;
 }) {
   const t = useTranslations('WeeklySession');
-  const format = useFormatter();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
@@ -183,13 +165,6 @@ export function WeeklySession({
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
   const [proposal, setProposal] = useState<UiPlanProposal | null>(initial?.proposal ?? null);
   const [popupOpen, setPopupOpen] = useState<boolean>(Boolean(initial?.proposal));
-  // Dismissing the popup drops to the persistent bar, never to a dead end — so
-  // Escape closes the popup rather than the conversation. Bound only while the
-  // popup is up, since this component is mounted throughout the session.
-  const proposalRef = useDialogFocus(
-    useCallback(() => setPopupOpen(false), []),
-    Boolean(proposal) && popupOpen,
-  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -266,21 +241,6 @@ export function WeeklySession({
         setNotice({ kind: 'error' });
       }
     });
-  }
-
-  function planLine(s: UiPlanSession): string {
-    const day = format.dateTime(new Date(`${s.date}T00:00:00`), {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-    const bits = [
-      day,
-      s.type,
-      s.durationMinutes != null ? t('minutes', { count: s.durationMinutes }) : null,
-      s.zone,
-    ].filter(Boolean);
-    return bits.join(' · ');
   }
 
   return (
@@ -383,25 +343,20 @@ export function WeeklySession({
         )}
       </div>
 
-      {/* Persistent bar: a pending plan can always be reviewed, saved, or
-          cancelled here even if the popup was dismissed. */}
+      {/* The Action Proposal card: the popup, or the persistent bar it drops to
+          when dismissed — a pending plan can always be reviewed, saved or
+          cancelled. Rendered here for the bar's place in the column; the popup
+          overlays the whole component. */}
       {proposal && !popupOpen && (
-        <div className="shrink-0 border-t border-signal/40 bg-signal/5 px-4 py-3">
-          <p className="font-body text-sm text-foreground">
-            {t('proposalPending', { count: proposal.sessions.length })}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <GhostButton onClick={() => setPopupOpen(true)} disabled={pending}>
-              {t('reviewPlan')}
-            </GhostButton>
-            <GhostButton onClick={cancelPlan} disabled={pending}>
-              {t('cancelPlan')}
-            </GhostButton>
-            <PrimaryButton onClick={confirmPlan} disabled={pending}>
-              {t('savePlan')}
-            </PrimaryButton>
-          </div>
-        </div>
+        <PlanProposalCard
+          proposal={proposal}
+          pending={pending}
+          popupOpen={false}
+          onReview={() => setPopupOpen(true)}
+          onKeepTalking={() => setPopupOpen(false)}
+          onConfirm={confirmPlan}
+          onCancel={cancelPlan}
+        />
       )}
 
       {notice.kind !== 'none' && (
@@ -479,66 +434,16 @@ export function WeeklySession({
         </footer>
       )}
 
-      {/* The confirmation popup — the athlete decides whether this plan touches
-          their calendar. Save and Cancel are both present; dismissing the popup
-          drops to the persistent bar above, never to a dead end. */}
       {proposal && popupOpen && (
-        <div
-          className="absolute inset-0 z-10 flex items-center justify-center bg-foreground/20 p-4 backdrop-blur-[1px]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="plan-proposal-title"
-        >
-          <div
-            ref={proposalRef}
-            tabIndex={-1}
-            className="flex max-h-[80%] w-full max-w-sm flex-col border border-border bg-panel shadow-2xl outline-none"
-          >
-            <div className="border-b border-rule px-5 py-4">
-              <h3
-                id="plan-proposal-title"
-                className="font-display text-xl tracking-[0.03em] text-foreground"
-              >
-                {t('proposalTitle')}
-              </h3>
-              <p className="mt-1 font-body text-sm text-muted-foreground">{t('proposalIntro')}</p>
-            </div>
-
-            <ul className="min-h-0 flex-1 divide-y divide-rule overflow-y-auto">
-              {proposal.sessions.map((s, i) => {
-                const color = TYPE_COLORS[s.type] ?? DEFAULT_TYPE_COLOR;
-                return (
-                  <li key={`${s.date}-${i}`} className="flex gap-3 px-5 py-3">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-body text-sm text-foreground">{planLine(s)}</div>
-                      {s.note && (
-                        <div className="mt-0.5 font-body text-xs text-muted-foreground">
-                          {s.note}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="flex flex-wrap justify-end gap-2 border-t border-rule px-5 py-4">
-              <GhostButton onClick={cancelPlan} disabled={pending}>
-                {t('cancelPlan')}
-              </GhostButton>
-              <GhostButton onClick={() => setPopupOpen(false)} disabled={pending}>
-                {t('keepTalking')}
-              </GhostButton>
-              <PrimaryButton onClick={confirmPlan} disabled={pending}>
-                {t('savePlan')}
-              </PrimaryButton>
-            </div>
-          </div>
-        </div>
+        <PlanProposalCard
+          proposal={proposal}
+          pending={pending}
+          popupOpen
+          onReview={() => setPopupOpen(true)}
+          onKeepTalking={() => setPopupOpen(false)}
+          onConfirm={confirmPlan}
+          onCancel={cancelPlan}
+        />
       )}
     </div>
   );
@@ -584,48 +489,6 @@ function MessageRow({
       </p>
       <CoachMessageFooter message={message} t={t} />
     </div>
-  );
-}
-
-function GhostButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-40"
-    >
-      {children}
-    </button>
-  );
-}
-
-function PrimaryButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="bg-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-    >
-      {children}
-    </button>
   );
 }
 

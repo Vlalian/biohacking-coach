@@ -61,7 +61,7 @@ export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record
 export function ProposalCard({ draft }: { draft: WeekDraft }) {
   const t = useTranslations('ProposalCard');
   const router = useRouter();
-  const { setOpen, setWeeklySeed } = useCoachOverlay();
+  const { setOpen, setChatSeed } = useCoachOverlay();
   const [pending, startTransition] = useTransition();
   const [outcome, setOutcome] = useState<CardOutcome>({ kind: 'idle' });
   const decided = isDecided(outcome);
@@ -92,13 +92,12 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
     startTransition(async () => {
       const result = await discussWeekDraftAction(draft.id);
       if (result.ok) {
-        // The seed is the server's Weekly Session state; the thread opens on it.
-        setWeeklySeed({
+        // The seed is the server's Coach Chat state with the draft as its
+        // pending proposal; the thread opens in chat on it (`/20`).
+        setChatSeed({
           conversationId: result.conversationId,
-          weeklySessionNumber: result.weeklySessionNumber,
           messages: result.messages,
           proposal: result.proposal,
-          ended: result.endedAt !== null,
         });
         setOpen(true);
         router.refresh();

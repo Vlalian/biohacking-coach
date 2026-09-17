@@ -41,8 +41,8 @@ const overlay = {
   setReference: vi.fn(),
   weeklyOfferDismissed: false,
   dismissWeeklyOffer: vi.fn(),
-  weeklySeed: null,
-  setWeeklySeed: vi.fn(),
+  chatSeed: null,
+  setChatSeed: vi.fn(),
 };
 
 describe('ProposalCard', () => {

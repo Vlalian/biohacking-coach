@@ -47,7 +47,7 @@ export function CoachThread({
   weeklyOffer?: WeeklyOfferInput | null;
 }) {
   const t = useTranslations('CoachThread');
-  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, weeklySeed, setWeeklySeed } = useCoachOverlay();
+  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, chatSeed, setChatSeed } = useCoachOverlay();
 
   // Decided on the client only. The server and the browser can disagree about
   // what day it is — no timezone is stored on the profile — so answering this
@@ -77,9 +77,9 @@ export function CoachThread({
   // a warm one hid it, because the component was already mounted in chat).
   // A seed present at mount wins outright: the overlay was closed when the
   // athlete tapped "Discuss" on the calendar, and it mounts straight onto the
-  // session that tap started (training-architecture/18).
+  // chat that tap handed the week to (training-architecture/18, /20).
   const [mode, setMode] = useState<'chat' | 'weekly'>(
-    weeklySeed ? 'weekly' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
+    chatSeed ? 'chat' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
   );
 
   // And the same rule while already mounted: a *new* Reference arriving (the
@@ -94,38 +94,36 @@ export function CoachThread({
     if (referenceId) setMode('chat');
   }
 
-  // A Weekly Session seeded from the calendar ("Discuss with the Coach" on a
-  // drafted week, `training-architecture/18`): the same adjust-state-on-prop
-  // shape as the Reference above. A new seed opens weekly mode on it; the
-  // seed's conversation id is the WeeklySession's key, so a session already
-  // showing is replaced rather than left holding stale state.
+  // A Coach Chat seeded from the calendar ("Discuss with the Coach" on a
+  // drafted week, `training-architecture/18`, into the one conversation since
+  // `/20`): the same adjust-state-on-prop shape as the Reference above. A new
+  // seed opens chat mode on it; the seed's conversation id is the CoachChat's
+  // key, so a chat already showing is replaced rather than left holding stale
+  // state — the seed carries the proposal the restored one did not.
   // The seed is a transfer, not a home. The thread copies it into its own
   // state the moment it sees it and clears the shared one right then, so
-  // closing the overlay any way at all — decline and close, not only "Back to
-  // Chat" — cannot leave a withdrawn plan waiting for the next open
+  // closing the overlay any way at all — cancel and close, not only a later
+  // send — cannot leave a withdrawn plan waiting for the next open
   // (CodeRabbit, PR #69). Adopted during render, as the mode switch already
   // was; the clear is a parent-state set the same way.
-  const [adopted, setAdopted] = useState<WeeklySessionInitial | null>(null);
+  const [adopted, setAdopted] = useState<CoachChatInitial | null>(null);
   // Guarded on the id so a seed is adopted once, even if the parent has not
   // re-rendered with it cleared yet — a render-time set with no guard loops.
-  if (weeklySeed && weeklySeed.conversationId !== adopted?.conversationId) {
-    setAdopted(weeklySeed as WeeklySessionInitial);
-    setMode('weekly');
-    setWeeklySeed(null);
+  if (chatSeed && chatSeed.conversationId !== adopted?.conversationId) {
+    setAdopted(chatSeed as CoachChatInitial);
+    setMode('chat');
+    setChatSeed(null);
   }
-  const weeklyStart = adopted ?? weeklyInitial;
+  const chatStart = adopted ?? chatInitial;
 
   if (mode === 'weekly') {
     return (
       <WeeklySession
-        key={weeklyStart?.conversationId ?? 'fresh'}
-        initial={weeklyStart}
+        key={weeklyInitial?.conversationId ?? 'fresh'}
+        initial={weeklyInitial}
         athleteFirstName={athleteFirstName}
         raceTarget={raceTarget}
-        onExit={() => {
-          setAdopted(null);
-          setMode('chat');
-        }}
+        onExit={() => setMode('chat')}
       />
     );
   }
@@ -185,7 +183,7 @@ export function CoachThread({
       )}
 
       <div className="min-h-0 flex-1">
-        <CoachChat initial={chatInitial} />
+        <CoachChat key={chatStart?.conversationId ?? 'fresh'} initial={chatStart} />
       </div>
     </div>
   );

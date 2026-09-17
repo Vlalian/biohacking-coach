@@ -101,6 +101,25 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     },
   );
 
+  // A staged week's notes are free text that reached the prompt boundary from
+  // storage; the boundary asserts on them regardless of who wrote them
+  // (CodeRabbit, PR #69; the chat path since training-architecture/20).
+  const leakyStaged = [
+    { date: '2026-08-14', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: `call ${EMAIL} first` },
+  ];
+
+  it('refuses a staged week whose note carries an email — Weekly Session', () => {
+    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, '2026-08-12');
+    expect(() => renderWeeklyPrompt({ ...ctx, stagedProposal: leakyStaged })).toThrow(/identifier/i);
+  });
+
+  it('refuses a staged week whose note carries an email — Coach Chat', () => {
+    const window = { start: '2026-08-12', end: '2026-08-16', excludedDates: [], fellThrough: false };
+    expect(() => buildChatPrompt(BASE, '2026-08-12', null, [], { window, stagedProposal: leakyStaged })).toThrow(
+      /identifier/i,
+    );
+  });
+
   it('the Weekly Session prompt carries no name or email', () => {
     const ctx = buildWeeklyContext(
       { ...withIdentity, weeklySessionNumber: 4 },

@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { AppShell, type AppShellStrings, type ThemePreference, type ViewId } from './app-shell';
-import { CoachOverlayContext, type CoachReference, type WeeklySeed } from './coach-overlay-context';
+import { CoachOverlayContext, type ChatSeed, type CoachReference } from './coach-overlay-context';
 
 /** The escape hatch reads as an equal of Sign out — same weight, same footer. */
 const ESCAPE_HATCH_CLASS =
@@ -89,8 +89,8 @@ export function ShellChrome({
   // Held here rather than in the overlay: the overlay unmounts when closed, so
   // owning this below would re-offer the Weekly Session on every reopen.
   const [weeklyOfferDismissed, setWeeklyOfferDismissed] = useState(false);
-  // A Weekly Session opened from the calendar (18): the thread consumes it.
-  const [weeklySeed, setWeeklySeed] = useState<WeeklySeed | null>(null);
+  // A drafted week taken into the chat from the calendar (18/20): the thread consumes it.
+  const [chatSeed, setChatSeed] = useState<ChatSeed | null>(null);
 
   const strings: AppShellStrings = useMemo(
     () => ({
@@ -142,8 +142,8 @@ export function ShellChrome({
         setReference,
         weeklyOfferDismissed,
         dismissWeeklyOffer: () => setWeeklyOfferDismissed(true),
-        weeklySeed,
-        setWeeklySeed,
+        chatSeed,
+        setChatSeed,
       }}
     >
       <AppShell

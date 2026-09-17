@@ -333,14 +333,28 @@ export interface ProposedSession {
   note: string | null;
 }
 
+/**
+ * The athlete's standing no-train weekdays, or none. One place for the
+ * `?? []`, because every window derivation needs it and each copy carried the
+ * same equivalent mutant (`training-architecture/20`).
+ */
+export function fixedConstraintsOf(athlete: Pick<Athlete, 'profile'>): string[] {
+  // Stryker disable next-line LogicalOperator,ArrayDeclaration: equivalent. A
+  // Fixed Constraint is matched by weekday name, so a non-weekday default
+  // matches no day and yields the same window as an empty one; and `||` and
+  // `??` agree on an array, which is never falsy.
+  return athlete.profile?.fixedConstraints ?? [];
+}
+
 export const PROPOSE_WEEK_PLAN_TOOL_NAME = 'propose_week_plan';
 
 /**
  * The tool the Coach calls to *propose* a training week — it never writes. A tool
  * call stages a proposal the athlete then confirms or cancels; the server is the
- * authority on what actually lands (ADR 0006). Dates are explicit, so a plan may
- * span any range the Coach and athlete agreed — including from today into the
- * following week, which a weekday-only shape could not express. `strict` makes
+ * authority on what actually lands (ADR 0006). Dates are explicit, so a plan
+ * can name the window's days exactly, which a weekday-only shape could not; the
+ * window itself is the server's choice (`training-architecture/20`), never the
+ * tool's to widen. `strict` makes
  * the API guarantee the input matches this schema, so there is no JSON parsing or
  * fence-stripping to get wrong.
  */
@@ -351,8 +365,8 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
     'NOT save anything — it shows the plan to the athlete, who confirms or cancels. ' +
     'Call it only once the athlete has agreed to the plan, never while you are ' +
     'still offering options. Give every session an explicit calendar date; omit ' +
-    'rest days entirely. The plan may cover any range you agreed, including from ' +
-    'today into next week.',
+    'rest days entirely. Every date must fall inside the PLANNING WINDOW you were ' +
+    'given; the server drops any date outside it.',
   input_schema: {
     type: 'object',
     additionalProperties: false,

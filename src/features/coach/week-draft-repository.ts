@@ -239,6 +239,30 @@ async function latestDiscussedHandoff(
   return { conversationId: payload.conversationId, weekStart: payload.weekStart };
 }
 
+/**
+ * The week a conversation is about, or null (`training-architecture/20`): the
+ * `weekStart` of the newest draft handed to *this* conversation. The
+ * conversation-keyed twin of {@link latestDiscussedHandoff}. Whether that week
+ * is still current is `conversationWindow`'s question, not this read's.
+ */
+export async function getDiscussedWeek(athleteId: string, conversationId: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ payload: events.payload })
+    .from(events)
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        eq(events.type, WEEK_DRAFT_EVENT.withdrawn),
+        sql`${events.payload} ->> 'reason' = ${DISCUSSED}`,
+        sql`${events.payload} ->> 'conversationId' = ${conversationId}`,
+      ),
+    )
+    .orderBy(desc(events.createdAt))
+    .limit(1);
+  const payload = (row?.payload ?? null) as { weekStart?: unknown } | null;
+  return typeof payload?.weekStart === 'string' ? payload.weekStart : null;
+}
+
 async function discussingState(athleteId: string, weeks: string[]): Promise<CalendarProposalState | null> {
   const handoff = await latestDiscussedHandoff(athleteId, weeks);
   if (!handoff) return null;

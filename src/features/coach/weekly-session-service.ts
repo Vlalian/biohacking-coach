@@ -10,10 +10,13 @@ import {
 } from '@/features/session/session-repository';
 import { buildWeeklyContext, renderWeeklyPrompt } from './prompts';
 import { planningWindow, type PlanningWindow } from './planning-window';
-import { callCoach, type CoachReply, type CoachToolCall } from './coach-client';
+import { callCoach, type CoachReply } from './coach-client';
 import type { Citation } from '@/lib/citation';
-import { LOOKUP_TOOL_NAME } from '@/features/knowledge-oracle/lookup-tool';
 import { noteSourceMentions, productionGrounding, type Grounding } from './grounding';
+import { proposalTurnTools } from './proposal-tools';
+import { conversationWindow } from './week-draft';
+import { getDiscussedWeek } from './week-draft-repository';
+import type { ConversationKind } from '@/lib/conversation-kinds';
 import {
   appendMessages,
   countWeeklySessions,
@@ -38,12 +41,12 @@ import { capacityFor } from '@/features/health/health-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
 import {
   buildWeeklyCheckIn,
+  fixedConstraintsOf,
   proposedToNewSessionRows,
   skippedFrom,
   toWeeklyApiMessages,
   validateProposedPlan,
   weekFeedbackFrom,
-  PROPOSE_WEEK_PLAN_TOOL,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   WEEKLY_OPENER,
   type ProposedSession,
@@ -68,12 +71,6 @@ import {
 
 const WEEKLY_MAX_TOKENS = 1400;
 
-// What the Coach is told after it proposes a plan: the plan is not saved, the
-// athlete decides. This keeps the Coach from claiming the week is done.
-const PROPOSAL_ACK =
-  'The plan has been shown to the athlete to confirm or cancel. Acknowledge briefly and ' +
-  'invite them to confirm when ready. Do not say it has been saved.';
-
 /**
  * The window this athlete's plan may be written into, today.
  *
@@ -87,14 +84,7 @@ function planningWindowFor(
   today: string,
   unavailableDates: string[],
 ): PlanningWindow {
-  return planningWindow(
-    today,
-    // Stryker disable next-line ArrayDeclaration: equivalent. A Fixed Constraint
-    // is matched by weekday name, so a non-weekday default matches no day and
-    // yields the same window as an empty one.
-    athlete.profile?.fixedConstraints ?? [],
-    unavailableDates,
-  );
+  return planningWindow(today, fixedConstraintsOf(athlete), unavailableDates);
 }
 
 /**
@@ -189,17 +179,14 @@ interface RenderedSystem {
 }
 
 /**
- * The Weekly Session's tools for one turn: the plan proposal, and the lookup
- * (`knowledge-oracle/05`). One resolver answers both — the lookup goes to the
- * grounding, everything else gets the proposal acknowledgement — because the
- * adapter makes exactly one tool round-trip and a turn may carry both calls.
+ * The Weekly Session's tools for one turn: the plan proposal and the lookup
+ * (`proposal-tools.ts`, shared with Coach Chat since `training-architecture/20`),
+ * or the lookup alone on the opener, when nothing has been agreed to propose.
  */
 function turnTools(grounding: Grounding, withProposal: boolean) {
-  return {
-    tools: withProposal ? [PROPOSE_WEEK_PLAN_TOOL, grounding.tool] : [grounding.tool],
-    resolveTool: (call: CoachToolCall) =>
-      call.name === LOOKUP_TOOL_NAME ? grounding.resolve(call) : Promise.resolve(PROPOSAL_ACK),
-  };
+  return withProposal
+    ? proposalTurnTools(grounding)
+    : { tools: [grounding.tool], resolveTool: grounding.resolve };
 }
 
 /** The proposal a Weekly Session is currently awaiting a decision on. */
@@ -511,11 +498,33 @@ export type CommitResult =
   | { ok: false; reason: 'not-owner' | 'no-proposal' | 'stale' };
 
 /**
+ * The window a confirmed proposal is validated and written against: the
+ * conversation's (`training-architecture/20`). For Coach Chat that is the whole
+ * of a week brought in to discuss, else this week's remainder; for a Weekly
+ * Session it is this week's remainder, as PR #57 bounded it.
+ */
+async function windowForCommit(
+  athlete: Athlete,
+  conversation: { id: string; kind: ConversationKind },
+  today: string,
+): Promise<PlanningWindow> {
+  const unavailableDates = await getUnavailableDates(athlete.id);
+  if (conversation.kind !== 'coach_chat') return planningWindowFor(athlete, today, unavailableDates);
+  return conversationWindow(
+    today,
+    await getDiscussedWeek(athlete.id, conversation.id),
+    fixedConstraintsOf(athlete),
+    unavailableDates,
+  );
+}
+
+/**
  * Commits the pending proposal — the athlete confirmed. Re-validates against
- * today (a proposal confirmed a day later may have dates now in the past),
- * writes the plan over only the coach-planned days of its own date span, records
- * the confirmation, and ends the session. Nothing an athlete lived through is
- * touched (see {@link replaceCoachPlanForDateRange}).
+ * the conversation's window (a proposal confirmed a day later may have dates
+ * now in the past), writes the plan over only the coach-planned days of that
+ * window, records the confirmation, and ends the session — a Weekly Session's.
+ * Coach Chat is the resting conversation and is never ended. Nothing an
+ * athlete lived through is touched (see {@link replaceCoachPlanForDateRange}).
  */
 export async function commitWeeklyPlan(
   athlete: Athlete,
@@ -528,10 +537,11 @@ export async function commitWeeklyPlan(
   const pending = await getPendingProposal(athlete.id, conversationId);
   if (!pending) return { ok: false, reason: 'no-proposal' };
 
-  // Stale if the proposal no longer fully validates against today — e.g. it was
-  // confirmed a day later and a day it included is now in the past. Refuse the
-  // whole plan rather than silently commit a shrunken week; the athlete re-plans.
-  const window = planningWindowFor(athlete, today, await getUnavailableDates(athlete.id));
+  // Stale if the proposal no longer fully validates against the window — e.g.
+  // it was confirmed a day later and a day it included is now in the past.
+  // Refuse the whole plan rather than silently commit a shrunken week; the
+  // athlete re-plans.
+  const window = await windowForCommit(athlete, conversation, today);
   const validated = validateProposedPlan({ sessions: pending.sessions }, window);
   if (!validated.ok || validated.sessions.length !== pending.sessions.length) {
     return { ok: false, reason: 'stale' };
@@ -546,7 +556,7 @@ export async function commitWeeklyPlan(
   const rows = proposedToNewSessionRows(validated.sessions, athlete.id);
   await replaceCoachPlanForDateRange(athlete.id, start, end, rows);
   await recordPlanCommitted(athlete.id, conversationId, validated.sessions);
-  await endConversation(athlete.id, conversationId, new Date());
+  if (conversation.kind !== 'coach_chat') await endConversation(athlete.id, conversationId, new Date());
 
   return { ok: true, sessionCount: rows.length, start, end };
 }

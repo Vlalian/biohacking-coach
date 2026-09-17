@@ -3,10 +3,13 @@
 import { CoachMessageFooter } from './coach-message-footer';
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, CornerDownLeft, X } from 'lucide-react';
+import { AlertTriangle, Check, CornerDownLeft, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
+import { useRouter } from '@/i18n/navigation';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import { sendCoachChatMessageAction } from './chat-actions';
+import { commitWeeklyPlanAction, declineWeeklyPlanAction } from './weekly-actions';
+import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
 import type { UiMessage } from './weekly-session';
 
 /**
@@ -22,21 +25,32 @@ import type { UiMessage } from './weekly-session';
  * dismissable chip above the composer and rides along with the next message.
  * It conditions that turn only — the athlete asked about a session, got an
  * answer, and may move on.
+ *
+ * The one conversation may also agree a week (`training-architecture/20`).
+ * When the Coach proposes one — or a drafted week is brought in from the
+ * calendar — the same Action Proposal card the Weekly Session shows appears
+ * here, and only the athlete's tap writes the calendar.
  */
 
 export interface CoachChatInitial {
   conversationId: string;
   messages: UiMessage[];
+  /** A week awaiting the athlete's decision, restored with the transcript. */
+  proposal?: UiPlanProposal | null;
 }
 
 type Notice =
   | { kind: 'none' }
   | { kind: 'error' }
   | { kind: 'consentRequired' }
-  | { kind: 'unsafeContent' };
+  | { kind: 'unsafeContent' }
+  | { kind: 'planned'; count: number }
+  | { kind: 'stale' };
 
 export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   const t = useTranslations('CoachChat');
+  const tWeekly = useTranslations('WeeklySession');
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
   const { reference, setReference } = useCoachOverlay();
@@ -47,6 +61,8 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   const [messages, setMessages] = useState<UiMessage[]>(initial?.messages ?? []);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice>({ kind: 'none' });
+  const [proposal, setProposal] = useState<UiPlanProposal | null>(initial?.proposal ?? null);
+  const [popupOpen, setPopupOpen] = useState<boolean>(Boolean(initial?.proposal));
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -86,11 +102,54 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
       setConversationId(result.conversationId);
       setMessages(result.messages);
       setReference(null);
+      // A fresh proposal supersedes any earlier one and reopens the popup, as
+      // in the Weekly Session; a turn with none leaves a pending one as it was.
+      if (result.proposal) {
+        setProposal(result.proposal);
+        setPopupOpen(true);
+      }
+    });
+  }
+
+  function confirmPlan() {
+    if (!conversationId) return;
+    setNotice({ kind: 'none' });
+    startTransition(async () => {
+      const result = await commitWeeklyPlanAction(conversationId);
+      if (result.ok) {
+        setProposal(null);
+        setPopupOpen(false);
+        setNotice({ kind: 'planned', count: result.sessionCount });
+        router.refresh();
+      } else if (result.reason === 'stale') {
+        // The plan crossed into a new day. Keep it visible so the athlete can
+        // cancel and ask for a fresh one, rather than committing a shrunken week.
+        setPopupOpen(false);
+        setNotice({ kind: 'stale' });
+      } else {
+        setNotice({ kind: 'error' });
+      }
+    });
+  }
+
+  function cancelPlan() {
+    if (!conversationId) return;
+    setNotice({ kind: 'none' });
+    startTransition(async () => {
+      const result = await declineWeeklyPlanAction(conversationId);
+      if (result.ok) {
+        setProposal(null);
+        setPopupOpen(false);
+        // The calendar's "being discussed" pointer has nothing to point at now.
+        router.refresh();
+      } else {
+        setNotice({ kind: 'error' });
+      }
     });
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="relative flex h-full min-h-0 flex-col bg-background">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         {messages.length === 0 && !pending ? (
           <div className="flex flex-col items-center gap-2 border border-dashed border-border bg-panel px-5 py-8 text-center">
@@ -126,7 +185,28 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
         )}
       </div>
 
-      {notice.kind !== 'none' && (
+      {proposal && !popupOpen && (
+        <PlanProposalCard
+          proposal={proposal}
+          pending={pending}
+          popupOpen={false}
+          onReview={() => setPopupOpen(true)}
+          onKeepTalking={() => setPopupOpen(false)}
+          onConfirm={confirmPlan}
+          onCancel={cancelPlan}
+        />
+      )}
+
+      {notice.kind === 'planned' && (
+        <div className="shrink-0 px-4 pt-2">
+          <div className="flex items-start gap-2 border-l-2 border-signal bg-panel px-3 py-2 text-sm text-foreground">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
+            <span>{tWeekly('planned', { count: notice.count })}</span>
+          </div>
+        </div>
+      )}
+
+      {notice.kind !== 'none' && notice.kind !== 'planned' && (
         // role="alert" so the failure is announced: the notice appears far from
         // the composer the athlete is looking at, and a screen-reader user
         // otherwise gets no signal that their message did not send.
@@ -143,6 +223,8 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
                 </>
               ) : notice.kind === 'unsafeContent' ? (
                 t('unsafeContent')
+              ) : notice.kind === 'stale' ? (
+                tWeekly('proposalStale')
               ) : (
                 t('error')
               )}
@@ -194,6 +276,18 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
           </button>
         </form>
       </footer>
+
+      {proposal && popupOpen && (
+        <PlanProposalCard
+          proposal={proposal}
+          pending={pending}
+          popupOpen
+          onReview={() => setPopupOpen(true)}
+          onKeepTalking={() => setPopupOpen(false)}
+          onConfirm={confirmPlan}
+          onCancel={cancelPlan}
+        />
+      )}
     </div>
   );
 }

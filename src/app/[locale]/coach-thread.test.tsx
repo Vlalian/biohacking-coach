@@ -1,17 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CoachOverlayContext, type WeeklySeed } from '@/components/shell/coach-overlay-context';
+import { CoachOverlayContext, type ChatSeed } from '@/components/shell/coach-overlay-context';
 
 /**
- * `training-architecture/18` — a Weekly Session seeded from the calendar opens
- * the thread in weekly mode on that conversation. Static render: what mode the
- * thread picks on mount, and what it hands the session.
+ * `training-architecture/18`, reworked by `/20` — a drafted week taken into
+ * the conversation from the calendar opens the thread in **chat** mode on the
+ * athlete's Coach Chat, proposal and all. Static render: what mode the thread
+ * picks on mount, and what it hands the chat.
  */
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => `${key}()` }));
-vi.mock('./coach-chat', () => ({ CoachChat: () => <div data-mode="chat" /> }));
+vi.mock('./coach-chat', () => ({
+  CoachChat: ({ initial }: { initial: { conversationId: string; proposal: unknown } | null }) => (
+    <div data-mode="chat" data-conversation={initial?.conversationId ?? 'none'} data-has-proposal={String(Boolean(initial?.proposal))} />
+  ),
+}));
 vi.mock('./weekly-session', () => ({
-  WeeklySession: ({ initial }: { initial: { conversationId: string; proposal: unknown } | null }) => (
-    <div data-mode="weekly" data-conversation={initial?.conversationId ?? 'none'} data-has-proposal={String(Boolean(initial?.proposal))} />
+  WeeklySession: ({ initial }: { initial: { conversationId: string } | null }) => (
+    <div data-mode="weekly" data-conversation={initial?.conversationId ?? 'none'} />
   ),
 }));
 
@@ -24,47 +29,46 @@ const base = {
   setReference: vi.fn(),
   weeklyOfferDismissed: false,
   dismissWeeklyOffer: vi.fn(),
-  weeklySeed: null as WeeklySeed | null,
-  setWeeklySeed: vi.fn(),
+  chatSeed: null as ChatSeed | null,
+  setChatSeed: vi.fn(),
 };
 
-const render = (seed: WeeklySeed | null) =>
+const render = (seed: ChatSeed | null, setChatSeed = vi.fn()) =>
   renderToStaticMarkup(
-    <CoachOverlayContext.Provider value={{ ...base, weeklySeed: seed }}>
+    <CoachOverlayContext.Provider value={{ ...base, chatSeed: seed, setChatSeed }}>
       <CoachThread chatInitial={null} weeklyInitial={null} />
     </CoachOverlayContext.Provider>,
   );
 
-describe('CoachThread — a seeded Weekly Session', () => {
+describe('CoachThread — a drafted week seeded into the chat', () => {
   it('opens in chat with no seed and no restored session', () => {
-    expect(render(null)).toContain('data-mode="chat"');
+    const html = render(null);
+    expect(html).toContain('data-mode="chat"');
+    expect(html).toContain('data-conversation="none"');
   });
 
-  it('clears the shared seed the moment it adopts it, so closing the overlay any other way cannot resurface it', () => {
-    // Before this the seed was cleared only on "Back to Chat". An athlete who
-    // declined the proposal and closed the overlay left the seed in the shell,
-    // and the next open showed the withdrawn plan again (CodeRabbit, PR #69).
-    const setWeeklySeed = vi.fn();
-    const seed: WeeklySeed = { conversationId: 'c1', weeklySessionNumber: 2, messages: [], proposal: { sessions: [] }, ended: false };
-    const html = renderToStaticMarkup(
-      <CoachOverlayContext.Provider value={{ ...base, weeklySeed: seed, setWeeklySeed }}>
-        <CoachThread chatInitial={null} weeklyInitial={null} />
-      </CoachOverlayContext.Provider>,
-    );
-    expect(html).toContain('data-conversation="c1"');
-    expect(setWeeklySeed).toHaveBeenCalledWith(null);
-  });
-
-  it('opens in weekly mode on the seed’s conversation, proposal and all', () => {
-    const html = render({
-      conversationId: 'c1',
-      weeklySessionNumber: 2,
-      messages: [],
-      proposal: { sessions: [{ date: '2026-09-22' }] },
-      ended: false,
-    });
-    expect(html).toContain('data-mode="weekly"');
+  it('opens in chat mode on the seed’s conversation with its proposal, and clears the seed at once', () => {
+    // Cleared on adoption, not on exit: an athlete who cancelled the proposal
+    // and closed the overlay must not find the withdrawn week waiting on the
+    // next open (CodeRabbit, PR #69).
+    const setChatSeed = vi.fn();
+    const html = render({ conversationId: 'c1', messages: [], proposal: { sessions: [{ date: '2026-09-22' }] } }, setChatSeed);
+    expect(html).toContain('data-mode="chat"');
     expect(html).toContain('data-conversation="c1"');
     expect(html).toContain('data-has-proposal="true"');
+    expect(setChatSeed).toHaveBeenCalledWith(null);
+  });
+
+  it('a seed wins over a restored Weekly Session — the athlete tapped Discuss, so that is where they land', () => {
+    const html = renderToStaticMarkup(
+      <CoachOverlayContext.Provider value={{ ...base, chatSeed: { conversationId: 'c1', messages: [], proposal: null } }}>
+        <CoachThread
+          chatInitial={null}
+          weeklyInitial={{ conversationId: 'w1', weeklySessionNumber: 1, messages: [], proposal: null, ended: false }}
+        />
+      </CoachOverlayContext.Provider>,
+    );
+    expect(html).toContain('data-mode="chat"');
+    expect(html).toContain('data-conversation="c1"');
   });
 });

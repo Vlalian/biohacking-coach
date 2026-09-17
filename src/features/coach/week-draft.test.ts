@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { addDays } from '@/lib/date';
+import { planningWindow } from './planning-window';
 import {
+  conversationWindow,
   cycleAnchor,
   wholeWeekWindow,
   draftDueWeek,
@@ -45,6 +47,39 @@ describe('nextWeekWindow / weekWindow — the week after today, bounded and reso
   it('with no constraints given at all, nothing is excluded', () => {
     expect(nextWeekWindow('2026-09-16')).toEqual({ start: NEXT_MON, end: '2026-09-27', excludedDates: [], fellThrough: false });
     expect(weekWindow(NEXT_MON, '2026-09-16')).toEqual({ start: NEXT_MON, end: '2026-09-27', excludedDates: [], fellThrough: false });
+  });
+});
+
+describe('conversationWindow — the week a chat may write (training-architecture/20)', () => {
+  const today = '2026-09-16'; // Wednesday; this week starts 09-14, next 09-21
+
+  it('a discussed next-week draft gives that whole week, Monday to Sunday', () => {
+    expect(conversationWindow(today, NEXT_MON, [], [])).toEqual({
+      start: NEXT_MON,
+      end: '2026-09-27',
+      excludedDates: [],
+      fellThrough: false,
+    });
+  });
+
+  it('a discussed current-week draft gives the whole current week, past days included — the same ruling as a late accept', () => {
+    expect(conversationWindow(today, MON, [], [])).toMatchObject({ start: MON, end: '2026-09-20' });
+  });
+
+  it('no discussed week gives the remainder of this week', () => {
+    expect(conversationWindow(today, null, [], [])).toEqual(planningWindow(today));
+  });
+
+  it('a discussed week that is already past, or beyond next week, is ignored', () => {
+    expect(conversationWindow(today, '2026-09-07', [], [])).toEqual(planningWindow(today));
+    expect(conversationWindow(today, '2026-09-28', [], [])).toEqual(planningWindow(today));
+  });
+
+  it('resolves the excluded days of the week it chose, not of today’s', () => {
+    expect(conversationWindow(today, NEXT_MON, ['Monday'], ['2026-09-25']).excludedDates).toEqual([
+      NEXT_MON,
+      '2026-09-25',
+    ]);
   });
 });
 

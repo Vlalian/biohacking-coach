@@ -3,7 +3,7 @@ import { logCoachFailure, type ModelSurface } from '@/lib/coach-log';
 import type { Citation } from '@/lib/citation';
 import type { ConversationKind } from '@/lib/conversation-kinds';
 import { noteSourceMentions } from './grounding';
-import { callCoach, type CoachTool, type CoachToolCall } from './coach-client';
+import { callCoach, type CoachReply, type CoachTool, type CoachToolCall } from './coach-client';
 import {
   appendMessages,
   createConversation,
@@ -59,9 +59,10 @@ export interface PreparedTurn {
    * Run once the turn and the reply are stored, never before: work that records
    * something *about* a turn the conversation did not receive is work about
    * nothing. Given the conversation id, which on a first turn did not exist when
-   * `prepare` ran.
+   * `prepare` ran, and the reply itself — its tool calls are how a surface
+   * learns the Coach proposed something (`training-architecture/20`).
    */
-  onStored?: (conversationId: string) => Promise<void>;
+  onStored?: (conversationId: string, reply: CoachReply) => Promise<void>;
 }
 
 export interface ConversationTurn {
@@ -117,12 +118,12 @@ export async function takeConversationTurn(
     turn,
     resumed.conversationId,
     trimmed,
-    answered.reply,
+    answered.reply.text,
     answered.prepared,
   );
   if (!id) return { ok: false, reason: 'not-owner' };
 
-  await runAfterStore(turn, answered.prepared, id);
+  await runAfterStore(turn, answered.prepared, id, answered.reply);
 
   return { ok: true, conversationId: id, messages: await getMessages(id) };
 }
@@ -147,9 +148,10 @@ async function runAfterStore(
   turn: ConversationTurn,
   prepared: PreparedTurn,
   conversationId: string,
+  reply: CoachReply,
 ): Promise<void> {
   try {
-    await prepared.onStored?.(conversationId);
+    await prepared.onStored?.(conversationId, reply);
   } catch (error) {
     logCoachFailure({
       surface: turn.surface,
@@ -199,19 +201,28 @@ async function resumeConversation(
 
 /**
  * Prompt build and model call, with the failure translated. Returns the reply
- * text alongside the prepared turn, or the refusal the caller should report.
+ * alongside the prepared turn, or the refusal the caller should report.
+ *
+ * A reply with no words is refused here, before anything is written. The
+ * adapter allows a wordless tool call because it cannot know whether a card
+ * will follow; a conversation does know, and the answer is still no — an empty
+ * Coach message stored is an empty message shown to the athlete and replayed
+ * as history on every later turn. The same rule the Weekly Session has had
+ * since its first proposal; it reached the shared turn with
+ * `training-architecture/20`, when Coach Chat gained a tool that can be called
+ * without prose.
  */
 async function askModel(
   turn: ConversationTurn,
   resumed: ResumedConversation,
   trimmed: string,
 ): Promise<
-  | { reply: string; prepared: PreparedTurn }
+  | { reply: CoachReply; prepared: PreparedTurn }
   | { reason: 'coach-unavailable' | 'unsafe-content' }
 > {
   try {
     const prepared = await turn.prepare(resumed.transcript, resumed.conversationId);
-    const { text } = await callCoach({
+    const reply = await callCoach({
       system: prepared.system,
       // The athlete's turn joins the history here rather than being stored first
       // — the same messages the API would have seen, and no orphan on failure.
@@ -220,8 +231,9 @@ async function askModel(
       tools: prepared.tools,
       resolveTool: prepared.resolveTool,
     });
-    noteSourceMentions(turn.surface, turn.athleteId, resumed.conversationId, text);
-    return { reply: text, prepared };
+    if (reply.text === '') return { reason: 'coach-unavailable' };
+    noteSourceMentions(turn.surface, turn.athleteId, resumed.conversationId, reply.text);
+    return { reply, prepared };
   } catch (error) {
     const reason = refusalReason(error);
     // The athlete sees a sentence; without this line the server saw nothing at

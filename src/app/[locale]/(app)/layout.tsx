@@ -143,9 +143,14 @@ export default async function AppShellLayout({
     // The tester's own thumbs, restored with the transcript so a flag left last
     // week is still there on load (`showable-version/05`, item 3). Read here
     // rather than per row: one query for the thread, not one per message.
-    const chatRatings = chat
-      ? await getRatingsForConversation(athlete.id, chat.conversationId)
-      : {};
+    // And the week awaiting a decision, if the chat holds one — a refresh
+    // mid-decision must not lose the card (`training-architecture/20`).
+    const [chatRatings, chatProposal] = chat
+      ? await Promise.all([
+          getRatingsForConversation(athlete.id, chat.conversationId),
+          getPendingProposal(athlete.id, chat.conversationId),
+        ])
+      : [{} as Awaited<ReturnType<typeof getRatingsForConversation>>, null];
 
     if (open) {
       const transcript = await getMessages(open.id);
@@ -180,6 +185,7 @@ export default async function AppShellLayout({
           citations: m.citations,
           rating: chatRatings[m.id] ?? null,
         })),
+        proposal: chatProposal ? { sessions: chatProposal.sessions } : null,
       };
     }
 
