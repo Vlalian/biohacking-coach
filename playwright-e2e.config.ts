@@ -11,9 +11,6 @@ import { defineConfig, devices } from '@playwright/test';
  * against holds seed data only (Mads, 2026-09-16), so the PNGs carry nothing
  * real.
  */
-/** The day every full-page baseline was photographed on. Change it, regenerate all. */
-export const PINNED_TODAY = '2026-09-16';
-
 export default defineConfig({
   testDir: 'e2e',
   testMatch: '**/*.visual.ts',
@@ -41,13 +38,13 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3001/en/sign-in',
-    // A server started by hand does not carry COACH_TODAY, and the calendar
-    // baselines would then fail on the real date. Always our own server.
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120_000,
-    // The clock seam (src/lib/date.ts `today()`): every baseline is taken on
-    // this day, so the calendar's highlighted cell and visible month hold still.
-    env: { COACH_TODAY: PINNED_TODAY },
+    // No pinned date, by Mads's ruling (2026-09-17): the baselines are taken
+    // on the real day, so the two calendar pages drift as the calendar does
+    // and are refreshed with `npm run test:e2e:update` when they do. A run
+    // can still pin the clock by hand — `COACH_TODAY=YYYY-MM-DD npm run dev`
+    // (src/lib/date.ts `today()`) — when one fixed day is what is wanted.
   },
   projects: [
     {
