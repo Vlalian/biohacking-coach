@@ -150,6 +150,15 @@ export const sessions = pgTable(
     origin: text('origin').notNull(),
     status: text('status').notNull().default('planned'),
     parked: boolean('parked').notNull().default(false),
+    // Why a parked session is parked. An Unavailable *Date* parks the day's
+    // planned training and names the day here; the session-level Unavailable
+    // toggle parks too but leaves this null. Clearing a date restores only the
+    // rows that name it, so the athlete's own per-session decision survives the
+    // day being marked and cleared around it (code-health issue 12). Null on a
+    // parked row means session-parked, which is also what every row parked
+    // before this column existed reads as — the conservative reading: nothing
+    // un-parks that the athlete did not ask to.
+    parkedByDate: date('parked_by_date', { mode: 'string' }),
     isTraining: boolean('is_training').notNull().default(true),
     duration: integer('duration'),
     zone: text('zone'),
@@ -597,7 +606,9 @@ export type NewAthleteFeedbackRow = typeof athleteFeedback.$inferInsert;
  * Distinct from a Fixed Constraint (a recurring weekday, stored in the Athlete
  * Profile) — this is a single day. The row is passed to the next Weekly Session
  * so the Coach plans around it; the sessions that fell on the day are parked in
- * place (`sessions.status = 'unavailable'`, `parked = true`) rather than moved.
+ * place (`sessions.status = 'unavailable'`, `parked = true`,
+ * `parked_by_date = <the day>`) rather than moved. Clearing the day restores
+ * only the rows that name it.
  *
  * Cascade-deletes with its athlete, like every other training table (ADR 0006 —
  * training data keys off the opaque athlete id and carries no identity).
