@@ -169,6 +169,8 @@
     "themeSystem": "System",
     "languageLabel": "Athlete Language",
     "languageNote": "Applies to the app and your Coach right away. Sports terms like RPE and Zone 2 stay in English either way.",
+    "preferredNameLabel": "What the Coach calls you",
+    "preferredNameNote": "The name we send the Coach on your behalf. Leave it empty and we send none. Your account name is not sent — but anything you type yourself, in a note or a message, reaches the Coach as written.",
     "raceTargetLabel": "Race target",
     "raceTargetNote": "The race you are training for. Everything in your plan is built backwards from it.",
     "raceTargetPlaceholder": "e.g. Ironman Copenhagen, 16 August 2026",
@@ -436,6 +438,7 @@
     "coachLabel": "Your Coach",
     "stepOf": "Step {step} of {total}",
     "stepLanguage": "Language",
+    "stepName": "Name",
     "stepExperience": "Experience",
     "stepRace": "Race",
     "stepAdaptive": "About you",
@@ -444,6 +447,9 @@
     "nextLabel": "Next",
     "nextValue": "Your first Week Plan is on the calendar",
     "qLanguage": "Which language do you prefer?",
+    "qName": "What should the Coach call you?",
+    "qNameSub": "A first name, a nickname, anything you like — or nothing. This is the name we send the Coach on your behalf; your account name is not. What you type yourself in a message reaches the Coach as written. You can change it in Settings.",
+    "skipName": "Skip — no name",
     "qExperience": "How many Ironman-distance races have you completed?",
     "qExperienceSub": "Including 70.3 and full-distance finishes",
     "expBeginner": "This will be my first",
@@ -778,5 +784,11 @@
     "glance_easy_swim": "easy swim",
     "glance_easy_bike": "easy bike",
     "glance_easy_run": "easy run"
+  },
+  "PreferredName": {
+    "placeholder": "e.g. Mads, Captain, M",
+    "realNameWarning": "That is your real name. The Coach will use it exactly as you typed it.",
+    "useAnyway": "Use it anyway",
+    "pickAnother": "Pick something else"
   }
 }

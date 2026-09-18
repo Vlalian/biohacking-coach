@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { user } from '@/db/auth-schema';
-
+import { athlete } from '@/db/schema';
 // Spy eq so the userId scoping can be asserted; fake the builder chain so the
 // merge-over-existing-prefs behaviour is observable.
 vi.mock('drizzle-orm', async (importOriginal) => {
@@ -14,7 +14,8 @@ let updatedSet: unknown = null;
 
 const limit = vi.fn(() => Promise.resolve(selectRows));
 const where = vi.fn(() => ({ limit }));
-const from = vi.fn(() => ({ where }));
+const innerJoin = vi.fn(() => ({ where }));
+const from = vi.fn(() => ({ where, innerJoin }));
 const select = vi.fn(() => ({ from }));
 
 const updateWhere = vi.fn(() => Promise.resolve());
@@ -26,7 +27,9 @@ const update = vi.fn(() => ({ set }));
 
 vi.mock('@/db', () => ({ getDb: () => ({ select, update }) }));
 
-const { getUiPrefs, setUiLanguage } = await import('./user-prefs-repository');
+const { getUiPrefs, setUiLanguage, setPreferredName, getPreferredNameForAthlete } = await import(
+  './user-prefs-repository',
+);
 
 beforeEach(() => {
   selectRows = [];
@@ -39,6 +42,7 @@ describe('getUiPrefs', () => {
     selectRows = [{ uiPrefs: { language: 'da' } }];
     const prefs = await getUiPrefs('user_abc');
     expect(eq).toHaveBeenCalledWith(user.id, 'user_abc');
+    expect(select).toHaveBeenCalledWith({ uiPrefs: user.uiPrefs });
     expect(prefs).toEqual({ language: 'da' });
   });
 
@@ -60,5 +64,38 @@ describe('setUiLanguage', () => {
     selectRows = [{ uiPrefs: { language: 'en', theme: 'dark' } }];
     await setUiLanguage('user_abc', 'da');
     expect(updatedSet).toEqual({ uiPrefs: { language: 'da', theme: 'dark' } });
+  });
+});
+
+describe('setPreferredName', () => {
+  it('stores the chosen name on the user row, merging over other prefs', async () => {
+    selectRows = [{ uiPrefs: { language: 'da' } }];
+    await setPreferredName('user_abc', 'Mads');
+    expect(update).toHaveBeenCalledWith(user);
+    expect(eq).toHaveBeenCalledWith(user.id, 'user_abc');
+    expect(updatedSet).toEqual({ uiPrefs: { language: 'da', preferredName: 'Mads' } });
+  });
+
+  it('removes the key entirely when cleared, rather than storing null or ""', async () => {
+    selectRows = [{ uiPrefs: { language: 'da', preferredName: 'Mads' } }];
+    await setPreferredName('user_abc', null);
+    expect(updatedSet).toEqual({ uiPrefs: { language: 'da' } });
+  });
+});
+
+describe('getPreferredNameForAthlete', () => {
+  it('reads the name through the user seam, keyed by the opaque athlete id', async () => {
+    selectRows = [{ uiPrefs: { preferredName: 'Mads' } }];
+    expect(await getPreferredNameForAthlete('athlete_1')).toBe('Mads');
+    expect(select).toHaveBeenCalledWith({ uiPrefs: user.uiPrefs });
+    expect(innerJoin).toHaveBeenCalledWith(user, expect.anything());
+    expect(eq).toHaveBeenCalledWith(athlete.id, 'athlete_1');
+  });
+
+  it('is null for an athlete who set none, and for one with no user at all', async () => {
+    selectRows = [{ uiPrefs: { language: 'en' } }];
+    expect(await getPreferredNameForAthlete('athlete_1')).toBeNull();
+    selectRows = [];
+    expect(await getPreferredNameForAthlete('synthetic_1')).toBeNull();
   });
 });

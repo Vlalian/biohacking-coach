@@ -43,5 +43,6 @@ export async function sendCoachChatMessageAction(input: {
     today(),
     resolved.language,
     input.referenceSessionId ?? null,
+    resolved.preferredName ?? null,
   );
 }

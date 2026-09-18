@@ -50,7 +50,12 @@ const REPORT = { energy: 6, body: 7, sleepQuality: 5, notableSignal: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  currentAthlete.mockResolvedValue({ ok: true, athlete: { id: 'athlete_1' }, language: 'en' });
+  currentAthlete.mockResolvedValue({
+    ok: true,
+    athlete: { id: 'athlete_1' },
+    language: 'en',
+    preferredName: 'Mads',
+  });
   assertAiCoachingConsent.mockResolvedValue({ ok: true });
   commitWeeklyPlan.mockResolvedValue({ ok: true });
   vi.useFakeTimers();
@@ -169,7 +174,9 @@ describe('the actions that reach the Coach are gated on consent', () => {
 
     await expect(startWeeklySessionAction()).resolves.toEqual({ ok: true });
 
-    expect(startWeeklySession).toHaveBeenCalledWith({ id: 'athlete_1' }, '2026-09-10', 'en');
+    expect(startWeeklySession).toHaveBeenCalledWith({ id: 'athlete_1' }, '2026-09-10', 'en', {
+      preferredName: 'Mads',
+    });
   });
 
   it.each([
@@ -205,7 +212,22 @@ describe('the actions that reach the Coach are gated on consent', () => {
       'how should I pace Sunday?',
       '2026-09-10',
       'en',
+      'Mads',
     );
+  });
+
+  it('passes null, not undefined, when the athlete chose no Preferred Name', async () => {
+    currentAthlete.mockResolvedValue({ ok: true, athlete: { id: 'athlete_1' }, language: 'en' });
+    startWeeklySession.mockResolvedValue({ ok: true });
+    continueWeeklySession.mockResolvedValue({ ok: true });
+
+    await startWeeklySessionAction();
+    await sendWeeklyMessageAction('conv_1', 'hello');
+
+    expect(startWeeklySession).toHaveBeenCalledWith({ id: 'athlete_1' }, '2026-09-10', 'en', {
+      preferredName: null,
+    });
+    expect((continueWeeklySession.mock.calls[0] as unknown[])[5]).toBeNull();
   });
 });
 

@@ -240,6 +240,12 @@ describe('golden — the Coach Chat prompt', () => {
     expect(buildChatPrompt(BASE, TODAY)).toMatchSnapshot();
   });
 
+  // preferred-name/02: the one name that reaches a prompt, by the athlete's
+  // choice. Pinned beside the nameless case above, which must not move.
+  it('renders identically with a Preferred Name', () => {
+    expect(buildChatPrompt(BASE, TODAY, null, [], null, 'Mads')).toMatchSnapshot();
+  });
+
   // training-architecture/20: the one conversation may agree a week. The bound
   // and the staged week render exactly as the Weekly Session renders them.
   it('renders identically with a planning window and a staged week', () => {
@@ -392,6 +398,13 @@ describe('golden — the Coach Chat prompt', () => {
  * ask. These two snapshots are therefore the ones to read when reviewing a prompt
  * change; the `BASE` ones pin the path that comes alive when a Check-in lands.
  */
+describe('golden — the Weekly Session prompt with a Preferred Name', () => {
+  it('renders identically with a Preferred Name at session 4+', () => {
+    const ctx = { ...buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TODAY), preferredName: 'Mads' };
+    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+  });
+});
+
 describe('golden — no Check-in has ever been given', () => {
   /**
    * The shape every real athlete's prompt actually has today (code-health/07).

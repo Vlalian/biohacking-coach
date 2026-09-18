@@ -264,6 +264,28 @@ describe('renderBriefingPrompt — golden', () => {
   });
 });
 
+describe('renderBriefingPrompt — the Preferred Name (preferred-name/02)', () => {
+  it('with none set, the posture is exactly what it was: third person, never a real name', () => {
+    const prompt = renderBriefingPrompt(ctx());
+    expect(prompt).toBe(renderBriefingPrompt(ctx({ preferredName: null })));
+    expect(prompt).toContain('Refer to the athlete in the third person; never use a real name.');
+    expect(prompt).not.toContain('PREFERRED NAME');
+  });
+
+  it('with one set, refers to the athlete by it and permits no other name', () => {
+    const prompt = renderBriefingPrompt(ctx({ preferredName: 'Mads' }));
+    expect(prompt).toContain('Refer to the athlete in the third person, by the name they chose, "Mads", and by no other name');
+    expect(prompt).not.toContain('never use a real name.');
+    expect(prompt).toMatchSnapshot();
+  });
+
+  it('carries the name through buildBriefingContext without walking it for identifiers', () => {
+    const built = buildBriefingContext({ today: '2026-08-08', plan, reports: null, transcripts: null, preferredName: 'Mads' });
+    expect(built.preferredName).toBe('Mads');
+    expect(buildBriefingContext({ today: '2026-08-08', plan, reports: null, transcripts: null }).preferredName).toBeNull();
+  });
+});
+
 describe('renderBriefingPrompt — the races (training-architecture/09)', () => {
   const withRaces = (over: Partial<BriefingReports['profile']>) =>
     renderBriefingPrompt(ctx({ reports: { ...reports, profile: { ...reports.profile, ...over } } }));
