@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import {
   healthNotes,
@@ -23,13 +23,18 @@ import { capacityStatement, type Capacity } from './capacity';
 /** Who wrote a note on the detail thread. */
 export type NoteAuthor = 'athlete' | 'head_coach';
 
-/** Opens an Injury with what the athlete says it prevents. */
+/**
+ * Opens an Injury with what the athlete says it prevents, and an optional short
+ * name for what and where ("left knee" — `showable-version/28a`). The name is
+ * for human eyes; the capacity is what the planner reads.
+ */
 export async function declareInjury(
   athleteId: string,
   capacity: Capacity,
   bother: Bother = null,
+  name: string | null = null,
 ): Promise<void> {
-  await getDb().insert(injuries).values({ athleteId, ...capacity, bother });
+  await getDb().insert(injuries).values({ athleteId, ...capacity, bother, name });
 }
 
 /**
@@ -64,6 +69,44 @@ export async function closeIllness(athleteId: string, illnessId: string): Promis
     .update(illnesses)
     .set({ closedAt: new Date() })
     .where(and(eq(illnesses.athleteId, athleteId), eq(illnesses.id, illnessId)));
+}
+
+/** Why a "reported by mistake" delete did not happen. */
+export type DeleteOutcome = 'deleted' | 'too-old' | 'missing';
+
+/** How long after declaring a record it may still be deleted as a mistake. */
+export const MISTAKE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Removes an Injury the athlete declared by mistake (`showable-version/28a`).
+ *
+ * Only inside the first 24 hours: after that the record is history — the
+ * calendar keeps marking the sessions done hurt, and the Head Coach may have
+ * read it. The window, the athlete and the id are all in the one WHERE, so
+ * the delete cannot outrun the check; when nothing was deleted, one read says
+ * whether the record was too old or was never theirs. Notes cascade with it.
+ */
+export async function deleteInjury(athleteId: string, injuryId: string, now: Date): Promise<DeleteOutcome> {
+  const deleted = await getDb()
+    .delete(injuries)
+    .where(and(eq(injuries.athleteId, athleteId), eq(injuries.id, injuryId), gt(injuries.openedAt, mistakeCutoff(now))))
+    .returning({ id: injuries.id });
+  if (deleted.length > 0) return 'deleted';
+  return (await ownsSubject(athleteId, { injuryId })) ? 'too-old' : 'missing';
+}
+
+/** The same for an Illness. */
+export async function deleteIllness(athleteId: string, illnessId: string, now: Date): Promise<DeleteOutcome> {
+  const deleted = await getDb()
+    .delete(illnesses)
+    .where(and(eq(illnesses.athleteId, athleteId), eq(illnesses.id, illnessId), gt(illnesses.openedAt, mistakeCutoff(now))))
+    .returning({ id: illnesses.id });
+  if (deleted.length > 0) return 'deleted';
+  return (await ownsSubject(athleteId, { illnessId })) ? 'too-old' : 'missing';
+}
+
+function mistakeCutoff(now: Date): Date {
+  return new Date(now.getTime() - MISTAKE_WINDOW_MS);
 }
 
 /**

@@ -9,9 +9,12 @@ import {
   closeInjury,
   declareIllness,
   declareInjury,
+  deleteIllness,
+  deleteInjury,
   getHealthNotes,
   setBother,
   type Bother,
+  type DeleteOutcome,
 } from '@/features/health/health-repository';
 import type { HealthNoteRow } from '@/db/schema';
 
@@ -35,11 +38,17 @@ export type HealthActionResult =
   | { ok: true }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
 
+/** "Reported by mistake": deleted, or why not (`showable-version/28a`). */
+export type DeleteActionResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-authenticated' | Exclude<DeleteOutcome, 'deleted'> };
+
 export type HealthSubject = { injuryId: string } | { illnessId: string };
 
 export async function declareInjuryAction(
   capacity: Capacity,
   bother?: number | null,
+  name?: string | null,
 ): Promise<HealthActionResult> {
   if (!isCapacity(capacity)) return { ok: false, reason: 'invalid' };
   const rating = parseBother(bother);
@@ -49,7 +58,7 @@ export async function declareInjuryAction(
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   // ← ticket 14's consent gate goes here, before the write.
-  await declareInjury(athleteId, capacity, rating);
+  await declareInjury(athleteId, capacity, rating, parseName(name));
   revalidatePath('/', 'layout');
   return { ok: true };
 }
@@ -79,6 +88,29 @@ export async function closeIllnessAction(illnessId: string): Promise<HealthActio
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
   await closeIllness(athleteId, illnessId);
+  revalidatePath('/', 'layout');
+  return { ok: true };
+}
+
+/**
+ * "Reported by mistake": removes a record the athlete declared less than 24
+ * hours ago. The clock is the server's, never the client's; the repository
+ * says why when it refuses, and the reason goes back as-is.
+ */
+export async function deleteInjuryAction(injuryId: string): Promise<DeleteActionResult> {
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+  return deleteResult(await deleteInjury(athleteId, injuryId, new Date()));
+}
+
+export async function deleteIllnessAction(illnessId: string): Promise<DeleteActionResult> {
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+  return deleteResult(await deleteIllness(athleteId, illnessId, new Date()));
+}
+
+function deleteResult(outcome: DeleteOutcome): DeleteActionResult {
+  if (outcome !== 'deleted') return { ok: false, reason: outcome };
   revalidatePath('/', 'layout');
   return { ok: true };
 }
@@ -141,6 +173,12 @@ function parseBother(value: unknown): Bother | undefined {
   // `Number.isInteger` is false for every non-number, so no typeof is needed.
   const inRange = Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 5;
   return inRange ? (value as number) : undefined;
+}
+
+/** A trimmed name, or null for none — blank is none, not an empty string. */
+function parseName(value: unknown): string | null {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed === '' ? null : trimmed;
 }
 
 function isSubject(value: unknown): value is HealthSubject {

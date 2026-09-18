@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { healthNotes, illnesses, injuries } from '@/db/schema';
 
 const rows: unknown[] = [];
@@ -46,8 +46,18 @@ const set = vi.fn((v: unknown) => {
   return { where: updateWhere };
 });
 
+// What a `delete(...).where(...).returning()` answers, and what it was asked.
+let deletedRows: unknown[] = [];
+const deletes: unknown[] = [];
+const returning = vi.fn(() => Promise.resolve(deletedRows));
+const deleteWhere = vi.fn((w: unknown) => {
+  deletes.push(w);
+  return { returning };
+});
+
 vi.mock('@/db', () => ({
   getDb: () => ({
+    delete: () => ({ where: deleteWhere }),
     select: (projection?: unknown) => ({
       from: (table: unknown) => {
         lastProjection = projection;
@@ -66,6 +76,8 @@ const {
   closeInjury,
   declareIllness,
   declareInjury,
+  deleteIllness,
+  deleteInjury,
   getHealthNotes,
   getOpenIllnesses,
   getOpenInjuries,
@@ -84,6 +96,8 @@ beforeEach(() => {
   lastProjection = null;
   inserted.length = 0;
   updates.length = 0;
+  deletedRows = [];
+  deletes.length = 0;
   vi.clearAllMocks();
 });
 
@@ -91,7 +105,7 @@ describe('declaring, and closing', () => {
   it('opens an Injury with what the athlete says it prevents', async () => {
     await declareInjury('athlete_1', CANNOT_RUN);
 
-    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null });
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null, name: null });
   });
 
   it('opens an Illness with no capacity at all', async () => {
@@ -393,10 +407,10 @@ describe('the Bother Rating and the history (training-architecture/06)', () => {
     await declareIllness('athlete_1', 4);
     await declareInjury('athlete_1', CANNOT_RUN);
 
-    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: 3 });
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: 3, name: null });
     expect(inserted[1]).toEqual({ athleteId: 'athlete_1', bother: 4 });
     // Not said is null, not zero — zero is a number the Head Coach would read.
-    expect(inserted[2]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null });
+    expect(inserted[2]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null, name: null });
   });
 
   it('updates the bother on a record the athlete owns, athlete id in the WHERE', async () => {
@@ -424,5 +438,58 @@ describe('the Bother Rating and the history (training-architecture/06)', () => {
     // `closedAt IS NULL`, because the closed ones are the history.
     expect(selectWhere).toHaveBeenCalledWith(eq(injuries.athleteId, 'athlete_1'));
     expect(selectWhere).toHaveBeenCalledWith(eq(illnesses.athleteId, 'athlete_1'));
+  });
+});
+
+describe('"reported by mistake" — a record younger than 24 h can be deleted (showable-version/28a)', () => {
+  const NOW = new Date('2026-09-18T12:00:00Z');
+  const DAY_AGO = new Date('2026-09-17T12:00:00Z');
+
+  it('deletes an Injury the athlete owns, only when it was opened inside the last 24 hours — in the one statement', async () => {
+    deletedRows = [{ id: 'injury_1' }];
+    expect(await deleteInjury('athlete_1', 'injury_1', NOW)).toBe('deleted');
+    expect(deletes[0]).toEqual(
+      and(eq(injuries.athleteId, 'athlete_1'), eq(injuries.id, 'injury_1'), gt(injuries.openedAt, DAY_AGO)),
+    );
+    // No read first: the athlete, the id and the age are all in the WHERE.
+    expect(selectWhere).not.toHaveBeenCalled();
+    // Returning the id and nothing more — the count is the answer.
+    expect(returning).toHaveBeenCalledWith({ id: injuries.id });
+  });
+
+  it('refuses an older record by name, and a record that is not there or not theirs as missing', async () => {
+    deletedRows = [];
+    owned = [{ id: 'injury_1' }];
+    expect(await deleteInjury('athlete_1', 'injury_1', NOW)).toBe('too-old');
+    // The reason is read after the refused delete, athlete-scoped like every probe.
+    expect(selectWhere).toHaveBeenCalledWith(and(eq(injuries.id, 'injury_1'), eq(injuries.athleteId, 'athlete_1')));
+
+    owned = [];
+    expect(await deleteInjury('athlete_1', 'nope', NOW)).toBe('missing');
+    expect(await deleteInjury('athlete_2', 'injury_1', NOW)).toBe('missing');
+  });
+
+  it('does the same for an Illness against its own table', async () => {
+    deletedRows = [{ id: 'illness_1' }];
+    expect(await deleteIllness('athlete_1', 'illness_1', NOW)).toBe('deleted');
+    expect(deletes[0]).toEqual(
+      and(eq(illnesses.athleteId, 'athlete_1'), eq(illnesses.id, 'illness_1'), gt(illnesses.openedAt, DAY_AGO)),
+    );
+
+    expect(returning).toHaveBeenCalledWith({ id: illnesses.id });
+
+    deletedRows = [];
+    owned = [{ id: 'illness_1' }];
+    expect(await deleteIllness('athlete_1', 'illness_1', NOW)).toBe('too-old');
+    expect(selectWhere).toHaveBeenCalledWith(and(eq(illnesses.id, 'illness_1'), eq(illnesses.athleteId, 'athlete_1')));
+    owned = [];
+    expect(await deleteIllness('athlete_1', 'illness_1', NOW)).toBe('missing');
+  });
+
+  it('declares an Injury with its name, and without one', async () => {
+    await declareInjury('athlete_1', CANNOT_RUN, 3, 'left knee');
+    await declareInjury('athlete_1', CANNOT_RUN, null);
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: 3, name: 'left knee' });
+    expect(inserted[1]).toEqual({ athleteId: 'athlete_1', swim: 'full', bike: 'full', run: 'none', bother: null, name: null });
   });
 });

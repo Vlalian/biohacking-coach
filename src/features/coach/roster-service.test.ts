@@ -19,7 +19,7 @@ const {
     Promise.resolve({
       injuries: [
         {
-          id: 'inj_1', athleteId: 'a1', swim: 'full', bike: 'easy', run: 'none',
+          id: 'inj_1', athleteId: 'a1', swim: 'full', bike: 'easy', run: 'none', name: null,
           openedAt: new Date('2026-08-01T08:00:00Z'), closedAt: null, bother: 3,
         },
       ],
@@ -161,6 +161,7 @@ describe('getCoachAthleteView — the health layer (training-architecture/06)', 
       {
         kind: 'injury', id: 'inj_1', from: '2026-08-01', to: null,
         capacity: { swim: 'full', bike: 'easy', run: 'none' }, bother: 3,
+        name: null, openedAt: new Date('2026-08-01T08:00:00Z'),
       },
     ]);
   });

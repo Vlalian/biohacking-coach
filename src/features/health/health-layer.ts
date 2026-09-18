@@ -34,6 +34,10 @@ export interface HealthSpan {
   capacity?: Capacity;
   /** The Bother Rating, 1–5, or null when the athlete did not say. */
   bother: number | null;
+  /** The injury's short name ("left knee"), or null: an illness has none. */
+  name: string | null;
+  /** When it was declared, to the second — the "reported by mistake" window. */
+  openedAt: Date;
 }
 
 export function spansFrom(
@@ -49,6 +53,8 @@ export function spansFrom(
         to: r.closedAt ? dateKey(r.closedAt) : null,
         capacity: { swim: r.swim, bike: r.bike, run: r.run } as Capacity,
         bother: r.bother,
+        name: r.name,
+        openedAt: r.openedAt,
       }),
     ),
     ...illnesses.map(
@@ -58,50 +64,54 @@ export function spansFrom(
         from: dateKey(r.openedAt),
         to: r.closedAt ? dateKey(r.closedAt) : null,
         bother: r.bother,
+        name: null,
+        openedAt: r.openedAt,
       }),
     ),
   ];
 }
 
-export interface WeekHealthLayer {
-  /**
-   * One entry per day of the week, in order: whether the athlete was ill that
-   * day, and which Illness — so a click on the band opens the right record.
-   */
-  days: { date: string; ill: boolean; illnessId: string | null }[];
-  hasIllness: boolean;
-  /** The injuries open at any point during this week, in the order given. */
-  injuries: HealthSpan[];
-  /** The illnesses that touched this week, in the order given. */
-  illnesses: HealthSpan[];
+/** One icon on a session chip: which kind, whether still open, and the injury's name if any. */
+export interface HealthMark {
+  kind: 'injury' | 'illness';
+  /** Signal while the record is open; muted once it is over — but never removed. */
+  open: boolean;
+  label: string | null;
+}
+
+/** Whether a span covers a date, with an open span running to today and never past it. */
+function covers(span: HealthSpan, date: string, todayKey: string): boolean {
+  return date >= span.from && date <= (span.to ?? todayKey);
 }
 
 /**
- * What a week row draws. `todayKey` closes every open-ended span: an illness
- * declared on Monday is drawn through today and not into next week, because
- * nobody has said the athlete will still be ill tomorrow.
+ * The marks a recorded session on `date` carries (`showable-version/28a`):
+ * every injury whose span covers the day, whatever the discipline — "left knee"
+ * does not say running is out, so the mark is not a per-discipline judgement —
+ * and every illness likewise. Injuries first. A closed record keeps marking
+ * its days forever, muted: a session done hurt was done hurt. Never a future
+ * day, because an open span ends at today.
  */
-export function layerForWeek(
+export function marksFor(date: string, spans: readonly HealthSpan[], todayKey: string): HealthMark[] {
+  const mark = (span: HealthSpan): HealthMark => ({ kind: span.kind, open: span.to === null, label: span.name });
+  const covering = spans.filter((s) => covers(s, date, todayKey));
+  return [...covering.filter((s) => s.kind === 'injury'), ...covering.filter((s) => s.kind === 'illness')].map(mark);
+}
+
+/**
+ * The two statuses the calendar's health area shows for a week
+ * (`showable-version/28a`): injured / ill when a record of that kind was open
+ * on any day the week covers, up to today. The area is always shown — a clean
+ * week reads healthy and uninjured — so this returns both flags, not a list.
+ */
+export function weekStatus(
   weekDates: readonly string[],
   spans: readonly HealthSpan[],
   todayKey: string,
-): WeekHealthLayer {
-  const covers = (span: HealthSpan, date: string) =>
-    date >= span.from && date <= (span.to ?? todayKey);
-  const overlapsWeek = (span: HealthSpan) => weekDates.some((date) => covers(span, date));
-
-  const illnesses = spans.filter((s) => s.kind === 'illness');
-  const days = weekDates.map((date) => {
-    const covering = illnesses.find((s) => covers(s, date));
-    return { date, ill: covering !== undefined, illnessId: covering?.id ?? null };
-  });
-
-  return {
-    days,
-    hasIllness: days.some((d) => d.ill),
-    injuries: spans.filter((s) => s.kind === 'injury' && overlapsWeek(s)),
-    illnesses: illnesses.filter(overlapsWeek),
-  };
+): { injured: boolean; ill: boolean } {
+  const openOn = (kind: HealthSpan['kind']) =>
+    spans.some((s) => s.kind === kind && weekDates.some((date) => covers(s, date, todayKey)));
+  return { injured: openOn('injury'), ill: openOn('illness') };
 }
 
 /**

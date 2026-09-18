@@ -9,12 +9,15 @@ import { formatFullDate } from '@/lib/date';
 import type { HealthNoteRow } from '@/db/schema';
 import { ALLOWANCES, DISCIPLINES, type Allowance, type Capacity } from '@/features/health/capacity';
 import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
+import { MISTAKE_WINDOW_MS } from '@/features/health/health-repository';
 import {
   addHealthNoteAction,
   closeIllnessAction,
   closeInjuryAction,
   declareIllnessAction,
   declareInjuryAction,
+  deleteIllnessAction,
+  deleteInjuryAction,
   readHealthNotesAction,
   setBotherAction,
   type HealthSubject,
@@ -42,6 +45,12 @@ import {
  *
  * **The consent gate (ticket 14, parked)** sits behind the two declare actions,
  * not in this component: the drawer will not need to change when it lands.
+ *
+ * `showable-version/28a` (Mads, 2026-09-17/18): one list — open records first,
+ * expanded (name · dates, then the glance); past ones collapsed under a fold,
+ * each its own fold with the same line as summary. The injury carries a short
+ * name ("left knee"). A record younger than 24 hours offers "declared by
+ * mistake", which deletes it; after that it is history.
  */
 export type HealthDrawerState =
   | { open: false }
@@ -74,16 +83,19 @@ export function HealthDrawer({
   // offering "I'm back" and the Bother Rating on it (CodeRabbit, PR #67).
   const open = spans.filter((s) => s.to === null);
   const closed = spans.filter((s) => s.to !== null);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    state.open && state.id ? state.id : (open[0]?.id ?? null),
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(() => initialSelection(state, open));
+  // The clock for "declared by mistake": read once, when the drawer mounts,
+  // on whichever side renders it. A record on the 24 h boundary may differ by
+  // the request's latency between server and client markup; the action
+  // decides on its own clock either way.
+  const [now] = useState(Date.now);
   if (!state.open) return null;
 
-  function run(action: () => Promise<{ ok: boolean }>) {
+  function run(action: () => Promise<{ ok: boolean; reason?: string }>) {
     setError(null);
     startTransition(async () => {
       const result = await action();
-      if (!result.ok) setError('error');
+      if (!result.ok) setError(result.reason === 'too-old' ? 'tooOld' : 'error');
       else router.refresh();
     });
   }
@@ -120,7 +132,7 @@ export function HealthDrawer({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {error && (
             <p role="alert" className="mb-3 font-body text-sm text-destructive">
-              {t('error')}
+              {t(error === 'tooOld' ? 'tooOld' : 'error')}
             </p>
           )}
 
@@ -131,7 +143,12 @@ export function HealthDrawer({
           ) : (
             <ul className="divide-y divide-border border border-border">
               {open.map((span) => (
-                <li key={span.id} data-selected={selectedId === span.id ? span.id : undefined}>
+                <li
+                  key={span.id}
+                  data-record={span.id}
+                  data-open="true"
+                  data-selected={selectedId === span.id ? span.id : undefined}
+                >
                   <RecordRow
                     span={span}
                     selected={selectedId === span.id}
@@ -139,10 +156,16 @@ export function HealthDrawer({
                     pending={pending}
                     locale={locale}
                     t={t}
+                    canDelete={!isCoach && now - span.openedAt.getTime() < MISTAKE_WINDOW_MS}
                     onSelect={() => setSelectedId(span.id)}
                     onClose={() =>
                       run(() =>
                         span.kind === 'injury' ? closeInjuryAction(span.id) : closeIllnessAction(span.id),
+                      )
+                    }
+                    onDelete={() =>
+                      run(() =>
+                        span.kind === 'injury' ? deleteInjuryAction(span.id) : deleteIllnessAction(span.id),
                       )
                     }
                     onBother={(value) => run(() => setBotherAction(subjectOf(span), value))}
@@ -171,20 +194,49 @@ export function HealthDrawer({
             <DeclareForm
               pending={pending}
               t={t}
-              onInjury={(capacity, bother) => run(() => declareInjuryAction(capacity, bother))}
+              onInjury={(capacity, bother, name) => run(() => declareInjuryAction(capacity, bother, name))}
               onIllness={(bother) => run(() => declareIllnessAction(bother))}
             />
           )}
 
           {closed.length > 0 && (
-            <details className="mt-6">
+            <details className="mt-6" data-history-fold="">
               <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 {t('history')} ({closed.length})
               </summary>
               <ul className="mt-2 divide-y divide-border border border-border">
                 {closed.map((span) => (
-                  <li key={span.id} className="px-3 py-2" data-history={span.id}>
-                    <RecordSummary span={span} locale={locale} t={t} />
+                  // Each past record is its own fold: one muted line, and the
+                  // rest — glance, bother, the thread — on tap.
+                  <li key={span.id} data-history={span.id}>
+                    <details
+                      data-record={span.id}
+                      data-open="false"
+                      className="px-3 py-2 opacity-70"
+                      onToggle={(e) => {
+                        if (e.currentTarget.open) setSelectedId(span.id);
+                      }}
+                    >
+                      <summary className="cursor-pointer">
+                        <RecordLine span={span} locale={locale} t={t} />
+                      </summary>
+                      <RecordGlance span={span} t={t} />
+                      {selectedId === span.id && (
+                        <Thread
+                          subject={subjectOf(span)}
+                          coachAthleteId={coachAthleteId}
+                          pending={pending}
+                          t={t}
+                          onAdd={(body) =>
+                            run(() =>
+                              coachAthleteId
+                                ? addHealthNoteAsCoachAction(coachAthleteId, subjectOf(span), body)
+                                : addHealthNoteAction(subjectOf(span), body),
+                            )
+                          }
+                        />
+                      )}
+                    </details>
                   </li>
                 ))}
               </ul>
@@ -202,24 +254,50 @@ function subjectOf(span: HealthSpan): HealthSubject {
   return span.kind === 'injury' ? { injuryId: span.id } : { illnessId: span.id };
 }
 
-/** The record as words: kind, what it prevents, when, and how much it bothers. */
-function RecordSummary({ span, locale, t }: { span: HealthSpan; locale: string; t: T }) {
-  const parts = span.capacity ? glanceParts(span.capacity) : [];
+/**
+ * Which record the drawer opens on: the one clicked; else, opened from a
+ * status, the newest open record of that kind; else the first open one.
+ */
+function initialSelection(state: HealthDrawerState, open: HealthSpan[]): string | null {
+  if (!state.open) return null;
+  if (state.id) return state.id;
+  const ofKind = state.kind ? open.filter((s) => s.kind === state.kind) : open;
+  const newest = [...ofKind].sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime())[0];
+  return newest?.id ?? open[0]?.id ?? null;
+}
+
+/** Line one: the name (or the kind) and the dates — "left knee · since 2 Sep". */
+function RecordLine({ span, locale, t }: { span: HealthSpan; locale: string; t: T }) {
+  const kindLabel = span.kind === 'illness' ? t('illnessLabel') : t('injuryLabel');
   return (
-    <div>
-      <p className="font-body text-sm text-foreground">
-        {span.kind === 'illness' ? t('illnessLabel') : t('injuryLabel')}
-        {parts.length > 0 && (
-          <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            {parts.map((p) => t(`glance_${p.allowance}_${p.discipline}`)).join(' · ')}
-          </span>
-        )}
-      </p>
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+    <p className="font-body text-sm text-foreground">
+      {span.name ?? kindLabel}
+      <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         {t('since', { date: formatFullDate(span.from, locale) })}
         {span.to && ` — ${formatFullDate(span.to, locale)}`}
-        {span.bother !== null && ` · ${t('botherLabel', { value: span.bother })}`}
-      </p>
+      </span>
+    </p>
+  );
+}
+
+/** Line two: what it prevents, and how much it bothers. Empty for an illness with no rating. */
+function RecordGlance({ span, t }: { span: HealthSpan; t: T }) {
+  const parts = span.capacity ? glanceParts(span.capacity) : [];
+  if (parts.length === 0 && span.bother === null) return null;
+  return (
+    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      {parts.map((p) => t(`glance_${p.allowance}_${p.discipline}`)).join(' · ')}
+      {span.bother !== null && `${parts.length > 0 ? ' · ' : ''}${t('botherLabel', { value: span.bother })}`}
+    </p>
+  );
+}
+
+/** The record as words: name and dates, then what it prevents and how much it bothers. */
+function RecordSummary({ span, locale, t }: { span: HealthSpan; locale: string; t: T }) {
+  return (
+    <div>
+      <RecordLine span={span} locale={locale} t={t} />
+      <RecordGlance span={span} t={t} />
     </div>
   );
 }
@@ -231,8 +309,10 @@ function RecordRow({
   pending,
   locale,
   t,
+  canDelete,
   onSelect,
   onClose,
+  onDelete,
   onBother,
 }: {
   span: HealthSpan;
@@ -241,8 +321,11 @@ function RecordRow({
   pending: boolean;
   locale: string;
   t: T;
+  /** Younger than 24 h and the athlete's own: "declared by mistake" is offered. */
+  canDelete: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onDelete: () => void;
   onBother: (value: number | null) => void;
 }) {
   return (
@@ -261,6 +344,17 @@ function RecordRow({
           >
             {span.kind === 'injury' ? t('imBack') : t('illnessOver')}
           </button>
+          {canDelete && (
+            <button
+              type="button"
+              data-action="delete"
+              onClick={onDelete}
+              disabled={pending}
+              className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              {t('declaredByMistake')}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -393,11 +487,12 @@ function DeclareForm({
 }: {
   pending: boolean;
   t: T;
-  onInjury: (capacity: Capacity, bother: number | null) => void;
+  onInjury: (capacity: Capacity, bother: number | null, name: string) => void;
   onIllness: (bother: number | null) => void;
 }) {
   const [capacity, setCapacity] = useState<Capacity>({ swim: 'full', bike: 'full', run: 'full' });
   const [bother, setBother] = useState<number | null>(null);
+  const [name, setName] = useState('');
   const restricted = DISCIPLINES.some((d) => capacity[d] !== 'full');
 
   return (
@@ -429,6 +524,23 @@ function DeclareForm({
           </div>
         ))}
       </div>
+      {/* What and where, in the athlete's words — a name to tell two injuries
+          apart, not a diagnosis; optional, and never read by the planner. */}
+      <div className="mt-3">
+        <label htmlFor="health-injury-name" className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          {t('nameLabel')}
+        </label>
+        <input
+          id="health-injury-name"
+          data-field="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t('namePlaceholder')}
+          maxLength={60}
+          disabled={pending}
+          className="mt-1 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
+        />
+      </div>
       <div className="mt-3">
         <BotherControl value={bother} disabled={pending} t={t} onChange={setBother} />
       </div>
@@ -436,7 +548,7 @@ function DeclareForm({
         <button
           type="button"
           disabled={pending || !restricted}
-          onClick={() => onInjury(capacity, bother)}
+          onClick={() => onInjury(capacity, bother, name)}
           className="border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
         >
           {t('declareInjury')}

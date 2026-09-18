@@ -16,6 +16,8 @@ const {
   declareIllness,
   closeInjury,
   closeIllness,
+  deleteInjury,
+  deleteIllness,
   addHealthNote,
   setBother,
   getHealthNotes,
@@ -26,6 +28,8 @@ const {
   declareIllness: vi.fn(async () => {}),
   closeInjury: vi.fn(async () => {}),
   closeIllness: vi.fn(async () => {}),
+  deleteInjury: vi.fn(async (): Promise<'deleted' | 'too-old' | 'missing'> => 'deleted'),
+  deleteIllness: vi.fn(async (): Promise<'deleted' | 'too-old' | 'missing'> => 'deleted'),
   addHealthNote: vi.fn(async () => {}),
   setBother: vi.fn(async () => {}),
   getHealthNotes: vi.fn(async () => [{ id: 'n1' }]),
@@ -39,6 +43,8 @@ vi.mock('@/features/health/health-repository', () => ({
   declareIllness,
   closeInjury,
   closeIllness,
+  deleteInjury,
+  deleteIllness,
   addHealthNote,
   setBother,
   getHealthNotes,
@@ -49,6 +55,8 @@ const {
   declareIllnessAction,
   closeInjuryAction,
   closeIllnessAction,
+  deleteInjuryAction,
+  deleteIllnessAction,
   addHealthNoteAction,
   setBotherAction,
   readHealthNotesAction,
@@ -64,9 +72,9 @@ beforeEach(() => {
 describe('declaring', () => {
   it('declares an Injury with what it prevents and an optional Bother Rating', async () => {
     expect(await declareInjuryAction(CANNOT_RUN, 3)).toEqual({ ok: true });
-    expect(declareInjury).toHaveBeenCalledWith('athlete_1', CANNOT_RUN, 3);
+    expect(declareInjury).toHaveBeenCalledWith('athlete_1', CANNOT_RUN, 3, null);
     expect(await declareInjuryAction(CANNOT_RUN)).toEqual({ ok: true });
-    expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null);
+    expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null, null);
     expect(revalidatePath).toHaveBeenCalled();
   });
 
@@ -144,6 +152,37 @@ describe('closing, rating, noting', () => {
   });
 });
 
+describe('"reported by mistake" (showable-version/28a)', () => {
+  it('deleteInjuryAction: as the resolved athlete, against the server clock, revalidates on deleted and passes too-old/missing through', async () => {
+    deleteInjury.mockResolvedValue('deleted');
+    expect(await deleteInjuryAction('inj_1')).toEqual({ ok: true });
+    expect(deleteInjury).toHaveBeenCalledWith('athlete_1', 'inj_1', expect.any(Date));
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+
+    revalidatePath.mockClear();
+    deleteInjury.mockResolvedValue('too-old');
+    expect(await deleteInjuryAction('inj_1')).toEqual({ ok: false, reason: 'too-old' });
+    deleteInjury.mockResolvedValue('missing');
+    expect(await deleteInjuryAction('inj_1')).toEqual({ ok: false, reason: 'missing' });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('deleteIllnessAction does the same', async () => {
+    deleteIllness.mockResolvedValue('deleted');
+    expect(await deleteIllnessAction('ill_1')).toEqual({ ok: true });
+    expect(deleteIllness).toHaveBeenCalledWith('athlete_1', 'ill_1', expect.any(Date));
+    deleteIllness.mockResolvedValue('too-old');
+    expect(await deleteIllnessAction('ill_1')).toEqual({ ok: false, reason: 'too-old' });
+  });
+
+  it('declareInjuryAction passes a trimmed name through, and null for none', async () => {
+    expect(await declareInjuryAction(CANNOT_RUN, 2, '  left knee ')).toEqual({ ok: true });
+    expect(declareInjury).toHaveBeenCalledWith('athlete_1', CANNOT_RUN, 2, 'left knee');
+    expect(await declareInjuryAction(CANNOT_RUN, null, '   ')).toEqual({ ok: true });
+    expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null, null);
+  });
+});
+
 describe('every action refuses a caller it cannot identify', () => {
   it('stores nothing when nobody is signed in', async () => {
     resolveAthleteId.mockResolvedValue(null);
@@ -152,9 +191,11 @@ describe('every action refuses a caller it cannot identify', () => {
     expect(await declareIllnessAction()).toEqual(refused);
     expect(await closeInjuryAction('inj_1')).toEqual(refused);
     expect(await closeIllnessAction('ill_1')).toEqual(refused);
+    expect(await deleteInjuryAction('inj_1')).toEqual(refused);
+    expect(await deleteIllnessAction('ill_1')).toEqual(refused);
     expect(await addHealthNoteAction({ injuryId: 'inj_1' }, 'x')).toEqual(refused);
     expect(await setBotherAction({ injuryId: 'inj_1' }, 3)).toEqual(refused);
-    for (const fn of [declareInjury, declareIllness, closeInjury, closeIllness, addHealthNote, setBother]) {
+    for (const fn of [declareInjury, declareIllness, closeInjury, closeIllness, deleteInjury, deleteIllness, addHealthNote, setBother]) {
       expect(fn).not.toHaveBeenCalled();
     }
   });
