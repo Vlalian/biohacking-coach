@@ -9,6 +9,7 @@ const pages = [
   'training-plan',
   'information',
   'equipment',
+  'glossary',
   'feedback',
   'settings',
   'privacy',
