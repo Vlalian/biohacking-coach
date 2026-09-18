@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PRODUCTION_ENDPOINT, protectedDatabaseVerdict } from './protected-database';
+import { PRODUCTION_ENDPOINT, guardDatabase, protectedDatabaseVerdict } from './protected-database';
 
 /**
  * The production database is the one place a script must never write by
@@ -42,8 +42,7 @@ describe('protectedDatabaseVerdict', () => {
 });
 
 describe('guardDatabase', () => {
-  it('exits with code 1 and prints the reason when refused', async () => {
-    const { guardDatabase } = await import('./protected-database');
+  it('exits with code 1 and prints the reason when refused', () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     guardDatabase(`postgresql://u:p@${PRODUCTION_ENDPOINT}.neon.tech/db`, []);
@@ -53,8 +52,7 @@ describe('guardDatabase', () => {
     error.mockRestore();
   });
 
-  it('returns quietly when allowed', async () => {
-    const { guardDatabase } = await import('./protected-database');
+  it('returns quietly when allowed', () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     guardDatabase('postgresql://u:p@ep-other.neon.tech/db', []);
     expect(exit).not.toHaveBeenCalled();
