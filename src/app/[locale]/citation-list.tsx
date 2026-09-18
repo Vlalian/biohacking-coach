@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import type { Citation } from "@/lib/citation";
+import { useState } from 'react';
+import type { Citation } from '@/lib/citation';
 
 /**
  * The sources behind a Coach message, as a plain reference list.
@@ -84,7 +84,7 @@ export function CitationEntries({ citations }: { citations: Citation[] }) {
             // A source with no stable link renders unlinked rather than as a
             // dead entry — decided in `retrieval.ts`'s `citationUrl`.
             <span>{c.title}</span>
-          )}{" "}
+          )}{' '}
           {/* CC BY requires the attribution to travel with the material. */}
           <span className="text-muted-foreground/70">· {c.attribution}</span>
         </li>

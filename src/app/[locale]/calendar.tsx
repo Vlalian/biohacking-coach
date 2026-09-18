@@ -469,12 +469,12 @@ export function Calendar({
 
       <div className="mt-5 hidden grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b border-border pb-1 md:grid">
         <span />
-        {Array.from({ length: 7 }, (_, i) => (
+        {HEADER_DAYS.map((day, i) => (
           <span
             key={i}
             className="px-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
           >
-            {format.dateTime(HEADER_DAYS[i], { weekday: 'short', timeZone: 'UTC' })}
+            {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
           </span>
         ))}
       </div>
