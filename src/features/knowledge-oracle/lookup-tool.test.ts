@@ -60,6 +60,23 @@ describe('LOOKUP_TOOL — what the model is told', () => {
     expect(d).toContain('not');
     for (const off of ['feel', 'logistics', 'schedul']) expect(d).toContain(off);
   });
+
+  it('asks for the question in English — the corpus is English, and a Danish question sits on the retrieval floor (knowledge-oracle/07)', () => {
+    const q = (LOOKUP_TOOL.input_schema as unknown as { properties: { question: { description: string } } }).properties.question.description.toLowerCase();
+    expect(q).toContain('english');
+    expect(q).toContain('translate');
+    expect(q).toContain('personal');
+  });
+
+  it('tells the model to look the topic up when asked what it knows, and hands it no catalogue to recite (knowledge-oracle/07)', () => {
+    // On the PR #82 smoke the Coach answered "what do you have evidence for?"
+    // by reciting this description's example list. The list is gone; the
+    // instruction is to look up the topic the athlete names.
+    const d = LOOKUP_TOOL.description.toLowerCase();
+    expect(d).toContain('what you know');
+    expect(d).toContain('rather than describing');
+    expect(d).not.toContain('why an easy day');
+  });
 });
 
 describe('parseLookupInput', () => {
