@@ -21,6 +21,15 @@ import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
 import { glanceParts, layerForWeek, type HealthSpan } from '@/features/health/health-layer';
 
+/**
+ * The seven header labels are formatted from these — Monday 1 January 2024 at
+ * **UTC** midnight, and always in UTC — so the weekday does not depend on the
+ * server's zone or the browser's. A local-midnight `Date` formatted in
+ * another zone read as the day before: on Vercel (UTC) every European tester
+ * saw Monday under SØN. (`showable-version/25`, Mads, 2026-09-17).
+ */
+export const HEADER_DAYS: readonly Date[] = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2024, 0, 1 + i)));
+
 // 'conflict' is the only reason the client cannot predict: it means someone
 // else — the Head Coach — changed this session while it was on screen, so the
 // move was refused rather than allowed to overwrite them (versioned-write.ts).
@@ -465,7 +474,7 @@ export function Calendar({
             key={i}
             className="px-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
           >
-            {format.dateTime(new Date(2024, 0, 1 + i), { weekday: 'short' })}
+            {format.dateTime(HEADER_DAYS[i], { weekday: 'short', timeZone: 'UTC' })}
           </span>
         ))}
       </div>
