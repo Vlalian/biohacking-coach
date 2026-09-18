@@ -60,6 +60,12 @@ vi.mock('@/features/feedback/message-feedback-repository', () => ({
 }));
 vi.mock('@/features/coach/narration-service', () => ({ narratePendingEvents }));
 vi.mock('@/features/coach/coach-repository', () => ({ holdsActiveCoachingLinks }));
+// The chores read has its own tests; here the layout's job is to run it once,
+// before render, and only for a linked coach (`training-architecture/19`).
+const getCoachChores = vi.fn(() => Promise.resolve([] as unknown[]));
+vi.mock('@/features/coach/coach-chores-service', () => ({ getCoachChores }));
+const CoachChoresDialog = () => null;
+vi.mock('./coach-chores-dialog', () => ({ CoachChoresDialog }));
 // Client components pulling in browser deps; the layout's own wiring is under
 // test here, not their rendering.
 vi.mock('@/components/shell/shell-chrome', () => ({ ShellChrome: () => null }));
@@ -357,6 +363,60 @@ describe('the silent week draft runs after the response, never in it (training-a
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await render();
     await expect(afterCallbacks[0]()).resolves.toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('the Head Coach’s chores are read before render, once, and only for linked coaches (training-architecture/19)', () => {
+  beforeEach(() => {
+    afterCallbacks.length = 0;
+    getCoachChores.mockClear();
+    getCoachChores.mockResolvedValue([]);
+    getSession.mockResolvedValue({ user: { id: 'user_coach', name: 'Lars' } });
+    getAthleteByUserId.mockResolvedValue(undefined);
+  });
+
+  it('reads chores exactly once, on the render path, for an account holding active Coaching Links', async () => {
+    holdsActiveCoachingLinks.mockResolvedValue(true);
+    await render();
+    // Before the response, not in after(): a popup a page late is the
+    // Briefing line the ticket refuses (triage, 2026-09-17).
+    expect(getCoachChores).toHaveBeenCalledTimes(1);
+    expect(getCoachChores).toHaveBeenCalledWith('user_coach');
+    for (const cb of afterCallbacks) await cb();
+    expect(getCoachChores).toHaveBeenCalledTimes(1);
+  });
+
+  it('costs an athlete without links no read at all', async () => {
+    holdsActiveCoachingLinks.mockResolvedValue(false);
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    await render();
+    expect(getCoachChores).not.toHaveBeenCalled();
+  });
+
+  it('renders the dialog before the page when there are chores, and nothing when there are none', async () => {
+    holdsActiveCoachingLinks.mockResolvedValue(true);
+    const chore = { kind: 'repin-block-set', athleteId: 'a1', athleteName: 'Sarah' };
+    getCoachChores.mockResolvedValue([chore]);
+    const element = await render();
+    const children = (element as unknown as { props: { children: unknown[] } }).props.children;
+    expect(Array.isArray(children)).toBe(true);
+    const [dialog] = children as { type: unknown; props: Record<string, unknown> }[];
+    expect(dialog.type).toBe(CoachChoresDialog);
+    expect(dialog.props.chores).toEqual([chore]);
+
+    getCoachChores.mockResolvedValue([]);
+    const empty = await render();
+    const [none] = (empty as unknown as { props: { children: unknown[] } }).props.children;
+    expect(none).toBeNull();
+  });
+
+  it('a failed chores read is logged and costs the coach the popup, not the shell', async () => {
+    holdsActiveCoachingLinks.mockResolvedValue(true);
+    getCoachChores.mockRejectedValueOnce(new Error('driver down'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(render()).resolves.toBeDefined();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
   });

@@ -646,7 +646,11 @@
     "blockRenamed": "{coach} omdøbte din blok \"{from}\" til \"{to}\"",
     "blockRebounded": "{coach} flyttede slutningen af din blok \"{name}\" til {day}",
     "blockRenamedAndRebounded": "{coach} omdøbte din blok \"{from}\" til \"{to}\" og flyttede dens slutning til {day}",
-    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke"
+    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke",
+    "blocksRepinned": "{coach} har tilpasset dine træningsblokke til den nye dato for {race}",
+    "blocksRepinnedNoDetail": "{coach} har tilpasset dine træningsblokke til den nye løbsdato",
+    "blocksRefitted": "De blokke, din Head Coach satte, passer ikke længere til den nye løbsdato, så jeg har tilpasset din træning frem mod {race}: {blocks}",
+    "blocksRefittedNoDetail": "De blokke, din Head Coach satte, passer ikke længere til den nye løbsdato, så jeg har tilpasset din træning frem mod dit løb"
   },
   "Privacy": {
     "dataRightsTitle": "Dine data",
@@ -679,6 +683,21 @@
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 uge} other {# uger}} til {race}"
   },
+  "CoachChores": {
+    "kicker": "Venter på dig",
+    "title": "{count, plural, one {Et løb er flyttet} other {# løb er flyttet}}",
+    "moved": "{athlete}s {race} er flyttet fra {from} til {to}.",
+    "stillEnds": "Den sidste blok, \"{block}\", slutter stadig {day}.",
+    "tooFew": "For få blokke ville overleve en tilpasning ({dropped} ville ryge), så start forfra fra udkastet i stedet.",
+    "nothing": "ingen",
+    "repin": "Tilpas til {day}",
+    "restart": "Start forfra fra udkastet",
+    "repinAll": "Tilpas alle",
+    "notNow": "Ikke nu",
+    "close": "Luk",
+    "done": "Klaret — blokkene passer til løbet igen.",
+    "error": "Det virkede ikke ({reason})."
+  },
   "BlockPanel": {
     "title": "Træningsblokke",
     "toward": "frem mod {race} den {date}",
@@ -689,7 +708,7 @@
     "authorCoach": "Coach",
     "authorYou": "Dig",
     "save": "Gem",
-    "stale": "Blokkene passer ikke længere til løbsdatoen — Coachen tegner dem op igen. Intet at redigere endnu.",
+    "stale": "Blokkene passer ikke længere til løbsdatoen. Tilpas dem fra beskeden ved næste login, ellers tegner Coachen dem op igen, når ingen Head Coach er tilknyttet. Intet at redigere endnu.",
     "conflict": "Ændret af en anden — det her er det gældende sæt.",
     "error": "Det virkede ikke ({reason})."
   },

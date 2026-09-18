@@ -48,10 +48,13 @@ vi.mock('@/db', () => ({
   getDb: () => Object.assign(chain(), { execute }),
 }));
 
-const { getBlockSet, insertBlockSet, casUpdateBlockSet, getLatestUnrealisticFlag } =
-  await import(
-  './training-block-repository'
-);
+const {
+  getBlockSet,
+  insertBlockSet,
+  casUpdateBlockSet,
+  getLatestUnrealisticFlag,
+  getStaleBlockSetsForHeadCoach,
+} = await import('./training-block-repository');
 
 function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
   if (node === null || typeof node !== 'object') return [];
@@ -334,5 +337,71 @@ describe('getLatestUnrealisticFlag — the Coach’s standing verdict, scoped to
     nextRows = [{ payload: { reason: '  too short  ' } }];
     expect(await getLatestUnrealisticFlag(ATHLETE, RACE)).toBe('too short');
     expect(Object.keys(selectArgs[0] as object)).toEqual(['payload']);
+  });
+});
+
+describe('getStaleBlockSetsForHeadCoach — one statement across the roster (training-architecture/19)', () => {
+  const COACH_USER = 'user_coach_1';
+
+  it('is one SELECT, scoped to the user’s active Coaching Links, joined to the Target Race', async () => {
+    await getStaleBlockSetsForHeadCoach(COACH_USER);
+
+    expect(executed).toHaveLength(1);
+    const { sql, params: bound } = executed[0];
+    // One statement, one SELECT at the top: no per-athlete fan-out, and no
+    // second read for the names — the roster join carries them.
+    expect(sql.match(/\bselect\b/gi)).toHaveLength(1);
+    expect(sql).toMatch(/from "training_block_set"/i);
+    expect(sql).toMatch(/join "coaching_link"/i);
+    expect(sql).toMatch(/join "coach"/i);
+    expect(sql).toMatch(/join "race"/i);
+    expect(sql).toMatch(/"coaching_link"\."status" = 'active'/i);
+    expect(sql).toMatch(/"race"\."is_target"/i);
+    expect(bound).toEqual([COACH_USER]);
+  });
+
+  it('asks the stale question in SQL: the last block’s end differs from the race date', async () => {
+    await getStaleBlockSetsForHeadCoach(COACH_USER);
+
+    const { sql } = executed[0];
+    expect(sql).toMatch(/"blocks" ?-> ?-1 ?->> ?'endDate'/i);
+    expect(sql).toMatch(/<> ?"race"\."date"::text/i);
+  });
+
+  it('maps a row to what the popup needs, the name resolved through the one rule', async () => {
+    executeRows = [
+      {
+        set_id: SET_ID,
+        athlete_id: ATHLETE,
+        race_id: RACE,
+        race_name: 'Ironman Copenhagen',
+        race_date: '2027-04-04',
+        start_date: '2026-09-14',
+        blocks: BLOCKS,
+        version: 3,
+        user_name: null,
+        synthetic_label: 'Sarah (synthetic)',
+      },
+    ];
+
+    expect(await getStaleBlockSetsForHeadCoach(COACH_USER)).toEqual([
+      {
+        set: {
+          id: SET_ID,
+          athleteId: ATHLETE,
+          raceId: RACE,
+          startDate: '2026-09-14',
+          blocks: BLOCKS,
+          version: 3,
+        },
+        athleteName: 'Sarah (synthetic)',
+        raceName: 'Ironman Copenhagen',
+        raceDate: '2027-04-04',
+      },
+    ]);
+  });
+
+  it('returns nothing when nothing is stale — the common case', async () => {
+    expect(await getStaleBlockSetsForHeadCoach(COACH_USER)).toEqual([]);
   });
 });

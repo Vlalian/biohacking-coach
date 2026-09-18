@@ -19,7 +19,10 @@ import {
 import { selectOpenConversations } from '@/features/coach/conversation';
 import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
-import { logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { getCoachChores } from '@/features/coach/coach-chores-service';
+import type { CoachChore } from '@/features/coach/coach-chores';
+import { logCoachChoresFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { CoachChoresDialog } from './coach-chores-dialog';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
 import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
 import { weekStartOf, today } from '@/lib/date';
@@ -217,6 +220,22 @@ export default async function AppShellLayout({
   // open has to be what drafts it. Outside the athlete branch on purpose: a
   // coach need not be an athlete. The service never throws; the catch is for
   // whatever is outside it.
+  // The Head Coach's chores (`training-architecture/19`): a stale block set on
+  // their Roster is repaired from a dialog before the page, in one click. Read
+  // **here, on the render path**, not in the `after()` below — a popup that
+  // arrives a page late is the Briefing line the ticket refuses. One query,
+  // only for an account holding links; zero rows is the common case. Guarded
+  // like narration: a driver failure costs the coach the popup on this open,
+  // never the shell.
+  let chores: CoachChore[] = [];
+  if (isHeadCoach) {
+    try {
+      chores = await getCoachChores(session!.user.id);
+    } catch (error) {
+      logCoachChoresFailure(session!.user.id, error);
+    }
+  }
+
   if (isHeadCoach) {
     const coachUserId = session!.user.id;
     after(async () => {
@@ -244,6 +263,7 @@ export default async function AppShellLayout({
         />
       }
     >
+      {chores.length > 0 ? <CoachChoresDialog chores={chores} /> : null}
       {children}
     </ShellChrome>
   );

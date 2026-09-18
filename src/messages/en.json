@@ -646,7 +646,11 @@
     "blockRenamed": "{coach} renamed your \"{from}\" block to \"{to}\"",
     "blockRebounded": "{coach} moved the end of your \"{name}\" block to {day}",
     "blockRenamedAndRebounded": "{coach} renamed your \"{from}\" block to \"{to}\" and moved its end to {day}",
-    "blockEditedNoDetail": "{coach} changed one of your training blocks"
+    "blockEditedNoDetail": "{coach} changed one of your training blocks",
+    "blocksRepinned": "{coach} re-fitted your training blocks to the new date of {race}",
+    "blocksRepinnedNoDetail": "{coach} re-fitted your training blocks to the new race date",
+    "blocksRefitted": "The blocks your Head Coach set no longer fit the new race date, so I've re-fitted your training toward {race}: {blocks}",
+    "blocksRefittedNoDetail": "The blocks your Head Coach set no longer fit the new race date, so I've re-fitted your training toward your race"
   },
   "Privacy": {
     "dataRightsTitle": "Your data",
@@ -679,6 +683,21 @@
     "weekOf": "week {week} of {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 week} other {# weeks}} to {race}"
   },
+  "CoachChores": {
+    "kicker": "Waiting for you",
+    "title": "{count, plural, one {A race moved} other {# races moved}}",
+    "moved": "{athlete}'s {race} moved from {from} to {to}.",
+    "stillEnds": "The last block, \"{block}\", still ends {day}.",
+    "tooFew": "Too few blocks would survive a re-pin ({dropped} would go), so start over from the draft instead.",
+    "nothing": "nothing",
+    "repin": "Re-pin to {day}",
+    "restart": "Start over from the draft",
+    "repinAll": "Re-pin all",
+    "notNow": "Not now",
+    "close": "Close",
+    "done": "Done — the blocks fit the race again.",
+    "error": "That didn't work ({reason})."
+  },
   "BlockPanel": {
     "title": "Training Blocks",
     "toward": "toward {race} on {date}",
@@ -689,7 +708,7 @@
     "authorCoach": "Coach",
     "authorYou": "You",
     "save": "Save",
-    "stale": "These blocks no longer match the race date — the Coach will redraw them. Nothing to edit here yet.",
+    "stale": "These blocks no longer match the race date. Re-pin them from the notice on your next login, or the Coach redraws them once no Head Coach is linked. Nothing to edit here yet.",
     "conflict": "Changed by someone else — this is the current set.",
     "error": "That didn't work ({reason})."
   },

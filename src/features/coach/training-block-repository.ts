@@ -1,6 +1,8 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { events, trainingBlockSet } from '@/db/schema';
+import { athlete, coach, coachingLink, events, race, trainingBlockSet } from '@/db/schema';
+import { user } from '@/db/auth-schema';
+import { resolveAthleteName } from './coach-repository';
 import type { TrainingBlockSpec } from './training-blocks';
 
 /**
@@ -170,6 +172,85 @@ export async function casUpdateBlockSet(params: {
   const result = (await getDb().execute(statement)) as { rows: { version: number }[] };
   const row = result.rows[0];
   return row ? { ok: true, version: Number(row.version) } : { ok: false, reason: 'conflict' };
+}
+
+/** A stored set that no longer ends on its race's day, with what the popup names it by. */
+export interface StaleBlockSet {
+  set: BlockSetRecord;
+  athleteName: string;
+  raceName: string;
+  raceDate: string;
+}
+
+/**
+ * Every stale set on this user's Roster, in one statement
+ * (`training-architecture/19`).
+ *
+ * Read by the app shell on every render for an account holding active
+ * Coaching Links, so the shape is the whole cost: one SELECT scoped to the
+ * user's active links, joined to each athlete's Target Race, with the stale
+ * question — the last block's end is not race day, `fitsRace` in SQL — in the
+ * WHERE. Zero rows is the common case and costs one indexed read; there is no
+ * per-athlete fan-out and no second read for the names, which ride the same
+ * join through the one identity rule ({@link resolveAthleteName}).
+ *
+ * Scoped by the user id from the authenticated session, not a coach id from
+ * a request: the shell has the session and nothing else, and a forged id
+ * matches no links (ADR 0006).
+ */
+export async function getStaleBlockSetsForHeadCoach(userId: string): Promise<StaleBlockSet[]> {
+  const statement = sql`
+    SELECT
+      ${trainingBlockSet.id} AS set_id,
+      ${trainingBlockSet.athleteId} AS athlete_id,
+      ${trainingBlockSet.raceId} AS race_id,
+      ${trainingBlockSet.startDate} AS start_date,
+      ${trainingBlockSet.blocks} AS blocks,
+      ${trainingBlockSet.version} AS version,
+      ${race.name} AS race_name,
+      ${race.date} AS race_date,
+      ${user.name} AS user_name,
+      ${athlete.syntheticLabel} AS synthetic_label
+    FROM ${trainingBlockSet}
+    INNER JOIN ${coachingLink} ON ${coachingLink.athleteId} = ${trainingBlockSet.athleteId}
+    INNER JOIN ${coach} ON ${coach.id} = ${coachingLink.coachId}
+    INNER JOIN ${race} ON ${race.id} = ${trainingBlockSet.raceId}
+    INNER JOIN ${athlete} ON ${athlete.id} = ${trainingBlockSet.athleteId}
+    LEFT JOIN ${user} ON ${user.id} = ${athlete.userId}
+    WHERE ${coach.userId} = ${userId}
+      AND ${coachingLink.status} = 'active'
+      AND ${race.isTarget}
+      AND ${trainingBlockSet.blocks}->-1->>'endDate' <> ${race.date}::text
+    ORDER BY ${race.date}, ${trainingBlockSet.athleteId}
+  `;
+
+  const result = (await getDb().execute(statement)) as {
+    rows: {
+      set_id: string;
+      athlete_id: string;
+      race_id: string;
+      start_date: string;
+      blocks: unknown;
+      version: number;
+      race_name: string;
+      race_date: string;
+      user_name: string | null;
+      synthetic_label: string | null;
+    }[];
+  };
+  return result.rows.map((row) => ({
+    set: {
+      id: row.set_id,
+      athleteId: row.athlete_id,
+      raceId: row.race_id,
+      startDate: row.start_date,
+      blocks: row.blocks as TrainingBlockSpec[],
+      version: Number(row.version),
+    },
+    athleteName: resolveAthleteName(row.user_name, row.synthetic_label),
+    raceName: row.race_name,
+    raceDate: row.race_date,
+  }));
 }
 
 /**

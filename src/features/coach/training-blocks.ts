@@ -350,6 +350,20 @@ export function isStaleSet(set: StoredBlockSet | null, raceDate: string): boolea
   return set !== null && !fitsRace(set, raceDate);
 }
 
+/**
+ * Where a stale set still ends — its last block's name and end date — or null
+ * when the set fits, is empty, or there is none. The one sentence the Briefing
+ * (19) and the popup both need: "the last block, 'Taper', still ends 15 Aug".
+ */
+export function staleLastBlockOf(
+  set: StoredBlockSet | null,
+  raceDate: string,
+): { lastBlockName: string; endsOn: string } | null {
+  if (!isStaleSet(set, raceDate)) return null;
+  const last = set!.blocks[set!.blocks.length - 1];
+  return last ? { lastBlockName: last.name, endsOn: last.endDate } : null;
+}
+
 // ── The Head Coach's edit (slice 08) ──────────────────────────────────────────
 
 /** What a Head Coach may change on one block: its name, its end, or both. */
@@ -433,4 +447,37 @@ export function applyBlockEdit(
   const blocks = set.blocks.map((b, i) => (i === index ? edited : b));
   const verdict = validateBlockSet(blocks, set.startDate, raceDate);
   return verdict.ok ? { ok: true, blocks } : { ok: false, reason: verdict.reason };
+}
+
+// ── The Head Coach's re-pin (slice 19) ────────────────────────────────────────
+
+export type RepinBlockSetResult =
+  | { ok: true; blocks: TrainingBlockSpec[]; dropped: string[] }
+  | { ok: false; reason: 'too-few-blocks' | BlockSetProblem; dropped: string[] };
+
+/**
+ * A stale set re-fitted to the race's new date, or why it cannot be
+ * (`training-architecture/19`).
+ *
+ * The repair is deliberately the smallest one: every block that would end
+ * after the new race day is dropped — it describes days that no longer exist
+ * — and the last survivor's end moves to race day. A block ending exactly on
+ * the new day survives: that is what {@link fitsRace} calls the last block, so
+ * it needs no repair (the ticket's draft said "on or after"; that would have
+ * dropped a block that already fit). Nothing is renamed and nothing is
+ * re-authored: pinning the final block to the race is the set's rule (the last
+ * block's end is never a judgement, `applyBlockEdit` refuses to move it), so
+ * the survivor keeps whoever named it. A race moved later drops nothing and
+ * lengthens the last block; a race moved early enough to leave fewer than two
+ * survivors is not a set any more, and the caller offers the arithmetic draft
+ * instead. `dropped` names what went, or would have, so the row can say why.
+ */
+export function repinBlockSet(set: StoredBlockSet, raceDate: string): RepinBlockSetResult {
+  const survivors = set.blocks.filter((b) => b.endDate <= raceDate);
+  const dropped = set.blocks.filter((b) => b.endDate > raceDate).map((b) => b.name);
+  if (survivors.length < MIN_BLOCKS) return { ok: false, reason: 'too-few-blocks', dropped };
+  const last = survivors.length - 1;
+  const blocks = survivors.map((b, i) => (i === last ? { ...b, endDate: raceDate } : b));
+  const verdict = validateBlockSet(blocks, set.startDate, raceDate);
+  return verdict.ok ? { ok: true, blocks, dropped } : { ok: false, reason: verdict.reason, dropped };
 }

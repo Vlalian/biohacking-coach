@@ -188,6 +188,8 @@ describe('getPendingNarrationEvents', () => {
       'session_moved',
       // A Head Coach renaming or re-bounding a Training Block (slice 08).
       'block_edited',
+      // A Head Coach re-pinning a stale set to a moved race (slice 19).
+      'blocks_repinned',
     ]) {
       expect(bound, type).toContain(type);
     }

@@ -359,6 +359,38 @@ describe('startBriefing — the prompt material the rest of the suite does not r
     expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach · current');
   });
 
+  it('says the stored set is stale while it is, and drops the line once it fits again (training-architecture/19)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    const race = { id: 'r1', name: 'IM', date: '2027-09-05' };
+    const set = {
+      id: 's1',
+      athleteId: 'a1',
+      raceId: 'r1',
+      startDate: '2026-06-01',
+      version: 2,
+      blocks: [
+        { name: 'Build', endDate: '2026-12-01', authoredBy: 'coach_ai' },
+        { name: 'Taper', endDate: '2027-08-15', authoredBy: 'head_coach' },
+      ],
+    };
+    const draft = [
+      { index: 1, total: 2, name: 'Block 1 of 2', startDate: TODAY, endDate: '2027-03-01', authoredBy: 'arithmetic' },
+      { index: 2, total: 2, name: 'Block 2 of 2', startDate: '2027-03-02', endDate: '2027-09-05', authoredBy: 'arithmetic' },
+    ];
+    getResolvedBlocks.mockResolvedValue({ race, set, blocks: draft });
+
+    await startBriefing('coach_1', 'a1', TODAY);
+    expect(lastSystem()).toContain('no longer fit the race date: the last block, "Taper", still ends 2027-08-15');
+
+    getResolvedBlocks.mockResolvedValue({
+      race,
+      set: { ...set, blocks: [set.blocks[0], { ...set.blocks[1], endDate: '2027-09-05' }] },
+      blocks: draft,
+    });
+    await startBriefing('coach_1', 'a1', TODAY);
+    expect(lastSystem()).not.toContain('no longer fit');
+  });
+
   it('reads no verdict at all for an athlete with no Target Race', async () => {
     getActiveLink.mockResolvedValue(activeLink(false, false));
     getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
