@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ADAPTIVE_FIELDS_BY_LEVEL,
   ONBOARDING_OPTIONS,
   ONBOARDING_STEPS,
   RACE_DISTANCES,
@@ -135,6 +136,15 @@ describe('previousStep / stepAfter — the way back, and the walk forward again 
     expect(stepAfter('race')).toBe('adaptive');
     expect(stepAfter('adaptive')).toBe('constraints');
     expect(stepAfter('constraints')).toBe('done');
+  });
+
+  it('names the adaptive fields each level asks, so a walk after a level change clears the other level’s answers (review, 2026-09-18)', () => {
+    // A beginner answered `motivation`, went Back, became intermediate: the
+    // intermediate panel never shows `motivation`, so it must not send it —
+    // `applyAnswer('adaptive')` stores every field it is sent.
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.beginner).toEqual(['availableHours', 'sportBackground', 'motivation']);
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.intermediate).toEqual(['availableHours', 'bestTime', 'weakestDiscipline', 'hasHumanCoach']);
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.veteran).toEqual(['availableHours', 'targetTime', 'trackedMetrics']);
   });
 
   it('cursorAfter: after re-answering an early step the walk continues to the next step in sequence, whatever the server says is first unanswered; done is done', () => {

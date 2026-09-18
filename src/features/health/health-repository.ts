@@ -9,6 +9,7 @@ import {
   type InjuryRow,
 } from '@/db/schema';
 import { capacityStatement, type Capacity } from './capacity';
+import { MISTAKE_WINDOW_MS } from './health-layer';
 
 /**
  * Injuries and Illnesses, read and written (`training-architecture/04`).
@@ -73,9 +74,6 @@ export async function closeIllness(athleteId: string, illnessId: string): Promis
 
 /** Why a "reported by mistake" delete did not happen. */
 export type DeleteOutcome = 'deleted' | 'too-old' | 'missing';
-
-/** How long after declaring a record it may still be deleted as a mistake. */
-export const MISTAKE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Removes an Injury the athlete declared by mistake (`showable-version/28a`).

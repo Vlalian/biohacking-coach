@@ -8,8 +8,7 @@ import { useDialogFocus } from '@/lib/use-dialog-focus';
 import { formatFullDate } from '@/lib/date';
 import type { HealthNoteRow } from '@/db/schema';
 import { ALLOWANCES, DISCIPLINES, type Allowance, type Capacity } from '@/features/health/capacity';
-import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
-import { MISTAKE_WINDOW_MS } from '@/features/health/health-repository';
+import { MISTAKE_WINDOW_MS, glanceParts, type HealthSpan } from '@/features/health/health-layer';
 import {
   addHealthNoteAction,
   closeIllnessAction,
@@ -476,8 +475,10 @@ function Thread({
 /**
  * "What can you do right now?" — capacity, never diagnosis. Three disciplines,
  * three allowances, an optional Bother Rating; and Illness as one button. The
- * copy was decided on 2026-09-11 so the form cannot drift into asking where it
- * hurts: there is no field for that, and no column behind one.
+ * copy was decided on 2026-09-11 so the form cannot drift into asking what is
+ * wrong: the name field (28a, Mads 2026-09-18) is "what and where" in the
+ * athlete's words — "left knee" — to tell two injuries apart, never a
+ * diagnosis, and never read by the planner.
  */
 function DeclareForm({
   pending,

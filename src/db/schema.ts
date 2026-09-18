@@ -816,7 +816,8 @@ export const injuries = pgTable(
     /**
      * A short name for what and where — "left knee" — so the drawer and the
      * calendar can tell two injuries apart (Mads, 2026-09-18, showable-
-     * version/28a). Optional, and **for human eyes only** like the thread and
+     * version/28a). The injury's name, never the athlete's: ADR 0006 keeps
+     * every training table free of who. Optional, and **for human eyes only** like the thread and
      * the Bother Rating: a body part is not a capacity, and the planner reads
      * capacity. Nothing on a prompt path reads it.
      */

@@ -916,6 +916,9 @@ function ProposedChip({
   );
 }
 
+/** The one icon per record kind, shared by the status area and the session marks. */
+const HEALTH_ICON: Record<'injury' | 'illness', LucideIcon> = { injury: Bandage, illness: Pill };
+
 /** One of the two statuses: icon + word, signal while a record of that kind is open this week. */
 function StatusButton({
   kind,
@@ -928,7 +931,7 @@ function StatusButton({
   label: string;
   onClick: () => void;
 }) {
-  const Icon = kind === 'injury' ? Bandage : Pill;
+  const Icon = HEALTH_ICON[kind];
   return (
     <button
       type="button"
@@ -957,7 +960,7 @@ function Marks({ marks, size }: { marks: HealthMark[]; size: number }) {
   return (
     <>
       {marks.map((m, i) => {
-        const Icon = m.kind === 'injury' ? Bandage : Pill;
+        const Icon = HEALTH_ICON[m.kind];
         return (
           <Icon
             key={`${m.kind}-${i}`}
@@ -1052,6 +1055,9 @@ function SessionChip({
   // reader — the label is only set when there is something to say, leaving an
   // unmarked chip's markup exactly what it was.
   const markLabel = marks.length > 0 ? markedLabel(session.title ?? session.type, marks, t) : undefined;
+  // The hover tooltip names the marks as well as any refusal (the ruling asked
+  // for "label and tooltip"); unset when there is nothing to say.
+  const title = [refusalText, markLabel].filter(Boolean).join(' · ') || undefined;
 
   if (!onOpen) {
     return (
@@ -1059,7 +1065,7 @@ function SessionChip({
         draggable={draggable}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        title={refusalText}
+        title={title}
         aria-label={markLabel}
         className={className}
         style={{ borderColor: color }}
@@ -1077,7 +1083,7 @@ function SessionChip({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
-      title={refusalText}
+      title={title}
       aria-label={markLabel}
       className={className}
       style={{ borderColor: color }}

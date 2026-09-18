@@ -420,6 +420,8 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     const html = render({ sessions: [session({ date: '2026-08-19' })], health: [injury], proposal: { kind: 'proposal', draft } });
     expect(html).toMatch(/data-mark="injury"[^>]*data-open="true"/);
     expect(html).toContain('left knee');
+    // Label and tooltip both (the ruling): the chip's title names the mark.
+    expect(html).toContain('title="Long ride · markInjury: left knee"');
     expect(html).toContain('data-proposed');
     expect(html.match(/data-mark=/g)).toHaveLength(1);
   });
@@ -455,12 +457,17 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(hurt).not.toContain('data-health-chip');
   });
 
-  it('reads the status per week: a record closed before the week leaves that week clean', () => {
-    // The injury ran 1–10 Aug; the current week (17–23) is clean, the week of the 10th is not.
-    const html = render({ health: [{ ...injury, to: '2026-08-10' }] });
-    const week = (start: string) => html.match(new RegExp(`data-health-status="${start}"[^>]*>[^]*?</div>`))?.[0] ?? '';
-    expect(week('2026-08-17')).not.toMatch(/data-active="true"/);
-    expect(week('2026-08-10')).toMatch(/data-status="injury"[^>]*data-active="true"/);
+  it('reads the current state: a healed record leaves every week’s status clean, an open one lights every week it touches', () => {
+    const weekOf = (html: string, start: string) =>
+      html.match(new RegExp(`data-health-status="${start}"[^>]*>[^]*?</div>`))?.[0] ?? '';
+    // Ran 1–10 Aug, healed: the week of the 10th keeps its marks, its status reads uninjured.
+    const healed = render({ health: [{ ...injury, to: '2026-08-10' }] });
+    expect(weekOf(healed, '2026-08-10')).not.toMatch(/data-active="true"/);
+    expect(weekOf(healed, '2026-08-17')).not.toMatch(/data-active="true"/);
+    // Still open since 1 Aug: both weeks read injured (the boundary before it is weekStatus's own test).
+    const open = render({ health: [injury] });
+    expect(weekOf(open, '2026-08-10')).toMatch(/data-status="injury"[^>]*data-active="true"/);
+    expect(weekOf(open, '2026-08-17')).toMatch(/data-status="injury"[^>]*data-active="true"/);
   });
 
   it('offers "How’s your body?" to the athlete whether or not anything is open, and never to the Head Coach', () => {

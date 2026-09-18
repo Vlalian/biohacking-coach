@@ -100,17 +100,19 @@ describe('marksFor — the icons a session carries (showable-version/28a)', () =
     expect(marks.map((m) => m.kind)).toEqual(['injury', 'illness']);
   });
 
-  it('weekStatus: injured/ill when a record is open on any day of the week; clean otherwise', () => {
+  it('weekStatus: injured/ill while a record is open and touches the week; a closed record leaves the status clean and its marks in place', () => {
     const week = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20'];
     expect(weekStatus(week, [knee], '2026-09-16')).toEqual({ injured: true, ill: false });
-    // Over before the week: the status reads clean, the marks on its days stay.
     expect(weekStatus(week, [flu], '2026-09-16')).toEqual({ injured: false, ill: false });
     expect(weekStatus(week, [{ ...flu, from: '2026-09-15', to: null }], '2026-09-16')).toEqual({ injured: false, ill: true });
-    // Closed inside the week, on a day the week covers: it was open that week.
-    expect(weekStatus(week, [{ ...knee, to: '2026-09-14' }], '2026-09-16')).toEqual({ injured: true, ill: false });
+    // Opened Monday, healed Tuesday, today Wednesday: the status is the current
+    // state, so it reads uninjured — the Monday session keeps its muted mark
+    // (review, 2026-09-18: a signal "Injured" over a healed record was wrong).
+    expect(weekStatus(week, [{ ...knee, from: '2026-09-14', to: '2026-09-15' }], '2026-09-16')).toEqual({ injured: false, ill: false });
     expect(weekStatus(week, [], '2026-09-16')).toEqual({ injured: false, ill: false });
-    // A week before the record: nothing yet.
+    // A week before the record: nothing yet. A past week it ran through: still open, so injured.
     expect(weekStatus(['2026-09-07', '2026-09-08'], [knee], '2026-09-16')).toEqual({ injured: false, ill: false });
+    expect(weekStatus(['2026-09-10', '2026-09-11'], [knee], '2026-09-16')).toEqual({ injured: true, ill: false });
   });
 });
 

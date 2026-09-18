@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
 import {
+  ADAPTIVE_FIELDS_BY_LEVEL,
   ONBOARDING_OPTIONS,
   OPTION_MESSAGE_KEY,
   type LabelledOption,
@@ -472,9 +473,10 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
       )}
 
       <PrimaryButton
-        onClick={() =>
-          submit({
-            step: 'adaptive',
+        onClick={() => {
+          // Only the fields this level asked: the drafts are seeded from every
+          // saved answer, and an answer from another level must not ride along.
+          const all = {
             sportBackground: sportBackground.length > 0 ? sportBackground : undefined,
             availableHours: availableHours || undefined,
             motivation: motivation || undefined,
@@ -483,8 +485,10 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
             hasHumanCoach: hasHumanCoach || undefined,
             targetTime: targetTime || undefined,
             trackedMetrics: trackedMetrics.length > 0 ? trackedMetrics : undefined,
-          })
-        }
+          };
+          const asked = ADAPTIVE_FIELDS_BY_LEVEL[answers.experienceLevel ?? 'beginner'];
+          submit({ step: 'adaptive', ...Object.fromEntries(asked.map((f) => [f, all[f]])) });
+        }}
         disabled={pending}
         pending={pending}
       >

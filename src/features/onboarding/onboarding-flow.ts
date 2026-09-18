@@ -279,6 +279,22 @@ export type StepAnswer =
     }
   | { step: 'constraints'; fixedConstraints?: string[]; weeklySessionDay?: string };
 
+/** The adaptive step's answer fields, minus the discriminator. */
+export type AdaptiveField = Exclude<keyof Extract<StepAnswer, { step: 'adaptive' }>, 'step'>;
+
+/**
+ * Which adaptive questions each level is asked (`availableHours` is asked of
+ * every level). The panel submits only these: `applyAnswer('adaptive')` stores
+ * every field it is sent, so after Back and a level change the other level's
+ * seeded answers would otherwise be re-submitted from a panel that never
+ * showed them (review, 2026-09-18).
+ */
+export const ADAPTIVE_FIELDS_BY_LEVEL: Record<ExperienceLevel, readonly AdaptiveField[]> = {
+  beginner: ['availableHours', 'sportBackground', 'motivation'],
+  intermediate: ['availableHours', 'bestTime', 'weakestDiscipline', 'hasHumanCoach'],
+  veteran: ['availableHours', 'targetTime', 'trackedMetrics'],
+};
+
 const FREE_TEXT_MAX = 200;
 
 // A server action's payload is untrusted input, not a typed call: the declared

@@ -74,6 +74,11 @@ describe('OnboardingFlow — the way back', () => {
     expect(source).not.toContain('step: result.step,');
   });
 
+  it('the adaptive panel submits only the fields its level asks', () => {
+    const source = readFileSync(new URL('./onboarding.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('ADAPTIVE_FIELDS_BY_LEVEL[');
+  });
+
   it('both languages carry the Back label', () => {
     expect(en.Onboarding.back).toBeTruthy();
     expect(da.Onboarding.back).toBeTruthy();

@@ -71,6 +71,9 @@ export function spansFrom(
   ];
 }
 
+/** How long after declaring a record it may still be deleted as a mistake (`showable-version/28a`). */
+export const MISTAKE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 /** One icon on a session chip: which kind, whether still open, and the injury's name if any. */
 export interface HealthMark {
   kind: 'injury' | 'illness';
@@ -100,9 +103,11 @@ export function marksFor(date: string, spans: readonly HealthSpan[], todayKey: s
 
 /**
  * The two statuses the calendar's health area shows for a week
- * (`showable-version/28a`): injured / ill when a record of that kind was open
- * on any day the week covers, up to today. The area is always shown — a clean
- * week reads healthy and uninjured — so this returns both flags, not a list.
+ * (`showable-version/28a`): injured / ill when a record of that kind is
+ * **still open** and touches the week. The status is the current state, not
+ * the week's history — a record healed on Tuesday leaves Wednesday's status
+ * clean while Monday's session keeps its muted mark. The area is always shown,
+ * so this returns both flags, not a list.
  */
 export function weekStatus(
   weekDates: readonly string[],
@@ -110,7 +115,9 @@ export function weekStatus(
   todayKey: string,
 ): { injured: boolean; ill: boolean } {
   const openOn = (kind: HealthSpan['kind']) =>
-    spans.some((s) => s.kind === kind && weekDates.some((date) => covers(s, date, todayKey)));
+    spans.some(
+      (s) => s.kind === kind && s.to === null && weekDates.some((date) => covers(s, date, todayKey)),
+    );
   return { injured: openOn('injury'), ill: openOn('illness') };
 }
 
