@@ -1,4 +1,5 @@
 import type { NewSessionRow } from '@/db/schema';
+import { createHash } from 'node:crypto';
 import { dateKey } from '@/lib/date';
 
 /**
@@ -25,12 +26,29 @@ import { dateKey } from '@/lib/date';
  * is what keeps H11 observable now that no persona carries one: the Head Coach
  * opens it on the plan and finds "athlete's own", no edit, no delete.
  *
- * A fixed id, unlike the Coach-origin rows: the reseed clears Coach-origin
+ * A stable id, unlike the Coach-origin rows: the reseed clears Coach-origin
  * sessions and leaves the athlete's own alone (so nothing a real person logs
  * is lost), which would pile this row up on every run without one. With it, a
  * reseed replaces the row rather than adding a sibling.
+ *
+ * Derived from the athlete, not one constant for all: a preview database
+ * seeds a second athlete beside the first (`/preview`), and one global id
+ * collided on the primary key the first time that happened (2026-09-18).
+ * UUID v5 over a fixed namespace, so it is a valid uuid column value and the
+ * same on every run for the same athlete.
  */
-export const SEED_ATHLETE_SESSION_ID = 'f2a6c5e1-7b3d-4c8e-9a1f-5d4e3c2b1a09';
+const SEED_SESSION_NAMESPACE = 'f2a6c5e1-7b3d-4c8e-9a1f-5d4e3c2b1a09';
+
+export function seedAthleteSessionId(athleteId: string): string {
+  const hash = createHash('sha1')
+    .update(Buffer.from(SEED_SESSION_NAMESPACE.replace(/-/g, ''), 'hex'))
+    .update(athleteId)
+    .digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
+  hash[8] = (hash[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 /** Last week's Monday: this week's Monday minus seven days. */
 function lastWeekMonday(now: Date): Date {
@@ -52,7 +70,7 @@ const WEEK: readonly Day[] = [
   { ...training, day: 2, origin: 'coach', type: 'Recovery', duration: 40, zone: 'Zone 1', title: 'Easy swim', note: 'Technique focus, easy effort.', feedbackBody: null, feedbackMind: null, feedbackComment: null },
   { ...training, day: 3, origin: 'coach', type: 'Tempo', duration: 60, zone: 'Zone 3', title: 'Tempo run', note: '20 min steady in the middle.', feedbackBody: null, feedbackMind: null, feedbackComment: null },
   { ...training, day: 5, origin: 'coach', type: 'Endurance', duration: 180, zone: 'Zone 2', title: 'Long ride', note: 'Fuel every 45 min.', feedbackBody: null, feedbackMind: null, feedbackComment: null },
-  { ...training, day: 6, id: SEED_ATHLETE_SESSION_ID, origin: 'athlete', type: 'Strength', duration: 45, zone: null, title: 'Strength & mobility', note: 'Core and single-leg work.', feedbackBody: null, feedbackMind: null, feedbackComment: null },
+  { ...training, day: 6, origin: 'athlete', type: 'Strength', duration: 45, zone: null, title: 'Strength & mobility', note: 'Core and single-leg work.', feedbackBody: null, feedbackMind: null, feedbackComment: null },
 ];
 
 export function seedWeekRows(athleteId: string, now: Date): NewSessionRow[] {
@@ -62,6 +80,7 @@ export function seedWeekRows(athleteId: string, now: Date): NewSessionRow[] {
 
   return WEEK.map(({ day, ...s }) => ({
     ...s,
+    ...(s.origin === 'athlete' ? { id: seedAthleteSessionId(athleteId) } : {}),
     athleteId,
     date: dayDate(day),
     // ratedAt is what marks a Session Reflection as given; derived so a row

@@ -11,7 +11,7 @@ import {
 } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
-import { SEED_ATHLETE_SESSION_ID, seedWeekRows } from '../src/features/athlete/seed-history';
+import { seedAthleteSessionId, seedWeekRows } from '../src/features/athlete/seed-history';
 import { parseSeedArgs } from '../src/features/athlete/seed-personas';
 import {
   SYNTHETIC_PROFILES,
@@ -140,7 +140,7 @@ async function seedMadsTrainingHistory(athleteId: string) {
       .where(
         and(
           eq(sessions.athleteId, athleteId),
-          or(eq(sessions.origin, 'coach'), eq(sessions.id, SEED_ATHLETE_SESSION_ID)),
+          or(eq(sessions.origin, 'coach'), eq(sessions.id, seedAthleteSessionId(athleteId))),
         ),
       ),
     db.insert(sessions).values(rows),

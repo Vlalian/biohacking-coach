@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SEED_ATHLETE_SESSION_ID, seedWeekRows } from './seed-history';
+import { seedAthleteSessionId, seedWeekRows } from './seed-history';
 
 /**
  * The week of history `scripts/seed.ts` gives the real dev athlete, as data.
@@ -38,10 +38,16 @@ describe('seedWeekRows', () => {
     }
   });
 
-  it('carries exactly one Athlete Session, with a fixed id so a reseed converges on it', () => {
+  it('carries exactly one Athlete Session, with an id derived from the athlete so a reseed converges on it', () => {
     const own = seedWeekRows(ATHLETE, NOW).filter((r) => r.origin === 'athlete');
     expect(own).toHaveLength(1);
-    expect(own[0].id).toBe(SEED_ATHLETE_SESSION_ID);
+    expect(own[0].id).toBe(seedAthleteSessionId(ATHLETE));
+    // Stable across runs, a valid UUID, and different for another athlete on
+    // the same database — two seeded athletes (the /preview skill's case)
+    // must never collide on the primary key.
+    expect(seedAthleteSessionId(ATHLETE)).toBe(seedAthleteSessionId(ATHLETE));
+    expect(seedAthleteSessionId(ATHLETE)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(seedAthleteSessionId('another-athlete')).not.toBe(seedAthleteSessionId(ATHLETE));
     // Strength is an Athlete Session type (athlete-session-rules.ts); a
     // coach-origin Strength row is one the app's own rules would refuse.
     expect(own[0].type).toBe('Strength');
