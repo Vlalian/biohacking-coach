@@ -156,7 +156,11 @@ export function AppShell({
   const coachOpen = Boolean(coachOverlay?.open);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    // The dynamic viewport unit, not 100vh: 100vh is the *largest* viewport on a phone, so when
+    // the file picker or the keyboard shrank it, the fixed frame stayed tall —
+    // half the page white, the header pushed out of reach until a reload
+    // (showable-version/30, Mads on the S5, 2026-09-17). The dynamic unit follows.
+    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* Top bar — always holds the drawer trigger and the theme cycle */}
       <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-3 sm:px-5">
         <button
