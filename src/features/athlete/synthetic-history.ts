@@ -1,22 +1,25 @@
+import type { NewInjuryRow } from '@/db/schema';
 import type { RaceDistance } from '@/lib/race-distances';
+import { addDays, dateKey } from '@/lib/date';
 import type { SessionHistoryItem } from '@/features/coach/check-in';
 import type { PlanType } from '@/features/coach/weekly-session';
+import type { Capacity } from '@/features/health/capacity';
 
 /**
- * The training history behind the two generated athletes that used to sit on
- * the Head Coach's Roster (showable-version/03).
+ * The training history behind the generated athletes a Head Coach tester
+ * finds on the Roster (showable-version/03, code-health/16).
  *
- * **Retired from the seed on 2026-09-18 (code-health/13). Nothing calls this
- * module from `scripts/seed.ts` any more**, and `scripts/retire-personas.ts`
- * removes the rows it wrote. Alex Rivera and Sam Chen were built so a Head
- * Coach logging in would see two athletes who genuinely differ rather than an
- * empty screen; they became a maintenance tax on every slice touching the
- * athlete shape, and fabricated data in a product about to be handed to real
- * people. The module is kept, not deleted, because Mads's ruling was "removed
- * or at least commented out": if a Head Coach needs to be shown something
- * before real athletes exist, wiring it back is an afternoon, whereas
- * re-deriving it from history is not. `retire-personas.ts` still reads
- * `SYNTHETIC_PROFILES` for the ids it retires.
+ * **Behind a flag since 2026-09-18.** code-health/13 retired the two personas
+ * from the seed's default path — fabricated data in a product about to be
+ * handed to real people, and a tax on every slice touching the athlete shape.
+ * code-health/16 wired them back for the Head Coach tester round only:
+ * `npm run seed -- --with-personas` writes them, the flag-less seed does not,
+ * and `scripts/retire-personas.ts` removes the rows afterwards. A Head Coach
+ * tester with one athlete cannot judge the Roster or the Briefing, so the
+ * round gets three athletes who genuinely differ — a clean beginner, a
+ * high-volume veteran, and Nadia Holm six weeks out with an open Injury and a
+ * fortnight of missed sessions, so the injury surfaces and the Briefing have
+ * something to say.
  *
  * Pure by construction: profile and clock in, rows out. No database, no
  * `getDb`, nothing imported from `scripts/`. That is not tidiness — the seed
@@ -69,11 +72,33 @@ export interface SyntheticProfile {
    * The Target Race, as a real date and distance rather than prose
    * (`training-architecture/02`). These are what the seeded Race row carries,
    * and what the Training Phase is derived from now that it is not stored —
-   * without them these two athletes would have no horizon at all, and the
-   * Roster would show two athletes the Coach plans identically.
+   * without them these athletes would have no horizon at all, and the Roster
+   * would show athletes the Coach plans identically.
+   *
+   * A fixed `YYYY-MM-DD`, or a distance from the seed's clock. Nadia's race is
+   * `{ weeksOut: 6 }` rather than a date because the point of her is *where
+   * she stands*: the phase is derived from today and the race (03), so a
+   * stored date would walk her out of the last block a week at a time, and
+   * a reseed in November would find her race in the past. Resolved by
+   * {@link raceDateFor}.
    */
-  raceDate: string;
+  raceDate: string | { weeksOut: number };
   raceDistance: RaceDistance;
+  /**
+   * An open Injury, or none — the athlete-facing record only (ADR 0011): what
+   * it prevents per discipline and a Bother Rating, never a detail thread. The
+   * seed cannot write free text about a body, and a persona has no physio.
+   * Every session dated since it opened is a miss, which is what makes the
+   * Briefing's "missed sessions" true rather than planted. `id` is fixed so a
+   * reseed replaces the row rather than opening a second injury.
+   */
+  injury?: {
+    id: string;
+    capacity: Capacity;
+    /** How many days before the seed's `today` it opened. */
+    daysOpen: number;
+    bother: number;
+  };
   communicationStyle: string;
   /** Sessions per week, before skips. The first-timer trains fewer days. */
   sessionsPerWeek: number;
@@ -99,17 +124,20 @@ const ZONES: Record<PlanType, string | null> = {
 };
 
 /**
- * Two athletes who are meant to read as two people.
+ * Three athletes who are meant to read as three people.
  *
- * A first-timer twelve weeks out and a veteran deep in Build put different words
- * in the Coach's mouth, and that contrast *is* the demonstration — so the
- * difference is deliberate in every field a prompt reads: experience, phase,
- * race, Communication Style, volume, and the proportion of hard work in a week.
+ * A first-timer nine months out, a veteran deep in a high-volume build, and an
+ * intermediate six weeks from an Olympic-distance race who has just stopped
+ * training on an injury put different words in the Coach's mouth, and that
+ * contrast *is* the demonstration — so the difference is deliberate in every
+ * field a prompt reads: experience, horizon (and so the derived phase), race,
+ * Communication Style, volume, the proportion of hard work in a week, and
+ * whether the body currently allows any of it.
  *
- * Both keep `userId` null and carry a fabricated `syntheticLabel`. That is the
+ * All keep `userId` null and carry a fabricated `syntheticLabel`. That is the
  * one place a name may sit in a training table (ADR 0006) and it names nobody
  * real. The database enforces the rest: `athlete_identity_source` checks that
- * exactly one of `user_id` and `synthetic_label` is set, so neither of these can
+ * exactly one of `user_id` and `synthetic_label` is set, so none of these can
  * acquire a login by accident.
  */
 export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
@@ -139,7 +167,56 @@ export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
     durations: { Endurance: 110, Recovery: 45, Tempo: 70, Intensity: 60 },
     week: ['Intensity', 'Endurance', 'Tempo', 'Intensity', 'Endurance', 'Recovery'],
   },
+  {
+    id: 'd3a9e2f4-5b6c-4d7e-8f90-2b3c4d5e6f7a',
+    syntheticLabel: 'Nadia Holm',
+    experienceLevel: 'intermediate',
+    raceTarget: 'Olympic distance — a personal best on the run',
+    raceDate: { weeksOut: 6 },
+    raceDistance: 'Olympic',
+    communicationStyle:
+      'The athlete is an experienced age-grouper six weeks from an Olympic-distance race, currently unable to run. Be candid about what the injury changes for race day and what it does not. Plan around it, never diagnose it.',
+    sessionsPerWeek: 5,
+    durations: { Endurance: 75, Recovery: 40, Tempo: 55, Intensity: 50 },
+    week: ['Intensity', 'Endurance', 'Tempo', 'Recovery', 'Endurance'],
+    injury: {
+      id: 'e4b0f3a5-6c7d-4e8f-9a01-3c4d5e6f7a8b',
+      // A running injury: the discipline a triathlete can least fake, and the
+      // one that reshapes a week rather than emptying it (capacity.ts).
+      capacity: { swim: 'full', bike: 'easy', run: 'none' },
+      daysOpen: 12,
+      bother: 3,
+    },
+  },
 ] as const;
+
+/**
+ * The Target Race's date for this profile on this clock — the stored date, or
+ * `weeksOut` weeks from `today`.
+ */
+export function raceDateFor(profile: SyntheticProfile, today: Date): string {
+  if (typeof profile.raceDate === 'string') return profile.raceDate;
+  return addDays(dateKey(today), profile.raceDate.weeksOut * 7);
+}
+
+/**
+ * The open Injury row the seed writes for this profile, or null for a clean
+ * one. The athlete-facing record only (ADR 0011): capacity per discipline and
+ * a Bother Rating; no note, no thread, nothing free-text. `closedAt` is null
+ * because open *is* the absence of an end (health-repository.ts).
+ */
+export function openInjuryFor(profile: SyntheticProfile, today: Date): NewInjuryRow | null {
+  if (!profile.injury) return null;
+  const { id, capacity, daysOpen, bother } = profile.injury;
+  return {
+    id,
+    athleteId: profile.id,
+    ...capacity,
+    bother,
+    openedAt: new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysOpen),
+    closedAt: null,
+  };
+}
 
 /**
  * A deterministic pseudo-random source — a 32-bit xorshift, seeded by the
@@ -273,6 +350,26 @@ function blockedDayFor(today: Date, week: number, taken: Set<string>): string | 
 }
 
 /**
+ * Whether the athlete missed this session.
+ *
+ * Every session from the day the profile's Injury opened is a miss — checked
+ * before the draw, so the clean personas' random sequence is untouched and
+ * their pinned histories hold. Otherwise a real week is not clean, and US-3
+ * says a skip is never an alarm.
+ */
+function missedSession(
+  profile: SyntheticProfile,
+  today: Date,
+  date: string,
+  random: () => number,
+): boolean {
+  if (profile.injury !== undefined && date >= dayKey(today, profile.injury.daysOpen)) return true;
+  // Stryker disable next-line EqualityOperator — `<` vs `<=` on a continuous
+  // draw; identical unless a draw is exactly 0.08.
+  return random() < 0.08;
+}
+
+/**
  * Builds one athlete's past.
  *
  * `weeks` counts backwards from `today`, most recent first, and every session
@@ -324,10 +421,7 @@ export function generateSyntheticHistory(
       const date = dayKey(today, week * 7 + i + 1);
       taken.add(date);
 
-      // A real week is not clean, and US-3 says a skip is never an alarm.
-      // Stryker disable next-line EqualityOperator — `<` vs `<=` on a
-      // continuous draw; identical unless a draw is exactly 0.08.
-      const skipped = random() < 0.08;
+      const skipped = missedSession(profile, today, date, random);
       const reflection = skipped ? null : reflectionFor(afterIntensity, random);
       sessions.push(buildSession(profile, type, date, skipped, reflection, random));
 

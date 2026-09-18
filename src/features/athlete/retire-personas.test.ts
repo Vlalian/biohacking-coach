@@ -26,8 +26,8 @@ describe('RETIRED_PERSONA_IDS', () => {
   it('names the two generated personas and the shallow Test Athlete', () => {
     for (const p of SYNTHETIC_PROFILES) expect(RETIRED_PERSONA_IDS).toContain(p.id);
     expect(RETIRED_PERSONA_IDS).toContain('eff4e0bc-d603-4d5e-8ae5-369ff5bb1213');
-    expect(RETIRED_PERSONA_IDS).toHaveLength(3);
-    expect(new Set(RETIRED_PERSONA_IDS).size).toBe(3);
+    expect(RETIRED_PERSONA_IDS).toHaveLength(4);
+    expect(new Set(RETIRED_PERSONA_IDS).size).toBe(4);
   });
 });
 
@@ -55,7 +55,7 @@ describe('planRetirement', () => {
   it('lists the ids that are already gone, so a second run is a no-op that says so', () => {
     const plan = planRetirement([row({ id: RETIRED_PERSONA_IDS[1] })]);
     expect(plan.erase.map((r) => r.id)).toEqual([RETIRED_PERSONA_IDS[1]]);
-    expect(plan.absent).toEqual([RETIRED_PERSONA_IDS[0], RETIRED_PERSONA_IDS[2]]);
+    expect(plan.absent).toEqual([RETIRED_PERSONA_IDS[0], RETIRED_PERSONA_IDS[2], RETIRED_PERSONA_IDS[3]]);
   });
 
   it('refuses a row that belongs to a real person, whatever id it sits under', () => {
