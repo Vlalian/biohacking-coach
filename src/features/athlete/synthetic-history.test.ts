@@ -304,6 +304,17 @@ describe('the two shipped profiles', () => {
     }
   });
 
+  it('carry isTraining from the session rather than asserting it', () => {
+    // The row used to hardcode `isTraining: true` whatever the session said —
+    // harmless while every generated session is training, and a lie the moment
+    // one is not. Carried from the session since code-health/13.
+    const profile = SYNTHETIC_PROFILES[0];
+    const [first] = generateSyntheticHistory(profile, 1, TODAY, 1234).sessions;
+    expect(first.isTraining).toBe(true);
+    const [row] = toSessionRows(profile, [{ ...first, isTraining: false }]);
+    expect(row.isTraining).toBe(false);
+  });
+
   it('carry no real identity, only a fabricated label', () => {
     for (const p of SYNTHETIC_PROFILES) {
       // ADR 0006: syntheticLabel is the one place a name may sit in a training
