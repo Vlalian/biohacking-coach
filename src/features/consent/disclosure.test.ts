@@ -64,12 +64,34 @@ describe('the processors the disclosure names', () => {
     expect(controller).toContain('OpenAI');
   });
 
+  /**
+   * `preferred-name/01` (2026-09-18). The controller sentence used to promise
+   * "Your name and email are never sent to either" — true of the account name
+   * as a *field* (ADR 0006 keeps it out of every training table), false of free
+   * text: `assertNoDirectIdentifier` recognises email and phone shapes only, so
+   * a name an athlete types into a session note reaches the model. A consent
+   * artifact cannot make a promise the code does not keep, so the claim is
+   * narrowed to the account name and email, and the athlete is told plainly
+   * that what they type themselves is sent as written.
+   */
+  it.each(['en', 'da'])('no longer claims a name can never reach the AI, in %s', (locale) => {
+    const { controller } = disclosureCopy(locale);
+    expect(controller).not.toContain('Your name and email are never');
+    expect(controller).not.toContain('Dit navn og din e-mail sendes aldrig');
+  });
+
+  it.each(['en', 'da'])('narrows the promise to the account name and email, in %s', (locale) => {
+    const { controller } = disclosureCopy(locale);
+    expect(controller).toContain(locale === 'da' ? 'kontonavn' : 'account name');
+  });
+
   it.each(['en', 'da'])(
-    'still promises name and email reach neither, in %s',
+    'tells the athlete what they type themselves is sent as written, in %s',
     (locale) => {
-      const copy = disclosureCopy(locale);
-      const claim = locale === 'da' ? 'Dit navn og din e-mail' : 'Your name and email';
-      expect(copy.controller).toContain(claim);
+      const { controller } = disclosureCopy(locale);
+      expect(controller).toContain(
+        locale === 'da' ? 'Det, du selv skriver' : 'Anything you type yourself',
+      );
     },
   );
 });
@@ -77,6 +99,14 @@ describe('the processors the disclosure names', () => {
 describe('DISCLOSURE_VERSION', () => {
   it('is a date, so a reader can tell which wording they consented to', () => {
     expect(DISCLOSURE_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  // A wording change and a version bump are the same edit (the module's own
+  // rule). The identity sentence changed on 2026-09-18, so the version must be
+  // past the one the old wording carried. Not the literal — pinning that would
+  // make every future amendment a test edit nobody reads.
+  it('was bumped past the version that carried the old identity claim', () => {
+    expect(DISCLOSURE_VERSION > '2026-09-10').toBe(true);
   });
 });
 

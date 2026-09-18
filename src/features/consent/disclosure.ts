@@ -150,8 +150,21 @@ export function purposesToShow(
  * nothing today and becomes a wall of legal text in front of an invited tester's
  * first impression the moment testers exist; the timing was chosen against that
  * schedule rather than by accident (Mads, 2026-09-09).
+ *
+ * `2026-09-10` → `2026-09-18`: the identity sentence corrected
+ * (`preferred-name/01`). The controller statement promised "Your name and email
+ * are never sent to either." Email is true. The name is true of *fields* and
+ * false of *free text*: identity is separated structurally (ADR 0006), but the
+ * only runtime guard, `assertNoDirectIdentifier` (`src/lib/identifiers.ts`),
+ * recognises email and phone shapes — no pattern recognises a name in prose, so
+ * a name an athlete types into a session note, a rating comment or a Coach Chat
+ * message reaches Anthropic as written. The sentence now says exactly that,
+ * and says what it *can* promise: the account name and email address are never
+ * sent. Corrected while the only grant it invalidates is Mads's own, for the
+ * same schedule reason as the bump above. Do not repeat the old sentence
+ * anywhere — AGENTS.md's Coding conventions say why.
  */
-export const DISCLOSURE_VERSION = '2026-09-10';
+export const DISCLOSURE_VERSION = '2026-09-18';
 
 /** Narrows an arbitrary string to a known purpose — untrusted input guard. */
 export function isConsentPurpose(value: string): value is ConsentPurpose {
@@ -197,7 +210,7 @@ const EN: DisclosureCopy = {
   intro:
     'To coach you, this app processes what you tell it and share with it. Please choose what you agree to below. You can change any of these later in Privacy & consent.',
   controller:
-    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which does the coaching itself, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. Your name and email are never sent to either.',
+    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which does the coaching itself, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. We never send your account name or email address to either. Anything you type yourself — session notes, ratings, and messages to the Coach — is sent as you wrote it, so leave out names and addresses you would rather the AI did not see.',
   requiredLabel: 'Required to use the Coach',
   optionalLabel: 'Optional',
   agree: 'Agree and continue',
@@ -242,7 +255,7 @@ const DA: DisclosureCopy = {
   intro:
     'For at kunne coache dig behandler appen det, du fortæller og deler med den. Vælg nedenfor, hvad du giver samtykke til. Du kan altid ændre det senere under Privatliv & samtykke.',
   controller:
-    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som står for selve coachingen, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Dit navn og din e-mail sendes aldrig til nogen af dem.',
+    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som står for selve coachingen, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Vi sender aldrig dit kontonavn eller din e-mailadresse til nogen af dem. Det, du selv skriver — sessionsnoter, vurderinger og beskeder til Coachen — sendes, som du har skrevet det, så undlad navne og adresser, du helst vil holde fra AI\'en.',
   requiredLabel: 'Krævet for at bruge Coachen',
   optionalLabel: 'Valgfrit',
   agree: 'Accepter og fortsæt',
