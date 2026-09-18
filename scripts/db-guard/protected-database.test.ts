@@ -35,6 +35,11 @@ describe('protectedDatabaseVerdict', () => {
     expect(protectedDatabaseVerdict('', []).ok).toBe(false);
   });
 
+  it('refuses the production endpoint whatever its case — a host is case-insensitive', () => {
+    const shouted = `postgresql://u:p@${PRODUCTION_ENDPOINT.toUpperCase()}.c-4.eu-central-1.aws.neon.tech/neondb`;
+    expect(protectedDatabaseVerdict(shouted, []).ok).toBe(false);
+  });
+
   it('matches the endpoint anywhere in the host, not by whole-string equality', () => {
     const pooled = `postgresql://u:p@${PRODUCTION_ENDPOINT}-pooler.c-4.eu-central-1.aws.neon.tech/neondb`;
     expect(protectedDatabaseVerdict(pooled, []).ok).toBe(false);

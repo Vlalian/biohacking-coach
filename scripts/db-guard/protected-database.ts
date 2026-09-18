@@ -23,7 +23,10 @@ export function protectedDatabaseVerdict(
   if (!databaseUrl) {
     return { ok: false, reason: 'DATABASE_URL is not set; nothing to run against.' };
   }
-  const isProduction = databaseUrl.includes(PRODUCTION_ENDPOINT);
+  // Case-insensitive on purpose: a host is case-insensitive by definition, and
+  // Node keeps whatever case a URL was typed in, so an upper-cased endpoint
+  // would otherwise walk past this check (CodeRabbit, PR #83).
+  const isProduction = databaseUrl.toLowerCase().includes(PRODUCTION_ENDPOINT);
   if (isProduction && !argv.includes('--production')) {
     return {
       ok: false,
