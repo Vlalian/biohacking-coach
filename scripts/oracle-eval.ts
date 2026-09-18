@@ -105,12 +105,7 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write(`retrieval: ${set.filter((c) => c.group !== 'adversarial').length} questions ... `);
-  const retrieval = await runRetrieval(set, {
-    embedder,
-    search,
-    phase: EVAL_ATHLETE.phase,
-    experienceLevel: EVAL_ATHLETE.experienceLevel,
-  });
+  const retrieval = await runRetrieval(set, { embedder, search });
   console.log('done');
 
   let generation: Awaited<ReturnType<typeof runGeneration>>['records'] = [];
@@ -122,8 +117,6 @@ async function main(): Promise<void> {
       search,
       callCoach,
       system: evalSystemPrompt(),
-      phase: EVAL_ATHLETE.phase,
-      experienceLevel: EVAL_ATHLETE.experienceLevel,
     });
     generation = run.records;
     console.log(`done (${run.lookups.length} lookups)`);

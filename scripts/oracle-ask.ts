@@ -15,7 +15,7 @@ import { retrievePassages, TOP_K } from '../src/features/knowledge-oracle/retrie
  * human reading real output.
  *
  *     npm run oracle:ask -- "How should training load be distributed in a base phase?"
- *     npm run oracle:ask -- "..." --phase build --xp veteran --k 10 --label before
+ *     npm run oracle:ask -- "..." --k 10 --label before
  *
  * Deliberately NOT a test:
  *
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
 
   if (!question) {
     console.error(
-      'Usage: npm run oracle:ask -- "<question>" [--phase base] [--xp veteran] [--k 6] [--label name]\n\n' +
+      'Usage: npm run oracle:ask -- "<question>" [--k 6] [--label name]\n\n' +
         'Embeds the query with the real OpenAI embedder, searches the live corpus,\n' +
         'and prints ranked passages with their similarity plus the athlete-facing\n' +
         'citation list. Costs one embedding call. Never run this in CI.',
@@ -97,8 +97,6 @@ async function main(): Promise<void> {
 
   const query = {
     question,
-    phase: arg('phase'),
-    experienceLevel: arg('xp'),
   };
 
   const result = await retrievePassages({
@@ -115,7 +113,7 @@ async function main(): Promise<void> {
   const lines: string[] = [
     `# ${question}`,
     '',
-    `phase=${query.phase ?? '—'}  xp=${query.experienceLevel ?? '—'}  k=${topK}`,
+    `k=${topK}`,
     `passages=${result.passages.length}  sources=${result.citations.length}`,
     '',
     '## Ranked passages',

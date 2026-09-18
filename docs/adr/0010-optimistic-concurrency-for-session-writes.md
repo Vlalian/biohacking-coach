@@ -36,6 +36,10 @@ serialisation it gave up by distributing; this app has one Postgres and has give
   the athlete's alone and touch columns nobody else writes, so versioning them would manufacture
   conflicts that cannot occur. A completed-status write and a coach's content edit are orthogonal and
   both should land.
+- **Derived, not versioned (added 2026-09-18):** `parked_by_date` names the Unavailable Date that
+  parked a session. It is not contested — nobody edits it — but it depends on `date`, so
+  `casUpdateSession` carries it to the new day whenever a versioned write sets `date`. It is written
+  *under* the versioned write, never listed among its content columns.
 
 ## What holds this together
 

@@ -79,15 +79,13 @@ describe('retrievePassages', () => {
         hit({ ordinal: 2, similarity: 0.91 }),
         hit({ ordinal: 3, similarity: 0.72 }),
       ]),
-      query: { question: 'How hard should easy days be?', phase: 'base' },
+      query: { question: 'How hard should easy days be?' },
     });
 
     expect(result.passages.map((p) => p.similarity)).toEqual([0.91, 0.72, 0.55]);
-    // What was embedded is the built query, not the raw question — the phase has
-    // to reach the vector or the context is decorative.
+    // What was embedded is the built query — the question, and only that.
     expect(embedder.calls).toHaveLength(1);
-    expect(embedder.calls[0][0]).toContain('base');
-    expect(embedder.calls[0][0]).toContain('How hard should easy days be?');
+    expect(embedder.calls[0]).toEqual(['How hard should easy days be?']);
   });
 
   it('treats retrieval finding nothing as a first-class result, not an error', async () => {

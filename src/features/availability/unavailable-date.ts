@@ -57,7 +57,9 @@ export async function markUnavailableDate(params: {
     db.insert(unavailableDates).values({ athleteId, date }).onConflictDoNothing(),
     db
       .update(sessions)
-      .set({ status: 'unavailable', parked: true, updatedAt: new Date() })
+      // `parkedByDate` names this day as the reason: it is what lets the
+      // clear below restore the day's own parking and nothing else.
+      .set({ status: 'unavailable', parked: true, parkedByDate: date, updatedAt: new Date() })
       .where(
         and(
           eq(sessions.athleteId, athleteId),
@@ -115,14 +117,17 @@ export async function clearUnavailableDate(params: {
     clearDate,
     db
       .update(sessions)
-      .set({ status: 'planned', parked: false, updatedAt: new Date() })
+      .set({ status: 'planned', parked: false, parkedByDate: null, updatedAt: new Date() })
       .where(
         and(
           eq(sessions.athleteId, athleteId),
           eq(sessions.date, date),
-          // The exact inverse of the park above: this day's own parked
-          // sessions, and nothing else on it.
-          eq(sessions.parked, true),
+          // The exact inverse of the park above: the sessions *this day*
+          // parked, and nothing else on it. A session the athlete marked
+          // unavailable themselves is parked with `parkedByDate` null and is
+          // not this flow's to restore — clearing the day must not undo a
+          // decision the day never made (code-health issue 12).
+          eq(sessions.parkedByDate, date),
         ),
       ),
   ]);

@@ -206,14 +206,12 @@ describe('ensureWeekDrafted — a valid reply is staged once, as the Coach', () 
     expect(recordWeekDraft.mock.calls[0][0].citations).toEqual([]);
   });
 
-  it('asks the corpus about this athlete: distance, block and experience in the query', async () => {
+  it('asks the corpus about this athlete: distance and block in the question itself, nothing prefixed', async () => {
     await ensureWeekDrafted(ATHLETE, TODAY);
     const query = retrievePassages.mock.calls[0][0].query;
-    expect(query.question).toBe(
-      'How should a Ironman triathlete structure a training week in the Build the Volume phase, week 3 of 19?',
-    );
-    expect(query.phase).toBe('Build the Volume');
-    expect(query.experienceLevel).toBe('intermediate');
+    expect(query).toEqual({
+      question: 'How should a Ironman triathlete structure a training week in the Build the Volume phase, week 3 of 19?',
+    });
   });
 });
 
@@ -369,9 +367,9 @@ describe('ensureWeekDrafted — the edges', () => {
     const system = callCoach.mock.calls[0][0].system;
     expect(system).not.toContain('RECURRING NO-TRAIN DAYS');
     expect(system).toContain('WEEK WINDOW: 2026-09-21 to 2026-09-27');
-    // No block → the corpus is asked the no-race question, with no phase.
+    // No block → the corpus is asked the no-race question.
     const query = retrievePassages.mock.calls[0][0].query;
-    expect(query).toEqual({ question: 'How should a triathlete structure a training week with no race booked?', phase: undefined, experienceLevel: undefined });
+    expect(query).toEqual({ question: 'How should a triathlete structure a training week with no race booked?' });
   });
 
   it('reads a missing athlete row or profile as no day and no constraints: Sunday, whole week', async () => {

@@ -1192,7 +1192,10 @@ describe('the grounding knows whose turn it is (knowledge-oracle/05, /06)', () =
     getTargetRace.mockResolvedValue(null);
   });
 
-  it('is built for the athlete, the Weekly Session surface, and the phase the prompt names', async () => {
+  it('is built for the athlete and the Weekly Session surface, and nothing about the athlete', async () => {
+    // Phase and experience were threaded in here for the query prefix until
+    // 2026-09-17 (knowledge-oracle/query.ts says why it went). The prompt
+    // still carries them; the search gets the Coach's question alone.
     getTargetRace.mockResolvedValue({ name: 'Ironman Kalmar', date: '2029-08-18' });
 
     await startWeeklySession(ATHLETE, TODAY);
@@ -1203,19 +1206,7 @@ describe('the grounding knows whose turn it is (knowledge-oracle/05, /06)', () =
       surface: 'weekly_session',
       // A first turn has no conversation yet; the id is minted after the reply.
       conversationId: null,
-      phase: expect.stringMatching(/^Block \d+ of \d+$/),
-      experienceLevel: 'intermediate',
     });
-  });
-
-  it('passes null, not undefined, when there is no race and no stated experience', async () => {
-    const unknown = { ...(ATHLETE as object), experienceLevel: null } as typeof ATHLETE;
-
-    await startWeeklySession(unknown, TODAY);
-
-    expect(productionGrounding).toHaveBeenCalledWith(
-      expect.objectContaining({ phase: null, experienceLevel: null }),
-    );
   });
 
   it('logs a first reply that cites its sources, against the surface and no conversation', async () => {

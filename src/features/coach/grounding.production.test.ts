@@ -59,8 +59,6 @@ describe('productionGrounding', () => {
       athleteId: 'a1',
       surface: 'weekly_session',
       conversationId: 'conv_9',
-      phase: 'Block 1 of 3',
-      experienceLevel: 'novice',
     });
     const text = await g.resolve(call);
 

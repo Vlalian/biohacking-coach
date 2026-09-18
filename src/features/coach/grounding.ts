@@ -55,9 +55,6 @@ export interface LookupRecord {
 export interface GroundingDeps {
   embedder: Embedder;
   search: KnowledgeSearch;
-  /** Training Phase, as the horizon derives it; folds into the query. */
-  phase?: string | null;
-  experienceLevel?: string | null;
   /**
    * Where a lookup is written down so it can be counted later (option a,
    * 2026-09-11). A failing record never fails the lookup — evidence is not
@@ -107,11 +104,7 @@ export function createGrounding(deps: GroundingDeps): Grounding {
         result = await retrievePassages({
           embedder: deps.embedder,
           search: deps.search,
-          query: {
-            question,
-            phase: deps.phase ?? undefined,
-            experienceLevel: deps.experienceLevel ?? undefined,
-          },
+          query: { question },
         });
       } catch (error) {
         // An identifier in the question is the athlete's mistake, not an outage:
@@ -166,16 +159,12 @@ export function productionGrounding(facts: {
   athleteId: string;
   surface: ModelSurface;
   conversationId: string | null;
-  phase?: string | null;
-  experienceLevel?: string | null;
 }): Grounding {
   return createGrounding({
     embedder: process.env.OPENAI_API_KEY
       ? openAiEmbedder()
       : refusingEmbedder('OPENAI_API_KEY is not set — retrieval cannot embed the question'),
     search: knowledgeSearch(),
-    phase: facts.phase,
-    experienceLevel: facts.experienceLevel,
     record: (entry) =>
       recordLookupPerformed(facts.athleteId, {
         surface: facts.surface,

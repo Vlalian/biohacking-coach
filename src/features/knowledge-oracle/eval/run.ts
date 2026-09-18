@@ -3,7 +3,6 @@ import { createGrounding, type LookupRecord } from '@/features/coach/grounding';
 import type { Embedder } from '../embedder';
 import { sourceMentions } from '../lookup-tool';
 import { retrievePassages, MIN_SIMILARITY, type KnowledgeSearch, type RetrievalResult } from '../retrieval';
-import type { OracleQuery } from '../query';
 import { EVAL_SET, isConversation, questionOf, type EvalCase, type EvalQuestion } from './eval-set';
 import type { GenerationRecord, RankedHit, RetrievalRecord } from './metrics';
 
@@ -21,17 +20,13 @@ import type { GenerationRecord, RankedHit, RetrievalRecord } from './metrics';
 export interface RetrievalPorts {
   embedder: Embedder;
   search: KnowledgeSearch;
-  /** The fixture athlete's, folded into the query exactly as the Coach's lookup folds them. */
-  phase?: string | null;
-  experienceLevel?: string | null;
   minSimilarity?: number;
   topK?: number;
 }
 
 /**
  * One embedding per single-turn question — the same query the Coach's lookup
- * would embed, phase and experience included, so the two halves of a run
- * measure one vector. The search runs unfloored so the record carries the raw
+ * would embed, so the two halves of a run measure one vector. The search runs unfloored so the record carries the raw
  * ranking — where the weak matches score is what decides the floor — and the
  * floor is applied here to say what the Coach would actually have read.
  */
@@ -44,7 +39,7 @@ export async function runRetrieval(set: readonly EvalCase[], ports: RetrievalPor
     const result = await retrievePassages({
       embedder: ports.embedder,
       search: ports.search,
-      query: queryFor(c.question, ports),
+      query: { question: c.question },
       topK: ports.topK,
       // Production caps distinct sources at MAX_CITATIONS and drops the rest;
       // the raw ranking must keep every top-k source or MRR and the floor lie.
@@ -54,15 +49,6 @@ export async function runRetrieval(set: readonly EvalCase[], ports: RetrievalPor
     records.push(retrievalRecord(c, rankedHits(result), floor));
   }
   return records;
-}
-
-/** The query as the Coach's lookup would build it — the fixture's phase and experience folded in. */
-function queryFor(question: string, ports: RetrievalPorts): OracleQuery {
-  return {
-    question,
-    phase: ports.phase ?? undefined,
-    experienceLevel: ports.experienceLevel ?? undefined,
-  };
 }
 
 /** The raw ranking, each passage named by its source's slug. */
@@ -94,8 +80,6 @@ export interface GenerationPorts {
   search: KnowledgeSearch;
   callCoach: (input: Parameters<typeof callCoach>[0]) => Promise<CoachReply>;
   system: string;
-  phase?: string | null;
-  experienceLevel?: string | null;
   maxTokens?: number;
 }
 
@@ -144,8 +128,6 @@ export async function runGeneration(
     const grounding = createGrounding({
       embedder: ports.embedder,
       search: ports.search,
-      phase: ports.phase,
-      experienceLevel: ports.experienceLevel,
       record: async (entry) => {
         lookups.push(entry);
       },
