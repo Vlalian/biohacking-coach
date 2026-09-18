@@ -8,6 +8,13 @@ import { expect, type Locator, type Page } from '@playwright/test';
  */
 export async function settled(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle');
+  // A cold dev server can answer a dynamic route's first request with the
+  // not-found page while Turbopack is still compiling it (seen on
+  // /coach/athlete/[id]/* at 98a851a). Its <h1> is the tell; a second visit
+  // gets the compiled route. A genuine 404 shows up again and fails below.
+  if (await page.locator('main h1', { hasText: /doesn't exist|findes ikke/i }).count()) {
+    await page.reload({ waitUntil: 'networkidle' });
+  }
   await page.locator('.animate-pulse').first().waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
   // Fonts arrive after first paint; a snapshot taken before them is a different picture.
   await page.evaluate(() => document.fonts.ready);

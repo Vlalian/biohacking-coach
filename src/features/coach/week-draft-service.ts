@@ -10,7 +10,7 @@ import { openAiEmbedder } from '@/features/knowledge-oracle/embedder';
 import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repository';
 import { retrievePassages, type RetrievalResult } from '@/features/knowledge-oracle/retrieval';
 import type { PlanningWindow } from './planning-window';
-import { callCoach, type CoachReply } from './coach-client';
+import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
 import { buildWeeklyContext, renderWeekDraftPrompt } from './prompts';
 import { getCheckInForWeek } from './check-in-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
@@ -74,6 +74,7 @@ export type DraftOutcome =
   | 'already-held'
   | 'no-window'
   | 'coach-failed'
+  | 'coach-disabled'
   | 'malformed'
   | 'lost-race'
   | 'drafted';
@@ -310,6 +311,10 @@ async function gateFacts(
 ): Promise<
   { gated: DraftOutcome } | { dueWeek: string; visibleFrom: string; window: PlanningWindow; unavailableDates: string[] }
 > {
+  // A switched-off Coach (the page snapshot suite, local work without a key)
+  // is an outcome, not a failure: nothing read, nothing embedded, nothing
+  // logged. First, so grounding's OpenAI call never happens either.
+  if (isCoachDisabled()) return { gated: 'coach-disabled' };
   const thisWeek = weekStartOf(today);
   const [athlete, link, unavailableDates, thisWeekSessions, thisWeekHistory] = await Promise.all([
     getAthleteById(athleteId),

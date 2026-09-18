@@ -16,7 +16,7 @@ import {
 } from './block-adjustment';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
-import { callCoach } from './coach-client';
+import { callCoach, isCoachDisabled } from './coach-client';
 import { renderBlockAdjustmentPrompt } from './prompts';
 import {
   casUpdateBlockSet,
@@ -88,6 +88,7 @@ export type AdjustmentOutcome =
   | 'already-adjusted'
   | 'head-coach-owned'
   | 'coach-failed'
+  | 'coach-disabled'
   | 'malformed'
   | 'refused'
   | 'lost-race'
@@ -252,6 +253,9 @@ async function writeAdjustment(
  * and one set read, then nothing. Never throws.
  */
 export async function ensureBlocksAdjusted(athleteId: string, today: string): Promise<AdjustmentOutcome> {
+  // Same rule as the week draft: a switched-off Coach is an outcome, not a
+  // failure, and costs no read and no log.
+  if (isCoachDisabled()) return 'coach-disabled';
   const race = await getTargetRace(athleteId);
   if (!race) return 'no-race';
   if (weeksTo(today, race.date) < MIN_WEEKS_TO_ADJUST) return 'too-close';

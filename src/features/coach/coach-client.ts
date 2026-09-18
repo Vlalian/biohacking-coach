@@ -117,6 +117,33 @@ export interface CoachReply {
 }
 
 /**
+ * The Coach is switched off for this process: `COACH_DISABLED=1`, honoured
+ * outside production only. Every call site already treats a thrown Coach call
+ * as a failed turn that writes nothing, so nothing downstream needs to know.
+ *
+ * For the page snapshot suite (frontend-quality/07), which loads athlete pages
+ * whose layout drafts next week in `after()`: without this, every run spent
+ * tokens and wrote a draft that changed the next picture. Also handy for local
+ * work without a key.
+ */
+export class CoachDisabledError extends Error {
+  constructor() {
+    super('The Coach is disabled (COACH_DISABLED is set).');
+    this.name = 'CoachDisabledError';
+  }
+}
+
+/**
+ * True when `COACH_DISABLED=1` outside production. Exported so the background
+ * callers (`ensureWeekDrafted`, `ensureBlocksAdjusted`) can step out before
+ * they gather context — grounding embeds through OpenAI first, and a disabled
+ * Coach must cost nothing and log nothing.
+ */
+export function isCoachDisabled(): boolean {
+  return process.env.COACH_DISABLED === '1' && process.env.NODE_ENV !== 'production';
+}
+
+/**
  * Thrown when a turn comes back with nothing to say — no text and no tool call.
  *
  * Raised here, in the adapter, rather than left to each caller, because the
@@ -175,14 +202,22 @@ const toolUsesIn = (content: Anthropic.ContentBlock[]): Anthropic.ToolUseBlock[]
  * failed turn: a search backend being down is not a reason the athlete gets no
  * answer.
  */
-export async function callCoach(input: {
+export interface CoachCallInput {
   system: string;
   messages: CoachMessage[];
   maxTokens: number;
   tools?: readonly CoachTool[];
   toolResult?: string;
   resolveTool?: (call: CoachToolCall) => Promise<string>;
-}): Promise<CoachReply> {
+}
+
+export async function callCoach(input: CoachCallInput): Promise<CoachReply> {
+  if (isCoachDisabled()) throw new CoachDisabledError();
+  return callCoachLive(input);
+}
+
+/** The real call, split from the switch so neither is harder to read for the other. */
+async function callCoachLive(input: CoachCallInput): Promise<CoachReply> {
   const client = getClient();
   const first = await client.messages.create(
     withInferenceGeo({

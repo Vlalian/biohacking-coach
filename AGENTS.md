@@ -120,6 +120,26 @@ gives a session the code but **not** `CONTEXT.md`, `OVERVIEW.md`, or the `.scrat
 Run both from the main folder. The junctions and generated `CLAUDE.md` are gitignored, so
 they never enter a PR.
 
+### If several unrelated routes 404 at once, it is the build cache
+
+A single page returning 404 is a bug in that page. **Every authenticated route
+returning 404 at once — `/da/training-plan` and a coach page and the rest — is
+not a bug, it is a stale `.next`.** Delete it and restart the dev server before
+reading any code:
+
+    Remove-Item -Recurse -Force .next    # PowerShell; `rm -rf .next` in bash
+    npm run dev
+
+The discriminator is the point: *one* route failing points at the code, *all*
+of them failing points at the cache. On 2026-09-04 the smoke run lost an hour
+because the dev log had said "404 for every route" from the start and the code
+was read first (`code-health/10`).
+
+The same not-found page also appears **once, on a cold dev server**, for the
+first request to a dynamic route Turbopack has not compiled yet (seen on
+`/coach/athlete/[id]/*` with no `.next` at all, 2026-09-17). Reload before
+concluding anything; the page suite's `settled()` does exactly that.
+
 ## Code standards
 
 ### Coding conventions
@@ -132,7 +152,7 @@ they never enter a PR.
 
 ### A primitive ships with its snapshot
 
-A component in `src/components/ui` is covered by a `*.visual.tsx` in that folder (its own file, or a case in `primitives.visual.tsx`), and any change to one — or to `globals.css` — is run through `npm run test:visual` before commit; a full-page change through `npm run test:e2e` (needs the dev database and the seed accounts in `.env.local`). Baselines are committed `-win32` PNGs under `__snapshots__/`, regenerated with the matching `:update` script only when the change in appearance was the point. Rationale and the platform ruling: `.scratch/frontend-quality/`.
+A component in `src/components/ui` is covered by a `*.visual.tsx` in that folder (its own file, or a case in `primitives.visual.tsx`), and any change to one — or to `globals.css` — is run through `npm run test:visual` before commit; a full-page change through `npm run test:e2e` (runs on its own Neon branch `test/e2e` — `E2E_DATABASE_URL` in `.env.local`, `neon connection-string test/e2e` — reseeded every run, with the Coach switched off by `COACH_DISABLED=1`; it starts its own dev server on 3001, so stop a hand-started one first). Baselines are committed `-win32` PNGs under `__snapshots__/`, regenerated with the matching `:update` script only when the change in appearance was the point. Rationale and the platform ruling: `.scratch/frontend-quality/`.
 
 ### Definition of done
 
@@ -182,3 +202,13 @@ Using the default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context — one `CONTEXT.md` at the repo root and `docs/adr/`. See `docs/agents/domain.md`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

@@ -1,4 +1,22 @@
+import { config as loadEnv } from 'dotenv';
 import { defineConfig, devices } from '@playwright/test';
+
+loadEnv({ path: ['.env.local', '.env'] });
+
+/**
+ * The suite's own database (frontend-quality/07): the Neon branch `test/e2e`,
+ * named by E2E_DATABASE_URL in .env.local and reseeded by e2e/global.setup.ts
+ * before every run, so the pictures always start from the same rows and no
+ * live session's writes to the dev branch can move them.
+ */
+const e2eDatabaseUrl = process.env.E2E_DATABASE_URL;
+if (!e2eDatabaseUrl) {
+  throw new Error(
+    'E2E_DATABASE_URL is not set. The page suite needs its own database: add the ' +
+      'connection string of the Neon branch test/e2e to .env.local ' +
+      '(`neon connection-string test/e2e`).',
+  );
+}
 
 /**
  * Full-page snapshots of every tester-facing page, as the athlete and as the
@@ -35,16 +53,28 @@ export default defineConfig({
     viewport: { width: 1280, height: 800 },
     colorScheme: 'light',
   },
+  globalSetup: './e2e/global.setup.ts',
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3001/en/sign-in',
-    reuseExistingServer: true,
+    // Always our own server: a hand-started one is on the dev database with
+    // the Coach live, and its pictures would be of somebody else's data.
+    reuseExistingServer: false,
     timeout: 120_000,
-    // No pinned date, by Mads's ruling (2026-09-17): the baselines are taken
-    // on the real day, so the two calendar pages drift as the calendar does
-    // and are refreshed with `npm run test:e2e:update` when they do. A run
-    // can still pin the clock by hand — `COACH_TODAY=YYYY-MM-DD npm run dev`
-    // (src/lib/date.ts `today()`) — when one fixed day is what is wanted.
+    env: {
+      DATABASE_URL: e2eDatabaseUrl,
+      // The Coach stays silent (coach-client.ts `CoachDisabledError`): the
+      // layout drafts next week in after() on every athlete page, and a live
+      // Coach spent tokens and changed the next picture on every run. The key
+      // is a dud on purpose, so a call that slipped past the switch fails
+      // loudly (401 in the dev log) instead of spending money.
+      COACH_DISABLED: '1',
+      ANTHROPIC_API_KEY: 'sk-ant-e2e-disabled',
+      OPENAI_API_KEY: 'sk-e2e-disabled',
+      // No pinned date, by Mads's ruling (2026-09-17): the baselines are taken
+      // on the real day, so the two calendar pages drift as the calendar does
+      // and are refreshed with `npm run test:e2e:update` when they do.
+    },
   },
   projects: [
     {
