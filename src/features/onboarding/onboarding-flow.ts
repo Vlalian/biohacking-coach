@@ -218,6 +218,39 @@ export function nextStep(
 }
 
 /**
+ * The step before `step` in the sequence, or null on the first. Back walks
+ * this (showable-version/32); the answers it lands on stay saved.
+ */
+export function previousStep(step: OnboardingStepId): OnboardingStepId | null {
+  const i = ONBOARDING_STEPS.indexOf(step);
+  return i > 0 ? ONBOARDING_STEPS[i - 1] : null;
+}
+
+/**
+ * The step after `step` in the sequence, whatever is answered — the walk
+ * forward after Back revisits every later step with its saved answer, so the
+ * athlete who changed their level gets that level's adaptive questions again.
+ * `nextStep` (first unanswered) is for resuming; this is for walking.
+ */
+export function stepAfter(step: OnboardingStepId): OnboardingStepId | 'done' {
+  const i = ONBOARDING_STEPS.indexOf(step);
+  return i + 1 < ONBOARDING_STEPS.length ? ONBOARDING_STEPS[i + 1] : 'done';
+}
+
+/**
+ * Where the client's cursor goes after the server accepted `current`. The
+ * server reports the first *unanswered* step, which after Back is the step the
+ * athlete had already reached — so the walk follows the sequence instead, and
+ * only `done` (the profile completed) is taken from the server.
+ */
+export function cursorAfter(
+  current: OnboardingStepId,
+  serverStep: OnboardingStepId | 'done',
+): OnboardingStepId | 'done' {
+  return serverStep === 'done' ? 'done' : stepAfter(current);
+}
+
+/**
  * A race is named only when it has a date. The one definition, because
  * `nextStep` and `completeProfile` asking two different questions of the same
  * fields is how an athlete gets past every step and then cannot finish.

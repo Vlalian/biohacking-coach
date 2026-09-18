@@ -8,7 +8,10 @@ import {
   buildCommStyle,
   coachGreeting,
   completeProfile,
+  cursorAfter,
   nextStep,
+  previousStep,
+  stepAfter,
   toCoachOnboarding,
 } from './onboarding-flow';
 import en from '@/messages/en.json';
@@ -114,6 +117,36 @@ describe('nextStep', () => {
 });
 
 // ── applyAnswer — the validation gate ─────────────────────────────────────────
+
+describe('previousStep / stepAfter — the way back, and the walk forward again (showable-version/32)', () => {
+  it('previousStep walks the sequence back and stops at the first', () => {
+    expect(previousStep('language')).toBeNull();
+    expect(previousStep('experience')).toBe('language');
+    expect(previousStep('distance')).toBe('experience');
+    expect(previousStep('race')).toBe('distance');
+    expect(previousStep('adaptive')).toBe('race');
+    expect(previousStep('constraints')).toBe('adaptive');
+  });
+
+  it('stepAfter walks forward in sequence regardless of what is answered, and ends at done', () => {
+    expect(stepAfter('language')).toBe('experience');
+    expect(stepAfter('experience')).toBe('distance');
+    expect(stepAfter('distance')).toBe('race');
+    expect(stepAfter('race')).toBe('adaptive');
+    expect(stepAfter('adaptive')).toBe('constraints');
+    expect(stepAfter('constraints')).toBe('done');
+  });
+
+  it('cursorAfter: after re-answering an early step the walk continues to the next step in sequence, whatever the server says is first unanswered; done is done', () => {
+    // The server answers with the first *unanswered* step, and after Back
+    // that is the step the athlete had already reached — not the one after
+    // the one they just re-answered. The client owns the cursor.
+    expect(cursorAfter('experience', 'constraints')).toBe('distance');
+    expect(cursorAfter('race', 'adaptive')).toBe('adaptive');
+    expect(cursorAfter('constraints', 'done')).toBe('done');
+    expect(cursorAfter('language', 'done')).toBe('done');
+  });
+});
 
 describe('applyAnswer', () => {
   it('refuses values outside the closed option sets', () => {
