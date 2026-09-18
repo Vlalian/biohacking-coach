@@ -14,9 +14,10 @@ import type { Session } from '@/features/session/session';
  * `renderToStaticMarkup` and not a DOM harness because everything under test is
  * the first render of pure presentational markup. No effects, no interaction.
  */
+const { dateTime } = vi.hoisted(() => ({ dateTime: vi.fn((_d: Date, _opts?: unknown) => 'date') }));
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
-  useFormatter: () => ({ dateTime: () => 'date' }),
+  useFormatter: () => ({ dateTime }),
   useLocale: () => 'en',
 }));
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -41,7 +42,7 @@ vi.mock('./proposal-card', () => ({
   ProposalCard: ({ draft }: { draft: { id: string } }) => <div data-proposal-card={draft.id} />,
 }));
 
-const { Calendar, MOVE_REFUSAL_KEY, liftRefusal } = await import('./calendar');
+const { Calendar, MOVE_REFUSAL_KEY, liftRefusal, HEADER_DAYS } = await import('./calendar');
 
 const TODAY = '2026-08-19';
 
@@ -467,5 +468,29 @@ describe('the health layer (training-architecture/06)', () => {
     const html = render({ readOnly: true, coachAthleteId: 'a1', health: [injury, illness] });
     expect(html).toContain('data-health-chip="inj_1"');
     expect(html).toContain('data-ill="true"');
+  });
+});
+
+describe('the weekday header (showable-version/25)', () => {
+  it('is built from UTC-midnight dates: Monday first when formatted in UTC or east of it — and the reason the formatter must be pinned', () => {
+    // On Vercel the server is UTC and the browser east of it; a local-midnight
+    // Date formatted in another zone was Sunday (Mads, production, 2026-09-17).
+    expect(HEADER_DAYS).toHaveLength(7);
+    expect(HEADER_DAYS.map((d) => d.getUTCDay())).toEqual([1, 2, 3, 4, 5, 6, 0]);
+    for (const timeZone of ['UTC', 'Europe/Copenhagen']) {
+      expect(new Intl.DateTimeFormat('da', { weekday: 'short', timeZone }).format(HEADER_DAYS[0])).toBe('man.');
+      expect(new Intl.DateTimeFormat('en', { weekday: 'short', timeZone }).format(HEADER_DAYS[0])).toBe('Mon');
+    }
+    // West of UTC the same instant is still Sunday evening — which is why the
+    // component formats these in UTC and never in whatever zone it runs in.
+    expect(new Intl.DateTimeFormat('en', { weekday: 'short', timeZone: 'America/Los_Angeles' }).format(HEADER_DAYS[0])).toBe('Sun');
+  });
+
+  it('formats the labels with timeZone UTC, never the server’s zone', () => {
+    dateTime.mockClear();
+    render({});
+    const headerCalls = dateTime.mock.calls.filter(([d]) => HEADER_DAYS.includes(d as Date));
+    expect(headerCalls).toHaveLength(7);
+    for (const [, opts] of headerCalls) expect(opts).toMatchObject({ weekday: 'short', timeZone: 'UTC' });
   });
 });

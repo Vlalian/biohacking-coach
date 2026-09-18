@@ -59,9 +59,11 @@ describe('CoachThread — a drafted week seeded into the chat', () => {
     expect(setChatSeed).toHaveBeenCalledWith(null);
   });
 
-  it('a restored Weekly Session opens in weekly mode with the chat kept mounted underneath, hidden', () => {
-    // A "Plan my week" tap mid-thought used to unmount the chat and lose the
-    // turn in flight from view (Mads, smoke run of PR #71).
+  it('opens in chat even with a restored Weekly Session — an open session never hijacks the overlay (showable-version/27)', () => {
+    // A weekly_session left open on 3 September made every reload open the
+    // overlay on it, hiding the persisted chat under it and showing that old
+    // session's proposal (Mads, production, 2026-09-17). The chat is the
+    // overlay's default; the session is where "Plan my week" leads.
     const html = renderToStaticMarkup(
       <CoachOverlayContext.Provider value={base}>
         <CoachThread
@@ -70,10 +72,22 @@ describe('CoachThread — a drafted week seeded into the chat', () => {
         />
       </CoachOverlayContext.Provider>,
     );
-    expect(html).toContain('data-mode="weekly"');
     expect(html).toContain('data-mode="chat"');
     expect(html).toContain('data-conversation="c9"');
-    expect(html).toContain('data-chat-hidden="true"');
+    expect(html).not.toContain('data-mode="weekly"');
+    expect(html).not.toContain('data-chat-hidden="true"');
+  });
+
+  it('offers "Plan my week" for the restored session instead of opening on it', () => {
+    const html = renderToStaticMarkup(
+      <CoachOverlayContext.Provider value={base}>
+        <CoachThread
+          chatInitial={{ conversationId: 'c9', messages: [] }}
+          weeklyInitial={{ conversationId: 'w1', weeklySessionNumber: 1, messages: [], proposal: null, ended: false }}
+        />
+      </CoachOverlayContext.Provider>,
+    );
+    expect(html).toContain('data-action="plan-week"');
   });
 
   it('a seed wins over a restored Weekly Session — the athlete tapped Discuss, so that is where they land', () => {

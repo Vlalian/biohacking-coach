@@ -82,7 +82,9 @@ export default async function AthletePage({
       // athlete on a finished questionnaire.
       if (step !== 'done') {
         return (
-          <main className="relative h-screen">
+          // h-dvh, as the shell (showable-version/30): the questionnaire has free-text
+          // fields, and the phone's keyboard resizes the viewport like the file picker.
+          <main className="relative h-dvh">
             <div className="absolute right-4 top-4 z-10">
               <SignOutButton />
             </div>
