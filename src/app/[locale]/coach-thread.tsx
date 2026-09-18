@@ -75,12 +75,13 @@ export function CoachThread({
   // to. Missing that was a real bug: with a Weekly Session open, the overlay
   // reopened in weekly mode and the chip was unreachable (caught in a fresh tab;
   // a warm one hid it, because the component was already mounted in chat).
-  // A seed present at mount wins outright: the overlay was closed when the
-  // athlete tapped "Discuss" on the calendar, and it mounts straight onto the
-  // chat that tap handed the week to (training-architecture/18, /20).
-  const [mode, setMode] = useState<'chat' | 'weekly'>(
-    chatSeed ? 'chat' : reference ? 'chat' : weeklyInitial ? 'weekly' : 'chat',
-  );
+  // The chat is where the overlay opens, always. A seed or a Reference already
+  // meant chat (training-architecture/18, /20); an open Weekly Session used to
+  // win over both, and a session left open on 3 September then made every
+  // reload open on it, hiding the persisted chat and showing that session's
+  // stale proposal (showable-version/27, Mads, production 2026-09-17). The
+  // session is where "Plan my week" leads, not where the app lands.
+  const [mode, setMode] = useState<'chat' | 'weekly'>('chat');
 
   // And the same rule while already mounted: a *new* Reference arriving (the
   // athlete tapped a different session without closing the overlay) drops the
@@ -154,6 +155,7 @@ export function CoachThread({
             like, independent of the once-a-week offer below. */}
         <button
           type="button"
+          data-action="plan-week"
           onClick={() => setMode('weekly')}
           className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-signal"
         >
