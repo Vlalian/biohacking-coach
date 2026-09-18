@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { boundPairs } from '@/test/drizzle-bound-pairs';
 
 // The DB is mocked so the authority logic can be tested without Postgres: the
 // sessions select returns a fixed day, and batch records whether a paired write
@@ -8,69 +9,6 @@ const batch = vi.fn().mockResolvedValue(undefined);
 const onConflictDoNothing = vi.fn(() => ({}));
 const insertValues = vi.fn(() => ({ onConflictDoNothing }));
 const updateWhere = vi.fn((_condition: unknown) => ({}));
-
-/**
- * The literal values bound into a drizzle condition.
- *
- * The selection rule moved out of `displacement.ts` and into the `WHERE`, so the
- * only honest way to hold it is to read the statement the repository actually
- * builds. `queryChunks` is drizzle's own structure; params carry a `.value`.
- */
-function boundValues(condition: unknown): unknown[] {
-  type Node = { value?: unknown; queryChunks?: unknown[] };
-  const out: unknown[] = [];
-  const walk = (node: unknown) => {
-    if (!node || typeof node !== 'object') return;
-    const n = node as Node;
-    if ('value' in n && !('queryChunks' in n)) out.push(n.value);
-    for (const chunk of n.queryChunks ?? []) walk(chunk);
-  };
-  walk(condition);
-  return out;
-}
-/**
- * The `[column, value]` pairs a drizzle condition binds, in source order.
- *
- * {@link boundValues} throws column identity away, so it cannot tell
- * `eq(sessions.parked, true)` from `eq(sessions.isTraining, true)` — both are
- * just `true` in the list, and a restore predicate swapped for the wrong column
- * would still satisfy every assertion. That gap was CodeRabbit's finding on
- * PR #57, and it matters here more than most places: these predicates *are* the
- * park and restore rules, which moved out of a pure function into SQL, so the
- * SQL is the only thing left to specify.
- *
- * Walks the chunk list in order and pairs each column with the parameter that
- * follows it, which is the shape drizzle renders a binary comparison in.
- */
-function boundPairs(condition: unknown): Array<[string, unknown]> {
-  type Node = { value?: unknown; name?: unknown; queryChunks?: unknown[] };
-  const flat: Node[] = [];
-  const walk = (node: unknown) => {
-    if (!node || typeof node !== 'object') return;
-    const n = node as Node;
-    if (n.queryChunks) {
-      for (const chunk of n.queryChunks) walk(chunk);
-      return;
-    }
-    flat.push(n);
-  };
-  walk(condition);
-
-  const pairs: Array<[string, unknown]> = [];
-  let column: string | null = null;
-  for (const node of flat) {
-    if (typeof node.name === 'string') {
-      column = node.name;
-    } else if ('value' in node && !Array.isArray(node.value) && column !== null) {
-      // drizzle's StringChunk carries `.value` too, as an array of SQL
-      // fragments — the ` = ` between a column and its parameter. Only a bound
-      // Param holds a scalar, and those are the ones being paired.
-      pairs.push([column, node.value]);
-      column = null;
-    }
-  }
-  return pairs;
-}
 
 const updateSet = vi.fn(() => ({ where: updateWhere }));
 const deleteWhere = vi.fn(() => ({}));
@@ -117,6 +55,17 @@ describe('markUnavailableDate', () => {
     expect(insertValues).toHaveBeenCalledWith({ athleteId: OWNER, date: '2026-07-18' });
     expect(updateSet).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'unavailable', parked: true }),
+    );
+  });
+
+  // Provenance (code-health issue 12): the day parks its sessions *because of
+  // this day*, and says so on the row. The value is the day itself, not a flag,
+  // so the restore can name the one day it is undoing.
+  it('records the day as why each session was parked', async () => {
+    await markUnavailableDate({ athleteId: OWNER, date: '2026-07-18', today: TODAY });
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ parkedByDate: '2026-07-18' }),
     );
   });
 
@@ -227,10 +176,23 @@ describe('clearUnavailableDate', () => {
     expect(selectWhere).not.toHaveBeenCalled();
     const condition = updateWhere.mock.calls[0][0];
     expect(condition).toMatchObject({ queryChunks: expect.anything() });
-    // Only this athlete’s parked sessions on this day come back.
-    expect(boundValues(condition)).toEqual(
-      expect.arrayContaining([OWNER, '2026-07-18', true]),
+    // Only this athlete’s sessions on this day come back, and only the ones
+    // *this day* parked: the predicate names the provenance column, not
+    // `parked`. A session the athlete marked unavailable themselves is parked
+    // with `parked_by_date` null and does not match, so clearing the day cannot
+    // undo it (code-health issue 12). The old rule, `parked = true`, restored
+    // both — which is exactly why this is asserted as a column/value pair.
+    expect(boundPairs(condition)).toEqual(
+      expect.arrayContaining([
+        ['athlete_id', OWNER],
+        ['date', '2026-07-18'],
+        ['parked_by_date', '2026-07-18'],
+      ]),
     );
+    expect(boundPairs(condition)).not.toContainEqual(['parked', true]);
+    // Restoring also clears the provenance: the row is planned again for no
+    // reason at all.
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ parkedByDate: null }));
   });
 
   it('clearing a day that was never marked is a no-op, not an error', async () => {

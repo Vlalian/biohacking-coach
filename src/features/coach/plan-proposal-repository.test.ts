@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { events } from '@/db/schema';
 
 /**
@@ -11,7 +11,9 @@ import { events } from '@/db/schema';
  * one athlete (ADR 0006) and to writes, not proposals.
  */
 const rows: unknown[] = [];
-const orderBy = vi.fn(() => Promise.resolve(rows));
+const limit = vi.fn(() => Promise.resolve(rows));
+// Awaitable straight from orderBy (the existing reads), or narrowed by limit first.
+const orderBy = vi.fn(() => Object.assign(Promise.resolve(rows), { limit }));
 const where = vi.fn(() => ({ orderBy }));
 const select = vi.fn(() => ({ from: () => ({ where }) }));
 
@@ -19,12 +21,46 @@ vi.mock('@/db', () => ({
   getDb: () => ({ select }),
 }));
 
-const { getLatestPlanWrittenAt } = await import('./plan-proposal-repository');
+const { getLatestPlanWrittenAt, latestPlanDecision } = await import('./plan-proposal-repository');
 
 beforeEach(() => {
   rows.length = 0;
   where.mockClear();
   select.mockClear();
+  orderBy.mockClear();
+  limit.mockClear();
+});
+
+/**
+ * training-architecture/24: a week handed to a conversation is decided there,
+ * and the chat's decisions carry a conversation, not a week. This is how the
+ * draft history learns what the athlete decided after the handoff.
+ */
+describe('latestPlanDecision — the newest written/declined for a conversation after a moment', () => {
+  const SINCE = new Date('2026-09-16T09:00:00Z');
+
+  it('reads both decision types for the conversation, newer than since, newest first, one row', async () => {
+    rows.push({ type: 'week_plan_declined' });
+    expect(await latestPlanDecision('athlete_1', 'c1', SINCE)).toBe('declined');
+    expect(where).toHaveBeenCalledWith(
+      and(
+        eq(events.athleteId, 'athlete_1'),
+        inArray(events.type, ['week_plan_written', 'week_plan_declined']),
+        sql`${events.payload} ->> 'conversationId' = ${'c1'}`,
+        gt(events.createdAt, SINCE),
+      ),
+    );
+    expect(orderBy).toHaveBeenCalledWith(desc(events.createdAt));
+    expect(limit).toHaveBeenCalledWith(1);
+    expect(select).toHaveBeenCalledWith({ type: events.type });
+  });
+
+  it('written when that is newest, null when nothing was decided', async () => {
+    rows.push({ type: 'week_plan_written' });
+    expect(await latestPlanDecision('athlete_1', 'c1', SINCE)).toBe('written');
+    rows.length = 0;
+    expect(await latestPlanDecision('athlete_1', 'c1', SINCE)).toBeNull();
+  });
 });
 
 describe('getLatestPlanWrittenAt', () => {

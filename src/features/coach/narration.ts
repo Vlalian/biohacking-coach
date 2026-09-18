@@ -143,18 +143,36 @@ function isCoachEvent(
  * naming no human. A `coach_ai` event pushed through {@link clause} would have
  * been attributed to a person who did nothing.
  */
-function coachClause(event: NarratableEvent, t: Translate): string {
+function coachClause(event: NarratableEvent, t: Translate, weekdayOf: WeekdayOf): string {
   switch (event.type) {
-    // A drafted week (`training-architecture/16`): one sentence, no detail —
-    // the proposal itself is on the calendar, and a list of sessions here
-    // would be a second copy of it. Malformed or not, the sentence is the same.
     case 'week_drafted':
-      return t('weekDrafted');
+      return weekDraftedClause(event.payload, t, weekdayOf);
     case 'race_flagged_unrealistic':
       return unrealisticClause(event.payload, t);
     default:
       return blocksDraftedClause(event.payload, t);
   }
+}
+
+/**
+ * A drafted week (`training-architecture/16`): one sentence, no session list —
+ * the proposal itself is on the calendar. It names the day training starts,
+ * the earliest session's, because the draft may be this week's remainder or
+ * next week (`/24`) and "next week" would be wrong half the time; with no
+ * dated session, or a malformed payload, the sentence has no day.
+ */
+function weekDraftedClause(payload: unknown, t: Translate, weekdayOf: WeekdayOf): string {
+  const first = firstSessionDate(payload);
+  return first ? t('weekDraftedFrom', { day: weekdayOf(first) }) : t('weekDrafted');
+}
+
+/** The earliest `date` among the payload's sessions, or undefined when none is dated. */
+function firstSessionDate(payload: unknown): string | undefined {
+  const sessions = (payload as { sessions?: unknown } | null)?.sessions;
+  if (!Array.isArray(sessions)) return undefined;
+  // ISO date keys sort as dates and `sort` puts undefined last, so the first
+  // is the earliest dated session — or undefined when none is dated.
+  return sessions.map((s) => field(s, 'date')).sort()[0];
 }
 
 /** No weekday here, unlike every session clause: a race is months out and its weekday says nothing. */
@@ -313,7 +331,7 @@ export function composeNarration(
   // and a list item are each finished — punctuation differs by language, and it
   // is copy, not logic.
   const clauses = events.map((e) => {
-    if (isCoachEvent(e)) return coachClause(e, t);
+    if (isCoachEvent(e)) return coachClause(e, t, weekdayOf);
     if (e.type === 'weekly_session_day_set' || e.type === 'week_draft_approved') {
       return weekClause(e, coachFirstNames, t);
     }

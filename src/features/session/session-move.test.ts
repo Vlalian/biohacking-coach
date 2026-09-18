@@ -36,6 +36,7 @@ function sessionRow(overrides: Partial<SessionRow> = {}): SessionRow {
     origin: 'coach',
     status: 'planned',
     parked: false,
+    parkedByDate: null,
     isTraining: true,
     version: 1,
     duration: 60,

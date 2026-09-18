@@ -31,6 +31,12 @@ vi.mock('./rating-modal', () => ({ RatingModal: () => null }));
 vi.mock('./session-drawer', () => ({ SessionDrawer: () => null }));
 // The card reaches the overlay context and three server actions; the calendar
 // test asserts where it is rendered, not what it does.
+vi.mock('./redraft-card', () => ({
+  RedraftCard: ({ weekStart }: { weekStart: string }) => <div data-redraft-card={weekStart} />,
+}));
+vi.mock('./drafting-card', () => ({
+  DraftingCard: ({ weekStart }: { weekStart: string }) => <div data-drafting-card={weekStart} />,
+}));
 vi.mock('./proposal-card', () => ({
   ProposalCard: ({ draft }: { draft: { id: string } }) => <div data-proposal-card={draft.id} />,
 }));
@@ -359,6 +365,20 @@ describe('Calendar — the drafted week the athlete has not decided on (training
     expect(markup.match(/aria-label="Intensity · 45 min · proposedChip"/g)).toHaveLength(1);
     expect(markup).not.toMatch(/<button[^>]*proposedChip/);
     expect(markup).not.toMatch(/draggable="true"[^>]*proposedChip/);
+  });
+
+  it('renders the re-draft offer in the card’s place for a declined week (training-architecture/24)', () => {
+    const markup = render({ proposal: { kind: 'redraft-offer', weekStart: '2026-08-24' } });
+    expect(markup).toContain('data-redraft-card="2026-08-24"');
+    expect(markup).not.toContain('data-proposal-card');
+    expect(markup).not.toContain('proposedChip');
+  });
+
+  it('a drafting slot shows the drafting card in the proposal card’s place, and no proposal card (training-architecture/29)', () => {
+    const markup = render({ proposal: { kind: 'drafting', weekStart: '2026-08-24' } });
+    expect(markup).toContain('data-drafting-card="2026-08-24"');
+    expect(markup).not.toContain('data-proposal-card');
+    expect(markup).not.toContain('proposedChip');
   });
 
   it('renders the pointer, and no card and no chips, while the draft is being discussed', () => {

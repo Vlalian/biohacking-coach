@@ -3,6 +3,9 @@ import { addDays } from '@/lib/date';
 import { planningWindow } from './planning-window';
 import {
   conversationWindow,
+  dueWeekFor,
+  hasCoachPlannedSession,
+  weekDraftHistory,
   cycleAnchor,
   wholeWeekWindow,
   draftDueWeek,
@@ -287,6 +290,120 @@ describe('visibleTo — the Head Coach’s day-early preview is the only reason 
     expect(visibleTo(draft, '2026-09-16')).toBe(false);
     expect(visibleTo(draft, '2026-09-17')).toBe(true);
     expect(visibleTo(draft, '2026-09-20')).toBe(true);
+  });
+});
+
+describe('dueWeekFor — this week first when it holds no plan (training-architecture/24, showable-version/11)', () => {
+  const today = '2026-09-16'; // Wednesday, Weekly Session Day Wednesday
+  const thisWeekWindow = weekWindow(MON, today, [], []);
+
+  const open = { today, weeklySessionDay: 'Wednesday', leadDays: 0, thisWeekHasCoachPlan: false, thisWeekDrafted: false, thisWeekWindow };
+
+  it('an empty, undrafted current week with days left is due now, visible today', () => {
+    expect(dueWeekFor(open)).toEqual({ weekStart: MON, visibleFrom: today });
+  });
+
+  it('a current week with a coach-planned session follows the cycle — next week, visible from the anchor', () => {
+    expect(dueWeekFor({ ...open, thisWeekHasCoachPlan: true })).toEqual({ weekStart: NEXT_MON, visibleFrom: '2026-09-16' });
+  });
+
+  it('a current week already drafted — pending or decided — follows the cycle too: drafted once', () => {
+    expect(dueWeekFor({ ...open, thisWeekDrafted: true }).weekStart).toBe(NEXT_MON);
+  });
+
+  it('no plannable day left this week falls through to the cycle', () => {
+    expect(dueWeekFor({ ...open, thisWeekWindow: null }).weekStart).toBe(NEXT_MON);
+  });
+
+  it('the lead day still moves the cycle week, never the this-week case', () => {
+    // Tuesday the 15th, one day of lead for a Wednesday athlete: the cycle is
+    // due a day early, so next week; and visible to the athlete from their day.
+    expect(dueWeekFor({ ...open, today: '2026-09-15', leadDays: 1, thisWeekHasCoachPlan: true })).toEqual({
+      weekStart: NEXT_MON,
+      visibleFrom: '2026-09-16',
+    });
+  });
+});
+
+describe('hasCoachPlannedSession', () => {
+  it('true for a coach or head_coach session, false for athlete-added, watch-logged or none', () => {
+    expect(hasCoachPlannedSession([{ origin: 'coach' }])).toBe(true);
+    expect(hasCoachPlannedSession([{ origin: 'head_coach' }])).toBe(true);
+    expect(hasCoachPlannedSession([{ origin: 'athlete' }, { origin: 'garmin' }])).toBe(false);
+    expect(hasCoachPlannedSession([])).toBe(false);
+  });
+});
+
+describe('weekDraftHistory — what became of a week’s draft (training-architecture/24)', () => {
+  const WEEK = NEXT_MON;
+  const drafted = (at: string, id = 'd1') => ({
+    id,
+    type: 'week_drafted',
+    payload: { weekStart: WEEK, sessions: [], visibleFrom: WEEK },
+    createdAt: new Date(at),
+  });
+  const resolve = (type: string, at: string, extra: Record<string, unknown> = {}) => ({
+    id: 'r',
+    type,
+    payload: { weekStart: WEEK, ...extra },
+    createdAt: new Date(at),
+  });
+
+  it('never, when no draft was ever recorded for the week', () => {
+    expect(weekDraftHistory([], WEEK)).toEqual({ kind: 'never' });
+  });
+
+  it('pending, carrying the newest draft, while nothing resolved it', () => {
+    expect(weekDraftHistory([drafted('2026-09-16T08:00Z')], WEEK)).toMatchObject({ kind: 'pending', draft: { id: 'd1' } });
+  });
+
+  it('declined and written name the athlete’s decision', () => {
+    expect(weekDraftHistory([drafted('2026-09-16T08:00Z'), resolve('week_plan_declined', '2026-09-16T09:00Z')], WEEK)).toEqual({ kind: 'declined' });
+    expect(weekDraftHistory([drafted('2026-09-16T08:00Z'), resolve('week_plan_written', '2026-09-16T09:00Z')], WEEK)).toEqual({ kind: 'written' });
+  });
+
+  it('a handoff to a conversation is discussed, with the conversation and when', () => {
+    expect(
+      weekDraftHistory(
+        [drafted('2026-09-16T08:00Z'), resolve('week_draft_withdrawn', '2026-09-16T09:00Z', { reason: 'discussed', conversationId: 'c1' })],
+        WEEK,
+      ),
+    ).toEqual({ kind: 'discussed', conversationId: 'c1', handedAt: new Date('2026-09-16T09:00Z') });
+  });
+
+  it('a severed preview the athlete never saw counts as never — the Coach may draft again', () => {
+    expect(
+      weekDraftHistory([drafted('2026-09-16T08:00Z'), resolve('week_draft_withdrawn', '2026-09-16T09:00Z', { reason: 'severed' })], WEEK),
+    ).toEqual({ kind: 'never' });
+  });
+
+  it('another week’s events are ignored, and a decision before the draft does not resolve it', () => {
+    expect(weekDraftHistory([resolve('week_plan_declined', '2026-09-16T07:00Z')], WEEK)).toEqual({ kind: 'never' });
+    expect(weekDraftHistory([resolve('week_plan_declined', '2026-09-16T07:00Z'), drafted('2026-09-16T08:00Z')], WEEK)).toMatchObject({ kind: 'pending' });
+    expect(weekDraftHistory([{ ...drafted('2026-09-16T08:00Z'), payload: { weekStart: '2026-09-28', sessions: [] } }], WEEK)).toEqual({ kind: 'never' });
+  });
+
+  it('a carrier with no session list is not a draft, an unrelated event does not resolve, and a discussed withdrawal needs its conversation', () => {
+    expect(weekDraftHistory([{ ...drafted('2026-09-16T08:00Z'), payload: { weekStart: WEEK } }], WEEK)).toEqual({ kind: 'never' });
+    expect(weekDraftHistory([drafted('2026-09-16T08:00Z'), resolve('something_else', '2026-09-16T09:00Z')], WEEK)).toMatchObject({ kind: 'pending' });
+    expect(
+      weekDraftHistory([drafted('2026-09-16T08:00Z'), resolve('week_draft_withdrawn', '2026-09-16T09:00Z', { reason: 'discussed' })], WEEK),
+    ).toEqual({ kind: 'never' });
+    expect(
+      weekDraftHistory([drafted('2026-09-16T08:00Z'), resolve('week_draft_withdrawn', '2026-09-16T09:00Z', { conversationId: 'c1' })], WEEK),
+    ).toEqual({ kind: 'never' });
+  });
+
+  it('a resolution lands on the newest carrier: an approved version after the draft is still pending until answered', () => {
+    const approved = { id: 'a1', type: 'week_draft_approved', payload: { weekStart: WEEK, sessions: [], visibleFrom: WEEK, draftId: 'd1' }, createdAt: new Date('2026-09-16T08:30Z') };
+    expect(weekDraftHistory([drafted('2026-09-16T08:00Z'), approved], WEEK)).toMatchObject({ kind: 'pending', draft: { id: 'a1', approved: true } });
+    expect(weekDraftHistory([drafted('2026-09-16T08:00Z'), approved, resolve('week_plan_written', '2026-09-16T09:00Z')], WEEK)).toEqual({ kind: 'written' });
+  });
+
+  it('pendingWeekDraft is the pending branch of the same walk', () => {
+    const events = [drafted('2026-09-16T08:00Z')];
+    expect(pendingWeekDraft(events, WEEK)).toEqual(expect.objectContaining({ id: 'd1' }));
+    expect(pendingWeekDraft([...events, resolve('week_plan_declined', '2026-09-16T09:00Z')], WEEK)).toBeNull();
   });
 });
 

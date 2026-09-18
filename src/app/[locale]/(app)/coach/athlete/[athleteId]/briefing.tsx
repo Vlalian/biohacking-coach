@@ -2,6 +2,8 @@
 
 import { useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import { Thinking } from '@/components/ui/thinking';
+import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 import {
   sendBriefingMessageAction,
   startBriefingAction,
@@ -14,6 +16,9 @@ export interface UiBriefingMessage {
   content: string;
   seq: number;
 }
+
+const primaryBtn =
+  'rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
 
 export interface BriefingInitial {
   conversationId: string;
@@ -94,9 +99,6 @@ export function Briefing({
     });
   }
 
-  const primaryBtn =
-    'rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
-
   return (
     <section className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-col gap-1">
@@ -105,12 +107,7 @@ export function Briefing({
       </header>
 
       {!conversationId ? (
-        <div className="flex flex-col items-center gap-3 rounded border border-neutral-200 p-6 dark:border-neutral-800">
-          <p className="text-sm text-neutral-500">{t('intro')}</p>
-          <button type="button" onClick={start} disabled={pending} className={primaryBtn}>
-            {pending ? t('starting') : t('start')}
-          </button>
-        </div>
+        <BriefingOpener pending={pending} onStart={start} />
       ) : (
         <>
           <ol className="flex flex-col gap-3">
@@ -127,8 +124,8 @@ export function Briefing({
               </li>
             ))}
             {pending && (
-              <li className="self-start text-sm text-neutral-400" aria-live="polite">
-                {t('thinking')}
+              <li className="self-start">
+                <Thinking label={t('thinking')} tone="muted" />
               </li>
             )}
           </ol>
@@ -162,5 +159,28 @@ export function Briefing({
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * The open state, before a briefing exists. While the ~30 s Coach call runs
+ * behind `startBriefingAction`, the button and a live status both say the week
+ * is being read and roughly how long (`training-architecture/29`, decision 9)
+ * — the click used to change one word on the button and nothing else, and a
+ * coach who switched tabs read that as nothing happening. Its own component so
+ * the pending branch renders without a click.
+ */
+export function BriefingOpener({ pending, onStart }: { pending: boolean; onStart: () => void }) {
+  const t = useTranslations('Briefing');
+  // Said once: the button goes quiet ("Opening…") and the status line under it
+  // carries the sentence with the estimate (Mads, PR #78 smoke run, S23).
+  return (
+    <div className="flex flex-col items-center gap-3 rounded border border-neutral-200 p-6 dark:border-neutral-800">
+      <p className="text-sm text-neutral-500">{t('intro')}</p>
+      <button type="button" onClick={onStart} disabled={pending} className={primaryBtn}>
+        {pending ? t('opening') : t('start')}
+      </button>
+      {pending && <Thinking label={t('starting', { seconds: COACH_EXPECTED_SECONDS })} tone="muted" />}
+    </div>
   );
 }

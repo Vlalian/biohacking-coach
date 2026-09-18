@@ -58,7 +58,17 @@ async function applyTransition(params: {
 
   const updated = await db
     .update(sessions)
-    .set({ status: transition.next, parked: transition.parked, updatedAt: new Date() })
+    // A status toggle is the athlete's own decision about one session, so it
+    // never carries a day's provenance: `parkedByDate` is written null on every
+    // transition, not merely left alone. Left alone, a session the day had
+    // parked and the athlete then toggled would keep naming that day, and
+    // clearing the day would restore it over the athlete's later choice.
+    .set({
+      status: transition.next,
+      parked: transition.parked,
+      parkedByDate: null,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(sessions.id, sessionId),
