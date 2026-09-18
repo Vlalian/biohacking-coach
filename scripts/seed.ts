@@ -1,23 +1,10 @@
 import '../src/db/load-env';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import { getDb } from '../src/db';
-import {
-  athlete,
-  coach,
-  coachingLink,
-  sessions,
-  unavailableDates,
-  type NewSessionRow,
-} from '../src/db/schema';
+import { athlete, coach, coachingLink, sessions } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
-import { dateKey } from '../src/lib/date';
-import {
-  SYNTHETIC_PROFILES,
-  generateSyntheticHistory,
-  toAthleteRow,
-  toSessionRows,
-} from '../src/features/athlete/synthetic-history';
+import { SEED_ATHLETE_SESSION_ID, seedWeekRows } from '../src/features/athlete/seed-history';
 
 /**
  * Seeds the database for local development and the eval.
@@ -26,8 +13,7 @@ import {
  * ended the localStorage era with the POC. Fresh data through the real flows is
  * better eval evidence anyway.
  *
- * Two kinds of athlete, seeded two different ways — because they are two
- * different things (route 06):
+ * Two real accounts and nothing fabricated:
  *
  *   - Mads is a *real* athlete. His account is created through better-auth's own
  *     server API, not by inserting a `user` row, so the password hashing and
@@ -37,27 +23,21 @@ import {
  *     his user fires the create hook, which mints his athlete row with a null
  *     `synthetic_label` — his name lives on `user.name`.
  *
- *   - The synthetic athlete has no user and never logs in. It carries a
- *     fabricated `synthetic_label`, inserted directly. That is the only place a
- *     name is allowed to sit in a training table, and it names nobody real.
+ *   - Coach Riley is a real login with a coach row and one active Coaching Link
+ *     to Mads, so the Head Coach's surfaces have a real athlete to show.
  *
- * Later slices grow this: the coach user and row, one active Coaching Link, and
- * a fuller synthetic roster.
+ * **No synthetic athlete is seeded any more** (code-health/13, 2026-09-18).
+ * The seed used to write a shallow "Test Athlete" and the two generated
+ * personas from `synthetic-history.ts` — Alex Rivera and Sam Chen — and link
+ * both coaches to them, so a Head Coach saw a Roster of athletes who differed.
+ * They were fabricated data in a product about to be handed to real people and
+ * a tax on every slice that touched the athlete shape. The generator module
+ * stays in the repo, unwired; `scripts/retire-personas.ts` removes the rows
+ * from a database that still holds them. `athlete.synthetic_label` and the
+ * `athlete_identity_source` constraint stay: the column is the structural
+ * guarantee that no fabricated name can ever acquire a login, and it costs
+ * nothing while unused.
  */
-
-/** A synthetic athlete keeps a fixed id so re-running the seed converges. */
-const SYNTHETIC_ATHLETE_ID = 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213';
-
-/**
- * The generated roster: athletes with no login, each with a full Athlete Profile
- * and ten weeks of history (showable-version/03). Their ids and shapes now live
- * beside the generator that fills them, so the seed has one source rather than a
- * list here and a matching list there.
- */
-const SYNTHETIC_ROSTER = SYNTHETIC_PROFILES.map((p) => ({
-  id: p.id,
-  label: p.syntheticLabel,
-}));
 
 /** A fixed id for Mads's dev coach row, so the dual-role seed is idempotent. */
 const MADS_COACH_ID = 'd3a9e2f4-5b6c-4d7e-8f90-1a2b3c4d5e6f';
@@ -116,69 +96,37 @@ async function madsAthleteId(email: string): Promise<string> {
 }
 
 /**
- * A week of *completed* training history for Mads, laid across last Mon–Sun.
+ * Mads's week of history, from `seed-history.ts` — the past, not a plan.
  *
- * Deliberately the past, not a future plan: a new athlete should reach the
- * calendar with no pre-planned week — the Week Plan is produced by running a
- * Weekly Session and confirming it, not by the seed. What the seed provides is
- * history the Coach can review and the Information View can chart (a couple of
- * days carry a Session Reflection so the review has real feedback to read).
- *
- * Re-seedable: his coach-origin sessions are cleared first, so re-running refreshes
- * last week rather than piling weeks up. Athlete- and Garmin-origin sessions are
- * left untouched.
+ * Re-seedable: his coach-origin sessions are cleared first, so re-running
+ * refreshes last week rather than piling weeks up. Athlete- and Garmin-origin
+ * sessions are left untouched — with one exception: the seed's own Athlete
+ * Session has a fixed id and is replaced by id, so it too converges rather
+ * than accumulating. Anything Mads logged himself survives.
  */
 async function seedMadsTrainingHistory(athleteId: string) {
   const db = getDb();
+  const rows = seedWeekRows(athleteId, new Date());
 
-  const now = new Date();
-  const mondayOffset = (now.getDay() + 6) % 7; // 0 = Monday
-  // Last week's Monday: this week's Monday minus 7 days.
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset - 7);
-  const dayDate = (offset: number) =>
-    dateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + offset));
-
-  // One training session per day (the Rest day carries no row — the calendar
-  // shows rest as the absence of a session). Two days carry a Session Reflection
-  // (Body + Mind, stored on the 1–5 scale the column holds), so the Weekly
-  // Session review has real feedback to read.
-  const week: Array<Partial<NewSessionRow> & { day: number }> = [
-    { day: 0, type: 'Endurance', duration: 60, zone: 'Zone 2', title: 'Easy aerobic ride', note: 'Keep it conversational.', feedbackBody: 4, feedbackMind: 4, feedbackComment: 'Felt smooth.' },
-    { day: 1, type: 'Intensity', duration: 45, zone: 'Zone 4', title: 'Threshold intervals', note: '4 x 6 min at threshold.', feedbackBody: 2, feedbackMind: 3, feedbackComment: 'Legs heavy on the last rep.' },
-    { day: 2, type: 'Recovery', duration: 40, zone: 'Zone 1', title: 'Easy swim', note: 'Technique focus, easy effort.' },
-    { day: 3, type: 'Tempo', duration: 60, zone: 'Zone 3', title: 'Tempo run', note: '20 min steady in the middle.' },
-    { day: 5, type: 'Endurance', duration: 180, zone: 'Zone 2', title: 'Long ride', note: 'Fuel every 45 min.' },
-    { day: 6, type: 'Strength', duration: 45, title: 'Strength & mobility', note: 'Core and single-leg work.' },
-  ];
-
-  const rows: NewSessionRow[] = week.map(({ day, ...s }) => ({
-    athleteId,
-    date: dayDate(day),
-    origin: 'coach',
-    status: 'completed',
-    dayOrder: 0,
-    type: s.type!,
-    duration: s.duration ?? null,
-    zone: s.zone ?? null,
-    title: s.title ?? null,
-    note: s.note ?? null,
-    isTraining: s.isTraining ?? true,
-    feedbackBody: s.feedbackBody ?? null,
-    feedbackMind: s.feedbackMind ?? null,
-    feedbackComment: s.feedbackComment ?? null,
-    ratedAt: s.feedbackBody != null ? now : null,
-  }));
-
-  // Atomic reseed: clear only the coach-planned sessions and insert last week's
-  // history in one transaction, so a failure can never leave Mads half-seeded.
-  // neon-http has no interactive transactions, but batch() is one.
+  // Atomic reseed: clear the seed's rows and insert last week's history in one
+  // transaction, so a failure can never leave Mads half-seeded. neon-http has
+  // no interactive transactions, but batch() is one.
   await db.batch([
     db
       .delete(sessions)
-      .where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'coach'))),
+      .where(
+        and(
+          eq(sessions.athleteId, athleteId),
+          or(eq(sessions.origin, 'coach'), eq(sessions.id, SEED_ATHLETE_SESSION_ID)),
+        ),
+      ),
     db.insert(sessions).values(rows),
   ]);
-  console.log(`Seeded ${rows.length} completed sessions for Mads (${dayDate(0)}–${dayDate(6)}).`);
+  const dates = rows.map((r) => r.date).sort();
+  console.log(
+    `Seeded ${rows.length} completed sessions for Mads (${dates[0]}–${dates.at(-1)}), ` +
+      'one of them an Athlete Session.',
+  );
 }
 
 /**
@@ -196,100 +144,9 @@ function isDuplicateUser(err: unknown): boolean {
   return /exist|already/i.test(message);
 }
 
-async function seedSyntheticAthlete() {
-  const [created] = await getDb()
-    .insert(athlete)
-    .values({
-      id: SYNTHETIC_ATHLETE_ID,
-      // No userId: a synthetic athlete has no login. The label is fabricated —
-      // it is the only name in this table and it names nobody real.
-      syntheticLabel: 'Test Athlete',
-    })
-    .onConflictDoNothing({ target: athlete.id })
-    .returning();
-
-  console.log(
-    created
-      ? `Seeded synthetic athlete: ${created.syntheticLabel} (${created.id})`
-      : `Synthetic athlete ${SYNTHETIC_ATHLETE_ID} already present — nothing to do.`,
-  );
-}
-
-/**
- * The two generated athletes the Head Coach's surfaces are evaluated against
- * (showable-version/03).
- *
- * These rows existed before with three sessions each — enough to prove the
- * Roster was not a one-row special case, and nothing more. A Head Coach judging
- * whether the Coach Briefing tells them something they did not already know
- * cannot do it against three sessions, so each now carries a full Athlete
- * Profile and ten weeks of history from {@link generateSyntheticHistory}.
- *
- * All the shaping lives in that module, which is pure and tested. This stays
- * what a seed should be: a thin wiring of generated data to the database.
- *
- * Re-runnable by the same pattern as Mads's history — fixed ids, and an atomic
- * delete-then-insert of `origin: 'coach'` rows in one batch, so anything an
- * athlete or an import produced survives a reseed untouched.
- */
-async function seedGeneratedAthletes() {
-  const db = getDb();
-  // Fixed, for the same reason the athlete ids are: a reseed should converge on
-  // the same two athletes rather than reshape the Roster every run.
-  const SEED = 20260902;
-  const WEEKS = 10;
-  const now = new Date();
-
-  for (const profile of SYNTHETIC_PROFILES) {
-    const { sessions: generated, unavailableDates: blocked } =
-      generateSyntheticHistory(profile, WEEKS, now, SEED);
-    const row = toAthleteRow(profile);
-
-    // Updated on every run, not just inserted: these two rows already exist from
-    // the earlier shallow seed with null profile columns, and
-    // `onConflictDoNothing` would leave them that way forever — a Roster entry
-    // with no profile behind it, which is the state this ticket exists to end.
-    await db
-      .insert(athlete)
-      .values(row)
-      .onConflictDoUpdate({ target: athlete.id, set: row });
-
-    const rows: NewSessionRow[] = toSessionRows(profile, generated, now);
-
-    await db.batch([
-      db
-        .delete(sessions)
-        .where(
-          and(eq(sessions.athleteId, profile.id), eq(sessions.origin, 'coach')),
-        ),
-      // Cleared, not just topped up. The blocked days are generated relative to
-      // `now`, so a reseed on a later day produces a different set — and without
-      // this, the old ones stay. Two runs a week apart left the calendar showing
-      // both weeks' Unavailable Dates, and the seed is meant to converge on one
-      // history rather than accumulate every history it has ever generated.
-      db.delete(unavailableDates).where(eq(unavailableDates.athleteId, profile.id)),
-      db.insert(sessions).values(rows),
-      // Keyed (athlete, date), so re-seeding the same days is a no-op rather
-      // than a duplicate-key failure that would abort the batch.
-      ...blocked.map((date) =>
-        db
-          .insert(unavailableDates)
-          .values({ athleteId: profile.id, date })
-          .onConflictDoNothing(),
-      ),
-    ]);
-
-    console.log(
-      `Seeded ${profile.syntheticLabel}: ${rows.length} sessions over ${WEEKS} weeks, ` +
-        `${blocked.length} unavailable date(s), ` +
-        `${profile.experienceLevel}, ${profile.raceDistance} on ${profile.raceDate}.`,
-    );
-  }
-}
-
 /**
  * The recruited coach: a real login with a coach row, and one active Coaching
- * Link to each athlete on their roster (Mads + the synthetic roster).
+ * Link to each athlete on their roster (Mads).
  *
  * Like Mads, the coach account goes through better-auth's own API so login sees
  * the record it expects. That signup fires the create hook, which also mints an
@@ -359,22 +216,17 @@ async function linkAthletes(coachId: string, athleteIds: string[]) {
 /**
  * Mads holds a coach row too (ballot 1: "Mads can hold a coach row for dev").
  * This is the dual-role person made real in the seed — one user with both an
- * athlete row and a coach row — with a link to the synthetic roster so his
- * coach capacity has something to show.
+ * athlete row and a coach row. It links to nobody now that the synthetic
+ * roster is retired (code-health/13): his Roster is the empty state, reached at
+ * `/coach` by URL, since the Navigation Drawer shows the entry only to an
+ * account holding active Coaching Links.
  */
-async function seedMadsAsCoach(madsUserId: string, rosterAthleteIds: string[]) {
-  const db = getDb();
-  await db
+async function seedMadsAsCoach(madsUserId: string) {
+  await getDb()
     .insert(coach)
     .values({ id: MADS_COACH_ID, userId: madsUserId })
     .onConflictDoNothing({ target: coach.userId });
-  const [row] = await db
-    .select({ id: coach.id })
-    .from(coach)
-    .where(eq(coach.userId, madsUserId))
-    .limit(1);
-  if (row) await linkAthletes(row.id, rosterAthleteIds);
-  console.log('Mads also holds a coach row (dual-role dev) linked to the synthetic roster.');
+  console.log('Mads also holds a coach row (dual-role dev), linked to no athlete.');
 }
 
 /** Resolves Mads's user id through his athlete row, for the dual-role seed. */
@@ -392,12 +244,8 @@ async function seed() {
   const madsEmail = requireEnv('SEED_MADS_EMAIL');
   const madsId = await seedMads();
   await seedMadsTrainingHistory(madsId);
-  await seedSyntheticAthlete();
-  await seedGeneratedAthletes();
-
-  const rosterIds = [madsId, ...SYNTHETIC_ROSTER.map((a) => a.id)];
-  await seedCoach(rosterIds);
-  await seedMadsAsCoach(await madsUserId(madsEmail), SYNTHETIC_ROSTER.map((a) => a.id));
+  await seedCoach([madsId]);
+  await seedMadsAsCoach(await madsUserId(madsEmail));
 }
 
 seed()

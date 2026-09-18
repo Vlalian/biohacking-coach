@@ -3,8 +3,20 @@ import type { SessionHistoryItem } from '@/features/coach/check-in';
 import type { PlanType } from '@/features/coach/weekly-session';
 
 /**
- * The training history behind the two generated athletes on the Head Coach's
- * Roster (showable-version/03).
+ * The training history behind the two generated athletes that used to sit on
+ * the Head Coach's Roster (showable-version/03).
+ *
+ * **Retired from the seed on 2026-09-18 (code-health/13). Nothing calls this
+ * module from `scripts/seed.ts` any more**, and `scripts/retire-personas.ts`
+ * removes the rows it wrote. Alex Rivera and Sam Chen were built so a Head
+ * Coach logging in would see two athletes who genuinely differ rather than an
+ * empty screen; they became a maintenance tax on every slice touching the
+ * athlete shape, and fabricated data in a product about to be handed to real
+ * people. The module is kept, not deleted, because Mads's ruling was "removed
+ * or at least commented out": if a Head Coach needs to be shown something
+ * before real athletes exist, wiring it back is an afternoon, whereas
+ * re-deriving it from history is not. `retire-personas.ts` still reads
+ * `SYNTHETIC_PROFILES` for the ids it retires.
  *
  * Pure by construction: profile and clock in, rows out. No database, no
  * `getDb`, nothing imported from `scripts/`. That is not tidiness — the seed
@@ -31,6 +43,8 @@ export interface SyntheticSession {
   type: PlanType;
   origin: 'coach';
   status: 'completed' | 'skipped';
+  /** Whether the session counts as load. Every generated type is training. */
+  isTraining: boolean;
   duration: number;
   zone: string | null;
   title: string;
@@ -213,6 +227,7 @@ function buildSession(
     type,
     origin: 'coach',
     status: skipped ? 'skipped' : 'completed',
+    isTraining: true,
     // ±10% so two athletes on the same template still look hand-made.
     duration: Math.round(profile.durations[type] * (0.9 + random() * 0.2)),
     zone: ZONES[type],
@@ -374,7 +389,10 @@ export function toSessionRows(
     origin: s.origin,
     status: s.status,
     dayOrder: 0,
-    isTraining: true,
+    // Carried, not asserted: the row said `true` regardless of the session
+    // until code-health/13 — true by coincidence, since every generated type is
+    // training, and wrong the day one is not.
+    isTraining: s.isTraining,
     type: s.type,
     duration: s.duration,
     zone: s.zone,
