@@ -1,4 +1,5 @@
 import '../src/db/load-env';
+import { guardDatabase } from './db-guard/protected-database';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../src/db';
 import { athlete, coach, coachingLink } from '../src/db/schema';
@@ -20,8 +21,9 @@ import { eraseAccount } from '../src/features/erasure/erasure-repository';
  * an active Coaching Link — those are decisions, not cleanup.
  */
 async function main(argv: string[]): Promise<void> {
+  guardDatabase(process.env.DATABASE_URL, argv);
   const yes = argv.includes('--yes');
-  const ids = argv.filter((a) => a !== '--yes');
+  const ids = argv.filter((a) => a !== '--yes' && a !== '--production');
   if (ids.length === 0) {
     console.error('usage: erase-accounts.ts [--yes] <userId> ...');
     process.exit(1);
