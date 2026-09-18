@@ -169,6 +169,8 @@
     "themeSystem": "Automatisk",
     "languageLabel": "Atletsprog",
     "languageNote": "Gælder appen og din Coach med det samme. Sportsudtryk som RPE og Zone 2 forbliver på engelsk uanset sprog.",
+    "preferredNameLabel": "Hvad Coachen kalder dig",
+    "preferredNameNote": "Det eneste navn, Coachen nogensinde hører. Lad feltet stå tomt, så bruger Coachen slet intet navn. Dit kontonavn sendes aldrig.",
     "raceTargetLabel": "Løbsmål",
     "raceTargetNote": "Det løb du træner frem mod. Hele din plan er bygget baglæns fra det.",
     "raceTargetPlaceholder": "F.eks. Ironman København, 16. august 2026",
@@ -436,6 +438,7 @@
     "coachLabel": "Din Coach",
     "stepOf": "Trin {step} af {total}",
     "stepLanguage": "Sprog",
+    "stepName": "Navn",
     "stepExperience": "Erfaring",
     "stepRace": "Løb",
     "stepAdaptive": "Om dig",
@@ -444,6 +447,9 @@
     "nextLabel": "Næste",
     "nextValue": "Din første ugeplan ligger klar i kalenderen",
     "qLanguage": "Hvilket sprog foretrækker du?",
+    "qName": "Hvad skal Coachen kalde dig?",
+    "qNameSub": "Et fornavn, et kælenavn, hvad du vil — eller ingenting. Det er det eneste navn, Coachen nogensinde hører; dit kontonavn forbliver privat. Du kan ændre det under Indstillinger.",
+    "skipName": "Spring over — intet navn",
     "qExperience": "Hvor mange Ironman-distanceløb har du gennemført?",
     "qExperienceSub": "Inkl. 70.3 og fuld distance",
     "expBeginner": "Det bliver mit første",
@@ -778,5 +784,11 @@
     "glance_easy_swim": "let svømning",
     "glance_easy_bike": "let cykling",
     "glance_easy_run": "let løb"
+  },
+  "PreferredName": {
+    "placeholder": "f.eks. Mads, Kaptajn, M",
+    "realNameWarning": "Det er dit rigtige navn. Coachen bruger det præcis, som du har skrevet det.",
+    "useAnyway": "Brug det alligevel",
+    "pickAnother": "Vælg noget andet"
   }
 }

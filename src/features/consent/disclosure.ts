@@ -163,6 +163,12 @@ export function purposesToShow(
  * sent. Corrected while the only grant it invalidates is Mads's own, for the
  * same schedule reason as the bump above. Do not repeat the old sentence
  * anywhere — AGENTS.md's Coding conventions say why.
+ *
+ * Same version, one bump (`preferred-name/02`, the PRD's "why one PRD"): the
+ * sentence also names the one name that *is* sent — the Preferred Name the
+ * athlete chooses for the Coach, stored on the user and passed into the
+ * prompt deliberately. Landed together with the correction so the disclosure
+ * is never false in a new way while it stops being false in the old one.
  */
 export const DISCLOSURE_VERSION = '2026-09-18';
 
@@ -210,7 +216,7 @@ const EN: DisclosureCopy = {
   intro:
     'To coach you, this app processes what you tell it and share with it. Please choose what you agree to below. You can change any of these later in Privacy & consent.',
   controller:
-    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which does the coaching itself, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. We never send your account name or email address to either. Anything you type yourself — session notes, ratings, and messages to the Coach — is sent as you wrote it, so leave out names and addresses you would rather the AI did not see.',
+    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which does the coaching itself, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. We never send your account name or email address to either — only the name you choose for the Coach to call you, if you set one. Anything you type yourself — session notes, ratings, and messages to the Coach — is sent as you wrote it, so leave out names and addresses you would rather the AI did not see.',
   requiredLabel: 'Required to use the Coach',
   optionalLabel: 'Optional',
   agree: 'Agree and continue',
@@ -255,7 +261,7 @@ const DA: DisclosureCopy = {
   intro:
     'For at kunne coache dig behandler appen det, du fortæller og deler med den. Vælg nedenfor, hvad du giver samtykke til. Du kan altid ændre det senere under Privatliv & samtykke.',
   controller:
-    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som står for selve coachingen, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Vi sender aldrig dit kontonavn eller din e-mailadresse til nogen af dem. Det, du selv skriver — sessionsnoter, vurderinger og beskeder til Coachen — sendes, som du har skrevet det, så undlad navne og adresser, du helst vil holde fra AI\'en.',
+    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som står for selve coachingen, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Vi sender aldrig dit kontonavn eller din e-mailadresse til nogen af dem — kun det navn, du selv vælger, at Coachen skal kalde dig, hvis du sætter et. Det, du selv skriver — sessionsnoter, vurderinger og beskeder til Coachen — sendes, som du har skrevet det, så undlad navne og adresser, du helst vil holde fra AI\'en.',
   requiredLabel: 'Krævet for at bruge Coachen',
   optionalLabel: 'Valgfrit',
   agree: 'Accepter og fortsæt',

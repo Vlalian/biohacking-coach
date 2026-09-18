@@ -19,6 +19,7 @@ import {
   setTargetRaceAction,
   removeRaceAction,
   updateLanguageAction,
+  updatePreferredNameAction,
   updateLinkVisibilityAction,
   updateWeeklySessionDayAction,
 } from './settings-actions';
@@ -86,6 +87,7 @@ export default async function SettingsPage({
         fixedConstraints: athlete.profile?.fixedConstraints ?? [],
       }}
       language={uiPrefs.language ?? locale}
+      preferredName={uiPrefs.preferredName ?? ''}
       coachingLink={
         athleteLink
           ? {
@@ -104,6 +106,7 @@ export default async function SettingsPage({
       onAddFixedConstraint={addFixedConstraintAction}
       onRemoveFixedConstraint={removeFixedConstraintAction}
       onUpdateLanguage={updateLanguageAction}
+      onUpdatePreferredName={updatePreferredNameAction}
       onSetLinkVisibility={updateLinkVisibilityAction}
       onSeverCoachingLink={severCoachingLinkAction}
       onDeleteAccount={deleteMyAccountAction}

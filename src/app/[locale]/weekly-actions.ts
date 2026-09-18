@@ -106,7 +106,9 @@ export async function startWeeklySessionAction(): Promise<StartWeeklyResult> {
     return { ok: false, reason: 'consent-required' };
   }
 
-  return startWeeklySession(resolved.athlete, today(), resolved.language);
+  return startWeeklySession(resolved.athlete, today(), resolved.language, {
+    preferredName: resolved.preferredName ?? null,
+  });
 }
 
 export async function sendWeeklyMessageAction(
@@ -125,6 +127,7 @@ export async function sendWeeklyMessageAction(
     content,
     today(),
     resolved.language,
+    resolved.preferredName ?? null,
   );
 }
 

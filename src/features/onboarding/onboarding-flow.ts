@@ -1,6 +1,7 @@
 import type { Onboarding } from '@/features/coach/check-in';
 import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
 import { isCalendarDate } from '@/lib/calendar-date';
+import { parsePreferredName } from '@/features/user-prefs/preferred-name';
 
 /**
  * The MCQ onboarding flow as pure data and functions — ported from the POC's
@@ -8,9 +9,18 @@ import { isCalendarDate } from '@/lib/calendar-date';
  *
  * Three deliberate deviations from the POC, each pinned by a standing decision:
  *
- * - **No name step.** The athlete's name already lives on the better-auth user
- *   (slice 02 created it at signup), and no training table may carry it
- *   (ADR 0006) — so onboarding neither asks for nor stores one.
+ * - **A name step, but not the POC's** (rewritten 2026-09-18,
+ *   `preferred-name/02`). This used to read "No name step": the athlete's name
+ *   already lives on the better-auth user and no training table may carry one
+ *   (ADR 0006). Both reasons still hold and neither is contradicted. The POC's
+ *   step duplicated login identity into training data; the step that exists
+ *   now asks a different question — *what should the Coach call you?* — and
+ *   its answer is a Preferred Name the athlete chose, stored identity-side in
+ *   `user.uiPrefs` by the action, **never in the answers below**. The flow
+ *   validates the typed value and records only that the step was answered;
+ *   nothing here reads `user.name`, and nothing is prefilled from it (Mads,
+ *   2026-08-21: a one-tap default is the app choosing, not the athlete).
+ *   Leaving it blank is an answer — the Coach stays nameless, as before.
  * - **No name in the Communication Style.** The POC interpolated the athlete's
  *   name into the `commStyle` string; that string is a training-table column and
  *   reaches prompts, so here it always says "The athlete" (GDPR decision 1).
@@ -23,6 +33,7 @@ import { isCalendarDate } from '@/lib/calendar-date';
 
 export type OnboardingStepId =
   | 'language'
+  | 'name'
   | 'experience'
   | 'distance'
   | 'race'
@@ -31,6 +42,7 @@ export type OnboardingStepId =
 
 export const ONBOARDING_STEPS: OnboardingStepId[] = [
   'language',
+  'name',
   'experience',
   'distance',
   'race',
@@ -191,18 +203,26 @@ export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
   Sunday: 'daySunday',
 };
 
+/** Which submission-tracked steps have been answered (an empty answer counts). */
+export interface OnboardingSubmitted {
+  name?: boolean;
+  adaptive?: boolean;
+  constraints?: boolean;
+}
+
 /**
- * The first unanswered step, or 'done'. The adaptive step counts as answered
- * once any of its level's answers exist OR it was explicitly submitted — all its
- * questions are optional in the POC, so submission is tracked by the caller
- * passing `adaptiveSubmitted`/`constraintsSubmitted` (an empty submission is a
- * legitimate answer).
+ * The first unanswered step, or 'done'. The name, adaptive and constraints
+ * steps count as answered once explicitly submitted — every question on them
+ * is optional, so submission is tracked by the caller passing `submitted` (an
+ * empty submission is a legitimate answer). The name step is tracked this way
+ * for a second reason: its value is never in `answers` at all.
  */
 export function nextStep(
   answers: OnboardingAnswers,
-  submitted: { adaptive?: boolean; constraints?: boolean } = {},
+  submitted: OnboardingSubmitted = {},
 ): OnboardingStepId | 'done' {
   if (!answers.language) return 'language';
+  if (!submitted.name) return 'name';
   if (!answers.experienceLevel) return 'experience';
   if (!answers.raceDistance) return 'distance';
   // Answered either way: a named race *with its date*, or an explicit "not
@@ -229,6 +249,8 @@ function hasNamedRace(answers: OnboardingAnswers): boolean {
 /** What the client may submit for one step. Everything else is refused. */
 export type StepAnswer =
   | { step: 'language'; language: string }
+  /** The Preferred Name, or absent/blank for none. Validated here, stored by the action. */
+  | { step: 'name'; preferredName?: string }
   | { step: 'experience'; experienceLevel: string }
   | { step: 'distance'; raceDistance: string }
   | { step: 'race'; raceTarget: string; raceDate: string }
@@ -277,16 +299,24 @@ const optionalText = (value: unknown): string | null | undefined => {
  */
 export function applyAnswer(
   answers: OnboardingAnswers,
-  submitted: { adaptive?: boolean; constraints?: boolean },
+  submitted: OnboardingSubmitted,
   payload: StepAnswer,
 ): {
   answers: OnboardingAnswers;
-  submitted: { adaptive?: boolean; constraints?: boolean };
+  submitted: OnboardingSubmitted;
 } | null {
   switch (payload.step) {
     case 'language': {
       if (!inSet(payload.language, ONBOARDING_OPTIONS.language)) return null;
       return { answers: { ...answers, language: payload.language }, submitted };
+    }
+    case 'name': {
+      // Validated with the same rule the write boundary applies, refused the
+      // same way — but the value itself goes no further than this check. The
+      // answers are profile JSONB on a training table, and a name may not land
+      // there (ADR 0006); the action stores it on the user.
+      if (!parsePreferredName(payload.preferredName).ok) return null;
+      return { answers, submitted: { ...submitted, name: true } };
     }
     case 'experience': {
       if (!inSet(payload.experienceLevel, ONBOARDING_OPTIONS.experienceLevel))
@@ -450,14 +480,15 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
 
 /**
  * The Coach's greeting when onboarding completes — the POC's `coachGreeting`,
- * unchanged. The name comes from the better-auth user for DISPLAY ONLY: the
- * action renders this on screen but persists the name-free variant
- * (`coachGreeting('', race)`) to the conversation log, because `messages` is a
- * training-side table keyed by athlete id and must never carry a name
- * (ADR 0006) — and it is never rendered into a model prompt.
+ * unchanged in shape. The name is the **Preferred Name** the athlete chose
+ * (`preferred-name/02`), or nothing; it is never derived from `user.name` any
+ * more. Still DISPLAY ONLY: the action renders this on screen but persists the
+ * name-free variant (`coachGreeting('', race)`) to the conversation log,
+ * because `messages` is a training-side table keyed by athlete id and must
+ * never carry a name (ADR 0006) — and it is never rendered into a model prompt.
  */
 export function coachGreeting(
-  name: string,
+  name: string | null | undefined,
   race: string,
 ): { intro: string; body: string } {
   const intro = name ? `Hello ${name}. I'm your Coach.` : `I'm your Coach.`;

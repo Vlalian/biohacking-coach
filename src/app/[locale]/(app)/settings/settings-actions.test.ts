@@ -10,6 +10,7 @@ const {
   updateLinkVisibility,
   severLinkForAthlete,
   setUiLanguage,
+  setPreferredName,
   updateRaceTarget,
   updateRaceDistance,
   upsertTargetRace,
@@ -29,6 +30,7 @@ const {
   updateLinkVisibility: vi.fn(() => Promise.resolve()),
   severLinkForAthlete: vi.fn(() => Promise.resolve()),
   setUiLanguage: vi.fn(() => Promise.resolve()),
+  setPreferredName: vi.fn(() => Promise.resolve()),
   updateRaceTarget: vi.fn(() => Promise.resolve()),
   updateRaceDistance: vi.fn(() => Promise.resolve()),
   upsertTargetRace: vi.fn(() => Promise.resolve()),
@@ -59,7 +61,7 @@ vi.mock('@/features/coach/coach-repository', () => ({
   getLinkForAthlete,
 }));
 vi.mock('@/features/coach/week-draft-repository', () => ({ withdrawPreviewDrafts }));
-vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setUiLanguage }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setUiLanguage, setPreferredName }));
 vi.mock('@/features/race/race-repository', () => ({
   upsertTargetRace,
   clearTargetRace,
@@ -76,6 +78,7 @@ const {
   addFixedConstraintAction,
   removeFixedConstraintAction,
   updateLanguageAction,
+  updatePreferredNameAction,
   updateRaceDistanceAction,
   updateTargetRaceAction,
   addRaceAction,
@@ -235,6 +238,33 @@ describe('updateLanguageAction', () => {
     const result = await updateLanguageAction('fr');
     expect(result).toEqual({ ok: false, reason: 'invalid' });
     expect(setUiLanguage).not.toHaveBeenCalled();
+  });
+});
+
+describe('updatePreferredNameAction (preferred-name/02)', () => {
+  it('stores the name on the user, trimmed, keyed by the signed-in user', async () => {
+    const result = await updatePreferredNameAction('  Mads ');
+    expect(result).toEqual({ ok: true });
+    expect(setPreferredName).toHaveBeenCalledWith('user_abc', 'Mads');
+  });
+
+  it('clears it when the field is emptied', async () => {
+    const result = await updatePreferredNameAction('   ');
+    expect(result).toEqual({ ok: true });
+    expect(setPreferredName).toHaveBeenCalledWith('user_abc', null);
+  });
+
+  it('refuses what the write boundary refuses — an identifier-shaped or oversized value', async () => {
+    expect(await updatePreferredNameAction('mads@example.com')).toEqual({ ok: false, reason: 'invalid' });
+    expect(await updatePreferredNameAction('a'.repeat(41))).toEqual({ ok: false, reason: 'invalid' });
+    expect(setPreferredName).not.toHaveBeenCalled();
+  });
+
+  it('refuses when nobody is signed in', async () => {
+    getSession.mockResolvedValue(null);
+    const result = await updatePreferredNameAction('Mads');
+    expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(setPreferredName).not.toHaveBeenCalled();
   });
 });
 

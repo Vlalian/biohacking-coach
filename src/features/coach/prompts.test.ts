@@ -157,6 +157,44 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
   });
 });
 
+describe('the Preferred Name — the one name the athlete chose to send (preferred-name/02)', () => {
+  const TODAY = '2026-08-12';
+
+  it("Coach Chat: with none set, the prompt is exactly today's — no name, the old privacy line, no empty artefact", () => {
+    const prompt = buildChatPrompt(BASE, TODAY);
+    expect(prompt).toBe(buildChatPrompt(BASE, TODAY, null, [], null, null));
+    expect(prompt).toContain("PRIVACY: Never use athlete's name. Second person only. No PII reproduction.");
+    expect(prompt).not.toContain('PREFERRED NAME');
+  });
+
+  it('Coach Chat: with one set, the Coach is told the name and permitted only that name', () => {
+    const prompt = buildChatPrompt(BASE, TODAY, null, [], null, 'Mads');
+    expect(prompt).toContain('PREFERRED NAME: "Mads"');
+    expect(prompt).toContain('PRIVACY: Call the athlete only by the PREFERRED NAME above');
+    expect(prompt).not.toContain("Never use athlete's name");
+  });
+
+  it('Weekly Session: with none set, nothing about a name renders', () => {
+    const ctx = buildWeeklyContext(BASE, [], [], [], [], null, TODAY);
+    expect(renderWeeklyPrompt(ctx)).toBe(renderWeeklyPrompt({ ...ctx, preferredName: undefined }));
+    expect(renderWeeklyPrompt(ctx)).not.toContain('PREFERRED NAME');
+  });
+
+  it('Weekly Session: with one set, the Coach is told the name', () => {
+    const ctx = { ...buildWeeklyContext(BASE, [], [], [], [], null, TODAY), preferredName: 'Mads' };
+    expect(renderWeeklyPrompt(ctx)).toContain('PREFERRED NAME: "Mads"');
+  });
+
+  it('the Preferred Name is exempt from the identifier assertion, which still runs over everything else', () => {
+    // The name is never walked — it is the athlete's chosen value and the walk
+    // could not tell it from a leak. The write boundary (`parsePreferredName`)
+    // is where a shaped value is refused; here a name is a name.
+    expect(() => buildChatPrompt(BASE, TODAY, null, [], null, 'Mads')).not.toThrow();
+    const leaky: CheckIn = { ...BASE, personaName: undefined, equipment: [{ id: 'e1', category: 'bike', name: 'Bike', details: 'call +45 12 34 56 78', createdAt: new Date(), updatedAt: new Date() } as never] };
+    expect(() => buildChatPrompt(leaky, TODAY, null, [], null, 'Mads')).toThrow();
+  });
+});
+
 describe('buildWeeklyContext — raceTarget', () => {
   it('forwards raceTarget from checkIn', () => {
     const ctx = buildWeeklyContext(

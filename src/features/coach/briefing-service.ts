@@ -22,6 +22,7 @@ import {
   getOwnedBriefing,
 } from './conversation-repository';
 import type { Message } from './conversation';
+import { getPreferredNameForAthlete } from '@/features/user-prefs/user-prefs-repository';
 import {
   BRIEFING_OPENER,
   buildBriefingContext,
@@ -81,7 +82,16 @@ async function buildBriefingSystem(
   // 0003; the Training Blocks are the horizon that calendar is built toward).
   // The Coach's own "unrealistic" verdict travels with the blocks for the same
   // reason: it is the Coach's judgement, not the athlete's report.
-  const [plan, resolved] = await Promise.all([getBriefingPlan(athleteId), getResolvedBlocks(athleteId, today)]);
+  const [plan, resolved, preferredName] = await Promise.all([
+    getBriefingPlan(athleteId),
+    getResolvedBlocks(athleteId, today),
+    // What the athlete chose for the Coach to call them (`preferred-name/02`),
+    // read through the user seam for the *linked* athlete — the action cannot
+    // resolve it, since the signed-in user here is the Head Coach. Ungated by
+    // Link Visibility: a pseudonym the athlete picked, for a coach who already
+    // sees their real name on the Roster.
+    getPreferredNameForAthlete(athleteId),
+  ]);
   // Scoped to the current Target Race: a verdict on a race the athlete has since
   // replaced is not this race's.
   const raceUnrealistic = resolved.race ? await getLatestUnrealisticFlag(athleteId, resolved.race.id) : null;
@@ -106,7 +116,7 @@ async function buildBriefingSystem(
       }))
     : null;
 
-  const ctx = buildBriefingContext({ today, plan, blocks, reports, transcripts, language });
+  const ctx = buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName });
   return renderBriefingPrompt(ctx);
 }
 

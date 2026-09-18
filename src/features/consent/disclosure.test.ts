@@ -85,6 +85,15 @@ describe('the processors the disclosure names', () => {
     expect(controller).toContain(locale === 'da' ? 'kontonavn' : 'account name');
   });
 
+  // preferred-name/02, in the same bump: the one name that IS sent is the one
+  // the athlete chose for the Coach, and the disclosure says so.
+  it.each(['en', 'da'])('names the Preferred Name as the one name that is sent, in %s', (locale) => {
+    const { controller } = disclosureCopy(locale);
+    expect(controller).toContain(
+      locale === 'da' ? 'det navn, du selv vælger' : 'the name you choose for the Coach to call you',
+    );
+  });
+
   it.each(['en', 'da'])(
     'tells the athlete what they type themselves is sent as written, in %s',
     (locale) => {

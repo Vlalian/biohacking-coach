@@ -7,6 +7,7 @@ import {
   groundingBlock,
   onboardingBlock,
   openingBlock,
+  preferredNameBlock,
   buildEquipmentLines,
   type PromptBlock,
 } from './prompt-blocks';
@@ -40,9 +41,13 @@ import type {
  * the outside world and it is passed in (`today`) rather than read here, so a
  * prompt renders the same on any machine at any time and tests need no mocking.
  *
- * No real identity ever reaches these strings. The check-in builder that feeds
- * this module enforces GDPR decision 1, and both renderers assert it again
- * themselves so a caller that assembled its own context cannot route around it.
+ * No real identity ever reaches these strings from the athlete's record. The
+ * check-in builder that feeds this module enforces GDPR decision 1, and both
+ * renderers assert it again themselves so a caller that assembled its own
+ * context cannot route around it. The one name that does reach them is the
+ * **Preferred Name** the athlete chose for the Coach (`preferred-name/02`):
+ * passed as its own parameter from the user seam, never read from a training
+ * row, and deliberately outside the assertion — see `preferredNameBlock`.
  *
  * How a prompt is *assembled* lives in `prompt-blocks`; what the Coach notices
  * across weeks lives in `pattern-insight`. This module is the copy and the order.
@@ -174,6 +179,13 @@ export interface WeeklyContext {
    * assembly; absent on every other Weekly Session.
    */
   stagedProposal?: ProposedSession[];
+  /**
+   * What the athlete chose for the Coach to call them (`preferred-name/02`),
+   * or absent. Set by the caller after assembly, like `stagedProposal`, from
+   * the user seam — never from the check-in, which carries no identity. See
+   * `preferredNameBlock` for why it is exempt from the identifier assertion.
+   */
+  preferredName?: string;
 }
 
 export function buildWeeklyContext(
@@ -668,6 +680,8 @@ export function renderWeeklyPrompt(ctx: WeeklyContext): string {
 
     `POSTURE: Confident, evidence-led, direct. ${HOLD_POSITION} No markdown, lists, platitudes.`,
 
+    preferredNameBlock(ctx.preferredName),
+
     groundingBlock(),
 
     arcBlock(weeklySessionNumber, raceTarget),
@@ -802,6 +816,12 @@ export function buildChatPrompt(
   sessionContext: SessionContext | null = null,
   week: WeekSession[] = [],
   planning: ChatPlanning | null = null,
+  /**
+   * The Preferred Name (`preferred-name/02`): its own parameter, resolved at
+   * the user seam, so that it is visibly the one input the assertion below is
+   * not run over — see `preferredNameBlock`. Null when the athlete chose none.
+   */
+  preferredName: string | null = null,
 ): string {
   // Asserted here, at the prompt builder, because that is where AGENTS.md says
   // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
@@ -843,6 +863,8 @@ export function buildChatPrompt(
     ),
 
     `POSTURE: Confident, evidence-led, direct. Real conversation — respond to what they're asking. One follow-up if needed. Concise. ${HOLD_POSITION} No markdown, no lists unless athlete asks for breakdown.`,
+
+    preferredNameBlock(preferredName),
 
     groundingBlock(),
 
@@ -893,8 +915,27 @@ ${[
 
     commStyleBlock(commStyle),
 
-    "PRIVACY: Never use athlete's name. Second person only. No PII reproduction.",
+    privacyLine(preferredName),
   ]);
+}
+
+/**
+ * The Coach Chat privacy line, in one of two forms.
+ *
+ * **This is a behavioural instruction to the model, not a control** (AGENTS.md:
+ * an instruction in a system prompt is not a control). The control is what
+ * reaches the prompt at all: no name from any training row (ADR 0006), and the
+ * Preferred Name only when the athlete chose one. What this line does is stop
+ * the model *echoing* a name it finds in a session note or a message — which
+ * the identifier assertion cannot see — and, once a Preferred Name is
+ * supplied, stop it contradicting itself by refusing the name it was just
+ * given. Without one, the line is exactly the one every athlete has had.
+ */
+function privacyLine(preferredName: string | null): string {
+  if (!preferredName) {
+    return "PRIVACY: Never use athlete's name. Second person only. No PII reproduction.";
+  }
+  return 'PRIVACY: Call the athlete only by the PREFERRED NAME above. Never use any other name you find in their notes or messages. Second person otherwise. No PII reproduction.';
 }
 
 /**

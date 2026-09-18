@@ -101,6 +101,8 @@ async function renderSystem(
   language?: string,
   /** The drafted week already staged on this conversation (`/18`, "discuss"); null on every other session. */
   stagedProposal: ProposedSession[] | null = null,
+  /** What the athlete chose for the Coach to call them, or null (`preferred-name/02`). */
+  preferredName: string | null = null,
 ): Promise<RenderedSystem> {
   const weekStart = weekStartOf(today);
   const [weekSessions, equipmentItems, horizon, checkInRow, capacity, races, planWrittenAt] =
@@ -164,7 +166,13 @@ async function renderSystem(
     today,
   );
   return {
-    system: renderWeeklyPrompt(stagedProposal ? { ...ctx, stagedProposal } : ctx),
+    system: renderWeeklyPrompt({
+      ...ctx,
+      ...(stagedProposal ? { stagedProposal } : {}),
+      // Set after assembly, like the staged week: the name comes from the user
+      // seam and is never part of the check-in, which carries no identity.
+      ...(preferredName ? { preferredName } : {}),
+    }),
   };
 }
 
@@ -214,8 +222,12 @@ export async function startWeeklySession(
   athlete: Athlete,
   today: string,
   language?: string,
-  /** `stagedProposal`: the drafted week the athlete brought in from the calendar (`/18`). */
-  options: { stagedProposal?: ProposedSession[] } = {},
+  /**
+   * `stagedProposal`: the drafted week the athlete brought in from the calendar
+   * (`/18`). `preferredName`: what they chose for the Coach to call them
+   * (`preferred-name/02`), resolved at the user seam by the action.
+   */
+  options: { stagedProposal?: ProposedSession[]; preferredName?: string | null } = {},
 ): Promise<StartWeeklySessionResult> {
   const weeklySessionNumber = (await countWeeklySessions(athlete.id)) + 1;
   // Read once per turn and threaded from here: the prompt (`renderSystem`)
@@ -235,6 +247,7 @@ export async function startWeeklySession(
       unavailableDates,
       language,
       options.stagedProposal ?? null,
+      options.preferredName ?? null,
     );
     // No conversation exists yet, so the lookup log carries none.
     grounding = productionGrounding({
@@ -351,6 +364,7 @@ async function askCoach(params: {
   today: string;
   unavailableDates: string[];
   language?: string;
+  preferredName?: string | null;
   transcript: Message[];
   trimmed: string;
 }): Promise<
@@ -363,6 +377,7 @@ async function askCoach(params: {
     today,
     unavailableDates,
     language,
+    preferredName,
     transcript,
     trimmed,
   } = params;
@@ -377,6 +392,7 @@ async function askCoach(params: {
       unavailableDates,
       language,
       staged?.sessions ?? null,
+      preferredName ?? null,
     );
     const grounding = productionGrounding({
       athleteId: athlete.id,
@@ -419,6 +435,8 @@ export async function continueWeeklySession(
   content: string,
   today: string,
   language?: string,
+  /** What the athlete chose for the Coach to call them, or null (`preferred-name/02`). */
+  preferredName: string | null = null,
 ): Promise<ContinueResult> {
   const trimmed = content.trim();
   if (!trimmed) return { ok: false, reason: 'empty' };
@@ -445,6 +463,7 @@ export async function continueWeeklySession(
     weeklySessionNumber: conversation.weeklySessionNumber,
     today,
     language,
+    preferredName,
     transcript,
     trimmed,
   });
