@@ -32,3 +32,12 @@ for (const route of pages) {
     await snapshot(page);
   });
 }
+
+// Mads holds a coach row that links to nobody since the personas retired
+// (code-health/13), so his Roster is the empty state — deliberate, not an error.
+test('coach roster, empty', async ({ page }) => {
+  await page.goto('/en/coach');
+  await settled(page);
+  await expect(page.getByText('No athletes linked yet.')).toBeVisible();
+  await snapshot(page);
+});
