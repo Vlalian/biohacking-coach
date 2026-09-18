@@ -41,6 +41,7 @@ vi.mock('./settings-actions', () => ({
   severCoachingLinkAction: vi.fn(),
   updateCommunicationStyleAction: vi.fn(),
   updateLanguageAction: vi.fn(),
+  updatePreferredNameAction: vi.fn(),
   updateLinkVisibilityAction: vi.fn(),
   updateRaceDistanceAction: vi.fn(),
   updateTargetRaceAction: vi.fn(),
@@ -216,5 +217,22 @@ describe('SettingsPage', () => {
 
     const props = (element as unknown as { props: Record<string, unknown> }).props;
     expect(props.language).toBe('da');
+    // And no Preferred Name reads as '' — the field renders empty, never the
+    // account name (preferred-name/02).
+    expect(props.preferredName).toBe('');
+  });
+
+  it('passes the stored Preferred Name through the user seam, beside the language', async () => {
+    getSession.mockResolvedValue({
+      user: { id: 'user_abc', name: 'Mads Kilstrup', email: 'mads@example.com' },
+    });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', communicationStyle: null, profile: null });
+    getUiPrefs.mockResolvedValue({ language: 'en', preferredName: 'Captain' });
+
+    const element = await render('en');
+
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    expect(props.preferredName).toBe('Captain');
+    expect(getUiPrefs).toHaveBeenCalledWith('user_abc');
   });
 });

@@ -10,6 +10,15 @@ describe('answerText renders a line for every step', () => {
     expect(answerText({ step: 'language', language: 'en' })).toBe('English');
   });
 
+  it('records that a Preferred Name was chosen or skipped, never the name itself', () => {
+    // `messages` is a training-side table keyed by athlete id (ADR 0006): the
+    // line says the question was answered, and nothing more.
+    expect(answerText({ step: 'name', preferredName: 'Mads' })).toBe('Chosen');
+    expect(answerText({ step: 'name', preferredName: 'Mads' })).not.toContain('Mads');
+    expect(answerText({ step: 'name', preferredName: '  ' })).toBe('—');
+    expect(answerText({ step: 'name' })).toBe('—');
+  });
+
   it('names the experience level and the Race Distance as given', () => {
     expect(answerText({ step: 'experience', experienceLevel: 'veteran' })).toBe('veteran');
     expect(answerText({ step: 'distance', raceDistance: 'Full' })).toBe('Full');

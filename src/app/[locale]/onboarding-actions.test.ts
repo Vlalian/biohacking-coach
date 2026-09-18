@@ -1,22 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getSession, getAthleteByUserId, answerOnboardingStep, setUiLanguage } = vi.hoisted(
-  () => ({
-    getSession: vi.fn(),
-    getAthleteByUserId: vi.fn(),
-    answerOnboardingStep: vi.fn(),
-    setUiLanguage: vi.fn(),
-  }),
-);
+const {
+  getSession,
+  getAthleteByUserId,
+  answerOnboardingStep,
+  setUiLanguage,
+  setPreferredName,
+  getUiPrefs,
+  getTranslations,
+} = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  getAthleteByUserId: vi.fn(),
+  answerOnboardingStep: vi.fn(),
+  setUiLanguage: vi.fn(),
+  setPreferredName: vi.fn(),
+  getUiPrefs: vi.fn(async () => ({})),
+  getTranslations: vi.fn(async () => (key: string) => key),
+}));
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
-vi.mock('next-intl/server', () => ({
-  getTranslations: async () => (key: string) => key,
-}));
+vi.mock('next-intl/server', () => ({ getTranslations }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/onboarding/onboarding-service', () => ({ answerOnboardingStep }));
-vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setUiLanguage }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setUiLanguage, setPreferredName, getUiPrefs }));
 
 const { answerOnboardingAction } = await import('./onboarding-actions');
 
@@ -41,6 +48,9 @@ beforeEach(() => {
   getAthleteByUserId.mockReset();
   answerOnboardingStep.mockReset();
   setUiLanguage.mockReset();
+  setPreferredName.mockReset();
+  getUiPrefs.mockReset().mockResolvedValue({});
+  getTranslations.mockClear();
 });
 
 function signedIn() {
@@ -65,10 +75,118 @@ describe('answerOnboardingAction', () => {
     // the duplication by passing the personalised greeting through.
     const storedGreeting = answerOnboardingStep.mock.calls[0][3] as string;
     expect(storedGreeting).not.toContain('Mads');
-    expect(storedGreeting).toContain('Ironman Copenhagen');
+    expect(storedGreeting).toBe("I'm your Coach. Ironman Copenhagen is your target. Let's get to work.");
+    // The seam reads the request's own session, in the Onboarding namespace.
+    expect(getSession).toHaveBeenCalledWith({ headers: expect.any(Headers) });
+    expect(getTranslations).toHaveBeenCalledWith('Onboarding');
+    // A race step never touches the user-side preferences.
+    expect(setUiLanguage).not.toHaveBeenCalled();
+    expect(setPreferredName).not.toHaveBeenCalled();
   });
 
-  it('greets by first name only, not the full name', async () => {
+  it('names the stored race in the greeting when the finishing step is not the race step', async () => {
+    getSession.mockResolvedValue({ user: USER });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      profile: { onboardingAnswers: { raceTarget: 'Ironman Kalmar' } },
+    });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
+
+    const result = (await answerOnboardingAction({ step: 'constraints' })) as {
+      displayGreetingBody?: string;
+    };
+
+    expect(answerOnboardingStep.mock.calls[0][3]).toBe(
+      "I'm your Coach. Ironman Kalmar is your target. Let's get to work.",
+    );
+    expect(result.displayGreetingBody).toBe("Ironman Kalmar is your target. Let's get to work.");
+  });
+
+  it('greets without a race for "no race yet", and for an athlete with no profile at all', async () => {
+    signedIn();
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
+    const noRace = (await answerOnboardingAction({ step: 'race', noRaceYet: true })) as {
+      displayGreetingBody?: string;
+    };
+    expect(noRace.displayGreetingBody).toBe("Let's get to work.");
+
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: null });
+    const noProfile = (await answerOnboardingAction({ step: 'constraints' })) as {
+      displayGreetingBody?: string;
+    };
+    expect(noProfile.displayGreetingBody).toBe("Let's get to work.");
+
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: {} });
+    const noAnswers = (await answerOnboardingAction({ step: 'constraints' })) as {
+      displayGreetingBody?: string;
+    };
+    expect(noAnswers.displayGreetingBody).toBe("Let's get to work.");
+  });
+
+  it('treats a forged race payload that says both "no race" and a name as no race', async () => {
+    // The decision wins, as it does in the flow (`noRaceYet === true` stores
+    // nothing else); the greeting must not name a race the record will not hold.
+    signedIn();
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
+    const result = (await answerOnboardingAction({
+      step: 'race',
+      noRaceYet: true,
+      raceTarget: 'Forged',
+    } as unknown as Parameters<typeof answerOnboardingAction>[0])) as { displayGreetingBody?: string };
+    expect(result.displayGreetingBody).toBe("Let's get to work.");
+  });
+
+  it('adds no display greeting, and reads no prefs, before the last step', async () => {
+    signedIn();
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+
+    const result = await answerOnboardingAction({ step: 'name', preferredName: 'Mads' });
+
+    expect(result).toEqual({ ok: true, step: 'experience' });
+    expect(getUiPrefs).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['language', { step: 'language', language: 'da' }, 'qLanguage', 'Dansk'],
+    ['name', { step: 'name', preferredName: 'Mads' }, 'qName', 'Chosen'],
+    ['experience', { step: 'experience', experienceLevel: 'veteran' }, 'qExperience', 'veteran'],
+    ['distance', { step: 'distance', raceDistance: 'Full' }, 'qDistance', 'Full'],
+    ['race', { step: 'race', noRaceYet: true }, 'qRace', 'No race booked yet'],
+    ['adaptive', { step: 'adaptive' }, 'qAdaptive', '—'],
+    ['constraints', { step: 'constraints' }, 'qConstraints', '— · Sunday'],
+  ] as const)(
+    'records the %s step in the transcript as the Coach asked it and the athlete answered it',
+    async (_step, payload, questionKey, answer) => {
+      signedIn();
+      answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+
+      await answerOnboardingAction(payload as Parameters<typeof answerOnboardingAction>[0]);
+
+      expect(answerOnboardingStep.mock.calls[0][2]).toEqual({ question: questionKey, answer });
+    },
+  );
+
+  // preferred-name/02: the greeting uses the name the athlete chose for the
+  // Coach — and nothing derived from `user.name`. The first-name split that
+  // used to live here (`user.name.trim().split(/\s+/)[0]`) is gone: it took
+  // the surname for anyone whose family name is written first.
+  it('greets by the Preferred Name, read from the user seam, never by the account name', async () => {
+    signedIn();
+    getUiPrefs.mockResolvedValue({ preferredName: 'Captain' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
+
+    const result = await answerOnboardingAction({
+      step: 'race',
+      raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
+    }) as { displayGreetingIntro?: string };
+
+    expect(result.displayGreetingIntro).toContain('Captain');
+    expect(result.displayGreetingIntro).not.toContain('Mads');
+    expect(result.displayGreetingIntro).not.toContain('Kilstrup');
+  });
+
+  it('greets without any name when the athlete chose none — user.name is not a fallback', async () => {
     signedIn();
     answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
 
@@ -78,8 +196,38 @@ describe('answerOnboardingAction', () => {
       raceDate: '2027-08-15',
     }) as { displayGreetingIntro?: string };
 
-    expect(result.displayGreetingIntro).toContain('Mads');
-    expect(result.displayGreetingIntro).not.toContain('Kilstrup');
+    expect(result.displayGreetingIntro).toBe("I'm your Coach.");
+  });
+
+  it('stores the Preferred Name on the user, identity-side, only after the step is accepted', async () => {
+    signedIn();
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+
+    await answerOnboardingAction({ step: 'name', preferredName: '  Mads ' });
+
+    expect(setPreferredName).toHaveBeenCalledWith(USER.id, 'Mads');
+    // The payload reaches the flow (it validates the value), but what the flow
+    // persists does not: the transcript line and the greeting carry no name,
+    // and `applyAnswer` is pinned elsewhere to store nothing from it.
+    expect(JSON.stringify(answerOnboardingStep.mock.calls[0].slice(2))).not.toContain('Mads');
+  });
+
+  it('clears the Preferred Name when the step is skipped', async () => {
+    signedIn();
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+
+    await answerOnboardingAction({ step: 'name' });
+
+    expect(setPreferredName).toHaveBeenCalledWith(USER.id, null);
+  });
+
+  it('leaves no Preferred Name behind when the step is rejected', async () => {
+    signedIn();
+    answerOnboardingStep.mockResolvedValue({ ok: false, reason: 'invalid' });
+
+    await answerOnboardingAction({ step: 'name', preferredName: 'mads@example.com' });
+
+    expect(setPreferredName).not.toHaveBeenCalled();
   });
 
   it('writes the language preference only after the step is accepted', async () => {

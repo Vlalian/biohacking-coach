@@ -207,6 +207,23 @@ describe('startWeeklySession', () => {
   });
 });
 
+describe('the Preferred Name reaches the Weekly Session prompt (preferred-name/02)', () => {
+  it('on the opening turn, through the options', async () => {
+    await startWeeklySession(ATHLETE, TODAY, 'en', { preferredName: 'Mads' });
+    expect(callCoach.mock.calls[0][0].system).toContain('PREFERRED NAME: "Mads"');
+  });
+
+  it('on a later turn, as its own parameter', async () => {
+    await continueWeeklySession(ATHLETE, 'conv_1', 'felt strong', TODAY, 'en', 'Mads');
+    expect(callCoach.mock.calls[0][0].system).toContain('PREFERRED NAME: "Mads"');
+  });
+
+  it('renders nothing about a name when none was given', async () => {
+    await startWeeklySession(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('PREFERRED NAME');
+  });
+});
+
 describe('continueWeeklySession', () => {
   it('stores the athlete turn and the reply together, in order', async () => {
     await continueWeeklySession(ATHLETE, 'conv_1', 'felt strong', TODAY);

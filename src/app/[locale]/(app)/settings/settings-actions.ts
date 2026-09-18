@@ -31,7 +31,8 @@ import { withdrawPreviewDrafts } from '@/features/coach/week-draft-repository';
 import { today } from '@/lib/date';
 import type { LinkVisibility } from '@/features/coach/link-visibility';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
-import { setUiLanguage } from '@/features/user-prefs/user-prefs-repository';
+import { setPreferredName, setUiLanguage } from '@/features/user-prefs/user-prefs-repository';
+import { parsePreferredName } from '@/features/user-prefs/preferred-name';
 import { routing } from '@/i18n/routing';
 
 /**
@@ -305,6 +306,25 @@ export async function updateLanguageAction(
   if (!userId) return { ok: false, reason: 'not-authenticated' };
 
   await setUiLanguage(userId, language);
+  return { ok: true };
+}
+
+/**
+ * The Preferred Name — what the athlete chose for the Coach to call them
+ * (`preferred-name/02`), editable here as the Athlete Language is. Belongs to
+ * the *user*, not to either capacity: a Head Coach account sets its own the
+ * same way. An emptied field clears it, which puts the Coach back to nameless.
+ * The real-name warning is the screen's, advisory by nature; this end refuses
+ * only what the write boundary refuses.
+ */
+export async function updatePreferredNameAction(value: string): Promise<SettingsActionResult> {
+  const parsed = parsePreferredName(value);
+  if (!parsed.ok) return { ok: false, reason: 'invalid' };
+
+  const userId = await resolveUserId();
+  if (!userId) return { ok: false, reason: 'not-authenticated' };
+
+  await setPreferredName(userId, parsed.name);
   return { ok: true };
 }
 

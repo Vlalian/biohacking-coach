@@ -1,6 +1,6 @@
 import type { AthleteRow } from '@/db/schema';
 import type { Onboarding } from '@/features/coach/check-in';
-import type { OnboardingAnswers } from '@/features/onboarding/onboarding-flow';
+import type { OnboardingAnswers, OnboardingSubmitted } from '@/features/onboarding/onboarding-flow';
 
 /**
  * The Athlete Profile as stored in the `profile` JSONB.
@@ -21,7 +21,7 @@ import type { OnboardingAnswers } from '@/features/onboarding/onboarding-flow';
 export interface AthleteProfile {
   onboarding?: Onboarding;
   onboardingAnswers?: OnboardingAnswers;
-  onboardingSubmitted?: { adaptive?: boolean; constraints?: boolean };
+  onboardingSubmitted?: OnboardingSubmitted;
   fixedConstraints?: string[];
   weeklySessionDay?: string;
 }

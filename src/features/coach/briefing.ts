@@ -159,6 +159,16 @@ export interface BriefingContext {
   reports: BriefingReports | null;
   /** Athlete conversations, or null when `shareAiTranscripts` is off. */
   transcripts: BriefingTranscript[] | null;
+  /**
+   * What the athlete chose for the Coach to call them (`preferred-name/02`),
+   * or null. Read through the user seam by the service, never from the
+   * athlete's record, and — like the transcripts — not walked by the identifier
+   * assertion: it is a name by construction, and the walk could not tell a
+   * chosen one from a leaked one. Ungated by Link Visibility: it is a
+   * pseudonym the athlete picked, and the Head Coach already knows who they
+   * are from the Roster.
+   */
+  preferredName?: string | null;
 }
 
 /**
@@ -179,6 +189,7 @@ export function buildBriefingContext(input: {
   reports: BriefingReports | null;
   transcripts: BriefingTranscript[] | null;
   language?: string;
+  preferredName?: string | null;
 }): BriefingContext {
   const ctx: BriefingContext = {
     today: input.today,
@@ -187,6 +198,7 @@ export function buildBriefingContext(input: {
     blocks: input.blocks ?? null,
     reports: input.reports,
     transcripts: input.transcripts,
+    preferredName: input.preferredName ?? null,
   };
   // Guard the material the app assembled from the athlete's opaque record. The
   // transcripts are deliberately excluded — see the doc comment.
@@ -361,7 +373,24 @@ function transcriptsBlock(transcripts: BriefingTranscript[] | null): string {
     .join('\n\n')}`;
 }
 
-const BRIEFING_POSTURE = `You are talking TO the human coach, ABOUT their athlete. Report and analyse; never coach the athlete here and never address the athlete directly. Refer to the athlete in the third person; never use a real name.
+/**
+ * How the briefing names the athlete.
+ *
+ * Without a Preferred Name: the third person and no name, exactly as before.
+ * With one: the third person *by that name* and no other — a Head Coach
+ * reading about "the athlete" across a Roster of eight was doing work the
+ * prompt can do for them (`preferred-name/02`, ruled 2026-08-21).
+ *
+ * **An instruction, not a control** (AGENTS.md). The control is that the only
+ * name ever passed here is the one the athlete chose; the briefing material
+ * itself is keyed off the opaque athlete id and carries no name or email.
+ */
+function namingRule(preferredName: string | null | undefined): string {
+  if (!preferredName) return 'Refer to the athlete in the third person; never use a real name.';
+  return `Refer to the athlete in the third person, by the name they chose, "${preferredName}", and by no other name — not one you find in their notes or conversations.`;
+}
+
+const briefingPosture = (preferredName: string | null | undefined) => `You are talking TO the human coach, ABOUT their athlete. Report and analyse; never coach the athlete here and never address the athlete directly. ${namingRule(preferredName)}
 
 POSTURE: Confident, evidence-led, direct — a peer to the coach. State your read, back it with the material below, and invite the coach to interrogate it (patterns, a week summary, "how has their sleep trended?"). No markdown, no lists unless the coach asks for a breakdown. Concise.
 
@@ -377,11 +406,11 @@ BOUNDARIES:
  * built even though what they say is deliberately different.
  */
 export function renderBriefingPrompt(ctx: BriefingContext): string {
-  const { today, language, plan, blocks, reports, transcripts } = ctx;
+  const { today, language, plan, blocks, reports, transcripts, preferredName } = ctx;
 
   return assemble([
     `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
-    BRIEFING_POSTURE,
+    briefingPosture(preferredName),
     `TODAY: ${today}`,
     planBlock(plan),
     blocksBlock(blocks),
