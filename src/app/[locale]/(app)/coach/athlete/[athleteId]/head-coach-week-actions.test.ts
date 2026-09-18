@@ -1,18 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { resolveHeadCoachId, setWeeklySessionDayAsHeadCoach, approveWeekDraft, revalidatePath } = vi.hoisted(() => ({
+const { resolveHeadCoachId, setWeeklySessionDayAsHeadCoach, approveWeekDraft, coachDraftLanded, revalidatePath } = vi.hoisted(() => ({
   resolveHeadCoachId: vi.fn(),
   setWeeklySessionDayAsHeadCoach: vi.fn(),
   approveWeekDraft: vi.fn(),
+  coachDraftLanded: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('../../../../current-actor', () => ({ resolveHeadCoachId }));
-vi.mock('@/features/coach/head-coach-week-service', () => ({ setWeeklySessionDayAsHeadCoach, approveWeekDraft }));
+vi.mock('@/features/coach/head-coach-week-service', () => ({ setWeeklySessionDayAsHeadCoach, approveWeekDraft, coachDraftLanded }));
 
 const { setWeeklySessionDayAction } = await import('./day-actions');
-const { approveWeekDraftAction } = await import('./week-draft-actions');
+const { approveWeekDraftAction, coachDraftLandedAction } = await import('./week-draft-actions');
 
 /**
  * `training-architecture/17` — the two actions by which a Head Coach reaches a
@@ -79,5 +80,17 @@ describe('approveWeekDraftAction', () => {
       expect(await approveWeekDraftAction(ATHLETE, 'd1', '2026-09-21', SESSIONS)).toEqual({ ok: false, reason });
     }
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe('coachDraftLandedAction — the coach page’s poll read (training-architecture/29, review)', () => {
+  it('asks as the resolved coach and revalidates nothing; a caller with no coach row is told not yet', async () => {
+    coachDraftLanded.mockResolvedValue(true);
+    expect(await coachDraftLandedAction(ATHLETE, '2026-09-21')).toBe(true);
+    expect(coachDraftLanded).toHaveBeenCalledWith(COACH, ATHLETE, '2026-09-21');
+    expect(revalidatePath).not.toHaveBeenCalled();
+    resolveHeadCoachId.mockResolvedValue(null);
+    expect(await coachDraftLandedAction(ATHLETE, '2026-09-21')).toBe(false);
+    expect(coachDraftLanded).toHaveBeenCalledTimes(1);
   });
 });

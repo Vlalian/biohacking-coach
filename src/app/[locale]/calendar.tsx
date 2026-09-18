@@ -14,7 +14,9 @@ import { markUnavailableDateAction, clearUnavailableDateAction } from './availab
 import { RatingModal } from './rating-modal';
 import { SessionDrawer, type DrawerState } from './session-drawer';
 import { ProposalCard } from './proposal-card';
-import type { CalendarProposalState } from '@/features/coach/week-draft-repository';
+import { RedraftCard } from './redraft-card';
+import { DraftingCard } from './drafting-card';
+import type { CalendarSlotState } from '@/features/coach/week-draft-service';
 import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
 import { glanceParts, layerForWeek, type HealthSpan } from '@/features/health/health-layer';
@@ -256,7 +258,7 @@ export function Calendar({
    * athlete's own calendar passes this; the Head Coach's review is their own
    * panel (17). Absent, the calendar renders exactly as it did before 18.
    */
-  proposal?: CalendarProposalState | null;
+  proposal?: CalendarSlotState | null;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -413,6 +415,20 @@ export function Calendar({
       {proposal?.kind === 'proposal' && (
         <div className="mt-5">
           <ProposalCard draft={proposal.draft} />
+        </div>
+      )}
+      {proposal?.kind === 'drafting' && (
+        // The draft is being written this very request, by the shell's
+        // after(); the slot says so and re-reads until it lands (29).
+        <div className="mt-5">
+          <DraftingCard weekStart={proposal.weekStart} waiter={{ side: 'athlete' }} />
+        </div>
+      )}
+      {proposal?.kind === 'redraft-offer' && (
+        // A declined week with no plan: the one offer to draft it again
+        // (training-architecture/24). The card's place, not the calendar's.
+        <div className="mt-5">
+          <RedraftCard weekStart={proposal.weekStart} />
         </div>
       )}
       {proposal?.kind === 'discussing' && (

@@ -62,6 +62,9 @@ const getPendingWeekDraft = vi.fn<(athleteId: string, weekStart: string, options
 const getRoster = vi.fn(async (): Promise<unknown[]> => []);
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft }));
+// The in-flight draft (training-architecture/29): nothing in flight by default.
+const draftInFlight = vi.fn(async (): Promise<unknown> => null);
+vi.mock('./week-draft-service', () => ({ draftInFlight }));
 vi.mock('./coach-repository', () => ({
   getRoster,
   getActiveLink,
@@ -431,6 +434,54 @@ describe('getCoachAthleteView — the drafted week and its day are the Head Coac
     const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
     expect(view!.weeklySessionDay).toBeNull();
     expect(view!.pendingDraft).toBeNull();
+  });
+});
+
+describe('getCoachAthleteView.draftInFlight — the preview area says a draft is coming (training-architecture/29)', () => {
+  // Tuesday 2026-09-15, athlete's day Wednesday, one-day lead: the coach
+  // previews 2026-09-21, as the pendingDraft tests above read it.
+  const PREVIEW_WEEK = '2026-09-21';
+  const THIS_WEEK = '2026-09-14';
+
+  beforeEach(() => {
+    calendarRows.value = [];
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: {} });
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+    getAthleteById.mockResolvedValue({ id: 'a1', profile: { weeklySessionDay: 'Wednesday' } });
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getPendingWeekDraft.mockReset();
+    getPendingWeekDraft.mockResolvedValue(null);
+    draftInFlight.mockReset();
+    draftInFlight.mockResolvedValue(null);
+  });
+
+  it('set when no draft is pending and the in-flight week is the one the coach previews', async () => {
+    draftInFlight.mockResolvedValue({ weekStart: PREVIEW_WEEK, visibleFrom: '2026-09-16', expectedSeconds: 30 });
+    const view = await getCoachAthleteView('coach_1', 'a1', '2026-09-15');
+    expect(view!.draftInFlight).toEqual({ weekStart: PREVIEW_WEEK });
+    expect(draftInFlight).toHaveBeenCalledWith('a1', '2026-09-15');
+  });
+
+  it('null when a draft is pending — and the gate is not even asked', async () => {
+    getPendingWeekDraft.mockResolvedValue({ id: 'd1', weekStart: PREVIEW_WEEK, visibleFrom: '2026-09-16', sessions: [], citations: [], approved: false, createdAt: new Date() });
+    const view = await getCoachAthleteView('coach_1', 'a1', '2026-09-15');
+    expect(view!.draftInFlight).toBeNull();
+    expect(draftInFlight).not.toHaveBeenCalled();
+  });
+
+  it('re-reads the pending draft once when nothing is in flight, so a draft that landed between the reads is shown', async () => {
+    const landed = { id: 'd9', weekStart: PREVIEW_WEEK, visibleFrom: '2026-09-16', sessions: [], citations: [], approved: false, createdAt: new Date() };
+    getPendingWeekDraft.mockResolvedValueOnce(null).mockResolvedValueOnce(landed);
+    const view = await getCoachAthleteView('coach_1', 'a1', '2026-09-15');
+    expect(view!.pendingDraft).toEqual(landed);
+    expect(view!.draftInFlight).toBeNull();
+    expect(getPendingWeekDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it('null when nothing is in flight, and when the in-flight week is this week’s remainder, which the coach page does not preview', async () => {
+    expect((await getCoachAthleteView('coach_1', 'a1', '2026-09-15'))!.draftInFlight).toBeNull();
+    draftInFlight.mockResolvedValue({ weekStart: THIS_WEEK, visibleFrom: '2026-09-15', expectedSeconds: 30 });
+    expect((await getCoachAthleteView('coach_1', 'a1', '2026-09-15'))!.draftInFlight).toBeNull();
   });
 });
 

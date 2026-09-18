@@ -273,10 +273,41 @@ describe('composeNarration — the Coach announcing its own blocks (training-arc
     }
   });
 
-  it('announces a drafted week in one sentence, naming no human, whatever the payload', () => {
+  it('announces a drafted week by when training starts — the earliest session’s weekday — naming no human', () => {
+    // `training-architecture/24`: the draft may be this week's remainder or
+    // next week, so the sentence names the first day rather than "next week",
+    // and says when training starts (the showable-version/11 fall-through rule).
+    const out = composeNarration(
+      [
+        {
+          id: 'ev_w',
+          actorId: null,
+          type: 'week_drafted',
+          payload: { weekStart: '2026-09-21', sessions: [{ date: '2026-09-23' }, { date: '2026-09-22' }, { date: '2026-09-27' }] },
+          createdAt: new Date('2026-09-16T08:00:00Z'),
+        },
+      ],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=weekDraftedFrom(day=day:2026-09-22))');
+    expect(out).not.toContain('Lars');
+
+    // An undated session among dated ones is skipped, not counted as earliest.
+    const mixed = composeNarration(
+      [{ id: 'ev_w', actorId: null, type: 'week_drafted', payload: { sessions: [{ note: 'x' }, { date: '2026-09-24' }] }, createdAt: new Date() }],
+      {},
+      t,
+      weekday,
+    );
+    expect(mixed).toBe('single(clause=weekDraftedFrom(day=day:2026-09-24))');
+  });
+
+  it('announces a drafted week with no dated session in one sentence with no day, whatever the payload', () => {
     // `training-architecture/16`: the proposal itself is on the calendar, so the
     // sentence carries no session list — and a malformed payload says the same.
-    for (const payload of [{ weekStart: '2026-09-21', sessions: [] }, null, {}]) {
+    for (const payload of [{ weekStart: '2026-09-21', sessions: [] }, { sessions: [{ note: 'x' }] }, null, {}]) {
       const out = composeNarration(
         [{ id: 'ev_w', actorId: null, type: 'week_drafted', payload, createdAt: new Date('2026-09-16T08:00:00Z') }],
         { coach_1: 'Lars' },

@@ -36,8 +36,10 @@ vi.mock('next/server', () => ({ after }));
 vi.mock('@/features/coach/training-block-service', () => ({ ensureBlocksAdjusted, getResolvedBlocks }));
 // The drafted week the athlete has not decided on (training-architecture/18):
 // read here with today as `asOf`, passed to the calendar, never fetched by it.
-const getCalendarProposalState = vi.fn(() => Promise.resolve(null as unknown));
-vi.mock('@/features/coach/week-draft-repository', () => ({ getCalendarProposalState }));
+// Since training-architecture/29 the read is the service's slot state, which
+// adds "drafting" while the shell's after() is still writing the draft.
+const calendarSlotState = vi.fn(() => Promise.resolve(null as unknown));
+vi.mock('@/features/coach/week-draft-service', () => ({ calendarSlotState }));
 vi.mock('../../block-strip', () => ({ BlockStrip: () => null }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
@@ -54,7 +56,8 @@ vi.mock('@/features/garmin/detected-activity', () => ({
 }));
 // The client calendar pulls in browser deps; the page's own wiring is under
 // test here, not its rendering.
-vi.mock('../../calendar', () => ({ Calendar: () => null }));
+const Calendar = vi.fn(() => null);
+vi.mock('../../calendar', () => ({ Calendar }));
 vi.mock('../../garmin-upload', () => ({ GarminUpload: () => null }));
 vi.mock('../../detected-activities', () => ({ DetectedActivities: () => null }));
 
@@ -151,19 +154,36 @@ describe('TrainingPlanPage — the Training Block adjustment trigger (training-a
   });
 });
 
-describe('TrainingPlanPage — the drafted week (training-architecture/18)', () => {
-  it('reads the calendar proposal state as the athlete, with today, for a signed-in athlete', async () => {
+/** The first element of `type` in a React tree the page returned — the page is not rendered, its wiring is read. */
+function findElement(node: unknown, type: unknown): { props: Record<string, unknown> } | null {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = findElement(child, type);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  const element = node as { type?: unknown; props?: { children?: unknown } };
+  if (element.type === type) return element as { props: Record<string, unknown> };
+  return findElement(element.props?.children, type);
+}
+
+describe('TrainingPlanPage — the drafted week (training-architecture/18, 29)', () => {
+  it('asks the service for the slot state — proposal or drafting — as the athlete, with today, and passes it to the calendar', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_abc' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: {} });
-    await render();
-    expect(getCalendarProposalState).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    calendarSlotState.mockResolvedValue({ kind: 'drafting', weekStart: '2026-09-21' });
+    const tree = await render();
+    expect(calendarSlotState).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(findElement(tree, Calendar)?.props.proposal).toEqual({ kind: 'drafting', weekStart: '2026-09-21' });
   });
 
   it('reads nothing for a user with no athlete row', async () => {
-    getCalendarProposalState.mockClear();
+    calendarSlotState.mockClear();
     getSession.mockResolvedValue({ user: { id: 'user_abc' } });
     getAthleteByUserId.mockResolvedValue(undefined);
     await render();
-    expect(getCalendarProposalState).not.toHaveBeenCalled();
+    expect(calendarSlotState).not.toHaveBeenCalled();
   });
 });

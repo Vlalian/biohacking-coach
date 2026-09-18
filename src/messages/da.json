@@ -275,7 +275,8 @@
     "subtitle": "Spørg Coachen om denne atlet.",
     "intro": "Coachen har læst denne atlets data — åbn en briefing for at høre dens vurdering og stille spørgsmål.",
     "start": "Åbn briefing",
-    "starting": "Åbner…",
+    "opening": "Åbner…",
+    "starting": "Læser ugen… cirka {seconds} sekunder",
     "thinking": "Coachen tænker…",
     "inputLabel": "Spørg Coachen om denne atlet",
     "placeholder": "Spørg om søvn, belastning eller restitution",
@@ -626,7 +627,8 @@
     "yourHeadCoach": "Din Head Coach",
     "recently": "for nylig",
     "blocksDrafted": "Jeg har formet din træning frem mod {race}: {blocks}",
-    "weekDrafted": "Jeg har lavet et udkast til næste uge — kig på din plan, når du har tid",
+    "weekDrafted": "Jeg har lavet et udkast til en træningsuge — kig på din plan, når du har tid",
+    "weekDraftedFrom": "Jeg har lavet et udkast til en træningsuge, der starter {day} — kig på din plan, når du har tid",
     "weeklyDaySet": "{coach} flyttede din ugentlige planlægningsdag til {day}",
     "weeklyDaySetNoDetail": "{coach} ændrede din ugentlige planlægningsdag",
     "weekDraftShaped": "{coach} justerede næste uges plan, før den nåede dig",
@@ -710,6 +712,22 @@
     "approved": "Godkendt. Det når atleten på deres planlægningsdag.",
     "approvedChanged": "Godkendt med dine ændringer. Atleten får at vide, at du har justeret den.",
     "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
+    "error": "Det virkede ikke ({reason})."
+  },
+  "DraftingCard": {
+    "drafting": "Coachen laver et udkast til ugen… cirka {seconds} sekunder.",
+    "notYet": "Ikke endnu — det er her, næste gang du åbner appen."
+  },
+  "RedraftCard": {
+    "title": "Ingen plan for den uge",
+    "lead": "Du lod ugen fra {week} være, som den var. Coachen kan lave et udkast én gang til.",
+    "redraft": "Lav et udkast til min uge",
+    "drafting": "Coachen laver et udkast til ugen — cirka {seconds} sekunder. Det dukker op her.",
+    "alreadyPlanned": "Den uge har allerede en plan.",
+    "draftPending": "Der venter allerede et udkast til den uge på dig.",
+    "notDeclined": "Den uge blev ikke afvist, så der er ikke noget at lave om — spørg Coachen i stedet.",
+    "noWindow": "Ingen dag i den uge kan rumme træning.",
+    "consentRequired": "For at få et udkast skal du først tillade AI-coaching under Privatliv.",
     "error": "Det virkede ikke ({reason})."
   },
   "ProposalCard": {

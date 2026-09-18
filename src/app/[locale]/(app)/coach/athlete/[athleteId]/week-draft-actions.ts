@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { resolveHeadCoachId } from '../../../../current-actor';
-import { approveWeekDraft, type ApproveResult } from '@/features/coach/head-coach-week-service';
+import { approveWeekDraft, coachDraftLanded, type ApproveResult } from '@/features/coach/head-coach-week-service';
 import { today } from '@/lib/date';
 
 /**
@@ -34,4 +34,15 @@ export async function approveWeekDraftAction(
   });
   if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
+}
+
+/**
+ * The coach page's poll read (`training-architecture/29`): has the previewed
+ * week's draft landed? Behind the service's link gate; a caller with no coach
+ * row is told "not yet". A read, so nothing to revalidate.
+ */
+export async function coachDraftLandedAction(athleteId: string, weekStart: string): Promise<boolean> {
+  const headCoachId = await resolveHeadCoachId();
+  if (!headCoachId) return false;
+  return coachDraftLanded(headCoachId, athleteId, weekStart);
 }

@@ -51,10 +51,22 @@ const execute = vi.fn(async (statement: unknown) => {
 
 vi.mock('@/db', () => ({ getDb: () => Object.assign(chain(), { execute }) }));
 const getPendingProposal = vi.fn(async (): Promise<unknown> => null);
-vi.mock('./plan-proposal-repository', () => ({ getPendingProposal }));
+const latestPlanDecision = vi.fn(async (): Promise<'written' | 'declined' | null> => null);
+vi.mock('./plan-proposal-repository', () => ({ getPendingProposal, latestPlanDecision }));
+const getSessionsForWeek = vi.fn(async (): Promise<{ origin: string }[]> => []);
+vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek }));
 
-const { getPendingWeekDraft, recordWeekDraft, recordWeekDraftApproval, withdrawPreviewDrafts, getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed, getDiscussedWeek } =
-  await import('./week-draft-repository');
+const {
+  getPendingWeekDraft,
+  recordWeekDraft,
+  recordWeekDraftApproval,
+  withdrawPreviewDrafts,
+  getCalendarProposalState,
+  recordWeekDraftDecision,
+  recordWeekDraftDiscussed,
+  getDiscussedWeek,
+  getWeekDraftHistory,
+} = await import('./week-draft-repository');
 
 function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
   if (node === null || typeof node !== 'object') return [];
@@ -91,6 +103,8 @@ beforeEach(() => {
   rowsQueue = [];
   batches = [];
   execute.mockClear();
+  latestPlanDecision.mockReset().mockResolvedValue(null);
+  getSessionsForWeek.mockReset().mockResolvedValue([]);
 });
 
 describe('getPendingWeekDraft', () => {
@@ -268,66 +282,63 @@ describe('withdrawPreviewDrafts — a link severed mid-preview', () => {
   });
 });
 
-describe('getCalendarProposalState — what the athlete’s calendar shows (training-architecture/18)', () => {
-  const drafted = (weekStart: string, visibleFrom = weekStart) => ({
+describe('getCalendarProposalState — what the athlete’s calendar shows (18; nearer week first and the re-draft offer, 24)', () => {
+  const drafted = (weekStart: string, visibleFrom = weekStart, at = '2026-09-16T08:00:00Z') => ({
     id: `d-${weekStart}`,
     type: 'week_drafted',
     payload: { weekStart, visibleFrom, sessions: [SESSION], citations: [] },
-    createdAt: new Date('2026-09-16T08:00:00Z'),
+    createdAt: new Date(at),
   });
-  // Wednesday the 16th: this week is the 14th, next the 21st. Reads come back
-  // next week first, then this week, then the withdrawn-for-discussion row.
-
-  it('shows next week’s visible draft first', async () => {
-    rowsQueue.push([drafted('2026-09-21', '2026-09-16')], [drafted('2026-09-14')]);
-    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({ kind: 'proposal', draft: { id: 'd-2026-09-21' } });
+  const declined = (weekStart: string) => ({ id: `r-${weekStart}`, type: 'week_plan_declined', payload: { weekStart }, createdAt: new Date('2026-09-16T09:00:00Z') });
+  const discussed = (weekStart: string) => ({
+    id: `w-${weekStart}`,
+    type: 'week_draft_withdrawn',
+    payload: { weekStart, draftId: `d-${weekStart}`, reason: 'discussed', conversationId: 'c1' },
+    createdAt: new Date('2026-09-16T09:00:00Z'),
   });
+  // Wednesday the 16th: this week is the 14th, next the 21st. The two reads
+  // are the two weeks' histories, this week first — the nearer week is the
+  // one the athlete should decide first (Mads, 2026-09-17).
 
-  it('falls back to this week’s pending draft when next week’s is not visible yet', async () => {
-    rowsQueue.push([drafted('2026-09-21', '2026-09-20')], [drafted('2026-09-14')]);
+  it('shows this week’s visible draft before next week’s', async () => {
+    rowsQueue.push([drafted('2026-09-14')], [drafted('2026-09-21', '2026-09-16')]);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({ kind: 'proposal', draft: { id: 'd-2026-09-14' } });
   });
 
-  it('points at the conversation a draft moved into while that conversation’s proposal is still pending', async () => {
-    rowsQueue.push([], [], [{ payload: { weekStart: '2026-09-21', draftId: 'd-2026-09-21', reason: 'discussed', conversationId: 'c1' } }]);
-    getPendingProposal.mockResolvedValueOnce({ conversationId: 'c1', sessions: [SESSION] });
+  it('shows next week’s draft when this week has none, and nothing when it is not visible yet', async () => {
+    rowsQueue.push([], [drafted('2026-09-21', '2026-09-16')]);
+    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({ kind: 'proposal', draft: { id: 'd-2026-09-21' } });
+    rowsQueue.push([], [drafted('2026-09-21', '2026-09-20')]);
+    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toBeNull();
+  });
+
+  it('points at the conversation a draft moved into while that conversation has decided nothing', async () => {
+    rowsQueue.push([], [drafted('2026-09-21'), discussed('2026-09-21')]);
+    latestPlanDecision.mockResolvedValue(null);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toEqual({ kind: 'discussing', conversationId: 'c1', weekStart: '2026-09-21' });
-    expect(getPendingProposal).toHaveBeenCalledWith(ATHLETE, 'c1');
+    expect(latestPlanDecision).toHaveBeenCalledWith(ATHLETE, 'c1', new Date('2026-09-16T09:00:00Z'));
   });
 
-  it('shows nothing once the discussed proposal was decided in the conversation, and nothing when nothing was ever drafted', async () => {
-    rowsQueue.push([], [], [{ payload: { weekStart: '2026-09-21', draftId: 'd', reason: 'discussed', conversationId: 'c1' } }]);
-    getPendingProposal.mockResolvedValueOnce(null);
-    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toBeNull();
-    rowsQueue.push([], [], []);
-    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toBeNull();
+  it('offers a re-draft for the nearer declined week that holds no coach-planned session', async () => {
+    rowsQueue.push([drafted('2026-09-14'), declined('2026-09-14')], []);
+    getSessionsForWeek.mockResolvedValue([{ origin: 'athlete' }]);
+    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toEqual({ kind: 'redraft-offer', weekStart: '2026-09-14' });
+    expect(getSessionsForWeek).toHaveBeenCalledWith(ATHLETE, '2026-09-14');
   });
 
-  it('asks for the discussed withdrawals of exactly the two weeks, reading only the payload', async () => {
-    getPendingProposal.mockClear();
-    rowsQueue.push([], [], [{ payload: { weekStart: '2026-09-21', draftId: 'd', reason: 'discussed', conversationId: 'c1' } }]);
-    getPendingProposal.mockResolvedValueOnce({ conversationId: 'c1', sessions: [] });
-    await getCalendarProposalState(ATHLETE, '2026-09-16');
-    const bound = boundValues(whereArgs.at(-1));
-    expect(bound).toContain('discussed');
-    expect(bound).toContain('week_draft_withdrawn');
-    expect(bound).toContain('2026-09-21');
-    expect(bound).toContain('2026-09-14');
-    expect(Object.keys(selectArgs.at(-1) as object)).toEqual(['payload']);
+  it('a week declined in the conversation is offered too — the chat’s cancel is a decline', async () => {
+    rowsQueue.push([], [drafted('2026-09-21'), discussed('2026-09-21')]);
+    latestPlanDecision.mockResolvedValue('declined');
+    getSessionsForWeek.mockResolvedValue([]);
+    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toEqual({ kind: 'redraft-offer', weekStart: '2026-09-21' });
   });
 
-  it('a withdrawn row with no readable week is not a pointer either', async () => {
-    getPendingProposal.mockClear();
-    rowsQueue.push([], [], [{ payload: { reason: 'discussed', conversationId: 'c1' } }]);
+  it('offers nothing for a declined week that already has a coach-planned session, a written week, or one never drafted', async () => {
+    rowsQueue.push([drafted('2026-09-14'), declined('2026-09-14')], [drafted('2026-09-21'), { ...declined('2026-09-21'), type: 'week_plan_written' }]);
+    getSessionsForWeek.mockResolvedValue([{ origin: 'head_coach' }]);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toBeNull();
-    expect(getPendingProposal).not.toHaveBeenCalled();
-  });
-
-  it('a withdrawn row with no readable conversation is not a pointer', async () => {
-    getPendingProposal.mockClear();
-    rowsQueue.push([], [], [{ payload: { weekStart: '2026-09-21', reason: 'discussed' } }]);
+    rowsQueue.push([], []);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toBeNull();
-    expect(getPendingProposal).not.toHaveBeenCalled();
   });
 });
 
@@ -370,6 +381,40 @@ describe('getDiscussedWeek — which week a conversation is about (training-arch
     expect(whereArgs).toHaveLength(1);
     rowsQueue.push([{ payload: { reason: 'discussed', conversationId: 'c1' }, createdAt: HANDED_AT }]);
     expect(await getDiscussedWeek(ATHLETE, 'c1')).toBeNull();
+  });
+});
+
+describe('getWeekDraftHistory — the week’s history, with a discussed week resolved through its conversation (24)', () => {
+  const draft = { id: 'd1', type: 'week_drafted', payload: { weekStart: WEEK, sessions: [], visibleFrom: WEEK }, createdAt: new Date('2026-09-16T08:00:00Z') };
+  const handoff = {
+    id: 'w',
+    type: 'week_draft_withdrawn',
+    payload: { weekStart: WEEK, reason: 'discussed', conversationId: 'c1' },
+    createdAt: new Date('2026-09-16T09:00:00Z'),
+  };
+
+  it('a declined week reads as declined from the rows alone, scoped to the athlete and the week', async () => {
+    rowsQueue.push([draft, { id: 'r', type: 'week_plan_declined', payload: { weekStart: WEEK }, createdAt: new Date('2026-09-16T09:00:00Z') }]);
+    expect(await getWeekDraftHistory(ATHLETE, WEEK)).toEqual({ kind: 'declined' });
+    expect(latestPlanDecision).not.toHaveBeenCalled();
+    const bound = boundValues(whereArgs.at(-1));
+    expect(bound).toContain(ATHLETE);
+    expect(bound).toContain(WEEK);
+  });
+
+  it('a discussed week is still discussing while the conversation has decided nothing', async () => {
+    rowsQueue.push([draft, handoff]);
+    expect(await getWeekDraftHistory(ATHLETE, WEEK)).toEqual({ kind: 'discussing', conversationId: 'c1' });
+    expect(latestPlanDecision).toHaveBeenCalledWith(ATHLETE, 'c1', new Date('2026-09-16T09:00:00Z'));
+  });
+
+  it('a discussed week becomes declined or written by the conversation’s decision after the handoff', async () => {
+    rowsQueue.push([draft, handoff]);
+    latestPlanDecision.mockResolvedValue('declined');
+    expect(await getWeekDraftHistory(ATHLETE, WEEK)).toEqual({ kind: 'declined' });
+    rowsQueue.push([draft, handoff]);
+    latestPlanDecision.mockResolvedValue('written');
+    expect(await getWeekDraftHistory(ATHLETE, WEEK)).toEqual({ kind: 'written' });
   });
 });
 

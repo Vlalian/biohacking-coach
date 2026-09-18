@@ -2,8 +2,18 @@ import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
-import { pendingWeekDraft, visibleTo, WEEK_DRAFT_EVENT, type SkeletonDay, type WeekDraft } from './week-draft';
-import { getPendingProposal } from './plan-proposal-repository';
+import {
+  hasCoachPlannedSession,
+  pendingWeekDraft,
+  visibleTo,
+  weekDraftHistory,
+  WEEK_DRAFT_EVENT,
+  type SkeletonDay,
+  type WeekDraft,
+  type WeekDraftEvent,
+} from './week-draft';
+import { latestPlanDecision } from './plan-proposal-repository';
+import { getSessionsForWeek } from '@/features/session/session-repository';
 import { PLAN_EVENT } from './plan-proposal';
 import { addDays, weekStartOf } from '@/lib/date';
 import type { ProposedSession } from './weekly-session';
@@ -48,7 +58,12 @@ export async function getPendingWeekDraft(
 }
 
 async function readPendingWeekDraft(athleteId: string, weekStart: string): Promise<WeekDraft | null> {
-  const rows = await getDb()
+  return pendingWeekDraft(await readWeekDraftEvents(athleteId, weekStart), weekStart);
+}
+
+/** The week's draft events, oldest first — what both history readers walk. */
+async function readWeekDraftEvents(athleteId: string, weekStart: string): Promise<WeekDraftEvent[]> {
+  return getDb()
     .select({ id: events.id, type: events.type, payload: events.payload, createdAt: events.createdAt })
     .from(events)
     .where(
@@ -59,8 +74,30 @@ async function readPendingWeekDraft(athleteId: string, weekStart: string): Promi
       ),
     )
     .orderBy(asc(events.createdAt));
+}
 
-  return pendingWeekDraft(rows, weekStart);
+/**
+ * What became of a week's draft, with a week that went into a conversation
+ * resolved through that conversation's decisions (`training-architecture/24`).
+ */
+export type ResolvedWeekDraftHistory =
+  | { kind: 'never' }
+  | { kind: 'pending'; draft: WeekDraft }
+  | { kind: 'declined' }
+  | { kind: 'written' }
+  | { kind: 'discussing'; conversationId: string };
+
+/**
+ * The pure {@link weekDraftHistory} over the week's rows; a `discussed` week
+ * asks the conversation what the athlete decided after the handoff — the
+ * chat's decisions carry a conversation, not a week, so the rows alone cannot
+ * say. Nothing decided yet is `discussing`.
+ */
+export async function getWeekDraftHistory(athleteId: string, weekStart: string): Promise<ResolvedWeekDraftHistory> {
+  const history = weekDraftHistory(await readWeekDraftEvents(athleteId, weekStart), weekStart);
+  if (history.kind !== 'discussed') return history;
+  const decided = await latestPlanDecision(athleteId, history.conversationId, history.handedAt);
+  return decided ? { kind: decided } : { kind: 'discussing', conversationId: history.conversationId };
 }
 
 export interface NewWeekDraft {
@@ -192,59 +229,61 @@ export async function withdrawPreviewDrafts(athleteId: string, today: string): P
 }
 
 /**
- * What the athlete's calendar shows about a drafted week (`/18`): the proposal
- * itself, a pointer to the conversation it moved into, or nothing.
+ * What the athlete's calendar shows about a drafted week (`/18`, `/24`): the
+ * proposal itself, a pointer to the conversation it moved into, an offer to
+ * draft a declined week once more, or nothing.
  */
 export type CalendarProposalState =
   | { kind: 'proposal'; draft: WeekDraft }
-  | { kind: 'discussing'; conversationId: string; weekStart: string };
+  | { kind: 'discussing'; conversationId: string; weekStart: string }
+  | { kind: 'redraft-offer'; weekStart: string };
 
 /**
- * Next week's visible pending draft, else this week's — at most one proposal is
- * ever shown, and next week wins. When neither is pending, the most recent
- * draft handed to a conversation whose proposal is still open is reported as
- * "being discussed", so the calendar can point at where it went.
+ * This week's visible pending draft, else next week's — the nearer week is the
+ * one the athlete should decide first (Mads, 2026-09-17; it used to be next
+ * week first). When neither is pending: a week handed to a conversation that
+ * has decided nothing is "being discussed", so the calendar can point at where
+ * it went; else the nearer declined week with no coach-planned session gets
+ * the one offer to draft again (`/24`, decision 1). Two history reads, one per
+ * week, and the pointer and the offer are read off the same two answers.
  */
 export async function getCalendarProposalState(athleteId: string, today: string): Promise<CalendarProposalState | null> {
   const thisWeek = weekStartOf(today);
-  for (const weekStart of [addDays(thisWeek, 7), thisWeek]) {
-    const draft = await getPendingWeekDraft(athleteId, weekStart, { asOf: today });
-    if (draft) return { kind: 'proposal', draft };
+  const weeks = [thisWeek, addDays(thisWeek, 7)];
+  const histories = await Promise.all(weeks.map((weekStart) => getWeekDraftHistory(athleteId, weekStart)));
+
+  for (const history of histories) {
+    if (history.kind === 'pending' && visibleTo(history.draft, today)) return { kind: 'proposal', draft: history.draft };
   }
-  return discussingState(athleteId, [addDays(thisWeek, 7), thisWeek]);
+  for (const [i, history] of histories.entries()) {
+    if (history.kind === 'discussing') return { kind: 'discussing', conversationId: history.conversationId, weekStart: weeks[i] };
+  }
+  return redraftOffer(athleteId, weeks, histories);
+}
+
+/** The nearer declined week that holds no coach-planned session, as the offer to draft it again — or null. */
+async function redraftOffer(
+  athleteId: string,
+  weeks: string[],
+  histories: ResolvedWeekDraftHistory[],
+): Promise<CalendarProposalState | null> {
+  for (const [i, history] of histories.entries()) {
+    if (history.kind !== 'declined') continue;
+    if (!hasCoachPlannedSession(await getSessionsForWeek(athleteId, weeks[i]))) {
+      return { kind: 'redraft-offer', weekStart: weeks[i] };
+    }
+  }
+  return null;
 }
 
 /** The reason a withdrawn draft carries when the athlete took it into a conversation. */
 const DISCUSSED = 'discussed';
 
-/** The most recent draft handed to a conversation for one of `weeks`, or null. */
-async function latestDiscussedHandoff(
-  athleteId: string,
-  weeks: string[],
-): Promise<{ conversationId: string; weekStart: string } | null> {
-  const [row] = await getDb()
-    .select({ payload: events.payload })
-    .from(events)
-    .where(
-      and(
-        eq(events.athleteId, athleteId),
-        eq(events.type, WEEK_DRAFT_EVENT.withdrawn),
-        sql`${events.payload} ->> 'reason' = ${DISCUSSED}`,
-        inArray(sql`${events.payload} ->> 'weekStart'`, weeks),
-      ),
-    )
-    .orderBy(desc(events.createdAt))
-    .limit(1);
-  const payload = (row?.payload ?? null) as { conversationId?: unknown; weekStart?: unknown } | null;
-  if (typeof payload?.conversationId !== 'string' || typeof payload.weekStart !== 'string') return null;
-  return { conversationId: payload.conversationId, weekStart: payload.weekStart };
-}
-
 /**
  * The week a conversation is about, or null (`training-architecture/20`): the
  * `weekStart` of the newest draft handed to *this* conversation, **while the
  * athlete has not yet decided it**. The conversation-keyed twin of
- * {@link latestDiscussedHandoff}.
+ * `getWeekDraftHistory`'s discussed branch.
  *
  * A handoff closes on the athlete's first decision after it — the week written
  * or the proposal cancelled on the card — not on the proposal's pendingness:
@@ -287,14 +326,6 @@ export async function getDiscussedWeek(athleteId: string, conversationId: string
   return decided ? null : payload.weekStart;
 }
 
-async function discussingState(athleteId: string, weeks: string[]): Promise<CalendarProposalState | null> {
-  const handoff = await latestDiscussedHandoff(athleteId, weeks);
-  if (!handoff) return null;
-  // Still being discussed only while that conversation's proposal is pending;
-  // once it was confirmed or cancelled there, the calendar has nothing to point at.
-  const pending = await getPendingProposal(athleteId, handoff.conversationId);
-  return pending ? { kind: 'discussing', ...handoff } : null;
-}
 
 /** The athlete's own decision on a draft — the event 16's pending rule resolves on. */
 export async function recordWeekDraftDecision(decision: {

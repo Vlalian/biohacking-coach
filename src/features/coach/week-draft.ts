@@ -2,6 +2,7 @@ import { addDays, weekStartOf } from '@/lib/date';
 import type { Citation } from '@/lib/citation';
 import { excludedBetween, hasAPlannableDay, planningWindow, type PlanningWindow } from './planning-window';
 import type { ProposedSession } from './weekly-session';
+import { PLAN_EVENT } from './plan-proposal';
 import { effectiveWeeklySessionDay, WEEKDAYS } from './weekly-offer';
 
 /**
@@ -29,13 +30,6 @@ export const WEEK_DRAFT_EVENT = {
   approved: 'week_draft_approved',
   withdrawn: 'week_draft_withdrawn',
 } as const;
-
-/** The events that end a draft's wait for an answer. */
-const RESOLVING_TYPES: readonly string[] = [
-  'week_plan_written',
-  'week_plan_declined',
-  WEEK_DRAFT_EVENT.withdrawn,
-];
 
 /** A drafted week, as staged — or as a Head Coach approved it (`/17`). */
 export interface WeekDraft {
@@ -107,24 +101,71 @@ function draftOf(event: WeekDraftEvent, weekStart: string): WeekDraft | null {
 const DRAFT_CARRYING_TYPES: readonly string[] = [WEEK_DRAFT_EVENT.drafted, WEEK_DRAFT_EVENT.approved];
 
 /**
- * The draft a week is still waiting on, or null.
+ * What became of a week's draft (`training-architecture/24`, Mads 2026-09-17:
+ * *a week is drafted once*). The gate reads this instead of "is one pending":
+ * pending ended at every decision, and every decision reopened the gate, so
+ * an accepted, declined or discussed week was drafted again on the next open.
  *
+ * - `never` — no draft was ever recorded, or the only one was a Head Coach
+ *   preview withdrawn when the link was severed (`reason: 'severed'`): the
+ *   athlete never saw it, so it does not count as their one offer.
+ * - `pending` — the newest draft, nothing has resolved it.
+ * - `declined` / `written` — the athlete's answer on the calendar.
+ * - `discussed` — the athlete took it into a conversation
+ *   (`reason: 'discussed'`); what they decided there is the repository's to
+ *   resolve, since the chat's decisions carry a conversation, not a week.
+ */
+export type WeekDraftHistory =
+  | { kind: 'never' }
+  | { kind: 'pending'; draft: WeekDraft }
+  | { kind: 'declined' }
+  | { kind: 'written' }
+  | { kind: 'discussed'; conversationId: string; handedAt: Date };
+
+/**
  * Walks the week's events oldest-first: a `week_drafted` becomes the pending
  * one, a `week_draft_approved` (the Head Coach's version, `/17`) replaces it —
  * the newest of either wins, one pending per week — and a later written /
- * declined / withdrawn event for the same week clears it. Events for other
- * weeks are ignored. Pure: events in, decision out — the same shape as
+ * declined / withdrawn event for the same week names the outcome. Events for
+ * other weeks are ignored. Pure: events in, decision out — the same shape as
  * `pendingProposal`, keyed on `weekStart` because a silent draft has no
  * conversation to be keyed on.
  */
-export function pendingWeekDraft(events: WeekDraftEvent[], weekStart: string): WeekDraft | null {
-  let pending: WeekDraft | null = null;
+export function weekDraftHistory(events: WeekDraftEvent[], weekStart: string): WeekDraftHistory {
+  let history: WeekDraftHistory = { kind: 'never' };
   for (const event of events) {
-    if (weekStartOfPayload(event.payload) !== weekStart) continue;
-    if (DRAFT_CARRYING_TYPES.includes(event.type)) pending = draftOf(event, weekStart) ?? pending;
-    else if (RESOLVING_TYPES.includes(event.type)) pending = null;
+    if (weekStartOfPayload(event.payload) === weekStart) history = nextHistory(history, event, weekStart);
   }
-  return pending;
+  return history;
+}
+
+/** One step of the walk: a carrier makes the draft pending; a resolver answers a pending one; anything else is ignored. */
+function nextHistory(history: WeekDraftHistory, event: WeekDraftEvent, weekStart: string): WeekDraftHistory {
+  if (DRAFT_CARRYING_TYPES.includes(event.type)) {
+    const draft = draftOf(event, weekStart);
+    return draft ? { kind: 'pending', draft } : history;
+  }
+  return history.kind === 'pending' ? (resolutionOf(event) ?? history) : history;
+}
+
+/** The outcome a resolving event names for the pending draft before it, or null for an unrelated event. */
+function resolutionOf(event: WeekDraftEvent): WeekDraftHistory | null {
+  if (event.type === PLAN_EVENT.written) return { kind: 'written' };
+  if (event.type === PLAN_EVENT.declined) return { kind: 'declined' };
+  return event.type === WEEK_DRAFT_EVENT.withdrawn ? withdrawnOutcome(event) : null;
+}
+
+/** A withdrawal into a conversation is `discussed`; any other withdrawal (a severed preview) resets to `never`. */
+function withdrawnOutcome(event: WeekDraftEvent): WeekDraftHistory {
+  const rec = event.payload as Record<string, unknown>;
+  if (rec.reason !== 'discussed' || typeof rec.conversationId !== 'string') return { kind: 'never' };
+  return { kind: 'discussed', conversationId: rec.conversationId, handedAt: event.createdAt };
+}
+
+/** The draft a week is still waiting on, or null — the pending branch of {@link weekDraftHistory}. */
+export function pendingWeekDraft(events: WeekDraftEvent[], weekStart: string): WeekDraft | null {
+  const history = weekDraftHistory(events, weekStart);
+  return history.kind === 'pending' ? history.draft : null;
 }
 
 // ── Which week, and its window ────────────────────────────────────────────────
@@ -153,6 +194,49 @@ function weekdayIndex(key: string): number {
  */
 export function draftDueWeek(today: string, weeklySessionDay: string | null | undefined, leadDays = 0): string {
   return addDays(weekStartOf(cycleAnchor(today, weeklySessionDay, leadDays)), 7);
+}
+
+/** The week a draft is due, and the first day the athlete may see it. */
+export interface DueWeek {
+  weekStart: string;
+  visibleFrom: string;
+}
+
+/**
+ * Which week the Coach should draft today (`training-architecture/24`,
+ * decision 5; `showable-version/11`, Mads 2026-09-02: *a new athlete gets the
+ * remainder of their current week, always*). An empty, never-drafted current
+ * week with days left is due now and visible today; otherwise the cycle rule —
+ * the week after the anchor, visible from the athlete's day. A current week
+ * already drafted, pending or decided, is done with (drafted once), so the
+ * same open moves on to the cycle week. The fall-through is the same as the
+ * Weekly Session's: no plannable day left this week means next week.
+ */
+export function dueWeekFor(facts: {
+  today: string;
+  weeklySessionDay: string | null | undefined;
+  leadDays: number;
+  thisWeekHasCoachPlan: boolean;
+  thisWeekDrafted: boolean;
+  thisWeekWindow: PlanningWindow | null;
+}): DueWeek {
+  const { today, weeklySessionDay, leadDays, thisWeekHasCoachPlan, thisWeekDrafted, thisWeekWindow } = facts;
+  if (!thisWeekHasCoachPlan && !thisWeekDrafted && thisWeekWindow !== null) {
+    return { weekStart: weekStartOf(today), visibleFrom: today };
+  }
+  return {
+    weekStart: draftDueWeek(today, weeklySessionDay, leadDays),
+    visibleFrom: cycleAnchor(today, weeklySessionDay, leadDays),
+  };
+}
+
+/**
+ * Whether a week already holds a plan from a coach — the Coach's own or the
+ * Head Coach's. An athlete-added session or a watch-logged activity is not a
+ * plan: the week is still the Coach's to draft.
+ */
+export function hasCoachPlannedSession(sessions: readonly { origin: string }[]): boolean {
+  return sessions.some((s) => s.origin === 'coach' || s.origin === 'head_coach');
 }
 
 /**

@@ -29,8 +29,8 @@ import {
   type ProposedSession,
 } from './weekly-session';
 import {
-  cycleAnchor,
-  draftDueWeek,
+  dueWeekFor,
+  hasCoachPlannedSession,
   weekSkeleton,
   weekWindow,
   HEAD_COACH_LEAD_DAYS,
@@ -38,7 +38,14 @@ import {
   type SkeletonDay,
 } from './week-draft';
 import { getCoachByUserId, getLinkForAthlete, getRoster } from './coach-repository';
-import { getPendingWeekDraft, recordWeekDraft } from './week-draft-repository';
+import {
+  getCalendarProposalState,
+  getWeekDraftHistory,
+  recordWeekDraft,
+  type CalendarProposalState,
+  type ResolvedWeekDraftHistory,
+} from './week-draft-repository';
+import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 
 /**
  * The Coach drafts next week on its own (`training-architecture/16`) — the
@@ -74,18 +81,25 @@ export type DraftOutcome =
 /**
  * The cheap gate, as a pure decision over the facts the service gathered.
  *
- * Its own function so the six early exits are six lines here rather than six
- * guards in the entry point — the shape that put the discarded `04a` build over
- * the complexity ceiling.
+ * Its own function so the early exits are lines here rather than guards in
+ * the entry point — the shape that put the discarded `04a` build over the
+ * complexity ceiling.
+ *
+ * **A week is drafted once** (`training-architecture/24`, Mads 2026-09-17).
+ * The gate used to ask "is a draft still pending?", and pending ended at every
+ * decision — Accept, Decline, Discuss — so every decision reopened the gate
+ * and the next app-open drafted the same week again. Now any history but
+ * `never` is `already-drafted`; a second draft is only ever the athlete's own
+ * ask ({@link redraftWeek}).
  */
 export function draftGate(facts: {
   consented: boolean;
-  pending: boolean;
+  history: ResolvedWeekDraftHistory;
   held: boolean;
   window: PlanningWindow | null;
 }): Exclude<DraftOutcome, 'coach-failed' | 'malformed' | 'lost-race' | 'drafted'> | null {
   if (!facts.consented) return 'consent-refused';
-  if (facts.pending) return 'already-drafted';
+  if (facts.history.kind !== 'never') return 'already-drafted';
   if (facts.held) return 'already-held';
   if (!facts.window) return 'no-window';
   return null;
@@ -124,6 +138,143 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
   return outcome === 'drafted' ? 'drafted' : 'lost-race';
 }
 
+/** A draft the gate would write now, and nothing recorded yet: what the waiting surfaces show. */
+export type DraftInFlight = { weekStart: string; visibleFrom: string; expectedSeconds: number };
+
+/**
+ * Whether a draft is in flight for this athlete — derived, never stored
+ * (`training-architecture/29`, triage 2026-09-17): the gate would draft the
+ * due week and nothing is recorded for it, which is exactly the state the
+ * shell's `after()` is drafting into while the page has already rendered. The
+ * same facts as {@link ensureWeekDrafted}'s gate and no Coach call. Never
+ * throws; a dead driver reads as nothing in flight, logged like the draft's
+ * own failures.
+ */
+export async function draftInFlight(athleteId: string, today: string): Promise<DraftInFlight | null> {
+  const facts = await guarded(athleteId, () => gateFacts(athleteId, today));
+  if (facts === 'coach-failed' || 'gated' in facts) return null;
+  return { weekStart: facts.dueWeek, visibleFrom: facts.visibleFrom, expectedSeconds: COACH_EXPECTED_SECONDS };
+}
+
+/**
+ * The waiting card's read (`/29`): whether any draft is now recorded for the
+ * week. A read and nothing else — the card polls this, not the page, because
+ * a page refresh re-renders the shell whose `after()` would start the very
+ * draft being waited on again (review of the 24+29 batch). A dead driver is
+ * "not yet", logged.
+ */
+export async function draftLanded(athleteId: string, weekStart: string): Promise<boolean> {
+  const history = await guarded(athleteId, () => getWeekDraftHistory(athleteId, weekStart));
+  return history !== 'coach-failed' && history.kind !== 'never';
+}
+
+/** What the calendar's card slot shows: a proposal state, or that the draft is on its way. */
+export type CalendarSlotState = CalendarProposalState | { kind: 'drafting'; weekStart: string };
+
+/**
+ * The calendar's card slot, with the in-flight draft added to the repository's
+ * proposal states (`/29`). The proposal read comes first — a card, a pointer or
+ * an offer is never hidden behind "drafting" — and the gate is asked only when
+ * there is none.
+ */
+export async function calendarSlotState(athleteId: string, today: string): Promise<CalendarSlotState | null> {
+  const proposal = await getCalendarProposalState(athleteId, today);
+  if (proposal) return proposal;
+  const inFlight = await draftInFlight(athleteId, today);
+  // Nothing in flight after nothing to show: the draft may have landed between
+  // the two reads (the shell's after() runs beside this render), so read once
+  // more rather than show an empty slot with no poll (CodeRabbit, PR #78).
+  if (!inFlight) return getCalendarProposalState(athleteId, today);
+  return slotStateFor(null, inFlight, today);
+}
+
+/**
+ * Pure: the proposal state wins; else an in-flight draft the athlete may see
+ * today is `drafting`. A Head Coach's lead-day draft (`/17`) is stamped
+ * visible from the athlete's own day, and until then it is not theirs to wait
+ * for — the slot shows nothing, as it would for the draft itself.
+ */
+export function slotStateFor(
+  proposal: CalendarProposalState | null,
+  inFlight: DraftInFlight | null,
+  today: string,
+): CalendarSlotState | null {
+  if (proposal) return proposal;
+  if (inFlight && inFlight.visibleFrom <= today) return { kind: 'drafting', weekStart: inFlight.weekStart };
+  return null;
+}
+
+/** Why the athlete's own ask for a second draft was refused. */
+export type RedraftRefusal = 'not-declined' | 'already-planned' | 'draft-pending';
+
+/**
+ * The one way a week is drafted twice (`training-architecture/24`, decision
+ * 1): the athlete declined the Coach's draft and asks for another. Allowed
+ * for a declined week that holds no coach-planned session and has a plannable
+ * day; refused, by name, otherwise. Then the ordinary Coach call and write —
+ * `recordWeekDraft`'s guard against a pending twin is exactly right here.
+ * Visible today: the athlete is looking. Never throws.
+ */
+export async function redraftWeek(
+  athleteId: string,
+  weekStart: string,
+  today: string,
+): Promise<DraftOutcome | RedraftRefusal> {
+  const facts = await guarded(athleteId, () => redraftFacts(athleteId, weekStart, today));
+  if (facts === 'coach-failed') return facts;
+  if ('refused' in facts) return facts.refused;
+  const { window, unavailableDates } = facts;
+
+  const asked = await askCoach(athleteId, today, window, unavailableDates);
+  if (typeof asked === 'string') return asked;
+
+  const outcome = await guarded(athleteId, () =>
+    recordWeekDraft({
+      athleteId,
+      weekStart,
+      visibleFrom: today,
+      sessions: asked.sessions,
+      citations: asked.citations,
+      skeleton: asked.skeleton,
+    }),
+  );
+  if (outcome === 'coach-failed') return outcome;
+  return outcome === 'drafted' ? 'drafted' : 'lost-race';
+}
+
+/** The re-draft's gate, as facts gathered in one round and one pure decision. */
+async function redraftFacts(
+  athleteId: string,
+  weekStart: string,
+  today: string,
+): Promise<{ refused: DraftOutcome | RedraftRefusal } | { window: PlanningWindow; unavailableDates: string[] }> {
+  const [athlete, consent, history, sessions, unavailableDates] = await Promise.all([
+    getAthleteById(athleteId),
+    assertAiCoachingConsent(athleteId),
+    getWeekDraftHistory(athleteId, weekStart),
+    getSessionsForWeek(athleteId, weekStart),
+    getUnavailableDates(athleteId),
+  ]);
+  const refused = redraftGate({ consented: consent.ok, history, planned: hasCoachPlannedSession(sessions) });
+  if (refused) return { refused };
+  const window = weekWindow(weekStart, today, profileFacts(athlete).fixedConstraints, unavailableDates);
+  if (!window) return { refused: 'no-window' };
+  return { window, unavailableDates };
+}
+
+/** Pure: the reason a re-draft is refused, or null when it may go ahead — the window is asked after. */
+export function redraftGate(facts: {
+  consented: boolean;
+  history: ResolvedWeekDraftHistory;
+  planned: boolean;
+}): DraftOutcome | RedraftRefusal | null {
+  if (!facts.consented) return 'consent-refused';
+  if (facts.history.kind === 'pending') return 'draft-pending';
+  if (facts.history.kind !== 'declined') return 'not-declined';
+  if (facts.planned) return 'already-planned';
+  return null;
+}
+
 /**
  * The Head Coach's app-open as a trigger: one {@link ensureWeekDrafted} per
  * athlete on their Roster (`training-architecture/16`, "whoever opens the app
@@ -159,23 +310,38 @@ async function gateFacts(
 ): Promise<
   { gated: DraftOutcome } | { dueWeek: string; visibleFrom: string; window: PlanningWindow; unavailableDates: string[] }
 > {
-  const [athlete, link] = await Promise.all([getAthleteById(athleteId), getLinkForAthlete(athleteId)]);
+  const thisWeek = weekStartOf(today);
+  const [athlete, link, unavailableDates, thisWeekSessions, thisWeekHistory] = await Promise.all([
+    getAthleteById(athleteId),
+    getLinkForAthlete(athleteId),
+    getUnavailableDates(athleteId),
+    getSessionsForWeek(athleteId, thisWeek),
+    getWeekDraftHistory(athleteId, thisWeek),
+  ]);
   const { weeklySessionDay, fixedConstraints } = profileFacts(athlete);
   // A linked Head Coach sees the draft one day before the athlete (`/17`), so
   // the cycle is due a day early — and the athlete's own day is stamped on the
-  // draft as the first day they may see it, whoever triggered it.
-  const leadDays = link ? HEAD_COACH_LEAD_DAYS : 0;
-  const dueWeek = draftDueWeek(today, weeklySessionDay, leadDays);
-  const visibleFrom = cycleAnchor(today, weeklySessionDay, leadDays);
+  // draft as the first day they may see it, whoever triggered it. An empty,
+  // never-drafted current week comes first, visible today (`/24`,
+  // `showable-version/11`).
+  const { weekStart: dueWeek, visibleFrom } = dueWeekFor({
+    today,
+    weeklySessionDay,
+    leadDays: link ? HEAD_COACH_LEAD_DAYS : 0,
+    thisWeekHasCoachPlan: hasCoachPlannedSession(thisWeekSessions),
+    thisWeekDrafted: thisWeekHistory.kind !== 'never',
+    thisWeekWindow: weekWindow(thisWeek, today, fixedConstraints, unavailableDates),
+  });
 
-  const [consent, pending, held, unavailableDates] = await Promise.all([
+  // Read again for the due week rather than reused when it is this week: one
+  // spare read on the rarer path, and no branch nothing can tell apart.
+  const [consent, history, held] = await Promise.all([
     assertAiCoachingConsent(athleteId),
-    getPendingWeekDraft(athleteId, dueWeek),
+    getWeekDraftHistory(athleteId, dueWeek),
     hasHeldWeeklySessionInWeek(athleteId, dueWeek),
-    getUnavailableDates(athleteId),
   ]);
   const window = weekWindow(dueWeek, today, fixedConstraints, unavailableDates);
-  const gated = draftGate({ consented: consent.ok, pending: pending !== null, held, window });
+  const gated = draftGate({ consented: consent.ok, history, held, window });
   // The gate's last exit is a null window, so past it the window is real.
   if (gated || !window) return { gated: gated ?? 'no-window' };
   return { dueWeek, visibleFrom, window, unavailableDates };
