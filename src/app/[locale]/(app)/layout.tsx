@@ -28,13 +28,13 @@ import type { CoachChatInitial } from '../coach-chat';
 import { chatStateOf } from '@/features/coach/coach-chat-service';
 import type { WeeklySessionInitial } from '../weekly-session';
 
-// The Views this port has real pages for. Glossary joins this list as its own
-// task lands (lovable/briefs build order) — left out for now rather than
-// linking to a page that 404s.
+// The Views this port has real pages for — a View is listed here only once
+// its page exists, never ahead of it, so the drawer cannot link to a 404.
 const ATHLETE_VIEWS: ViewId[] = [
   'training-plan',
   'information',
   'equipment',
+  'glossary',
   'settings',
   'privacy',
 ];
