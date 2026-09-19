@@ -190,7 +190,9 @@ export interface StaleBlockSet {
  * Coaching Links, so the shape is the whole cost: one SELECT scoped to the
  * user's active links, joined to each athlete's Target Race, with the stale
  * question — the last block's end is not race day, `fitsRace` in SQL — in the
- * WHERE. Zero rows is the common case and costs one indexed read; there is no
+ * WHERE, and only sets carrying at least one `head_coach` block (Mads,
+ * 2026-09-19): a set the Coach alone drafted heals itself on the athlete's
+ * next Training Plan visit, so it is not this coach's chore. Zero rows is the common case and costs one indexed read; there is no
  * per-athlete fan-out and no second read for the names, which ride the same
  * join through the one identity rule ({@link resolveAthleteName}).
  *
@@ -221,6 +223,7 @@ export async function getStaleBlockSetsForHeadCoach(userId: string): Promise<Sta
       AND ${coachingLink.status} = 'active'
       AND ${race.isTarget}
       AND ${trainingBlockSet.blocks}->-1->>'endDate' <> ${race.date}::text
+      AND jsonb_path_exists(${trainingBlockSet.blocks}, '$[*] ? (@.authoredBy == "head_coach")')
     ORDER BY ${race.date}, ${trainingBlockSet.athleteId}
   `;
 

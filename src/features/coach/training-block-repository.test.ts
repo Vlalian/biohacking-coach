@@ -360,6 +360,15 @@ describe('getStaleBlockSetsForHeadCoach — one statement across the roster (tra
     expect(bound).toEqual([COACH_USER]);
   });
 
+  it('lists only sets a Head Coach has a hand in — a coach_ai-only set heals itself on the athlete’s next visit', async () => {
+    // Mads, 2026-09-19: the popup asks the coach to fix only what only they
+    // can fix. A set with no head_coach block is redrafted by the Coach on
+    // the athlete's next Training Plan visit (07), so it is not a chore.
+    await getStaleBlockSetsForHeadCoach(COACH_USER);
+    const { sql } = executed[0];
+    expect(sql).toMatch(/jsonb_path_exists\("training_block_set"\."blocks", '\$\[\*\] \? \(@\.authoredBy == "head_coach"\)'\)/i);
+  });
+
   it('asks the stale question in SQL: the last block’s end differs from the race date', async () => {
     await getStaleBlockSetsForHeadCoach(COACH_USER);
 
