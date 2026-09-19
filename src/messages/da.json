@@ -720,7 +720,7 @@
       },
       "openWater": {
         "term": "Åbentvandssvøm",
-        "definition": "En svømmetur i naturligt vand (sø, hav, å) i modsætning til en pool. Involverer sigtning, udkast og våddragt-tilpasning — alle racespecifikke færdigheder."
+        "definition": "En svømmetur i naturligt vand (sø, hav, å) i modsætning til en pool. Involverer sigtning, drafting (at ligge på hjul) og våddragt-tilpasning — alle racespecifikke færdigheder."
       }
     },
     "race": {
@@ -741,7 +741,7 @@
         "definition": "Did Not Finish / Did Not Start / Diskvalificeret. Almindelige løbsudfald ud over en gennemførelse. DNS er nogle gange det klogeste valg ved skade."
       },
       "drafting": {
-        "term": "Udkast",
+        "term": "Drafting (at ligge på hjul)",
         "definition": "At svømme eller cykle tæt bag en anden atlet for at reducere modstand. Tilladt ved svømning, forbudt på cyklen i de fleste amatørløb, tilladt ved løb."
       },
       "specialNeeds": {
