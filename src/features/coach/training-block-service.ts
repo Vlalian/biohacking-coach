@@ -123,6 +123,18 @@ async function gateOn(set: BlockSetRecord | null, race: RaceRow): Promise<Adjust
   return (await getLinkForAthlete(set.athleteId)) ? 'head-coach-owned' : null;
 }
 
+/**
+ * The eight-week rule keeps the Coach from redrawing a plan close to the race.
+ * It protects a plan that still describes the race; a set past {@link gateOn}
+ * with a human's block still in it is stale with nobody linked to repair it,
+ * and that one is re-fitted whatever the distance (Mads, 2026-09-19, on
+ * ruling 2 of `training-architecture/19`).
+ */
+function tooCloseToRedraw(today: string, race: RaceRow, existing: BlockSetRecord | null): boolean {
+  if (weeksTo(today, race.date) >= MIN_WEEKS_TO_ADJUST) return false;
+  return existing === null || !holdsHeadCoachBlock(existing);
+}
+
 /** Everything the briefing carries, gathered in one round of reads. */
 async function gatherContext(
   athleteId: string,
@@ -271,11 +283,10 @@ export async function ensureBlocksAdjusted(athleteId: string, today: string): Pr
   if (isCoachDisabled()) return 'coach-disabled';
   const race = await getTargetRace(athleteId);
   if (!race) return 'no-race';
-  if (weeksTo(today, race.date) < MIN_WEEKS_TO_ADJUST) return 'too-close';
-
   const existing = await getBlockSet(athleteId, race.id);
   const gated = await gateOn(existing, race);
   if (gated) return gated;
+  if (tooCloseToRedraw(today, race, existing)) return 'too-close';
 
   const ctx = await gatherContext(athleteId, today, race, trainingBlocks(today, race.date));
   const asked = await askCoach(athleteId, ctx);

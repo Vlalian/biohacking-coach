@@ -611,6 +611,27 @@ describe('the solo case — a severed link ends the Head Coach’s hold on a sta
     ]);
   });
 
+  it('re-fits an orphaned stale set even inside eight weeks — the rule protects a plan that still describes the race, and this one does not (Mads, 2026-09-19)', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2026-10-25' }); // six weeks out
+    getBlockSet.mockResolvedValue(HUMAN_STALE);
+    getLinkForAthlete.mockResolvedValue(undefined);
+    callCoach.mockResolvedValue(toolReply({ blocks: [{ name: 'Sharpen', endDate: '2026-10-11' }, { name: 'Taper', endDate: '2026-10-25' }] }));
+
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('drafted');
+    expect(casUpdateBlockSet.mock.calls[0][0].events[0].payload).toMatchObject({ refittedHeadCoachBlocks: true });
+  });
+
+  it('inside eight weeks the eight-week rule still holds for everything else: no set, a fitting set, a stale set the Coach itself drafted', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2026-10-25' });
+    getLinkForAthlete.mockResolvedValue(undefined);
+
+    getBlockSet.mockResolvedValue(null);
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('too-close');
+    getBlockSet.mockResolvedValue(storedSet({ blocks: SHAPED.map((b) => ({ ...b, endDate: '2027-01-01' })) }));
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('too-close');
+    expect(callCoach).not.toHaveBeenCalled();
+  });
+
   it('a redraft of the Coach’s own stale set does not claim to have re-fitted a human’s blocks', async () => {
     getBlockSet.mockResolvedValue(storedSet({ blocks: SHAPED.map((b) => ({ ...b, endDate: '2027-01-01' })) }));
     getLinkForAthlete.mockResolvedValue(undefined);
