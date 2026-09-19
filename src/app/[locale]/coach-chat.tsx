@@ -9,7 +9,7 @@ import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import { sendCoachChatMessageAction } from './chat-actions';
 import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
 import { usePlanDecision } from './use-plan-decision';
-import type { UiMessage } from './weekly-session';
+import type { UiMessage } from './ui-message';
 import { Thinking } from '@/components/ui/thinking';
 
 /**

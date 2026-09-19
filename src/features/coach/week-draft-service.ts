@@ -13,6 +13,7 @@ import type { PlanningWindow } from './planning-window';
 import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
 import { buildWeeklyContext, renderWeekDraftPrompt } from './prompts';
 import { getCheckInForWeek } from './check-in-repository';
+import { getPresenceStage } from './presence-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
 import { hasHeldWeeklySessionInWeek } from './conversation-repository';
 import { getResolvedBlocks } from './training-block-service';
@@ -446,26 +447,29 @@ async function gatherContext(
   unavailableDates: string[],
 ): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult }> {
   const weekStart = weekStartOf(today);
-  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races] = await Promise.all([
-    getAthleteById(athleteId),
-    getSessionsForWeek(athleteId, weekStart),
-    getEquipmentItems(athleteId),
-    getResolvedBlocks(athleteId, today),
-    getCheckInForWeek(athleteId, weekStart),
-    // The capacity half only; the detail thread has no reader here (ADR 0011).
-    capacityFor(athleteId),
-    // Every race, so the draft knows a tune-up from the target (slice 09). No
-    // plan-written-at: the draft is the plan being written, so nothing is late
-    // relative to it yet.
-    getRaces(athleteId),
-  ]);
+  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races, presenceStage] =
+    await Promise.all([
+      getAthleteById(athleteId),
+      getSessionsForWeek(athleteId, weekStart),
+      getEquipmentItems(athleteId),
+      getResolvedBlocks(athleteId, today),
+      getCheckInForWeek(athleteId, weekStart),
+      // The capacity half only; the detail thread has no reader here (ADR 0011).
+      capacityFor(athleteId),
+      // Every race, so the draft knows a tune-up from the target (slice 09). No
+      // plan-written-at: the draft is the plan being written, so nothing is late
+      // relative to it yet.
+      getRaces(athleteId),
+      // How much the Coach actually has on this athlete (`training-architecture/21`).
+      getPresenceStage(athleteId),
+    ]);
   if (!athlete) throw new Error('athlete row missing');
 
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
     readinessFrom(checkInRow),
-    0,
+    presenceStage,
     undefined,
     equipmentItems,
     horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,

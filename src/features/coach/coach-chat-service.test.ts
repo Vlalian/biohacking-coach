@@ -59,11 +59,15 @@ vi.mock('./conversation-repository', () => ({
   getMessages,
   getLatestOpenConversation,
 }));
-vi.mock('./check-in-repository', () => ({
+const { getCheckInForWeek, getPresenceStage } = vi.hoisted(() => ({
   // No Check-in filed: the ordinary week, and the one the prompt has to say it
   // has nothing for rather than inventing scores.
-  getCheckInForWeek: vi.fn(async () => null),
+  getCheckInForWeek: vi.fn<() => Promise<unknown>>(async () => null),
+  // Cold start unless a test says otherwise: the Coach knows nothing yet.
+  getPresenceStage: vi.fn<() => Promise<'cold_start' | 'building' | 'full'>>(async () => 'cold_start'),
 }));
+vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
+vi.mock('./presence-repository', () => ({ getPresenceStage }));
 const { getTargetRace, getRaces, getLatestPlanWrittenAt, getLatestOpenConversation } = vi.hoisted(() => ({
   // No race booked: the ordinary state for most of these fixtures, and the one
   // the prompt has to state plainly rather than omit.
@@ -471,6 +475,46 @@ describe('the Coach Chat system prompt carries no invented readiness', () => {
     const { system } = callCoach.mock.calls[0][0];
     for (const token of READINESS_SCORE_TOKENS) expect(system).not.toMatch(token);
     expect(system).toContain('NO CHECK-IN DATA');
+  });
+
+  it('reads a Check-in filed after the week was drafted — the next prompt sees it (training-architecture/21)', async () => {
+    // The reminder is scheduled before the draft but never forced, so a late
+    // Check-in is simply the freshest signal for whatever reads it next. This
+    // is the whole path: the row for this week, read on the turn, rendered.
+    getCheckInForWeek.mockResolvedValueOnce({
+      id: 'ci_1', athleteId: 'athlete_1', weekStart: '2026-08-10',
+      energy: 4, body: 5, sleepQuality: 3, notableSignal: 'calf tight since Tuesday',
+      createdAt: new Date(), updatedAt: new Date(),
+    });
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getOwnedConversation.mockReset();
+
+    await sendCoachChatMessage(ATHLETE, null, 'should I run tomorrow?', '2026-08-12');
+
+    expect(getCheckInForWeek).toHaveBeenCalledWith('athlete_1', '2026-08-10');
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('body=5/10 energy=4/10 sleep-quality=3/10');
+    expect(system).toContain('ATHLETE SAID (their words, this week): "calf tight since Tuesday"');
+    expect(system).not.toContain('NO CHECK-IN DATA');
+  });
+
+  it('carries the Presence Arc stage read from stored data, never a session count', async () => {
+    getPresenceStage.mockResolvedValueOnce('building');
+    callCoach.mockReset().mockResolvedValue({ text: 'ok', toolCalls: [] });
+    createConversation.mockReset().mockResolvedValue({ id: 'conv_new' });
+    appendMessages.mockReset().mockResolvedValue([]);
+    getMessages.mockReset().mockResolvedValue([]);
+    getOwnedConversation.mockReset();
+
+    await sendCoachChatMessage(ATHLETE, null, 'how did last week look?', '2026-08-12');
+
+    expect(getPresenceStage).toHaveBeenCalledWith('athlete_1');
+    const { system } = callCoach.mock.calls[0][0];
+    expect(system).toContain('PRESENCE — BUILDING:');
+    expect(system).not.toContain('sessions=');
   });
 
   it('names tune-ups and late races the same way the Weekly Session does (slice 09)', async () => {

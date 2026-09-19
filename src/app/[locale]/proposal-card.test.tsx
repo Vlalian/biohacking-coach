@@ -40,8 +40,8 @@ const overlay = {
   setOpen: vi.fn(),
   reference: null,
   setReference: vi.fn(),
-  weeklyOfferDismissed: false,
-  dismissWeeklyOffer: vi.fn(),
+  checkInOfferDismissed: false,
+  dismissCheckInOffer: vi.fn(),
   chatSeed: null,
   setChatSeed: vi.fn(),
 };

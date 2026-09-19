@@ -270,8 +270,8 @@ async function callCoachLive(input: CoachCallInput): Promise<CoachReply> {
     .join('\n\n');
   // A tool call with no words around it is still a turn here — the proposal card
   // can carry the meaning — so it is not refused the way a wholly empty reply is.
-  // The caller decides: `continueWeeklySession` refuses it when the proposal
-  // fails validation, because then there is no card either.
+  // The caller decides: `conversation-turn` refuses a wordless reply outright,
+  // because a proposal arriving with no explanation is a poor proposal anyway.
   return {
     text,
     toolCalls: toolUses.map((use) => ({ name: use.name, input: use.input })),

@@ -1,7 +1,7 @@
 import '../src/db/load-env';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildWeeklyContext, renderWeeklyPrompt, buildChatPrompt } from '../src/features/coach/prompts';
+import { buildChatPrompt } from '../src/features/coach/prompts';
 import { callCoach } from '../src/features/coach/coach-client';
 import { toApiMessages } from '../src/features/coach/conversation';
 import type { Message } from '../src/features/coach/conversation';
@@ -53,8 +53,8 @@ import type { WeekSession } from '../src/features/coach/week';
 // this only when you deliberately want a new baseline, and re-capture every
 // scenario when you do.
 //
-// Shaped to exercise the interesting branches: mid-relationship (session 4+, so
-// the full Reflective Prompt arc), a race target, real equipment, a Fixed
+// Shaped to exercise the interesting branches: mid-relationship (full presence,
+// so the Coach may synthesise), a race target, real equipment, a Fixed
 // Constraint, and a communication style that should be visible in the tone.
 //
 // It carries NO `readiness`, and that is the point: no Check-in feature exists,
@@ -66,16 +66,6 @@ import type { WeekSession } from '../src/features/coach/week';
 // so a human reading this tool and a human reading an eval run see one Coach.
 const FIXTURE: CheckIn = EVAL_ATHLETE;
 
-// A week that gives the Coach something to actually react to: a hard session
-// that went badly, a good one, and a skip. A flat week produces a bland reply
-// and tells you nothing about whether the Coach is reading the signals.
-const WEEK_FEEDBACK = [
-  { dateKey: '2026-08-11', sessionType: 'Intensity', body: 8, mind: 3, comment: 'legs never came around, cut the last interval' },
-  { dateKey: '2026-08-13', sessionType: 'Endurance', body: 5, mind: 7, comment: 'easy and steady, felt good' },
-  { dateKey: '2026-08-15', sessionType: 'Tempo', body: 7, mind: 5, comment: null },
-];
-
-const SKIPPED = [{ date: '2026-08-16', sessionType: 'Endurance' }];
 const TODAY = EVAL_TODAY;
 
 // The current week, as Coach Chat now sees it.
@@ -102,31 +92,13 @@ const THIS_WEEK: WeekSession[] = [
 
 const SCENARIOS: { name: string; system: () => string; firstTurn: string }[] = [
   {
-    name: 'weekly-session',
-    system: () =>
-      renderWeeklyPrompt(
-        buildWeeklyContext(FIXTURE, WEEK_FEEDBACK, [], SKIPPED, [], null, TODAY),
-      ),
-    firstTurn: "Let's do our weekly session.",
-  },
-  {
-    name: 'weekly-session-first-ever',
-    // Session 1 is a different prompt and a different Coach posture — it must
-    // not fake familiarity. Worth watching separately, because it is the one a
-    // new tester meets first.
-    system: () =>
-      renderWeeklyPrompt(
-        buildWeeklyContext(
-          { ...FIXTURE, weeklySessionNumber: 1, sessionCount: 0 },
-          [],
-          [],
-          [],
-          [],
-          null,
-          TODAY,
-        ),
-      ),
-    firstTurn: "Let's do our weekly session.",
+    // The Weekly Session scenarios lived here until the behavior was retired
+    // (ADR 0007, amended 2026-09-16; `training-architecture/21`). Cold start
+    // is the posture a new tester meets first, and the one that must not fake
+    // familiarity — worth watching on its own.
+    name: 'coach-chat-cold-start',
+    system: () => buildChatPrompt({ ...FIXTURE, presenceStage: 'cold_start' }, TODAY),
+    firstTurn: "Hi — I'm new here. Where do we start?",
   },
   {
     name: 'coach-chat',

@@ -26,66 +26,33 @@ import {
  * 0006). No shape of these calls crosses athletes.
  */
 
+/**
+ * `weekly_session_number` is never written any more: the Weekly Session is
+ * retired (`training-architecture/21`) and the column stays only for the rows
+ * already written. Nothing here reads it either.
+ */
 export async function createConversation(input: {
   athleteId: string;
   kind: ConversationKind;
-  weeklySessionNumber?: number | null;
 }): Promise<Conversation> {
   const [row] = await getDb()
     .insert(conversations)
     .values({
       athleteId: input.athleteId,
       kind: input.kind,
-      weeklySessionNumber: input.weeklySessionNumber ?? null,
     })
     .returning();
   return toConversation(row);
 }
 
 /**
- * Deletes a conversation this athlete owns. Scoped to the owner in the WHERE, so
- * a conversation that is not theirs is never touched (ADR 0006).
+ * Whether the athlete held a Weekly Session in the week containing `weekStart`
+ * (a 'YYYY-MM-DD' Monday).
  *
- * Narrow on purpose: this exists to undo a conversation that was created and
- * then could not be given its first message. A Weekly Session row counts toward
- * {@link countWeeklySessions} — and so toward the Presence Arc — from the moment
- * it exists, whether or not it holds anything, so an unusable row must not
- * survive. Not a general "delete my history" path; erasure is its own concern.
- */
-export async function deleteOwnedConversation(
-  athleteId: string,
-  conversationId: string,
-): Promise<void> {
-  await getDb()
-    .delete(conversations)
-    .where(and(eq(conversations.id, conversationId), eq(conversations.athleteId, athleteId)));
-}
-
-/**
- * How many Weekly Sessions this athlete has had. The next one is this + 1, which
- * selects the conversational arc (Session 1 welcomes, Session 4+ reviews).
- */
-export async function countWeeklySessions(athleteId: string): Promise<number> {
-  const [row] = await getDb()
-    .select({ n: count() })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.athleteId, athleteId),
-        eq(conversations.kind, 'weekly_session'),
-      ),
-    );
-  return row?.n ?? 0;
-}
-
-/**
- * Whether the athlete has already held a Weekly Session in the week containing
- * `weekStart` (a 'YYYY-MM-DD' Monday).
- *
- * This is the Weekly Session offer's "already done" test. It asks about the
- * *conversation*, not about whether a plan exists: an auto-drafted week must
- * still be offered for discussion, so a plan existing is not the same as the
- * athlete having held the session (coach-overlay issue 04, decision 4).
+ * The behavior is retired (`training-architecture/21`), so this is true only
+ * for a week in which an old row was written; the silent week draft still asks
+ * it (`week-draft-service`), because a week the athlete planned by talking must
+ * not be drafted over.
  */
 export async function hasHeldWeeklySessionInWeek(
   athleteId: string,

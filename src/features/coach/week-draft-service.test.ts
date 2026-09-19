@@ -13,6 +13,8 @@ const knowledgeSearch = vi.fn();
 const retrievePassages = vi.fn();
 const callCoach = vi.fn();
 const getCheckInForWeek = vi.fn();
+// What the Coach has on the athlete (`training-architecture/21`): nothing, by default.
+const getPresenceStage = vi.fn(async () => 'cold_start' as const);
 const hasHeldWeeklySessionInWeek = vi.fn();
 const getResolvedBlocks = vi.fn();
 // Every race the athlete has (slice 09). Empty by default: no tune-ups, no late races.
@@ -37,6 +39,7 @@ vi.mock('@/features/knowledge-oracle/retrieval', () => ({ retrievePassages }));
 const isCoachDisabled = vi.fn(() => false);
 vi.mock('./coach-client', () => ({ callCoach, isCoachDisabled }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
+vi.mock('./presence-repository', () => ({ getPresenceStage }));
 vi.mock('./conversation-repository', () => ({ hasHeldWeeklySessionInWeek }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));

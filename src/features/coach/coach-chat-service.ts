@@ -16,6 +16,7 @@ import { proposalTurnTools } from './proposal-tools';
 import { capacityFor } from '@/features/health/health-repository';
 import { getResolvedBlocks } from './training-block-service';
 import { getCheckInForWeek } from './check-in-repository';
+import { getPresenceStage } from './presence-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
 import {
   buildWeeklyCheckIn,
@@ -105,6 +106,7 @@ async function renderSystem(
     capacity,
     unavailableDates,
     facts,
+    presenceStage,
   ] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
@@ -131,6 +133,11 @@ async function renderSystem(
     // list the Weekly Session reads (`training-architecture/20`).
     getUnavailableDates(athlete.id),
     conversationFacts(athlete.id, conversationId),
+    // How much the Coach may claim to know: the Presence Arc, read from weeks
+    // of Session Reflections and Check-ins filed (`training-architecture/21`).
+    // A Check-in filed at any time — after the week was drafted, say — is
+    // simply the freshest signal for this, the next prompt that reads it.
+    getPresenceStage(athlete.id),
   ]);
 
   // The week this conversation may propose: the whole of a week brought in to
@@ -139,15 +146,11 @@ async function renderSystem(
   // 2026-09-16).
   const window = conversationWindow(today, facts.discussedWeek, fixedConstraintsOf(athlete), unavailableDates);
 
-  // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
-  // the Weekly Session's — how many Weekly Sessions have come before. Passing 1
-  // yields 0, the honest value for an athlete the Coach has not yet planned a
-  // week with.
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
     readinessFrom(checkInRow),
-    1,
+    presenceStage,
     language,
     equipmentItems,
     horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,

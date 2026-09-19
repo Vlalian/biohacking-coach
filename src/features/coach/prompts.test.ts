@@ -1,7 +1,6 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   buildWeeklyContext,
-  renderWeeklyPrompt,
   buildChatPrompt,
   formatWeekSessions,
   formatSkippedSessions,
@@ -18,12 +17,15 @@ const BASE: CheckIn = {
   personaName: 'Mads',
   commStyle: '',
   experienceLevel: 'intermediate',
-  sessionCount: 5,
+  presenceStage: 'full',
   language: 'English',
   weeklySessionDay: 'Monday',
   fixedConstraints: [],
   equipment: [],
 };
+
+// 2026-08-18 is a Tuesday.
+const TUESDAY = '2026-08-18';
 
 describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => {
   // The load-bearing criterion: the consent artifact tells the coach that no
@@ -87,20 +89,6 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     },
   );
 
-  it.each(['name', 'details'] as const)(
-    'refuses equipment %s carrying an email — Weekly Session',
-    (field) => {
-      const ctx = buildWeeklyContext(
-        { ...BASE, weeklySessionNumber: 4, equipment: leakyEquipment(field) },
-        [],
-        [],
-        [],
-        [],
-      );
-      expect(() => renderWeeklyPrompt(ctx)).toThrow(/identifier/i);
-    },
-  );
-
   // A staged week's notes are free text that reached the prompt boundary from
   // storage; the boundary asserts on them regardless of who wrote them
   // (CodeRabbit, PR #69; the chat path since training-architecture/20).
@@ -108,30 +96,20 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     { date: '2026-08-14', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: `call ${EMAIL} first` },
   ];
 
-  it('refuses a staged week whose note carries an email — Weekly Session', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, '2026-08-12');
-    expect(() => renderWeeklyPrompt({ ...ctx, stagedProposal: leakyStaged })).toThrow(/identifier/i);
-  });
-
   // Grill on the PR #71 smoke run (2026-09-17), decisions 2 and 3.
   describe('the card is the only question, and the Coach holds its position', () => {
     const window = { start: '2026-08-12', end: '2026-08-16', excludedDates: [], fellThrough: false };
     const chat = buildChatPrompt(BASE, '2026-08-12', null, [], { window, stagedProposal: null });
-    const weekly = renderWeeklyPrompt(buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, '2026-08-12'));
 
-    it.each([
-      ['Coach Chat', chat],
-      ['Weekly Session', weekly],
-    ])('%s: a full week is always proposed through the tool, never asked about in prose', (_name, prompt) => {
-      expect(prompt).toMatch(/whenever you lay out a full week, call the propose_week_plan tool/i);
-      expect(prompt).toMatch(/never describe a week in prose and ask whether to go with it/i);
-      expect(prompt).not.toContain('Call it only after agreement');
+    it('a full week is always proposed through the tool, never asked about in prose', () => {
+      expect(chat).toMatch(/whenever you lay out a full week, call the propose_week_plan tool/i);
+      expect(chat).toMatch(/never describe a week in prose and ask whether to go with it/i);
+      expect(chat).not.toContain('Call it only after agreement');
     });
 
-    it('Coach Chat holds a grounded position, the same posture the Weekly Session has always carried', () => {
+    it('Coach Chat holds a grounded position, the posture the Weekly Session carried before it', () => {
       expect(chat).toContain('Hold position unless the athlete gives a reason you can act on');
       expect(chat).toContain('say why in one sentence');
-      expect(weekly).toContain('Hold position unless the athlete gives a reason you can act on');
     });
   });
 
@@ -142,25 +120,12 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     );
   });
 
-  it('the Weekly Session prompt carries no name or email', () => {
-    const ctx = buildWeeklyContext(
-      { ...withIdentity, weeklySessionNumber: 4 },
-      [],
-      [],
-      [],
-      [],
-    );
-    const prompt = renderWeeklyPrompt(ctx);
-    expect(prompt).not.toContain(NAME);
-    expect(prompt).not.toContain('Realname');
-    expect(prompt).not.toContain(EMAIL);
-  });
 });
 
 describe('buildWeeklyContext — raceTarget', () => {
   it('forwards raceTarget from checkIn', () => {
     const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 1, raceTarget: 'Ironman Copenhagen' },
+      { ...BASE, raceTarget: 'Ironman Copenhagen' },
       [],
       [],
       [],
@@ -170,47 +135,56 @@ describe('buildWeeklyContext — raceTarget', () => {
   });
 
   it('forwards undefined raceTarget gracefully', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 1 }, [], [], [], []);
+    const ctx = buildWeeklyContext(BASE, [], [], [], []);
     expect(ctx.checkIn.raceTarget).toBeUndefined();
   });
 });
 
-describe('renderWeeklyPrompt — Week 1 raceTarget', () => {
-  it('includes raceTarget in Week 1 prompt', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 1, raceTarget: 'Ironman Copenhagen' },
-      [],
-      [],
-      [],
-      [],
-    );
-    expect(renderWeeklyPrompt(ctx)).toContain('Ironman Copenhagen');
+describe('the Presence Arc in Coach Chat (training-architecture/21)', () => {
+  // The arc used to be the Weekly Session's, keyed on sessions held. It is the
+  // one conversation's now, keyed on the stage decided from stored data, and
+  // each stage tells the Coach exactly how much history it may claim.
+  const at = (presenceStage: CheckIn['presenceStage']) =>
+    buildChatPrompt({ ...BASE, presenceStage }, TUESDAY);
+
+  it('cold start: knows the athlete from onboarding only and says so', () => {
+    const prompt = at('cold_start');
+    expect(prompt).toContain('PRESENCE — COLD START:');
+    expect(prompt).toContain("Don't fake familiarity");
+    expect(prompt).not.toContain('PRESENCE — BUILDING');
+    expect(prompt).not.toContain('PRESENCE — FULL');
   });
 
-  it('has no RACE instruction when raceTarget absent', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 1 }, [], [], [], []);
-    expect(renderWeeklyPrompt(ctx)).not.toContain('RACE:');
+  it('building: references what it actually has and declares uncertainty', () => {
+    const prompt = at('building');
+    expect(prompt).toContain('PRESENCE — BUILDING:');
+    expect(prompt).toContain('Declare uncertainty where evidence is thin');
+    expect(prompt).not.toContain('PRESENCE — COLD START');
   });
 
-  it('does not include raceTarget in Week 4+ prompt', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4, raceTarget: 'Ironman Copenhagen' },
-      [],
-      [],
-      [],
-      [],
-    );
-    expect(renderWeeklyPrompt(ctx)).not.toContain('Ironman Copenhagen');
+  it('full: synthesises and names patterns', () => {
+    const prompt = at('full');
+    expect(prompt).toContain('PRESENCE — FULL:');
+    expect(prompt).toContain('name patterns');
+    expect(prompt).not.toContain('PRESENCE — BUILDING');
   });
 
-  it('Week 1 prompt uses SESSION 1 arc', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 1 }, [], [], [], []);
-    expect(renderWeeklyPrompt(ctx)).toContain('ARC — SESSION 1');
+  it('carries no arc at all when a caller supplied no stage — nothing is claimed either way', () => {
+    expect(at(undefined)).not.toContain('PRESENCE —');
   });
 
-  it('Week 4 prompt uses SESSION 4+ arc', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
-    expect(renderWeeklyPrompt(ctx)).toContain('ARC — SESSION 4+');
+  it('never carries a session count — the arc is keyed on data, not on sessions held', () => {
+    for (const stage of ['cold_start', 'building', 'full'] as const) {
+      expect(at(stage)).not.toContain('sessions=');
+      expect(at(stage)).not.toContain('ARC — SESSION');
+    }
+  });
+
+  it('orients a cold-start athlete in the Coach’s voice, once (ADR 0001)', () => {
+    expect(at('cold_start')).toContain('FIRST CONVERSATION ORIENTATION:');
+    expect(at('cold_start')).toContain('Once only');
+    expect(at('building')).not.toContain('FIRST CONVERSATION ORIENTATION');
+    expect(at('full')).not.toContain('FIRST CONVERSATION ORIENTATION');
   });
 });
 
@@ -226,15 +200,8 @@ const ONBOARDING: Onboarding = {
 };
 
 describe('onboarding answers reach every Coach prompt', () => {
-  it('weekly prompt lists the answers with a never-re-ask instruction', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 1, onboarding: ONBOARDING },
-      [],
-      [],
-      [],
-      [],
-    );
-    const prompt = renderWeeklyPrompt(ctx);
+  it('the chat prompt lists the answers with a never-re-ask instruction', () => {
+    const prompt = buildChatPrompt({ ...BASE, onboarding: ONBOARDING }, TUESDAY);
     expect(prompt).toContain('ONBOARDING PROFILE');
     expect(prompt).toContain('NEVER ask for this information again');
     expect(prompt).toContain('Sport background: Runner, Gym');
@@ -262,34 +229,37 @@ describe('onboarding answers reach every Coach prompt', () => {
   });
 
   it('omits the block entirely when nothing was answered', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 1, onboarding: {} },
-      [],
-      [],
-      [],
-      [],
-    );
-    // The arc instructions may reference the block by name; the block itself must be absent.
-    expect(renderWeeklyPrompt(ctx)).not.toContain('athlete already answered these at onboarding');
+    const prompt = buildChatPrompt({ ...BASE, onboarding: {} }, TUESDAY);
+    expect(prompt).not.toContain('athlete already answered these at onboarding');
   });
 });
 
-describe('weekly prompt — the propose_week_plan tool', () => {
-  it('tells the Coach to propose the plan (not save) once agreed, with dated sessions', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
-    const prompt = renderWeeklyPrompt(ctx);
+describe('the chat prompt given a planning window — the lines the Weekly Session used to carry', () => {
+  const window = { start: '2026-08-18', end: '2026-08-23', excludedDates: [], fellThrough: false };
+  const prompt = buildChatPrompt(BASE, TUESDAY, null, [], { window, stagedProposal: null });
+
+  it('tells the Coach to propose the plan (not save), with dated sessions', () => {
     expect(prompt).toContain('propose_week_plan');
     expect(prompt).toContain('does NOT save');
     expect(prompt).toContain('YYYY-MM-DD');
   });
-});
 
-describe('weekly prompt — planning-phase Doubles instruction', () => {
   it('tells the Coach it may propose two sessions on one day, never forced', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
-    const prompt = renderWeeklyPrompt(ctx);
     expect(prompt).toContain('two sessions on one day');
     expect(prompt).toContain('Never forced');
+  });
+
+  it('states the window as a bound, and says when training starts if it fell through to next week', () => {
+    // A fall-through is the only circumstance in which a new athlete sees an
+    // empty current week, and the decision that allows it (Mads, 2026-09-02)
+    // allows it only on condition that the Coach says when training starts.
+    expect(prompt).toContain('PLANNING WINDOW: 2026-08-18 to 2026-08-23. Plan these days only; a later week is not yours to write.');
+    const fell = buildChatPrompt(BASE, TUESDAY, null, [], {
+      window: { start: '2026-08-24', end: '2026-08-30', excludedDates: [], fellThrough: true },
+      stagedProposal: null,
+    });
+    expect(fell).toContain('PLANNING WINDOW: 2026-08-24 to 2026-08-30. Nothing is plannable in the rest of this week, so the plan starts next week — say when training starts, plainly, rather than leaving an empty week unexplained.');
+    expect(fell).not.toContain('Plan these days only');
   });
 });
 
@@ -312,16 +282,6 @@ describe('skippedSessions — natural references', () => {
     expect(noPos).not.toContain('2nd');
   });
 
-  it('reaches the weekly prompt through renderWeeklyPrompt', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4 },
-      [],
-      [],
-      [{ date: '2026-07-15', sessionType: 'Endurance', position: 2 }],
-      [],
-    );
-    expect(renderWeeklyPrompt(ctx)).toContain('2nd Endurance');
-  });
 });
 
 describe('formatWeekFeedback — dates read the same as everywhere else', () => {
@@ -380,63 +340,19 @@ describe('formatWeekActivity — natural references', () => {
   });
 });
 
-describe('weekly prompt — week activity as silent background', () => {
-  const ACTIVITY = {
-    moves: [{ sessionType: 'Recovery', from: '2026-07-15', to: '2026-07-17' }],
-    creations: [{ sessionType: 'Strength', dateKey: '2026-07-18', retro: false }],
-  };
-
-  it('injects moves and creations with the no-challenge instruction', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4 },
-      [],
-      [],
-      [],
-      [],
-      ACTIVITY,
-    );
-    const prompt = renderWeeklyPrompt(ctx);
-    expect(prompt).toContain('WEEK ACTIVITY');
-    expect(prompt).toContain('moved Wed 2026-07-15 Recovery to Fri 2026-07-17');
-    expect(prompt).toContain('added Sat 2026-07-18 Strength');
-    expect(prompt.toLowerCase()).toContain('never challenge');
-  });
-
-  it('an empty log produces no move section', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4 },
-      [],
-      [],
-      [],
-      [],
-      { moves: [], creations: [] },
-    );
-    expect(renderWeeklyPrompt(ctx)).not.toContain('WEEK ACTIVITY');
-  });
-
-  it('no weekActivity at all produces no move section', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []);
-    expect(renderWeeklyPrompt(ctx)).not.toContain('WEEK ACTIVITY');
-  });
-});
-
 // The no-identity-in-prompts rule (GDPR decision 1): a real name or email must
 // never reach a rendered prompt. The check-in builder is what enforces this by
 // never populating identity; here we prove the prompt strings carry no such field.
 describe('no real identity reaches a prompt', () => {
   it('renders only the persona label and profile, never an email', () => {
-    const weekly = renderWeeklyPrompt(
-      buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], []),
-    );
     const chat = buildChatPrompt(BASE);
-    expect(weekly).not.toContain('@');
     expect(chat).not.toContain('@');
   });
 });
 
 // code-health/07 — the Coach must not be told a readiness the athlete never
 // gave. Until a Check-in feature exists there is no readiness, and the honest
-// rendering is *absence*: the STATE line keeps what is real (phase, sessions,
+// rendering is *absence*: the CONTEXT line keeps what is real (phase, presence,
 // xp) and simply carries no scores. Labelling invented numbers as placeholders
 // would be worse — AGENTS.md: if the model must not use a value, do not send it.
 describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
@@ -444,7 +360,7 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
     phase: 'Base Building',
     commStyle: '',
     experienceLevel: 'intermediate',
-    sessionCount: 5,
+    presenceStage: 'full',
     language: 'English',
     weeklySessionDay: 'Monday',
     fixedConstraints: [],
@@ -454,26 +370,11 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
   // Each score is asserted by its own rendered token rather than a bare number,
   // so an unrelated digit elsewhere in the prompt cannot make this pass or fail.
 
-  it('the Weekly Session STATE line keeps phase, sessions and xp but carries no scores', () => {
-    const ctx = buildWeeklyContext(
-      { ...NO_READINESS, weeklySessionNumber: 4 },
-      [],
-      [],
-      [],
-      [],
-      null,
-      '2026-08-18',
-    );
-    const prompt = renderWeeklyPrompt(ctx);
-
-    expect(prompt).toContain('STATE: phase=Base Building sessions=5 xp=intermediate');
-    for (const token of READINESS_SCORE_TOKENS) expect(prompt).not.toMatch(token);
-  });
-
   it('the Coach Chat CONTEXT line carries no scores either', () => {
     const prompt = buildChatPrompt(NO_READINESS, '2026-08-18');
 
-    expect(prompt).toContain('phase=Base Building xp=intermediate sessions=5');
+    expect(prompt).toContain('phase=Base Building xp=intermediate');
+    expect(prompt).not.toContain('sessions=');
     for (const token of READINESS_SCORE_TOKENS) expect(prompt).not.toMatch(token);
   });
 
@@ -481,12 +382,8 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
   // be told that, and told to ask — which is what the Presence Arc's P1 already
   // has it doing, so the two must not contradict each other.
   it('tells the Coach it has no readiness data and should ask', () => {
-    const weekly = renderWeeklyPrompt(
-      buildWeeklyContext({ ...NO_READINESS, weeklySessionNumber: 4 }, [], [], [], [], null, '2026-08-18'),
-    );
     const chat = buildChatPrompt(NO_READINESS, '2026-08-18');
 
-    expect(weekly).toContain('NO CHECK-IN DATA');
     expect(chat).toContain('NO CHECK-IN DATA');
   });
 
@@ -535,27 +432,20 @@ describe('no fabricated readiness reaches a prompt (code-health/07)', () => {
   it('omits a token it has no value for, rather than writing undefined', () => {
     const bare: CheckIn = {
       phase: undefined,
-      sessionCount: undefined,
+      presenceStage: undefined,
       experienceLevel: undefined,
       language: 'English',
       commStyle: '',
     };
 
-    const prompts = {
-      chat: buildChatPrompt(bare, '2026-08-18'),
-      weekly: renderWeeklyPrompt(
-        buildWeeklyContext({ ...bare, weeklySessionNumber: 1 }, [], [], [], [], null, '2026-08-18'),
-      ),
-    };
+    const prompt = buildChatPrompt(bare, '2026-08-18');
 
-    for (const [name, prompt] of Object.entries(prompts)) {
-      expect(prompt, `${name} prompt`).not.toContain('undefined');
-      expect(prompt, `${name} prompt`).not.toContain('sessions=');
-      expect(prompt, `${name} prompt`).not.toContain('phase=');
-      // The field with a documented default still renders, so an absent token
-      // means absent data rather than a whole line quietly dropping out.
-      expect(prompt, `${name} prompt`).toContain('xp=intermediate');
-    }
+    expect(prompt).not.toContain('undefined');
+    expect(prompt).not.toContain('phase=');
+    expect(prompt).not.toContain('PRESENCE —');
+    // The field with a documented default still renders, so an absent token
+    // means absent data rather than a whole line quietly dropping out.
+    expect(prompt).toContain('xp=intermediate');
   });
 });
 
@@ -839,62 +729,9 @@ describe('the prompt formatters, branch by branch', () => {
  * list that loses its separator, an omitted tag that renders `undefined`, a
  * nudge that fires in the wrong week.
  */
-describe('the weekly prompt block builders, branch by branch', () => {
-  const TUESDAY = '2026-08-18';
-
-  function weekly(overrides: Partial<CheckIn> = {}, unavailable: string[] = []) {
-    return renderWeeklyPrompt(
-      buildWeeklyContext(
-        { ...BASE, weeklySessionNumber: 4, ...overrides },
-        [],
-        [],
-        [],
-        unavailable,
-        null,
-        TUESDAY,
-      ),
-    );
-  }
-
-  it('lists several Fixed Constraints on one line, comma separated', () => {
-    expect(weekly({ fixedConstraints: ['Monday', 'Thursday'] })).toContain(
-      'NO TRAINING ON: Monday, Thursday',
-    );
-  });
-
-  it('names the weekday of the planning day in English', () => {
-    // 2026-08-18 is a Tuesday. A UTC-parsed key would render Monday for anyone
-    // west of Greenwich, and a different locale would not say 'Tuesday' at all.
-    expect(weekly({ weeklySessionDay: 'Monday' })).toContain('today Tuesday');
-  });
-
-  it('lists several Unavailable Dates on one line, comma separated', () => {
-    expect(weekly({}, ['2026-08-20', '2026-08-21'])).toContain(
-      'UNAVAILABLE: 2026-08-20, 2026-08-21',
-    );
-  });
-
-  it('omits a STATE tag whose value is absent or blank, rather than rendering the word', () => {
-    const blank = weekly({ phase: '', experienceLevel: '' });
-    expect(blank).not.toContain('undefined');
-    expect(blank).not.toContain('phase=');
-    // A real value still renders.
-    expect(weekly({ phase: 'Peak' })).toContain('phase=Peak');
-  });
-
-  it('joins several patterns with a semicolon', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TUESDAY);
-    const withPatterns = { ...ctx, patterns: ['sleeps badly before intervals', 'skips Fridays'] };
-    expect(renderWeeklyPrompt(withPatterns)).toContain(
-      'PATTERNS: sleeps badly before intervals; skips Fridays.',
-    );
-  });
-
-});
-
 describe('buildChatPrompt — its own branches', () => {
   it('renders the CONTEXT line without a tag whose value is missing', () => {
-    const prompt = buildChatPrompt({ ...BASE, phase: undefined, sessionCount: undefined });
+    const prompt = buildChatPrompt({ ...BASE, phase: undefined, presenceStage: undefined });
     expect(prompt).not.toContain('undefined');
     expect(prompt).toContain('xp=intermediate');
   });
@@ -961,10 +798,10 @@ describe('the last exact-shape assertions', () => {
 
   it('renders the Coach Chat CONTEXT line exactly, with an absent tag simply gone', () => {
     const prompt = buildChatPrompt(
-      { ...BASE, phase: undefined, sessionCount: 4, experienceLevel: 'advanced', readiness: undefined },
+      { ...BASE, phase: undefined, experienceLevel: 'advanced', readiness: undefined },
       '2026-08-18',
     );
-    expect(prompt).toContain('CONTEXT (use silently — never cite scores/numbers):\nxp=advanced sessions=4');
+    expect(prompt).toContain('CONTEXT (use silently — never cite scores/numbers):\nxp=advanced\n');
   });
 
   it('accepts a Reference with nothing identifying in it', () => {
@@ -982,10 +819,8 @@ describe('the last exact-shape assertions', () => {
 });
 
 describe('the equipment nudge, exhaustively', () => {
-  const at = (weeklySessionNumber: number | undefined, equipment: CheckIn['equipment']) =>
-    renderWeeklyPrompt(
-      buildWeeklyContext({ ...BASE, weeklySessionNumber, equipment }, [], [], [], [], null, '2026-08-18'),
-    );
+  const at = (presenceStage: CheckIn['presenceStage'], equipment: CheckIn['equipment']) =>
+    buildChatPrompt({ ...BASE, presenceStage, equipment }, TUESDAY);
 
   const NUDGE = 'EQUIPMENT NUDGE:';
   const someKit: CheckIn['equipment'] = [
@@ -998,32 +833,26 @@ describe('the equipment nudge, exhaustively', () => {
     },
   ];
 
-  it('fires in sessions 2 and 3 only, and never once there is equipment', () => {
-    expect(at(2, [])).toContain(NUDGE);
-    expect(at(3, [])).toContain(NUDGE);
-    expect(at(1, [])).not.toContain(NUDGE);
-    expect(at(4, [])).not.toContain(NUDGE);
+  it('fires while the picture is building, and never once there is equipment', () => {
+    expect(at('building', [])).toContain(NUDGE);
+    expect(at('cold_start', [])).not.toContain(NUDGE);
+    expect(at('full', [])).not.toContain(NUDGE);
     // The whole point of the nudge is an empty tab — a full one silences it.
-    expect(at(2, someKit)).not.toContain(NUDGE);
-    expect(at(3, someKit)).not.toContain(NUDGE);
+    expect(at('building', someKit)).not.toContain(NUDGE);
   });
 
-  it('does not fire when the session number is unknown or below the range', () => {
+  it('does not fire when the stage is unknown', () => {
     expect(at(undefined, [])).not.toContain(NUDGE);
-    expect(at(0, [])).not.toContain(NUDGE);
   });
 });
 
 // ── Grounding: the Coach cites its sources (knowledge-oracle/05) ──────────────
 
-describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
-  const TUESDAY = '2026-08-18';
-  const weekly = () =>
-    renderWeeklyPrompt(buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TUESDAY));
+describe('the GROUNDING block — the athlete-facing prompt carries it', () => {
   const chat = () => buildChatPrompt(BASE, TUESDAY);
 
   it('names the tool and asks for it before a training-science fact', () => {
-    for (const prompt of [weekly(), chat()]) {
+    for (const prompt of [chat()]) {
       expect(prompt).toContain('GROUNDING:');
       expect(prompt).toContain('look_up_training_science');
       expect(prompt).toMatch(/before stating a training-science fact/i);
@@ -1033,7 +862,7 @@ describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
   it('instructs Declared Uncertainty when nothing comes back, and silence about sources always', () => {
     // Decision 3 (Mads, 2026-09-11): the reply never names a source — the app
     // lists them beneath it. This is what makes the voice criterion testable.
-    for (const prompt of [weekly(), chat()]) {
+    for (const prompt of [chat()]) {
       expect(prompt).toContain('do not have grounding for that claim');
       expect(prompt).toContain('do not assert it');
       expect(prompt).toContain('Never write citations, footnotes or source names in your reply');
@@ -1047,7 +876,7 @@ describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
     // answer it, with no boundary drawn. Facts were right; the reader could not
     // tell which sentences the sources carried. The rule the Coach already
     // followed in 8 of 20 outside cases, made the rule.
-    for (const prompt of [weekly(), chat()]) {
+    for (const prompt of [chat()]) {
       expect(prompt).toContain('If they are about something nearby but do not answer the question, say so first');
       expect(prompt).toContain('your own coaching judgement, not science');
     }
@@ -1064,20 +893,10 @@ describe('the GROUNDING block — both athlete-facing prompts carry it', () => {
  * the model to fill in.
  */
 describe('the horizon reaches the prompt, including when there is none', () => {
-  const TUESDAY = '2026-08-18';
-
+  // The chat prompt, since the Weekly Session's is retired
+  // (`training-architecture/21`): the HORIZON block is one function, shared.
   function weekly(overrides: Partial<CheckIn> = {}) {
-    return renderWeeklyPrompt(
-      buildWeeklyContext(
-        { ...BASE, weeklySessionNumber: 4, ...overrides },
-        [],
-        [],
-        [],
-        [],
-        null,
-        TUESDAY,
-      ),
-    );
+    return buildChatPrompt({ ...BASE, ...overrides }, TUESDAY);
   }
 
   it('states the Race Distance the athlete trains for', () => {
@@ -1165,7 +984,7 @@ describe('the horizon reaches the prompt, including when there is none', () => {
       expect(weekly(target)).not.toContain('TUNE-UP WINDOW');
     });
 
-    it('renders the same lines in Coach Chat — Chat must not know less than the Weekly Session', () => {
+    it('renders the same lines with the full set on one Check-in', () => {
       const prompt = buildChatPrompt(
         { ...BASE, ...target, tuneUps: [olympic], lateRaces: [{ ...olympic, date: '2026-09-27' }] },
         TUESDAY,
@@ -1224,25 +1043,20 @@ describe('the horizon reaches the prompt, including when there is none', () => {
 });
 
 describe('the current Training Block and the week within it reach the Coach', () => {
-  const TUESDAY = '2026-08-18';
-
   it('names the block and the position, together', () => {
     // `training-architecture/03`: "The Coach prompt carries the current block
     // and the athlete's position within it." Which block alone says the same
     // thing for every week of that block.
-    const prompt = renderWeeklyPrompt(
-      buildWeeklyContext(
-        {
-          ...BASE,
-          weeklySessionNumber: 4,
-          raceDistance: 'Full',
-          raceTarget: 'Ironman Copenhagen',
-          raceDate: '2027-06-01',
-          phase: 'Block 1 of 5',
-          blockWeek: 'week 2 of 8',
-        },
-        [], [], [], [], null, TUESDAY,
-      ),
+    const prompt = buildChatPrompt(
+      {
+        ...BASE,
+        raceDistance: 'Full',
+        raceTarget: 'Ironman Copenhagen',
+        raceDate: '2027-06-01',
+        phase: 'Block 1 of 5',
+        blockWeek: 'week 2 of 8',
+      },
+      TUESDAY,
     );
 
     expect(prompt).toContain('Block 1 of 5, week 2 of 8');
@@ -1251,12 +1065,7 @@ describe('the current Training Block and the week within it reach the Coach', ()
   it('says nothing about a block for an athlete with no horizon', () => {
     // Half a position is worse than none: "week 2 of 8" with no block, or a
     // block with no week, is a number the model reasons from and nobody meant.
-    const prompt = renderWeeklyPrompt(
-      buildWeeklyContext(
-        { ...BASE, weeklySessionNumber: 4, raceDistance: 'Full', phase: undefined },
-        [], [], [], [], null, TUESDAY,
-      ),
-    );
+    const prompt = buildChatPrompt({ ...BASE, raceDistance: 'Full', phase: undefined }, TUESDAY);
 
     expect(prompt).toContain('no race booked');
     expect(prompt).not.toContain('week 2 of');
@@ -1265,15 +1074,8 @@ describe('the current Training Block and the week within it reach the Coach', ()
 
 
 describe("the athlete's own words reach the Coach", () => {
-  const TUESDAY = '2026-08-18';
-
   function weekly(overrides: Partial<CheckIn> = {}) {
-    return renderWeeklyPrompt(
-      buildWeeklyContext(
-        { ...BASE, weeklySessionNumber: 4, ...overrides },
-        [], [], [], [], null, TUESDAY,
-      ),
-    );
+    return buildChatPrompt({ ...BASE, ...overrides }, TUESDAY);
   }
 
   it('quotes the sentence and says whose it is', () => {
@@ -1301,7 +1103,7 @@ describe('which absence the Coach is told about', () => {
     phase: 'Base Building',
     commStyle: '',
     experienceLevel: 'intermediate',
-    sessionCount: 5,
+    presenceStage: 'full',
     language: 'English',
   };
 

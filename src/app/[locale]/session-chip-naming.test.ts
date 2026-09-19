@@ -55,10 +55,12 @@ describe('nothing in src/ calls a Session Chip a block', () => {
       .sort();
   }
 
-  it('leaves only the prompt-section sense, which is a different concept', () => {
-    // `prompts.ts` says "── Weekly Session blocks ──" over the section builders
-    // that assemble a prompt. That is `prompt-blocks.ts`'s sense of the word,
-    // not the calendar's, and the issue is explicit that it stays.
-    expect(filesSayingSessionBlock()).toEqual(['features/coach/prompts.ts']);
+  it('leaves nothing, now that the prompt-section sense went with the Weekly Session', () => {
+    // `prompts.ts` used to say "── Weekly Session blocks ──" over the section
+    // builders that assembled that prompt — `prompt-blocks.ts`'s sense of the
+    // word, not the calendar's, and the issue was explicit that it stayed.
+    // The Weekly Session is retired (`training-architecture/21`), and the
+    // heading went with it; nothing in `src/` says it now.
+    expect(filesSayingSessionBlock()).toEqual([]);
   });
 });
