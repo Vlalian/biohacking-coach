@@ -96,14 +96,14 @@ describe('a feedback interview is not a Coach Chat', () => {
 });
 
 describe('selectOpenConversations', () => {
-  it('picks the Weekly Session and the Coach Chat by name', () => {
+  it('picks the Coach Chat by name, and leaves an old open Weekly Session as history (training-architecture/21)', () => {
     const selected = selectOpenConversations([
       conversation('weekly_session', 'conv_weekly'),
       conversation('coach_chat', 'conv_chat'),
     ]);
 
-    expect(selected.weeklySession?.id).toBe('conv_weekly');
     expect(selected.coachChat?.id).toBe('conv_chat');
+    expect(Object.values(selected)).not.toContainEqual(expect.objectContaining({ id: 'conv_weekly' }));
   });
 
   it('ignores an open feedback interview entirely', () => {
@@ -116,7 +116,6 @@ describe('selectOpenConversations', () => {
     ]);
 
     expect(selected.coachChat?.id).toBe('conv_chat');
-    expect(selected.weeklySession).toBeNull();
     expect(Object.values(selected)).not.toContainEqual(
       expect.objectContaining({ id: 'conv_feedback' }),
     );
@@ -126,7 +125,6 @@ describe('selectOpenConversations', () => {
     // A tester whose only open conversation is an interview must open the app
     // to an empty Coach Overlay, not to their own complaint quoted back.
     expect(selectOpenConversations([conversation('feedback', 'conv_feedback')])).toEqual({
-      weeklySession: null,
       coachChat: null,
     });
   });

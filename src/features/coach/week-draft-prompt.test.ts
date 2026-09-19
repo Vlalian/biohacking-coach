@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildWeeklyContext, renderWeekDraftPrompt, renderWeeklyPrompt, stagedSessionLine, type WeekDraftContext } from './prompts';
+import { buildChatPrompt, buildWeeklyContext, renderWeekDraftPrompt, stagedSessionLine, type WeekDraftContext } from './prompts';
+import type { ProposedSession } from './weekly-session';
 import type { CheckIn } from './check-in';
 import { WEEK_DRAFT_OPENER } from './week-draft';
 
 /**
- * The silent week draft's prompt (`training-architecture/16`). Golden-pinned
- * like the Weekly Session's, plus the rules that matter: the skeleton is
+ * The silent week draft's prompt (`training-architecture/16`). Golden-pinned,
+ * plus the rules that matter: the skeleton is
  * presented as a default to adjust, retrieved science is numbered and cited
  * (or its absence is said), and the Coach is told to propose the whole window
  * in one call.
@@ -17,7 +18,7 @@ const CHECK_IN: CheckIn = {
   blockWeek: 'week 3 of 8',
   commStyle: '',
   experienceLevel: 'intermediate',
-  sessionCount: 4,
+  presenceStage: 'full',
   language: 'en',
   weeklySessionDay: 'Wednesday',
   fixedConstraints: ['Thursday'],
@@ -35,10 +36,7 @@ function ctx(over: Partial<WeekDraftContext> = {}): WeekDraftContext {
     ...buildWeeklyContext(
       CHECK_IN,
       [{ dateKey: '2026-09-13', sessionType: 'Endurance', body: 7, mind: 8 }],
-      [],
-      [],
       ['2026-09-26'],
-      null,
       TODAY,
     ),
     window: { start: '2026-09-21', end: '2026-09-27', excludedDates: ['2026-09-24', '2026-09-26'], fellThrough: false },
@@ -121,6 +119,59 @@ describe('renderWeekDraftPrompt', () => {
   });
 });
 
+// The blocks the Weekly Session's prompt used to share with the draft — STATE,
+// DATA USE, LAST WEEK FEEDBACK, UNAVAILABLE — are the draft's alone since the
+// session was retired (`training-architecture/21`), so their branches are
+// pinned here, where they are still rendered.
+describe('renderWeekDraftPrompt — the blocks it inherited, branch by branch', () => {
+  const draft = (checkIn: Partial<WeekDraftContext['checkIn']> = {}, over: Partial<WeekDraftContext> = {}) =>
+    renderWeekDraftPrompt(ctx({ checkIn: { ...CHECK_IN, ...checkIn }, ...over }));
+
+  it('STATE: drops a tag whose value is absent, keeps the xp default, and reads the scores as given', () => {
+    const full = draft();
+    expect(full).toContain('STATE: phase=Build the Volume presence=full body=6/10 energy=7/10 sleep-quality=5/10 xp=intermediate');
+    const bare = draft({ phase: undefined, presenceStage: undefined, experienceLevel: '', readiness: undefined });
+    expect(bare).toContain('\nSTATE: xp=intermediate\n');
+    expect(bare).not.toContain('undefined');
+    expect(draft({ experienceLevel: 'advanced' })).toContain('xp=advanced');
+  });
+
+  it('DATA USE: reads scores when there is a Check-in, and only Session Reflections when there is none', () => {
+    expect(draft()).toContain('DATA USE: Scores = coaching intelligence, never cite directly.\nLow body/energy/mental → soften load.');
+    expect(draft()).not.toContain('is your only read on those');
+    const none = draft({ readiness: undefined });
+    expect(none).toContain('DATA USE: Session Reflections = coaching intelligence, never cite directly.\nStrong feedback → validate. Mixed → name inconsistency. What the athlete tells you in words about body, sleep and energy is your only read on those — weigh it as such.');
+    expect(none).not.toContain('Low body/energy/mental');
+  });
+
+  it('LAST WEEK FEEDBACK: the reflections when there are any, else one of two honest absences', () => {
+    expect(draft()).toContain('LAST WEEK FEEDBACK:\n- Sun 13 Sept · Endurance · Body 🙂 (7/10) · Mind 🙂 (8/10)');
+    const noFeedback = { feedbackSummary: null };
+    expect(draft({}, noFeedback)).toContain('No feedback this week — use check-in signals and self-assessment.');
+    expect(draft({ readiness: undefined }, noFeedback)).toContain('No feedback this week, and no check-in data — go on what the athlete tells you.');
+    expect(draft({ readiness: undefined }, noFeedback)).not.toContain('use check-in signals');
+  });
+
+  it('UNAVAILABLE: the dates on one line, or nothing at all', () => {
+    expect(draft({}, { unavailableDates: ['2026-09-22', '2026-09-25'] })).toContain(
+      "UNAVAILABLE: 2026-09-22, 2026-09-25 — no sessions, don't mention unless athlete raises it.",
+    );
+    expect(draft({}, { unavailableDates: [] })).not.toContain('UNAVAILABLE');
+  });
+
+  it('RECURRING NO-TRAIN DAYS: several, comma separated', () => {
+    expect(draft({ fixedConstraints: ['Monday', 'Thursday'] })).toContain('RECURRING NO-TRAIN DAYS: Monday, Thursday');
+  });
+
+  it('names tune-ups, late races and the window beneath HORIZON, the same lines as the chat', () => {
+    const olympic = { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' };
+    const out = draft({ tuneUps: [olympic], lateRaces: [olympic], tuneUpWindow: { from: '2026-12-01', to: '2027-02-10' }, tuneUpEveEasy: true });
+    expect(out).toContain('TUNE-UPS: Olympic Odense on 2027-03-01 (Olympic) — ordinary training day, do not taper — keep the day before easy');
+    expect(out).toContain('LATE RACE: Olympic Odense on 2027-03-01 (Olympic)');
+    expect(out).toContain('TUNE-UP WINDOW: now (2026-12-01–2027-02-10)');
+  });
+});
+
 describe('renderWeekDraftPrompt — the window block, line by line', () => {
   it('lists the excluded days and the recurring no-train days only when there are any', () => {
     const full = renderWeekDraftPrompt(ctx());
@@ -149,12 +200,13 @@ describe('renderWeekDraftPrompt — the window block, line by line', () => {
   });
 });
 
-describe('the Weekly Session prompt with a week brought in from the calendar (training-architecture/18)', () => {
-  const weekly = (staged?: WeekDraftContext['checkIn'] extends never ? never : Parameters<typeof renderWeeklyPrompt>[0]['stagedProposal']) =>
-    renderWeeklyPrompt({ ...buildWeeklyContext({ ...CHECK_IN, weeklySessionNumber: 4 }, [], [], [], [], null, TODAY), stagedProposal: staged });
+describe('the one conversation with a week brought in from the calendar (training-architecture/18, into Coach Chat since /20)', () => {
+  const window = { start: '2026-09-21', end: '2026-09-27', excludedDates: [], fellThrough: false };
+  const weekly = (staged: ProposedSession[] | null) =>
+    buildChatPrompt(CHECK_IN, TODAY, null, [], { window, stagedProposal: staged });
 
   it('carries the PROPOSED WEEK block only when a proposal is staged, and not for an empty list', () => {
-    expect(weekly(undefined)).not.toContain('PROPOSED WEEK');
+    expect(weekly(null)).not.toContain('PROPOSED WEEK');
     expect(weekly([])).not.toContain('PROPOSED WEEK');
     const out = weekly([{ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: 'easy spin' }]);
     expect(out).toContain('PROPOSED WEEK (drafted for the athlete, already shown to them as a proposal');

@@ -6,7 +6,7 @@ import { AlertTriangle, CornerDownLeft } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import type { FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
-import type { UiMessage } from './weekly-session';
+import type { UiMessage } from './ui-message';
 import { Thinking } from '@/components/ui/thinking';
 
 /**

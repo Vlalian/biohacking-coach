@@ -16,13 +16,12 @@ import { buildChatPrompt } from '@/features/coach/prompts';
  */
 export const EVAL_ATHLETE: CheckIn = {
   phase: 'Build',
-  sessionCount: 8,
+  presenceStage: 'full',
   commStyle: 'direct, technical, no reassurance',
   experienceLevel: 'intermediate',
   language: 'English',
   weeklySessionDay: 'Monday',
   fixedConstraints: ['Thursday'],
-  weeklySessionNumber: 9,
   raceTarget: 'Ironman Copenhagen, 17 August 2027',
   equipment: [
     { id: 'e1', category: 'bike', name: 'Canyon Speedmax', details: 'CF SLX, Quarq power meter', addedDate: '2026-01-04' },

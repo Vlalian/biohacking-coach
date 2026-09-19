@@ -1,115 +1,114 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
-import { CalendarDays } from 'lucide-react';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import {
   localWeekday,
-  shouldOfferWeeklySession,
-  type WeeklyOfferInput,
+  shouldOfferCheckIn,
+  type CheckInOfferInput,
 } from '@/features/coach/weekly-offer';
 import { CoachChat, type CoachChatInitial } from './coach-chat';
-import { WeeklySession, type WeeklySessionInitial } from './weekly-session';
+import { CheckInReminder } from './check-in-reminder';
+import type { CheckInReport } from './check-in-step';
+import { saveCheckInAction } from './weekly-actions';
 
 /**
- * The one Coach conversation (ADR 0007): "Coach Chat, the Weekly Session,
- * Session Negotiation, and the Reflective Prompt become *behaviors inside that
- * one thread*, not destinations."
+ * The one Coach conversation (ADR 0007, amended 2026-09-16): Coach Chat is the
+ * whole thread. The Weekly Session that used to be entered from here is retired
+ * (`training-architecture/21`) — the chat proposes a week when the athlete
+ * wants one, and the silent draft plans it otherwise.
  *
- * So this is a mode switch inside a single surface, not a router. Coach Chat is
- * the **baseline** — what the Coach is doing whenever it isn't running a
- * structured behavior — and the Weekly Session is entered from within it and
- * returns to it.
- *
- * The Weekly Session is **offered, never forced** (ADR 0007). Two ways in:
- * the athlete's own action in the header, always available; and the single
- * sanctioned proactive nudge on their Weekly Session Day, which is dismissable
- * and never blocks the chat beneath it. An in-progress Weekly Session restored
- * from the server is reachable through "Plan my week"; it no longer decides
- * where the overlay opens (showable-version/27).
+ * What this hosts above the chat is the single sanctioned proactive nudge, now
+ * the **Check-in reminder**: on the athlete's Weekly Session Day it asks for a
+ * quick check-in before the week is drafted, and opens the Check-in step in
+ * place. Dismissable, never blocking the chat beneath it, and skipping changes
+ * nothing — a Check-in filed later is simply the freshest signal for the next
+ * prompt that reads it.
  */
 export function CoachThread({
   chatInitial,
-  weeklyInitial,
   athleteFirstName,
   raceTarget,
-  weeklyOffer = null,
+  checkInOffer = null,
 }: {
   chatInitial: CoachChatInitial | null;
-  weeklyInitial: WeeklySessionInitial | null;
   /** Header only — never sent anywhere (ADR 0006). */
   athleteFirstName?: string;
   raceTarget?: string | null;
-  /** The server's half of the nudge decision: the athlete's stored day, and
-   *  whether they have already held this week's session. Which weekday it
-   *  actually is gets decided here, in the athlete's own timezone. */
-  weeklyOffer?: WeeklyOfferInput | null;
+  /** The server's half of the reminder decision: the athlete's stored day, and
+   *  whether this week's Check-in is already filed. Which weekday it actually
+   *  is gets decided here, in the athlete's own timezone. */
+  checkInOffer?: CheckInOfferInput | null;
 }) {
   const t = useTranslations('CoachThread');
-  const { reference, weeklyOfferDismissed, dismissWeeklyOffer, chatSeed, setChatSeed } = useCoachOverlay();
+  const { checkInOfferDismissed, dismissCheckInOffer, chatSeed, setChatSeed } = useCoachOverlay();
 
   // Decided on the client only. The server and the browser can disagree about
   // what day it is — no timezone is stored on the profile — so answering this
   // server-side would nudge on the wrong local day near midnight *and* mismatch
   // on hydration. `false` is the server snapshot, so the first paint matches and
-  // the offer appears a beat later: right for an offer, wrong for a gate.
+  // the reminder appears a beat later: right for a reminder, wrong for a gate.
   // Same mounted-detection shape `settings-view.tsx` uses for its theme tiles.
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
     () => false,
   );
-  const offerWeeklySession =
-    mounted && weeklyOffer
-      ? shouldOfferWeeklySession({
-          weeklySessionDay: weeklyOffer.weeklySessionDay,
+  const offerCheckIn =
+    mounted && checkInOffer
+      ? shouldOfferCheckIn({
+          weeklySessionDay: checkInOffer.weeklySessionDay,
           todayWeekday: localWeekday(new Date()),
-          hasHeldWeeklySessionThisWeek: weeklyOffer.hasHeldWeeklySessionThisWeek,
+          hasCheckedInThisWeek: checkInOffer.hasCheckedInThisWeek,
         })
       : false;
 
-  // Mode on mount: the chat, always. A seed or a Reference already meant chat
-  // (training-architecture/18, /20 — the overlay is unmounted while closed, so
-  // "Discuss with Coach" *mounts* this component with the Reference set). An
-  // open Weekly Session used to win when neither was present, and a session
-  // left open on 3 September then made every reload open on it, hiding the
-  // persisted chat and showing that session's stale proposal (showable-version
-  // /27, Mads, production 2026-09-17). The session is where "Plan my week"
-  // leads, not where the app lands.
-  const [mode, setMode] = useState<'chat' | 'weekly'>('chat');
+  // The reminder's two states: the banner asking, and the Check-in step it
+  // opens. Both are answered by dismissing the offer — filing, skipping and
+  // "not now" all end it for the week; the server's "already filed" answer
+  // keeps it ended across reloads.
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkInPending, startCheckIn] = useTransition();
+  const [checkInFailed, setCheckInFailed] = useState(false);
 
-  // And the same rule while already mounted: a *new* Reference arriving (the
-  // athlete tapped a different session without closing the overlay) drops the
-  // thread back to chat. Adjusted during render rather than in an effect —
-  // React's documented "adjusting state when a prop changes" pattern — so the
-  // switch lands in the same pass instead of a second one.
-  const referenceId = reference?.sessionId ?? null;
-  const [seenReferenceId, setSeenReferenceId] = useState(referenceId);
-  if (referenceId !== seenReferenceId) {
-    setSeenReferenceId(referenceId);
-    if (referenceId) setMode('chat');
+  function fileCheckIn(report: CheckInReport) {
+    setCheckInFailed(false);
+    startCheckIn(async () => {
+      // The action rethrows anything that is not the athlete's fault (a
+      // database error, say). Left uncaught, that reaches the locale error
+      // boundary, which replaces this form - and the answers held in its local
+      // state - with a retry screen. The athlete keeps their answers and gets
+      // the notice instead.
+      try {
+        const result = await saveCheckInAction(report);
+        if (result.ok) dismissCheckInOffer();
+        else setCheckInFailed(true);
+      } catch {
+        setCheckInFailed(true);
+      }
+    });
   }
 
   // A Coach Chat seeded from the calendar ("Discuss with the Coach" on a
   // drafted week, `training-architecture/18`, into the one conversation since
-  // `/20`): the same adjust-state-on-prop shape as the Reference above. A new
-  // seed opens chat mode on it; the seed's conversation id is the CoachChat's
-  // key, so a chat already showing is replaced rather than left holding stale
-  // state — the seed carries the proposal the restored one did not.
+  // `/20`): React's documented "adjusting state when a prop changes" pattern,
+  // during render rather than in an effect, so it lands in the same pass. The
+  // seed's conversation id is the CoachChat's key, so a chat already showing is
+  // replaced rather than left holding stale state — the seed carries the
+  // proposal the restored one did not.
   // The seed is a transfer, not a home. The thread copies it into its own
   // state the moment it sees it and clears the shared one right then, so
   // closing the overlay any way at all — cancel and close, not only a later
   // send — cannot leave a withdrawn plan waiting for the next open
-  // (CodeRabbit, PR #69). Adopted during render, as the mode switch already
-  // was; the clear is a parent-state set the same way.
+  // (CodeRabbit, PR #69). Adopted during render; the clear is a parent-state
+  // set the same way.
   const [adopted, setAdopted] = useState<(CoachChatInitial & { seededAt: number }) | null>(null);
   // Guarded on the handoff time, not the id: Discuss reuses the open chat, so a
   // second handoff into the same conversation must still be adopted — and a
   // render-time set with no guard loops.
   if (chatSeed && chatSeed.seededAt !== adopted?.seededAt) {
     setAdopted(chatSeed as CoachChatInitial & { seededAt: number });
-    setMode('chat');
     setChatSeed(null);
   }
   const chatStart = adopted ?? chatInitial;
@@ -117,24 +116,8 @@ export function CoachThread({
   // seed — the proposal included — even when the overlay sat open on that chat.
   const chatKey = adopted ? `${adopted.conversationId}:${adopted.seededAt}` : (chatInitial?.conversationId ?? 'fresh');
 
-  // The chat stays mounted underneath the Weekly Session, hidden, so a turn in
-  // flight is not thrown away by the switch: on Mads's smoke run of PR #71 a
-  // "Plan my week" tap mid-thought lost the message from view until reload
-  // (the server had stored it). The Weekly Session is on its way out (21);
-  // until then it is a layer over the chat, not a replacement of it.
   return (
-    <>
-      {mode === 'weekly' && (
-        <WeeklySession
-          key={weeklyInitial?.conversationId ?? 'fresh'}
-          initial={weeklyInitial}
-          athleteFirstName={athleteFirstName}
-          raceTarget={raceTarget}
-          onExit={() => setMode('chat')}
-        />
-      )}
-      {/* A class, not the `hidden` attribute: the utility's display:flex would win over the attribute. */}
-      <div className={mode === 'weekly' ? 'hidden' : 'flex h-full min-h-0 flex-col bg-background'} data-chat-hidden={mode === 'weekly' ? 'true' : undefined}>
+    <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b border-border px-5 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-display text-2xl leading-none tracking-[0.04em] text-foreground">
@@ -147,51 +130,22 @@ export function CoachThread({
             </div>
           )}
         </div>
-        {/* Always reachable, never demanded — the athlete can plan whenever they
-            like, independent of the once-a-week offer below. */}
-        <button
-          type="button"
-          data-action="plan-week"
-          onClick={() => setMode('weekly')}
-          className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-signal"
-        >
-          <CalendarDays className="h-3 w-3" />
-          {t('planWeek')}
-        </button>
       </header>
 
-      {offerWeeklySession && !weeklyOfferDismissed && (
-        <div className="shrink-0 border-b border-signal/40 bg-signal/5 px-4 py-3">
-          <p className="text-sm leading-relaxed text-foreground">{t('offerBody')}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                // Accepting answers the offer as surely as dismissing it does.
-                // Without this the banner is still pending, so returning to
-                // chat re-offers a session the athlete is already in.
-                dismissWeeklyOffer();
-                setMode('weekly');
-              }}
-              className="bg-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal-foreground transition-opacity hover:opacity-90"
-            >
-              {t('offerAccept')}
-            </button>
-            <button
-              type="button"
-              onClick={dismissWeeklyOffer}
-              className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {t('offerDismiss')}
-            </button>
-          </div>
-        </div>
+      {offerCheckIn && !checkInOfferDismissed && (
+        <CheckInReminder
+          open={checkInOpen}
+          pending={checkInPending}
+          failed={checkInFailed}
+          onOpen={() => setCheckInOpen(true)}
+          onSkip={dismissCheckInOffer}
+          onSubmit={fileCheckIn}
+        />
       )}
 
       <div className="min-h-0 flex-1">
         <CoachChat key={chatKey} initial={chatStart} />
       </div>
-      </div>
-    </>
+    </div>
   );
 }

@@ -88,6 +88,22 @@ describe('renderBriefingPrompt — transcripts gated by shareAiTranscripts', () 
     const prompt = renderBriefingPrompt(ctx({ transcripts: null }));
     expect(prompt).toContain('has not shared their private Coach Chat');
   });
+
+  it('still renders an old Weekly Session transcript under its own heading (training-architecture/21)', () => {
+    // The behavior is retired and nothing writes the kind any more, but the
+    // rows already written are the athlete's history and the Head Coach's to
+    // read while transcripts are shared — the reader keeps its label.
+    const prompt = renderBriefingPrompt(
+      ctx({
+        transcripts: [
+          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Coach: good — then we build'] },
+          { kind: 'coach_chat', lines: ['Athlete: I felt tired'] },
+        ],
+      }),
+    );
+    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nCoach: good — then we build');
+    expect(prompt).toContain('[Coach Chat]\nAthlete: I felt tired');
+  });
 });
 
 describe('buildBriefingContext — no direct identifier reaches the prompt (GDPR decision 1)', () => {

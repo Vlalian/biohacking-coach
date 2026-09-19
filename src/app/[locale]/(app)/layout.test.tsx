@@ -8,7 +8,7 @@ const {
   getMessages,
   getPendingProposal,
   getRatingsForConversation,
-  hasHeldWeeklySessionInWeek,
+  getCheckInForWeek,
   narratePendingEvents,
   holdsActiveCoachingLinks,
 } = vi.hoisted(() => ({
@@ -26,7 +26,8 @@ const {
   getMessages: vi.fn((): Promise<Record<string, unknown>[]> => Promise.resolve([])),
   getPendingProposal: vi.fn(() => Promise.resolve(null)),
   getRatingsForConversation: vi.fn(() => Promise.resolve({})),
-  hasHeldWeeklySessionInWeek: vi.fn(() => Promise.resolve(false)),
+  // This week's Check-in, or none: the server's half of the reminder decision.
+  getCheckInForWeek: vi.fn((): Promise<Record<string, unknown> | null> => Promise.resolve(null)),
   // Narration has its own tests; here the layout's job is only to run it, with
   // the athlete's id, before the transcript is read.
   narratePendingEvents:
@@ -52,8 +53,8 @@ vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }))
 vi.mock('@/features/coach/conversation-repository', () => ({
   getOpenConversations,
   getMessages,
-  hasHeldWeeklySessionInWeek,
 }));
+vi.mock('@/features/coach/check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/coach/plan-proposal-repository', () => ({ getPendingProposal }));
 vi.mock('@/features/feedback/message-feedback-repository', () => ({
   getRatingsForConversation,
@@ -89,7 +90,8 @@ describe('AppShellLayout', () => {
     getOpenConversations.mockResolvedValue([]);
     getMessages.mockReset();
     getMessages.mockResolvedValue([]);
-    hasHeldWeeklySessionInWeek.mockClear();
+    getCheckInForWeek.mockReset();
+    getCheckInForWeek.mockResolvedValue(null);
     narratePendingEvents.mockReset();
     narratePendingEvents.mockResolvedValue(undefined);
   });
@@ -102,20 +104,22 @@ describe('AppShellLayout', () => {
     expect(getAthleteByUserId).not.toHaveBeenCalled();
   });
 
-  it('restores an in-progress Weekly Session for a signed-in athlete', async () => {
+  it('leaves an old open Weekly Session where it is — there is no screen for it any more (training-architecture/21)', async () => {
+    // The behavior is retired; the row stays for the transcript readers, and
+    // the shell neither restores it nor reads its messages.
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
     getOpenConversations.mockResolvedValue([
       { id: 'conv_1', kind: 'weekly_session', weeklySessionNumber: 3 },
     ]);
-    getMessages.mockResolvedValue([
-      { id: 'm1', role: 'athlete', content: 'hi', seq: 1 },
-    ]);
 
-    await render();
+    const element = await render();
 
     expect(getOpenConversations).toHaveBeenCalledWith('athlete_1');
-    expect(getMessages).toHaveBeenCalledWith('conv_1');
+    expect(getMessages).not.toHaveBeenCalled();
+    const props = (element as unknown as { props: Record<string, unknown> }).props;
+    const coachContent = props.coachContent as { props: Record<string, unknown> };
+    expect(coachContent.props).not.toHaveProperty('weeklyInitial');
   });
 
   it("resumes the athlete's Coach Chat — the overlay's baseline mode", async () => {
@@ -128,9 +132,9 @@ describe('AppShellLayout', () => {
     expect(getMessages).toHaveBeenCalledWith('chat_1');
   });
 
-  it('picks both kinds out of one open-conversation query', async () => {
+  it('picks the chat out of one open-conversation query, beside an old Weekly Session', async () => {
     // The seam issue 01 asks for: resolved across kinds, not by naming one. A
-    // resting Coach Chat and an in-progress Weekly Session are open at once.
+    // resting Coach Chat and an old open `weekly_session` row can coexist.
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null });
     getOpenConversations.mockResolvedValue([
@@ -141,13 +145,13 @@ describe('AppShellLayout', () => {
     await render();
 
     expect(getOpenConversations).toHaveBeenCalledTimes(1);
-    expect(getMessages).toHaveBeenCalledWith('conv_1');
+    expect(getMessages).toHaveBeenCalledTimes(1);
     expect(getMessages).toHaveBeenCalledWith('chat_1');
   });
 
-  it('hands the nudge inputs down without deciding the day itself', async () => {
+  it('hands the reminder inputs down without deciding the day itself', async () => {
     // ADR 0007's single sanctioned nudge, split deliberately: the server answers
-    // what it knows (the stored day, whether a session was held) and stops. The
+    // what it knows (the stored day, whether a Check-in is filed) and stops. The
     // weekday is resolved in the browser, because the profile stores no timezone
     // — deciding it here would read the server's clock and nudge on the wrong
     // local day near midnight. So the layout must pass inputs, not a verdict.
@@ -159,13 +163,13 @@ describe('AppShellLayout', () => {
     });
     const element = await render();
 
-    expect(hasHeldWeeklySessionInWeek).toHaveBeenCalledWith('athlete_1', expect.any(String));
+    expect(getCheckInForWeek).toHaveBeenCalledWith('athlete_1', expect.any(String));
 
     const props = (element as unknown as { props: Record<string, unknown> }).props;
     const coachContent = props.coachContent as { props: Record<string, unknown> };
-    expect(coachContent.props.weeklyOffer).toEqual({
+    expect(coachContent.props.checkInOffer).toEqual({
       weeklySessionDay: 'Monday',
-      hasHeldWeeklySessionThisWeek: false,
+      hasCheckedInThisWeek: false,
     });
   });
 
@@ -236,60 +240,56 @@ describe('the Roster entry in the Navigation Drawer', () => {
   });
 });
 
-describe('the weekly offer keys on the conversation, never on the plan', () => {
-  // `coach-overlay/04` decision 4, pinned for `training-architecture/07` and
-  // `/16`: a drafted week must still be offered, so the layout may derive
-  // `hasHeldWeeklySessionThisWeek` from held conversations only. A plan read
-  // here would be the exact regression — generation silencing its own offer.
-  it('the layout reads no sessions and no plan to decide the nudge', async () => {
+describe('the Check-in reminder keys on the Check-in, never on the plan', () => {
+  // `coach-overlay/04` decision 4, carried over when the nudge became the
+  // Check-in reminder (`training-architecture/21`): a drafted week must still
+  // be asked about, so the layout may derive `hasCheckedInThisWeek` from the
+  // Check-in row only. A plan read here would be the exact regression —
+  // generation silencing its own reminder.
+  it('the layout reads no sessions and no plan to decide the reminder', async () => {
     const { readFileSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');
     const source = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
-    expect(source).toContain('hasHeldWeeklySessionInWeek');
+    expect(source).toContain('getCheckInForWeek');
     // Every seam a plan or a drafted week could be read through, by name.
     expect(source).not.toMatch(
-      /session-repository|getSessionsFor|hasCoachPlanForWeek|replaceCoachPlan|getResolvedBlocks|getBlockSet|training-block|plan-proposal-repository'\)[^]*?weeklyOffer/,
+      /session-repository|getSessionsFor|hasCoachPlanForWeek|replaceCoachPlan|getResolvedBlocks|getBlockSet|training-block|plan-proposal-repository'\)[^]*?checkInOffer/,
     );
   });
 
-  // The runtime half. The layout can see two things that resemble "this week
-  // has a plan": a pending proposal and a held Weekly Session. The offer must
-  // follow the second and ignore the first — and the previous version of this
-  // test set up neither, so it asserted the default and could not fail (review
-  // of 07, 2026-09-15).
-  const weeklyOfferOf = async () => {
+  const checkInOfferOf = async () => {
     const element = await render();
     const props = (element as unknown as { props: Record<string, unknown> }).props;
-    return (props.coachContent as { props: Record<string, unknown> }).props.weeklyOffer;
+    return (props.coachContent as { props: Record<string, unknown> }).props.checkInOffer;
   };
 
-  it('derives the offer from the held-session read for this week, and from nothing else', async () => {
+  it('derives the reminder from this week\'s Check-in read, and from nothing else', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({
       id: 'athlete_1',
       syntheticLabel: null,
       profile: { weeklySessionDay: 'Monday' },
     });
-    hasHeldWeeklySessionInWeek.mockResolvedValue(false);
+    getCheckInForWeek.mockResolvedValue(null);
     getPendingProposal.mockClear();
 
-    expect(await weeklyOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasHeldWeeklySessionThisWeek: false });
-    expect(hasHeldWeeklySessionInWeek).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
-    // No open Weekly Session, so the proposal — the only plan-shaped thing in
-    // reach — is never even read on the way to the offer.
+    expect(await checkInOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasCheckedInThisWeek: false });
+    expect(getCheckInForWeek).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    // The proposal — the only plan-shaped thing in reach — is never read on
+    // the way to the reminder.
     expect(getPendingProposal).not.toHaveBeenCalled();
   });
 
-  it('withdraws the offer only when this week\'s session was actually held', async () => {
+  it('withdraws the reminder only when this week\'s Check-in is actually filed', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
     getAthleteByUserId.mockResolvedValue({
       id: 'athlete_1',
       syntheticLabel: null,
       profile: { weeklySessionDay: 'Monday' },
     });
-    hasHeldWeeklySessionInWeek.mockResolvedValue(true);
+    getCheckInForWeek.mockResolvedValue({ id: 'ci_1', weekStart: '2026-09-14', energy: 6, body: 6, sleepQuality: 6 });
 
-    expect(await weeklyOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasHeldWeeklySessionThisWeek: true });
+    expect(await checkInOfferOf()).toEqual({ weeklySessionDay: 'Monday', hasCheckedInThisWeek: true });
   });
 });
 

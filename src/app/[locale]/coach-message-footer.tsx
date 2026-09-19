@@ -2,7 +2,7 @@
 
 import { MessageThumbs } from './message-thumbs';
 import { CitationList } from './citation-list';
-import type { UiMessage } from './weekly-session';
+import type { UiMessage } from './ui-message';
 
 /**
  * What hangs below a Coach turn: the sources it drew on, and the tester's

@@ -20,14 +20,18 @@ import {
   type WeekFeedbackEntry,
 } from './check-in';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
-import type { CoachMessage } from './coach-client';
-import { toApiMessages, type Message } from './conversation';
+import type { PresenceStage } from './presence';
 
 /**
- * The Weekly Session's pure orchestration logic — the deterministic seam between
- * the app's data and the Coach's prompts. Everything here is plain data in, plain
- * data out: no DB, no HTTP, no Anthropic client. The server action wires these to
- * the repository and the adapter.
+ * The pure logic behind planning a week — the deterministic seam between the
+ * app's data and the Coach's prompts. Everything here is plain data in, plain
+ * data out: no DB, no HTTP, no Anthropic client. The services wire these to the
+ * repositories and the adapter.
+ *
+ * Named for the Weekly Session that first owned it; that behavior is retired
+ * (ADR 0007, amended 2026-09-16) and what remains here is what outlived it: the
+ * check-in the prompts reason about, the `propose_week_plan` tool and its
+ * validation, and the week's feedback and skips as the prompts read them.
  *
  * The load-bearing rule of ADR 0006 / GDPR decision 1 lives here: {@link
  * buildWeeklyCheckIn} assembles a check-in from the opaque athlete profile and
@@ -39,12 +43,9 @@ import { toApiMessages, type Message } from './conversation';
 // Re-exported here because this is where callers have always imported it from.
 export type { Readiness };
 
-/** The user-turn primer that opens a Weekly Session (never persisted). */
-export const WEEKLY_OPENER = "Let's do our weekly session.";
-
 /**
- * Assembles the check-in the Weekly Session prompt reasons about, from the
- * athlete's opaque profile and today's reported readiness.
+ * Assembles the check-in the Coach prompts reason about, from the athlete's
+ * opaque profile and today's reported readiness.
  *
  * `readiness` is nullable because the athlete may skip the Check-in (ADR 0007),
  * and until a device feed exists the athlete
@@ -73,7 +74,8 @@ export function buildWeeklyCheckIn(
    */
   today: string,
   readiness: Readiness | null,
-  weeklySessionNumber: number,
+  /** Where the Presence Arc stands, read from stored data (`presence-repository`). */
+  presenceStage: PresenceStage,
   language?: string,
   equipmentItems: EquipmentItem[] = [],
   /**
@@ -133,16 +135,14 @@ export function buildWeeklyCheckIn(
     ...(capacity ? { capacity } : {}),
     ...(notableSignal ? { notableSignal } : {}),
     ...constraintFactsFrom(athlete),
-    // The STATE line's `sessions=` is coaching-relationship depth — how many
-    // Weekly Sessions have come before, not the athlete's weekly frequency.
-    // Mapping `trainingSessionsPerWeek` here would mislabel a cadence (6/week)
-    // as history (6 sessions had), so relationship depth is used instead.
-    sessionCount: Math.max(0, weeklySessionNumber - 1),
+    // Coaching-relationship depth, as the Presence Arc reads it from data —
+    // never the athlete's weekly frequency, which would mislabel a cadence
+    // (6/week) as history.
+    presenceStage,
     language: language ?? 'en',
     // Equipment lives in its own table (its own screen, its own CRUD), not on
     // the athlete row — the caller fetches it and passes it in.
     equipment: equipmentItems,
-    weeklySessionNumber,
   };
   assertNoIdentity(checkIn);
   return checkIn;
@@ -303,15 +303,6 @@ export function skippedFrom(sessions: Session[]): SkippedSession[] {
   return sessions
     .filter((s) => s.status === 'skipped')
     .map((s) => ({ date: s.date, sessionType: s.type }));
-}
-
-/**
- * Renders a stored transcript into the alternating user/assistant history the
- * Anthropic API expects. The Coach speaks first in a Weekly Session, so a fixed
- * user-turn primer opens the history; it is a prompt device, never persisted.
- */
-export function toWeeklyApiMessages(transcript: Message[]): CoachMessage[] {
-  return toApiMessages(transcript, WEEKLY_OPENER);
 }
 
 // ── The Week Plan proposal tool ───────────────────────────────────────────────

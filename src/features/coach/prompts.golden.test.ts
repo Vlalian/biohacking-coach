@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWeeklyContext, renderWeeklyPrompt, buildChatPrompt } from './prompts';
+import { buildChatPrompt } from './prompts';
 import { planningWindow } from './planning-window';
 import type { CheckIn, SessionContext } from './check-in';
 import type { WeekSession } from './week';
@@ -26,6 +26,11 @@ import type { WeekSession } from './week';
  *
  * From here on the file does what it says: it pins output against future change.
  *
+ * The Weekly Session's goldens lived here until the behavior was retired
+ * (ADR 0007, amended 2026-09-16; `training-architecture/21`): the prompt they
+ * pinned no longer exists, and the arc it carried is pinned below as the chat
+ * prompt's, per stage.
+ *
  * When a prompt is *deliberately* changed — new copy, a new block, retired
  * guidance — these snapshots are meant to be updated (`vitest -u`) and the diff
  * read as the review artifact: it shows exactly what every athlete will now be
@@ -38,200 +43,40 @@ const BASE: CheckIn = {
   phase: 'Base Building',
   commStyle: '',
   experienceLevel: 'intermediate',
-  sessionCount: 5,
+  presenceStage: 'full',
   language: 'English',
   weeklySessionDay: 'Monday',
   fixedConstraints: [],
   equipment: [],
 };
 
-// A fixed date so the weekday-dependent PLANNING DAY line is deterministic.
-// 2026-08-18 is a Tuesday; BASE prefers Monday, so the line renders.
+// A fixed date so nothing weekday-dependent drifts. 2026-08-18 is a Tuesday.
 const TODAY = '2026-08-18';
 
-describe('golden — the Weekly Session prompt, per arc', () => {
+describe('golden — the Coach Chat prompt, per Presence Arc stage (training-architecture/21)', () => {
   // The arc is the largest conditional in the prompt and the one a refactor is
-  // most likely to get subtly wrong, so every branch is pinned: 1, 2, 3, and 4+.
-  for (const weeklySessionNumber of [1, 2, 3, 4]) {
-    it(`renders identically for session ${weeklySessionNumber}`, () => {
-      const ctx = buildWeeklyContext(
-        { ...BASE, weeklySessionNumber },
-        [],
-        [],
-        [],
-        [],
-        null,
-        TODAY,
-      );
-      expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+  // most likely to get subtly wrong, so every stage is pinned — including the
+  // Guided Tour beats that ride on it: orientation at cold start, the
+  // Equipment nudge while building with an empty tab.
+  for (const presenceStage of ['cold_start', 'building', 'full'] as const) {
+    it(`renders identically at ${presenceStage}`, () => {
+      expect(buildChatPrompt({ ...BASE, presenceStage }, TODAY)).toMatchSnapshot();
     });
   }
 
-  it('renders identically with every optional block populated', () => {
-    const ctx = buildWeeklyContext(
+  it('renders identically at building once the Equipment tab is filled — no nudge', () => {
+    const prompt = buildChatPrompt(
       {
         ...BASE,
-        weeklySessionNumber: 4,
-        commStyle: 'terse, technical, no reassurance',
-        raceTarget: 'Ironman Copenhagen 2027',
-        fixedConstraints: ['Thursday'],
-        language: 'da',
+        presenceStage: 'building',
         equipment: [
           { id: 'e1', category: 'bike', name: 'Canyon Speedmax', details: 'CF SLX', addedDate: '2026-01-04' },
-          { id: 'e2', category: 'watch', name: 'Garmin Fenix 8', details: null, addedDate: '2026-02-11' },
-        ],
-        onboarding: {
-          sportBackground: ['running', 'swimming'],
-          availableHours: '6–10h',
-          motivation: 'finish under 11 hours',
-          weakestDiscipline: 'swim',
-        },
-      },
-      [
-        {
-          dateKey: '2026-08-13',
-          sessionType: 'Intensity',
-          body: 8,
-          mind: 4,
-          comment: 'legs heavy from Tuesday',
-        },
-      ],
-      // Three occurrences is the pattern-detection threshold, so this populates
-      // the PATTERNS block rather than silently rendering nothing.
-      [
-        { sleep: 5.5, pushedBack: true, sessionType: 'intensity' },
-        { sleep: 5.0, pushedBack: true, sessionType: 'intensity' },
-        { sleep: 5.8, pushedBack: true, sessionType: 'intensity' },
-      ],
-      [{ date: '2026-08-14', sessionType: 'Endurance', position: 2 }],
-      ['2026-08-20'],
-      {
-        moves: [
-          { sessionType: 'Intensity', from: '2026-08-12', to: '2026-08-15' },
-        ],
-        creations: [{ sessionType: 'Strength', dateKey: '2026-08-16', retro: true }],
-      },
-      TODAY,
-    );
-    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
-  });
-
-  // The PLANNING DAY line is suppressed on two different conditions, and a
-  // suppressed line is exactly the kind of thing a whitespace refactor breaks
-  // quietly — the block simply vanishes and nothing else looks wrong.
-  it('renders identically when today IS the preferred Weekly Session Day', () => {
-    // 2026-08-17 is a Monday, and BASE prefers Monday: no PLANNING DAY line.
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4 },
-      [],
-      [],
-      [],
-      [],
-      null,
-      '2026-08-17',
-    );
-    expect(renderWeeklyPrompt(ctx)).not.toContain('PLANNING DAY');
-    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
-  });
-
-  it('renders identically when the stored Weekly Session Day is the retired Flexible — read as Sunday', () => {
-    // "Flexible" was retired on 2026-09-14 (CONTEXT.md): a stored one reads as
-    // Sunday, so the Coach is told the preferred day like everyone else's.
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4, weeklySessionDay: 'Flexible' },
-      [],
-      [],
-      [],
-      [],
-      null,
-      TODAY,
-    );
-    expect(renderWeeklyPrompt(ctx)).toContain('PLANNING DAY: Preferred Sunday, today Tuesday');
-    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
-  });
-
-  // training-architecture/20: the day is stated, the week is not asked about.
-  // "Plan rest of this week or from next Sunday?" offered a week the server
-  // refused (PR #57 bounded the write to this week's remainder on purpose).
-  it('states the preferred day but no longer asks which week to plan', () => {
-    const ctx = buildWeeklyContext({ ...BASE, weeklySessionNumber: 4 }, [], [], [], [], null, TODAY);
-    const prompt = renderWeeklyPrompt(ctx);
-    expect(prompt).toContain('PLANNING DAY: Preferred Monday, today Tuesday');
-    expect(prompt).not.toContain('from next');
-    expect(prompt).not.toContain('Plan rest of this week');
-  });
-
-  // showable-version/11. The window is told unconditionally — it was the only
-  // bound a Flexible athlete's Coach ever had, and it stays now that Flexible
-  // reads as Sunday, because a prompt line is a request and the window is what
-  // the server enforces.
-  it('tells an athlete on the retired Flexible which days the plan may cover', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4, weeklySessionDay: 'Flexible' },
-      [],
-      [],
-      [],
-      [],
-      null,
-      TODAY,
-    );
-    const prompt = renderWeeklyPrompt(ctx);
-    // 2026-08-18 is a Tuesday; its week ends Sunday 2026-08-23.
-    expect(prompt).toContain('PLANNING WINDOW: 2026-08-18 to 2026-08-23');
-  });
-
-  it('says when training starts when the window falls through to next week', () => {
-    const ctx = buildWeeklyContext(
-      {
-        ...BASE,
-        weeklySessionNumber: 4,
-        // Every day left in the week of 2026-08-18 is a no-training day.
-        fixedConstraints: [
-          'Tuesday',
-          'Wednesday',
-          'Thursday',
-          'Friday',
-          'Saturday',
-          'Sunday',
         ],
       },
-      [],
-      [],
-      [],
-      [],
-      null,
       TODAY,
     );
-    const prompt = renderWeeklyPrompt(ctx);
-    expect(prompt).toContain('PLANNING WINDOW: 2026-08-24 to 2026-08-30');
-    expect(prompt).toContain('say when training starts');
-  });
-
-  it('narrows the window by the athlete Unavailable Dates', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 4 },
-      [],
-      [],
-      [],
-      ['2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23'],
-      null,
-      TODAY,
-    );
-    expect(renderWeeklyPrompt(ctx)).toContain('PLANNING WINDOW: 2026-08-24 to 2026-08-30');
-  });
-
-  it('renders identically when the equipment nudge fires', () => {
-    // Sessions 2-3 with no equipment: the one combination that emits the nudge.
-    const ctx = buildWeeklyContext(
-      { ...BASE, weeklySessionNumber: 2, equipment: [] },
-      [],
-      [],
-      [],
-      [],
-      null,
-      TODAY,
-    );
-    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
+    expect(prompt).not.toContain('EQUIPMENT NUDGE');
+    expect(prompt).toMatchSnapshot();
   });
 });
 
@@ -415,8 +260,8 @@ describe('golden — no Check-in has ever been given', () => {
     language: BASE.language,
     weeklySessionDay: BASE.weeklySessionDay,
     fixedConstraints: BASE.fixedConstraints,
-    // `sessionCount` is coaching-relationship depth. BASE says 5, which cannot
-    // be true of a session-1 athlete, so the two cases below set their own.
+    // No stage on purpose: BASE says full presence, which cannot be true of an
+    // athlete who has never reported anything, so the case below sets its own.
     raceTarget: 'Ironman Copenhagen 2027',
     commStyle: 'terse, technical, no reassurance',
     equipment: [
@@ -433,40 +278,11 @@ describe('golden — no Check-in has ever been given', () => {
     },
   };
 
-  // Session 1 is when this matters most: a first meeting, where the Coach has
-  // nothing but onboarding and must not imply it can see how the athlete slept.
-  it('the Weekly Session renders without readiness at session 1', () => {
-    const ctx = buildWeeklyContext(
-      { ...NO_READINESS, weeklySessionNumber: 1, sessionCount: 0 },
-      [],
-      [],
-      [],
-      [],
-      null,
-      TODAY,
-    );
-    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
-  });
-
-  // And at 4+, where the arc expects a Reflective Prompt and a review.
-  it('the Weekly Session renders without readiness at session 4+', () => {
-    const ctx = buildWeeklyContext(
-      { ...NO_READINESS, weeklySessionNumber: 4, sessionCount: 3 },
-      [],
-      [],
-      [],
-      [],
-      null,
-      TODAY,
-    );
-    expect(renderWeeklyPrompt(ctx)).toMatchSnapshot();
-  });
-
   it('Coach Chat renders without readiness', () => {
-    // `sessionCount: 0` because that is what `coach-chat-service` passes for an
-    // athlete the Coach has not yet planned a week with. Left off, this golden
-    // pinned `sessions=undefined` — a template hole rendered as a word, in the
-    // one file a human reads to check what the Coach is actually told.
-    expect(buildChatPrompt({ ...NO_READINESS, sessionCount: 0 }, TODAY)).toMatchSnapshot();
+    // Cold start, because that is what `presence-repository` reads for an
+    // athlete with no reflections and no check-ins — the first meeting, where
+    // the Coach has nothing but onboarding and must not imply it can see how
+    // the athlete slept.
+    expect(buildChatPrompt({ ...NO_READINESS, presenceStage: 'cold_start' }, TODAY)).toMatchSnapshot();
   });
 });

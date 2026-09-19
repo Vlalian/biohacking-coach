@@ -95,20 +95,14 @@ beforeEach(() => {
 });
 
 describe('createConversation', () => {
-  it('inserts with the given athlete, kind and session number', async () => {
-    insertRows = [cRow({ weeklySessionNumber: 3 })];
-    const conv = await createConversation({
-      athleteId: 'athlete_1',
-      kind: 'weekly_session',
-      weeklySessionNumber: 3,
-    });
+  it('inserts with the given athlete and kind, and never writes a Weekly Session number', async () => {
+    // The column stays for the rows already written; the behavior that
+    // numbered them is retired (`training-architecture/21`).
+    insertRows = [cRow({ kind: 'coach_chat', weeklySessionNumber: null })];
+    const conv = await createConversation({ athleteId: 'athlete_1', kind: 'coach_chat' });
     expect(insert).toHaveBeenCalledWith(conversations);
-    expect(insertedValues).toMatchObject({
-      athleteId: 'athlete_1',
-      kind: 'weekly_session',
-      weeklySessionNumber: 3,
-    });
-    expect(conv.weeklySessionNumber).toBe(3);
+    expect(insertedValues).toEqual({ athleteId: 'athlete_1', kind: 'coach_chat' });
+    expect(conv.weeklySessionNumber).toBeNull();
   });
 });
 
