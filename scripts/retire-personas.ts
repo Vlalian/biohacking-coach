@@ -1,5 +1,5 @@
 import '../src/db/load-env';
-import { count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../src/db';
 import { athlete, coachingLink, sessions } from '../src/db/schema';
 import {
@@ -62,9 +62,18 @@ async function main(argv: string[]): Promise<void> {
 
   const db = getDb();
   const ids = plan.erase.map((r) => r.id);
-  await db.delete(athlete).where(inArray(athlete.id, ids));
+  // The plan was read a moment ago; a row that gained a user since is a
+  // person now, so the delete re-checks ownership instead of trusting the plan.
+  const erased = await db
+    .delete(athlete)
+    .where(and(inArray(athlete.id, ids), isNull(athlete.userId)))
+    .returning({ id: athlete.id });
   const [left] = await db.select({ n: count() }).from(athlete).where(inArray(athlete.id, ids));
-  console.log(`erased ${ids.length} athlete row(s); ${left.n} of them remain.`);
+  console.log(`erased ${erased.length} athlete row(s); ${left.n} of them remain.`);
+  if (erased.length !== ids.length) {
+    console.error('some rows gained a user between the plan and the delete; they were kept.');
+    process.exit(1);
+  }
 }
 
 main(process.argv.slice(2)).catch((error) => {

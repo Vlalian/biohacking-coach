@@ -316,11 +316,16 @@ async function linkAthletes(coachId: string, athleteIds: string[]) {
  * active Coaching Links. With them, he sees the same three Coach Riley does.
  */
 async function seedMadsAsCoach(madsUserId: string, rosterAthleteIds: string[]) {
-  await getDb()
+  // A reseed finds his coach row already there, possibly under another id
+  // (a preview seeded with a different SEED_MADS_EMAIL); link the row that
+  // exists, never the fixed id, or the Coaching Link fails its foreign key.
+  const [coachRow] = await getDb()
     .insert(coach)
     .values({ id: MADS_COACH_ID, userId: madsUserId })
-    .onConflictDoNothing({ target: coach.userId });
-  await linkAthletes(MADS_COACH_ID, rosterAthleteIds);
+    .onConflictDoNothing({ target: coach.userId })
+    .returning({ id: coach.id });
+  const coachId = coachRow?.id ?? (await coachIdForUser(madsUserId));
+  await linkAthletes(coachId, rosterAthleteIds);
   console.log(
     `Mads also holds a coach row (dual-role dev), linked to ${rosterAthleteIds.length} athlete(s).`,
   );
