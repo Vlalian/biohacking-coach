@@ -36,10 +36,7 @@ function ctx(over: Partial<WeekDraftContext> = {}): WeekDraftContext {
     ...buildWeeklyContext(
       CHECK_IN,
       [{ dateKey: '2026-09-13', sessionType: 'Endurance', body: 7, mind: 8 }],
-      [],
-      [],
       ['2026-09-26'],
-      null,
       TODAY,
     ),
     window: { start: '2026-09-21', end: '2026-09-27', excludedDates: ['2026-09-24', '2026-09-26'], fellThrough: false },

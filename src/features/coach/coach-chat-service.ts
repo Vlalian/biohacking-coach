@@ -33,10 +33,10 @@ import type { PlanningWindow } from './planning-window';
 import type { CoachReply } from './coach-client';
 
 /**
- * Coach Chat — the Coach Overlay's *baseline* mode (ADR 0007): the open-ended,
- * athlete-led conversation the Coach is having whenever it is not running a
- * structured behavior. Not a separate room; the Weekly Session is entered from
- * inside the same surface.
+ * Coach Chat — the Coach Overlay's one conversation (ADR 0007, amended
+ * 2026-09-16): open-ended and athlete-led, and since `training-architecture/21`
+ * also where a week is discussed and agreed; the Weekly Session that used to
+ * sit on top of it is retired.
  *
  * Server-side orchestration only. A turn is taken by
  * {@link takeConversationTurn}, which reaches `coach-client` (and so
@@ -47,8 +47,8 @@ import type { CoachReply } from './coach-client';
  * session id is checked against that owner by the repository, never trusted
  * (ADR 0006).
  *
- * Unlike the Weekly Session, a Coach Chat is never "ended" by the app — it is
- * the resting conversation, so it stays open and is resumed on every visit.
+ * A Coach Chat is never "ended" by the app — it is the resting conversation,
+ * so it stays open and is resumed on every visit.
  */
 
 /**

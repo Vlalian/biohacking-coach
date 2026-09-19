@@ -445,9 +445,10 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * with them, which is right: a briefing is that coach's account of their own
  * coaching.
  *
- * `weeklySessionNumber` is the 1-based ordinal that selects the Weekly Session's
- * conversational arc (Session 1 welcomes, Session 4+ reviews); null for kinds
- * that have no such arc.
+ * `weeklySessionNumber` was the 1-based ordinal that selected the Weekly
+ * Session's conversational arc. The behaviour is retired
+ * (`training-architecture/21`); the column stays for old `weekly_session`
+ * rows and is null on everything written since.
  *
  * Retention and deletion of conversations are a GDPR-track question, not schema —
  * deliberately not decided here.

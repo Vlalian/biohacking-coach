@@ -1,5 +1,5 @@
 import type { Citation } from '@/lib/citation';
-import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
 import { SEQ_RETRIES, isSeqConflict } from './seq-conflict';
@@ -46,32 +46,6 @@ export async function createConversation(input: {
 }
 
 /**
- * Whether the athlete held a Weekly Session in the week containing `weekStart`
- * (a 'YYYY-MM-DD' Monday).
- *
- * The behavior is retired (`training-architecture/21`), so this is true only
- * for a week in which an old row was written; the silent week draft still asks
- * it (`week-draft-service`), because a week the athlete planned by talking must
- * not be drafted over.
- */
-export async function hasHeldWeeklySessionInWeek(
-  athleteId: string,
-  weekStart: string,
-): Promise<boolean> {
-  const [row] = await getDb()
-    .select({ n: count() })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.athleteId, athleteId),
-        eq(conversations.kind, 'weekly_session'),
-        gte(conversations.createdAt, new Date(`${weekStart}T00:00:00`)),
-      ),
-    );
-  return (row?.n ?? 0) > 0;
-}
-
-/**
  * Every still-open conversation this athlete has, newest first.
  *
  * The Coach Overlay hosts one conversation surface across kinds (ADR 0007), so
@@ -98,9 +72,9 @@ export async function getOpenConversations(athleteId: string): Promise<Conversat
 /**
  * The athlete's most recent still-open conversation of a kind, or null.
  *
- * The Weekly Session page uses this to restore an in-progress session on refresh:
- * an open (`ended_at IS NULL`) conversation is one the athlete has not finalised,
- * so its transcript is picked back up rather than lost.
+ * Coach Chat, onboarding, the feedback interview and narration use this to pick
+ * a transcript back up: an open (`ended_at IS NULL`) conversation is one the
+ * athlete has not finalised, so it is resumed rather than lost.
  */
 export async function getLatestOpenConversation(
   athleteId: string,

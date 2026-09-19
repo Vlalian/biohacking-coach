@@ -1,4 +1,3 @@
-import { detectPatterns } from './pattern-insight';
 import {
   CONSTRAINT_SIGNALS,
   assemble,
@@ -26,9 +25,6 @@ import type {
   RaceMention,
   Readiness,
   SessionContext,
-  SessionHistoryItem,
-  SkippedSession,
-  WeekActivity,
   WeekFeedbackEntry,
 } from './check-in';
 
@@ -96,43 +92,6 @@ const dayReference = (dateKey: string): string => `${weekdayShort(dateKey)} ${da
 const qualifiedType = (sessionType: string, position?: number): string =>
   `${position ? `${ordinal(position)} ` : ''}${sessionType}`;
 
-/**
- * Natural references for skipped sessions: date + type, with the position
- * qualifier ("2nd Endurance") only when two same-type sessions share a day.
- * Entity ids never appear in prompts.
- */
-export function formatSkippedSessions(
-  skippedSessions?: SkippedSession[],
-): string | null {
-  if (!skippedSessions || skippedSessions.length === 0) return null;
-  return skippedSessions
-    .map((s) => {
-      return `${dayReference(s.date)}: ${qualifiedType(s.sessionType, s.position)}, skipped`;
-    })
-    .join('; ');
-}
-
-/**
- * The week's Session Moves and Athlete Session creations as natural references —
- * date + type, position qualifier only for same-type Doubles, never entity ids.
- * Silent Pattern Insight material for the Weekly Session.
- */
-export function formatWeekActivity(weekActivity?: WeekActivity | null): string | null {
-  if (!weekActivity) return null;
-  const lines: string[] = [];
-  (weekActivity.moves || []).forEach((m) => {
-    lines.push(
-      `- moved ${dayReference(m.from)} ${qualifiedType(m.sessionType, m.position)} to ${dayReference(m.to)}`,
-    );
-  });
-  (weekActivity.creations || []).forEach((c) => {
-    lines.push(
-      `- added ${dayReference(c.dateKey)} ${c.sessionType}${c.retro ? ' (retro-logged as done)' : ''}`,
-    );
-  });
-  return lines.length > 0 ? lines.join('\n') : null;
-}
-
 const FEEDBACK_EMOJI = ['😫', '😕', '😐', '🙂', '😄'];
 const emojiForScore = (val: number): string =>
   FEEDBACK_EMOJI[Math.round(((val - 1) * 4) / 9)] || '—';
@@ -162,35 +121,29 @@ export function formatWeekFeedback(
     .join('\n');
 }
 
+/**
+ * What the week draft's prompt reads about the athlete's week. Until
+ * `training-architecture/21` this also carried pattern insights, skipped
+ * sessions and the week's moves for the Weekly Session's prompt; that prompt
+ * is gone, and the draft never rendered them, so they went with it.
+ */
 export interface WeeklyContext {
   checkIn: CheckIn;
-  patterns: string[];
   feedbackSummary: string | null;
-  skippedSessions: SkippedSession[];
   unavailableDates: string[];
-  weekActivityLines: string | null;
   today: string;
 }
 
 export function buildWeeklyContext(
   checkIn: CheckIn,
   weekFeedback: WeekFeedbackEntry[] = [],
-  // Stryker disable next-line ArrayDeclaration: equivalent. `detectPatterns`
-  // returns [] for anything shorter than PATTERN_THRESHOLDS.minOccurrences (3),
-  // so a one-element default is indistinguishable from an empty one.
-  sessionHistory: SessionHistoryItem[] = [],
-  skippedSessions: SkippedSession[] = [],
   unavailableDates: string[] = [],
-  weekActivity: WeekActivity | null = null,
   today: string = todayISO(),
 ): WeeklyContext {
   return {
     checkIn,
-    patterns: detectPatterns(sessionHistory),
     feedbackSummary: formatWeekFeedback(weekFeedback),
-    skippedSessions,
     unavailableDates,
-    weekActivityLines: formatWeekActivity(weekActivity),
     today,
   };
 }
@@ -465,7 +418,7 @@ Before closing, weave 2-3 sentences — coach orienting athlete, not product tou
 1. Training Plan tab — tap sessions to log body/mind; that's how I learn what works for you
 2. Equipment tab — add gear for more specific advice
 3. Glossary — unfamiliar terms, it's there
-Once only — never repeat it in a later turn.`;
+Only while the athlete is new (this block is present until their first Check-in or rated week) — if an earlier turn in this conversation already did it, do not repeat it.`;
 
 const EQUIPMENT_NUDGE = `EQUIPMENT NUDGE: One sentence when it fits — don't know what they train on; Equipment tab helps you be specific. Once only.`;
 
@@ -612,13 +565,13 @@ ${[
   .filter((part): part is string => part !== null)
   .join(' ')}${readinessFragment(readiness)}${noTrain}`,
 
-    // The same horizon the Weekly Session plans against. Chat used to carry
+    // The same horizon the week draft plans against. Chat used to carry
     // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
     // was answered by a Coach that did not know when the race was.
     horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
 
     // What the athlete's body currently allows, or nothing at all when nothing
-    // is restricted (ADR 0011) — the same sentence the Weekly Session carries.
+    // is restricted (ADR 0011) — the same sentence the week draft carries.
     // Chat is where "should I do tomorrow's intervals?" gets asked, and until
     // training-architecture/06 it was answered by a Coach that did not know the
     // athlete could not run.
@@ -639,7 +592,7 @@ ${[
 
     // The one conversation may agree a week (`training-architecture/20`): the
     // bound the server will enforce, the week already on the table if one was
-    // brought in, and the two lines the Weekly Session has always carried.
+    // brought in, and the two lines the Weekly Session carried before it.
     ...chatPlanningBlocks(planning),
 
     CONSTRAINT_SIGNALS,
@@ -655,7 +608,7 @@ ${[
 }
 
 /**
- * The planning half of the chat prompt, in the order the Weekly Session renders
+ * The planning half of the chat prompt, in the order the Weekly Session rendered
  * the same lines; nothing at all when the chat was given no window.
  *
  * The staged week is the Coach's own by the time it arrives (approval strips
@@ -852,7 +805,7 @@ export function renderBlockAdjustmentPrompt(ctx: BlockAdjustmentContext): string
 // ── The silent week draft (training-architecture/16) ─────────────────────────
 
 /**
- * Everything the Weekly Session prompt reasons from, plus the week being
+ * Everything the Weekly Session prompt reasoned from, plus the week being
  * drafted: its window, the computed skeleton the Coach adjusts, and the
  * training science retrieved for it. Assembled by the draft service; rendered
  * by {@link renderWeekDraftPrompt}.
@@ -953,7 +906,7 @@ ${lines.join('\n')}`;
 /**
  * The system prompt for drafting a week with nobody in the room.
  *
- * The Weekly Session's blocks where they still apply — horizon, capacity, the
+ * The retired Weekly Session's blocks where they still apply — horizon, capacity, the
  * athlete's own words, state, last week's reflections, unavailable days — and
  * none of its conversation: no arc, no check-in questions, no guided tour.
  * There is no athlete to ask, so the prompt says what it knows and what it

@@ -15,7 +15,6 @@ const callCoach = vi.fn();
 const getCheckInForWeek = vi.fn();
 // What the Coach has on the athlete (`training-architecture/21`): nothing, by default.
 const getPresenceStage = vi.fn(async () => 'cold_start' as const);
-const hasHeldWeeklySessionInWeek = vi.fn();
 const getResolvedBlocks = vi.fn();
 // Every race the athlete has (slice 09). Empty by default: no tune-ups, no late races.
 const getRaces = vi.fn(async () => []);
@@ -40,7 +39,6 @@ const isCoachDisabled = vi.fn(() => false);
 vi.mock('./coach-client', () => ({ callCoach, isCoachDisabled }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('./presence-repository', () => ({ getPresenceStage }));
-vi.mock('./conversation-repository', () => ({ hasHeldWeeklySessionInWeek }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState }));
@@ -96,7 +94,6 @@ beforeEach(() => {
   });
   callCoach.mockResolvedValue(toolReply({ sessions: PROPOSED }));
   getCheckInForWeek.mockResolvedValue(null);
-  hasHeldWeeklySessionInWeek.mockResolvedValue(false);
   getResolvedBlocks.mockResolvedValue({
     race: { id: 'r1', name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Ironman' },
     set: null,
@@ -110,7 +107,7 @@ beforeEach(() => {
 
 describe('draftGate — a week is drafted once (training-architecture/24)', () => {
   const window = { start: NEXT_MON, end: '2026-09-27', excludedDates: [], fellThrough: false };
-  const go = { consented: true, held: false, window };
+  const go = { consented: true, window };
 
   it('goes ahead only when the week was never drafted', () => {
     expect(draftGate({ ...go, history: { kind: 'never' } })).toBeNull();
@@ -129,9 +126,10 @@ describe('draftGate — a week is drafted once (training-architecture/24)', () =
     }
   });
 
-  it('the other exits keep their order: consent, held, window', () => {
+  it('the other exits keep their order: consent, window', () => {
+    // "Already held by talking" was an exit until training-architecture/21:
+    // nothing writes a weekly_session any more, so it could never fire again.
     expect(draftGate({ ...go, consented: false, history: { kind: 'never' } })).toBe('consent-refused');
-    expect(draftGate({ ...go, held: true, history: { kind: 'never' } })).toBe('already-held');
     expect(draftGate({ ...go, window: null, history: { kind: 'never' } })).toBe('no-window');
   });
 });
@@ -159,12 +157,6 @@ describe('ensureWeekDrafted — the cheap gate calls neither the Coach nor the e
     expect(recordWeekDraft).not.toHaveBeenCalled();
   });
 
-  it('when a Weekly Session was already held for that week — the athlete planned it by talking', async () => {
-    hasHeldWeeklySessionInWeek.mockResolvedValue(true);
-    expect(await ensureWeekDrafted(ATHLETE, TODAY)).toBe('already-held');
-    expect(hasHeldWeeklySessionInWeek).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
-    expect(callCoach).not.toHaveBeenCalled();
-  });
 
   it('when no day of the due week can hold training', async () => {
     getAthleteById.mockResolvedValue({
@@ -390,8 +382,8 @@ describe('ensureWeekDrafted — the edges', () => {
   it('reads a missing athlete row or profile as no day and no constraints: Sunday, whole week', async () => {
     // 2026-09-20 is a Sunday: with no day stored the cycle is anchored there.
     getAthleteById.mockResolvedValueOnce(undefined).mockResolvedValue({ id: ATHLETE, profile: null });
-    hasHeldWeeklySessionInWeek.mockResolvedValue(true);
-    expect(await ensureWeekDrafted(ATHLETE, '2026-09-20')).toBe('already-held');
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    expect(await ensureWeekDrafted(ATHLETE, '2026-09-20')).toBe('already-drafted');
     expect(getWeekDraftHistory).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
   });
 
@@ -442,8 +434,8 @@ describe('ensureWeekDrafted — a linked Head Coach sees the draft a day early (
   });
 
   it('with no link the same Tuesday is still last week’s cycle, visible from that day', async () => {
-    hasHeldWeeklySessionInWeek.mockResolvedValue(true);
-    expect(await ensureWeekDrafted(ATHLETE, '2026-09-15')).toBe('already-held');
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    expect(await ensureWeekDrafted(ATHLETE, '2026-09-15')).toBe('already-drafted');
     expect(getWeekDraftHistory).toHaveBeenCalledWith(ATHLETE, '2026-09-14');
   });
 
@@ -548,11 +540,14 @@ describe('draftInFlight — derived, never stored (training-architecture/29)', (
     }
   });
 
-  it('null when consent is missing, the week is held, or no day can hold training', async () => {
+  it('null when consent is missing, the week is already drafted, or no day can hold training', async () => {
     assertAiCoachingConsent.mockResolvedValueOnce({ ok: false, missing: ['ai_coaching'] });
     expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
-    hasHeldWeeklySessionInWeek.mockResolvedValueOnce(true);
+    // Two history reads sit before the gate (this week, then the due week), so a
+    // one-shot value would land on the wrong one.
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
     expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
     getUnavailableDates.mockResolvedValueOnce(ALL_DAYS_OF_NEXT_WEEK);
     expect(await draftInFlight(ATHLETE, TODAY)).toBeNull();
   });

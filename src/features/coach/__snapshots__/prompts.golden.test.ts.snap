@@ -43,7 +43,7 @@ Before closing, weave 2-3 sentences — coach orienting athlete, not product tou
 1. Training Plan tab — tap sessions to log body/mind; that's how I learn what works for you
 2. Equipment tab — add gear for more specific advice
 3. Glossary — unfamiliar terms, it's there
-Once only — never repeat it in a later turn."
+Only while the athlete is new (this block is present until their first Check-in or rated week) — if an earlier turn in this conversation already did it, do not repeat it."
 `;
 
 exports[`golden — the Coach Chat prompt > renders identically for a week the Coach planned alone 1`] = `
@@ -320,7 +320,7 @@ Before closing, weave 2-3 sentences — coach orienting athlete, not product tou
 1. Training Plan tab — tap sessions to log body/mind; that's how I learn what works for you
 2. Equipment tab — add gear for more specific advice
 3. Glossary — unfamiliar terms, it's there
-Once only — never repeat it in a later turn."
+Only while the athlete is new (this block is present until their first Check-in or rated week) — if an earlier turn in this conversation already did it, do not repeat it."
 `;
 
 exports[`golden — the Coach Chat prompt, per Presence Arc stage (training-architecture/21) > renders identically at full 1`] = `

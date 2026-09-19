@@ -112,7 +112,7 @@ export async function approveWeekDraft(params: {
 
 /**
  * The coach's sessions as the server accepts them for that week, or null — the
- * same validator the Weekly Session and the athlete's accept use, against the
+ * same validator the athlete's accept uses, against the
  * draft's own week.
  */
 function acceptedSessions(weekStart: string, today: string, sessions: unknown): ProposedSession[] | null {
@@ -133,7 +133,7 @@ function sessionsArrayLength(input: unknown): number {
  * **A Head Coach's note is never sent** (`prompts.ts:sessionNote`, Mads
  * 2026-08-21): it is a third party's prose about the athlete, and a name in it
  * is invisible to the identifier assertion. The approved sessions become the
- * athlete's proposal — staged into a Weekly Session prompt on "discuss",
+ * athlete's proposal — staged into the chat's prompt on "discuss",
  * written as `origin: 'coach'` rows on "accept" — and on both routes a note
  * the coach typed would travel as if the Coach had written it, past a guard
  * that keys on origin. So it is stripped here, at the one write, rather than

@@ -3,8 +3,6 @@ import {
   buildWeeklyContext,
   buildChatPrompt,
   formatWeekSessions,
-  formatSkippedSessions,
-  formatWeekActivity,
   formatWeekFeedback,
 } from './prompts';
 import type { CheckIn, Onboarding } from './check-in';
@@ -124,18 +122,12 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
 
 describe('buildWeeklyContext — raceTarget', () => {
   it('forwards raceTarget from checkIn', () => {
-    const ctx = buildWeeklyContext(
-      { ...BASE, raceTarget: 'Ironman Copenhagen' },
-      [],
-      [],
-      [],
-      [],
-    );
+    const ctx = buildWeeklyContext({ ...BASE, raceTarget: 'Ironman Copenhagen' });
     expect(ctx.checkIn.raceTarget).toBe('Ironman Copenhagen');
   });
 
   it('forwards undefined raceTarget gracefully', () => {
-    const ctx = buildWeeklyContext(BASE, [], [], [], []);
+    const ctx = buildWeeklyContext(BASE);
     expect(ctx.checkIn.raceTarget).toBeUndefined();
   });
 });
@@ -182,7 +174,7 @@ describe('the Presence Arc in Coach Chat (training-architecture/21)', () => {
 
   it('orients a cold-start athlete in the Coach’s voice, once (ADR 0001)', () => {
     expect(at('cold_start')).toContain('FIRST CONVERSATION ORIENTATION:');
-    expect(at('cold_start')).toContain('Once only');
+    expect(at('cold_start')).toContain('do not repeat it');
     expect(at('building')).not.toContain('FIRST CONVERSATION ORIENTATION');
     expect(at('full')).not.toContain('FIRST CONVERSATION ORIENTATION');
   });
@@ -263,82 +255,17 @@ describe('the chat prompt given a planning window — the lines the Weekly Sessi
   });
 });
 
-describe('skippedSessions — natural references', () => {
-  it('renders date + type without ids', () => {
-    const line = formatSkippedSessions([{ date: '2026-07-15', sessionType: 'Recovery' }]);
-    expect(line).toContain('2026-07-15');
-    expect(line).toContain('Recovery');
-    expect(line).toContain('skipped');
-    expect(line).not.toMatch(/s_[a-z0-9]/);
-  });
-
-  it('adds the position qualifier only when provided (same-type Doubles)', () => {
-    const withPos = formatSkippedSessions([
-      { date: '2026-07-15', sessionType: 'Endurance', position: 2 },
-    ]);
-    expect(withPos).toContain('2nd Endurance');
-    const noPos = formatSkippedSessions([{ date: '2026-07-15', sessionType: 'Endurance' }]);
-    expect(noPos).not.toContain('1st');
-    expect(noPos).not.toContain('2nd');
-  });
-
-});
-
 describe('formatWeekFeedback — dates read the same as everywhere else', () => {
-  it('names the weekday from local midnight, matching the skipped/activity lines', () => {
+  it('names the weekday from local midnight', () => {
     // A bare 'YYYY-MM-DD' parses as UTC; behind UTC that renders the previous
-    // day. Both helpers must agree on the weekday for the same date.
+    // day, and the calendar names the same date Wednesday.
     const feedback = formatWeekFeedback([
       { dateKey: '2026-07-15', sessionType: 'Endurance', body: 8, mind: 7 },
     ]);
-    const skipped = formatSkippedSessions([
-      { date: '2026-07-15', sessionType: 'Endurance' },
-    ]);
     expect(feedback).toContain('Wed');
-    expect(skipped).toContain('Wed');
   });
 });
 
-describe('formatWeekActivity — natural references', () => {
-  it('renders a move as date + type → target day, no entity ids', () => {
-    const line = formatWeekActivity({
-      moves: [{ sessionType: 'Recovery', from: '2026-07-15', to: '2026-07-17' }],
-      creations: [],
-    });
-    expect(line).toContain('moved Wed 2026-07-15 Recovery to Fri 2026-07-17');
-    expect(line).not.toMatch(/s_[a-z0-9]/);
-  });
-
-  it('adds the position qualifier only for same-type Doubles', () => {
-    const withPos = formatWeekActivity({
-      moves: [{ sessionType: 'Endurance', from: '2026-07-15', to: '2026-07-17', position: 2 }],
-      creations: [],
-    });
-    expect(withPos).toContain('2nd Endurance');
-    const noPos = formatWeekActivity({
-      moves: [{ sessionType: 'Endurance', from: '2026-07-15', to: '2026-07-17' }],
-      creations: [],
-    });
-    expect(noPos).not.toContain('1st');
-  });
-
-  it('renders Athlete Session creations, flagging retro-logs', () => {
-    const line = formatWeekActivity({
-      moves: [],
-      creations: [
-        { sessionType: 'Strength', dateKey: '2026-07-18', retro: false },
-        { sessionType: 'Mobility', dateKey: '2026-07-14', retro: true },
-      ],
-    });
-    expect(line).toContain('added Sat 2026-07-18 Strength');
-    expect(line).toContain('added Tue 2026-07-14 Mobility (retro-logged as done)');
-  });
-
-  it('returns null when there is nothing to report', () => {
-    expect(formatWeekActivity({ moves: [], creations: [] })).toBeNull();
-    expect(formatWeekActivity(undefined)).toBeNull();
-  });
-});
 
 // The no-identity-in-prompts rule (GDPR decision 1): a real name or email must
 // never reach a rendered prompt. The check-in builder is what enforces this by
@@ -464,6 +391,17 @@ const planned = (over: Partial<WeekSession> = {}): WeekSession => ({
 });
 
 describe('formatWeekSessions', () => {
+  it('qualifies a Double by position — 1st, 2nd, 3rd, then Nth — and leaves a single session unqualified', () => {
+    // The ordinal table used to be pinned through the Weekly Session's skipped
+    // line; that line is gone (training-architecture/21), this one remains.
+    const line = (position?: number) => formatWeekSessions([planned({ position })]) ?? '';
+    expect(line(undefined)).not.toMatch(/\d+(st|nd|rd|th) /);
+    expect(line(1)).toContain('1st ');
+    expect(line(2)).toContain('2nd ');
+    expect(line(3)).toContain('3rd ');
+    expect(line(4)).toContain('4th ');
+  });
+
   it("never sends a Head Coach's note, and keeps every other origin's", () => {
     // Mads, 2026-08-21. A Head Coach's note is a third party's prose *about*
     // the athlete, written by someone who never agreed to have it processed —
@@ -629,65 +567,9 @@ describe('the prompt formatters, branch by branch', () => {
     const ctx = buildWeeklyContext(BASE);
     expect(ctx.today).toBe('2026-08-19');
     expect(ctx).toMatchObject({
-      patterns: [],
-      skippedSessions: [],
       unavailableDates: [],
       feedbackSummary: null,
-      weekActivityLines: null,
     });
-  });
-
-  it('distinguishes null from empty for skipped sessions', () => {
-    expect(formatSkippedSessions()).toBeNull();
-    expect(formatSkippedSessions([])).toBeNull();
-  });
-
-  it('joins several skipped sessions with a semicolon', () => {
-    expect(
-      formatSkippedSessions([
-        { date: '2026-08-17', sessionType: 'Endurance' },
-        { date: '2026-08-19', sessionType: 'Tempo' },
-      ]),
-    ).toBe('Mon 2026-08-17: Endurance, skipped; Wed 2026-08-19: Tempo, skipped');
-  });
-
-  it('ordinals the Double qualifier 1st, 2nd, 3rd, then Nth', () => {
-    const at = (position: number) =>
-      formatSkippedSessions([{ date: '2026-08-17', sessionType: 'Endurance', position }]);
-    expect(at(1)).toContain('1st Endurance');
-    expect(at(2)).toContain('2nd Endurance');
-    expect(at(3)).toContain('3rd Endurance');
-    expect(at(4)).toContain('4th Endurance');
-  });
-
-  it('names weekdays in en-GB short form, from local midnight', () => {
-    // Sunday is the one that catches a UTC-parsed date key west of Greenwich:
-    // it would render as the Saturday before.
-    expect(formatSkippedSessions([{ date: '2026-08-23', sessionType: 'Recovery' }])).toBe(
-      'Sun 2026-08-23: Recovery, skipped',
-    );
-  });
-
-  it('treats a week activity with no moves and no creations as nothing to report', () => {
-    expect(formatWeekActivity()).toBeNull();
-    expect(formatWeekActivity(null)).toBeNull();
-    expect(formatWeekActivity({})).toBeNull();
-    expect(formatWeekActivity({ moves: [] })).toBeNull();
-    expect(formatWeekActivity({ creations: [] })).toBeNull();
-  });
-
-  it('reports creations when there are no moves at all, and flags a retro-log', () => {
-    expect(
-      formatWeekActivity({
-        creations: [
-          { sessionType: 'Strength', dateKey: '2026-08-18', retro: true },
-          { sessionType: 'Mobility', dateKey: '2026-08-19', retro: false },
-        ],
-      }),
-    ).toBe(
-      '- added Tue 2026-08-18 Strength (retro-logged as done)\n' +
-        '- added Wed 2026-08-19 Mobility',
-    );
   });
 
   it('maps a feedback score across the whole emoji scale, and falls back off it', () => {

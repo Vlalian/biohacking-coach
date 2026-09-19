@@ -15,7 +15,6 @@ import { buildWeeklyContext, renderWeekDraftPrompt } from './prompts';
 import { getCheckInForWeek } from './check-in-repository';
 import { getPresenceStage } from './presence-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
-import { hasHeldWeeklySessionInWeek } from './conversation-repository';
 import { getResolvedBlocks } from './training-block-service';
 import { getRaces } from '@/features/race/race-repository';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
@@ -26,7 +25,6 @@ import {
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   validateProposedPlan,
   weekFeedbackFrom,
-  skippedFrom,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -72,7 +70,6 @@ const DRAFT_ACK = 'Staged as a proposal for the athlete. Reply with one word.';
 export type DraftOutcome =
   | 'consent-refused'
   | 'already-drafted'
-  | 'already-held'
   | 'no-window'
   | 'coach-failed'
   | 'coach-disabled'
@@ -97,12 +94,10 @@ export type DraftOutcome =
 export function draftGate(facts: {
   consented: boolean;
   history: ResolvedWeekDraftHistory;
-  held: boolean;
   window: PlanningWindow | null;
 }): Exclude<DraftOutcome, 'coach-failed' | 'malformed' | 'lost-race' | 'drafted'> | null {
   if (!facts.consented) return 'consent-refused';
   if (facts.history.kind !== 'never') return 'already-drafted';
-  if (facts.held) return 'already-held';
   if (!facts.window) return 'no-window';
   return null;
 }
@@ -341,13 +336,12 @@ async function gateFacts(
 
   // Read again for the due week rather than reused when it is this week: one
   // spare read on the rarer path, and no branch nothing can tell apart.
-  const [consent, history, held] = await Promise.all([
+  const [consent, history] = await Promise.all([
     assertAiCoachingConsent(athleteId),
     getWeekDraftHistory(athleteId, dueWeek),
-    hasHeldWeeklySessionInWeek(athleteId, dueWeek),
   ]);
   const window = weekWindow(dueWeek, today, fixedConstraints, unavailableDates);
-  const gated = draftGate({ consented: consent.ok, history, held, window });
+  const gated = draftGate({ consented: consent.ok, history, window });
   // The gate's last exit is a null window, so past it the window is real.
   if (gated || !window) return { gated: gated ?? 'no-window' };
   return { dueWeek, visibleFrom, window, unavailableDates };
@@ -484,7 +478,7 @@ async function gatherContext(
   const grounding = await ground(athleteId, groundingFacts(athlete, horizon.blocks, today));
 
   const ctx = {
-    ...buildWeeklyContext(checkIn, weekFeedbackFrom(weekSessions), [], skippedFrom(weekSessions), unavailableDates, null, today),
+    ...buildWeeklyContext(checkIn, weekFeedbackFrom(weekSessions), unavailableDates, today),
     window,
     skeleton,
     passages: grounding.passages,

@@ -4,13 +4,10 @@ import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 
-/** What the athlete reports: three scores together, and a sentence or nothing. */
-export interface CheckInReport {
-  energy: number;
-  body: number;
-  sleepQuality: number;
-  notableSignal: string | null;
-}
+import type { CheckInReport } from '@/features/coach/check-in-repository';
+
+/** What the athlete reports — three scores together, and a sentence or nothing — declared with its store. */
+export type { CheckInReport };
 
 /** One 1–10 score, as a row of ten buttons. */
 function ScoreRow({
@@ -60,7 +57,7 @@ function ScoreRow({
  * ones the session had; only the host changed.
  *
  * Three scores and a sentence. The three are required *together* — half a
- * Check-in renders to the Coach as none at all, which is why Continue stays
+ * Check-in renders to the Coach as none at all, which is why Save stays
  * disabled until all three are answered rather than filing what it has.
  *
  * The sentence is optional and deliberately free text: how a week actually went
