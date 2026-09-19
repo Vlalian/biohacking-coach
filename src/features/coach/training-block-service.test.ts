@@ -14,6 +14,10 @@ const callCoach = vi.fn();
 const logCoachFailure = vi.fn();
 const logBlockAdjustmentRefused = vi.fn();
 const getActiveLink = vi.fn();
+// The athlete's own link, read by the gate only for a stale set carrying a
+// human's block (19). Linked by default: every earlier test was written for
+// Coached Mode, where the Head Coach's hold on the set stands.
+const getLinkForAthlete = vi.fn();
 
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
 vi.mock('./training-block-repository', () => ({
@@ -28,11 +32,15 @@ vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete 
 const isCoachDisabled = vi.fn(() => false);
 vi.mock('./coach-client', () => ({ callCoach, isCoachDisabled }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logBlockAdjustmentRefused }));
-vi.mock('./coach-repository', () => ({ getActiveLink }));
+vi.mock('./coach-repository', () => ({ getActiveLink, getLinkForAthlete }));
 
-const { ensureBlocksAdjusted, getResolvedBlocks, editBlockAsHeadCoach } = await import(
-  './training-block-service'
-);
+const {
+  ensureBlocksAdjusted,
+  getResolvedBlocks,
+  editBlockAsHeadCoach,
+  repinBlockSetAsHeadCoach,
+  restartBlockSetFromDraftAsHeadCoach,
+} = await import('./training-block-service');
 
 const TODAY = '2026-09-14';
 const ATHLETE = 'athlete-1';
@@ -79,6 +87,7 @@ beforeEach(() => {
   capacityFor.mockResolvedValue(null);
   getCheckInForWeek.mockResolvedValue(null);
   getSessionsForAthlete.mockResolvedValue([]);
+  getLinkForAthlete.mockResolvedValue({ headCoachName: 'Lars', link: { id: 'l1' } });
   callCoach.mockResolvedValue(
     toolReply({ blocks: SHAPED.map(({ name, endDate }) => ({ name, endDate })) }),
   );
@@ -564,5 +573,263 @@ describe('editBlockAsHeadCoach', () => {
     );
     expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('head-coach-owned');
     expect(callCoach).not.toHaveBeenCalled();
+  });
+});
+
+describe('the solo case — a severed link ends the Head Coach’s hold on a stale set (training-architecture/19, ruling 2)', () => {
+  const HUMAN_STALE = storedSet({
+    blocks: [
+      { name: 'Long Rides', endDate: '2027-03-01', authoredBy: 'head_coach' },
+      { name: 'Taper', endDate: '2027-06-01', authoredBy: 'coach_ai' },
+    ],
+  });
+
+  it('with an active Coaching Link the Coach still never redraws a head_coach block', async () => {
+    getBlockSet.mockResolvedValue(HUMAN_STALE);
+    getLinkForAthlete.mockResolvedValue({ headCoachName: 'Lars', link: { id: 'l1' } });
+
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('head-coach-owned');
+    expect(callCoach).not.toHaveBeenCalled();
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('with no active link the stale set is redrafted, the new blocks are coach_ai, and the sentence names whose blocks were re-fitted', async () => {
+    getBlockSet.mockResolvedValue(HUMAN_STALE);
+    getLinkForAthlete.mockResolvedValue(undefined);
+
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('drafted');
+
+    expect(callCoach).toHaveBeenCalledTimes(1);
+    expect(casUpdateBlockSet).toHaveBeenCalledTimes(1);
+    const params = casUpdateBlockSet.mock.calls[0][0];
+    expect(params.blocks.every((b: TrainingBlockSpec) => b.authoredBy === 'coach_ai')).toBe(true);
+    expect(params.events).toEqual([
+      expect.objectContaining({
+        type: 'blocks_drafted',
+        payload: expect.objectContaining({ refittedHeadCoachBlocks: true }),
+      }),
+    ]);
+  });
+
+  it('re-fits an orphaned stale set even inside eight weeks — the rule protects a plan that still describes the race, and this one does not (Mads, 2026-09-19)', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2026-10-25' }); // six weeks out
+    getBlockSet.mockResolvedValue(HUMAN_STALE);
+    getLinkForAthlete.mockResolvedValue(undefined);
+    callCoach.mockResolvedValue(toolReply({ blocks: [{ name: 'Sharpen', endDate: '2026-10-11' }, { name: 'Taper', endDate: '2026-10-25' }] }));
+
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('drafted');
+    expect(casUpdateBlockSet.mock.calls[0][0].events[0].payload).toMatchObject({ refittedHeadCoachBlocks: true });
+  });
+
+  it('inside eight weeks the eight-week rule still holds for everything else: no set, a fitting set, a stale set the Coach itself drafted', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2026-10-25' });
+    getLinkForAthlete.mockResolvedValue(undefined);
+
+    getBlockSet.mockResolvedValue(null);
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('too-close');
+    getBlockSet.mockResolvedValue(storedSet({ blocks: SHAPED.map((b) => ({ ...b, endDate: '2027-01-01' })) }));
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('too-close');
+    expect(callCoach).not.toHaveBeenCalled();
+  });
+
+  it('a redraft of the Coach’s own stale set does not claim to have re-fitted a human’s blocks', async () => {
+    getBlockSet.mockResolvedValue(storedSet({ blocks: SHAPED.map((b) => ({ ...b, endDate: '2027-01-01' })) }));
+    getLinkForAthlete.mockResolvedValue(undefined);
+
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('drafted');
+    const params = casUpdateBlockSet.mock.calls[0][0];
+    expect(params.events[0].payload).not.toHaveProperty('refittedHeadCoachBlocks');
+  });
+
+  it('the link is read only when it decides something: never for a set that fits, never for no set', async () => {
+    getBlockSet.mockResolvedValue(storedSet());
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('already-adjusted');
+    getBlockSet.mockResolvedValue(null);
+    expect(await ensureBlocksAdjusted(ATHLETE, TODAY)).toBe('drafted');
+    expect(getLinkForAthlete).not.toHaveBeenCalled();
+  });
+});
+
+describe('repinBlockSetAsHeadCoach — one click re-pins a stale set (training-architecture/19)', () => {
+  const COACH = 'coach-1';
+  const MOVED_RACE = { ...RACE, date: '2027-09-05' };
+  const repin = (over: Partial<Parameters<typeof repinBlockSetAsHeadCoach>[0]> = {}) =>
+    repinBlockSetAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      raceId: RACE.id,
+      expectedVersion: 1,
+      today: TODAY,
+      ...over,
+    });
+
+  beforeEach(() => {
+    getActiveLink.mockResolvedValue({ id: 'l1', coachId: COACH, athleteId: ATHLETE, status: 'active' });
+    getTargetRace.mockResolvedValue(MOVED_RACE);
+    getBlockSet.mockResolvedValue(storedSet());
+    casUpdateBlockSet.mockResolvedValue({ ok: true, version: 2 });
+  });
+
+  it('refuses with not-linked before reading anything', async () => {
+    getActiveLink.mockResolvedValue(undefined);
+    expect(await repin()).toEqual({ ok: false, reason: 'not-linked' });
+    expect(getTargetRace).not.toHaveBeenCalled();
+    expect(getBlockSet).not.toHaveBeenCalled();
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('refuses no-race for a race that is not the target, or already run', async () => {
+    expect(await repin({ raceId: 'race-other' })).toEqual({ ok: false, reason: 'no-race' });
+    getTargetRace.mockResolvedValue({ ...MOVED_RACE, date: TODAY });
+    expect(await repin()).toEqual({ ok: false, reason: 'no-race' });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('refuses no-set when nothing is stored, and not-stale when the set already fits', async () => {
+    getBlockSet.mockResolvedValue(null);
+    expect(await repin()).toEqual({ ok: false, reason: 'no-set' });
+    getTargetRace.mockResolvedValue(RACE);
+    getBlockSet.mockResolvedValue(storedSet());
+    expect(await repin()).toEqual({ ok: false, reason: 'not-stale' });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('writes the re-pinned set by CAS on the panel’s version, the blocks_repinned event in the same statement', async () => {
+    expect(await repin({ expectedVersion: 7 })).toEqual({ ok: true, version: 2 });
+
+    expect(casUpdateBlockSet).toHaveBeenCalledTimes(1);
+    const params = casUpdateBlockSet.mock.calls[0][0];
+    expect(params).toMatchObject({ athleteId: ATHLETE, setId: 'set-1', expectedVersion: 7 });
+    expect(params.startDate).toBeUndefined();
+    expect(params.blocks).toEqual([...SHAPED.slice(0, 3), { ...SHAPED[3], endDate: '2027-09-05' }]);
+    expect(params.events).toEqual([
+      {
+        actorType: 'head_coach',
+        actorId: COACH,
+        type: 'blocks_repinned',
+        payload: {
+          raceId: RACE.id,
+          raceName: 'Ironman Copenhagen',
+          from: '2027-08-15',
+          to: '2027-09-05',
+          dropped: [],
+        },
+      },
+    ]);
+  });
+
+  it('names what was dropped when the race moved earlier', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2027-06-01' });
+
+    expect(await repin()).toEqual({ ok: true, version: 2 });
+    const params = casUpdateBlockSet.mock.calls[0][0];
+    expect(params.blocks).toEqual([SHAPED[0], { ...SHAPED[1], endDate: '2027-06-01' }]);
+    expect(params.events[0].payload).toMatchObject({ from: '2027-08-15', to: '2027-06-01', dropped: ['Race Specific', 'Taper'] });
+  });
+
+  it('refuses invalid, with the validator’s reason, when the stored set can no longer be accepted', async () => {
+    // A name that has since become refusable — an identifier shape — is
+    // caught on the way out rather than written back.
+    getBlockSet.mockResolvedValue(
+      storedSet({ blocks: [SHAPED[0], { ...SHAPED[3], name: 'mail me at x@y.dk' }] }),
+    );
+
+    expect(await repin()).toEqual({ ok: false, reason: 'invalid', problem: 'identifier' });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('refuses too-few-blocks, naming what would go, and writes nothing', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2027-02-01' });
+
+    expect(await repin()).toEqual({
+      ok: false,
+      reason: 'too-few-blocks',
+      dropped: ['Sharpen the Bike', 'Race Specific', 'Taper'],
+    });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('a set changed underneath is refused with what won (ADR 0010)', async () => {
+    casUpdateBlockSet.mockResolvedValue({ ok: false, reason: 'conflict' });
+    const won = storedSet({ version: 3, blocks: [{ ...SHAPED[0], name: 'Long Rides' }, ...SHAPED.slice(1)] });
+    getBlockSet.mockResolvedValueOnce(storedSet()).mockResolvedValueOnce(won);
+
+    expect(await repin()).toEqual({
+      ok: false,
+      reason: 'conflict',
+      current: { version: 3, startDate: won.startDate, blocks: won.blocks },
+    });
+  });
+});
+
+describe('restartBlockSetFromDraftAsHeadCoach — the arithmetic draft replaces a set too stale to re-pin', () => {
+  const COACH = 'coach-1';
+  const EARLY_RACE = { ...RACE, date: '2026-12-01' };
+  const restart = (over: Partial<Parameters<typeof restartBlockSetFromDraftAsHeadCoach>[0]> = {}) =>
+    restartBlockSetFromDraftAsHeadCoach({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      raceId: RACE.id,
+      expectedVersion: 1,
+      today: TODAY,
+      ...over,
+    });
+
+  beforeEach(() => {
+    getActiveLink.mockResolvedValue({ id: 'l1', coachId: COACH, athleteId: ATHLETE, status: 'active' });
+    getTargetRace.mockResolvedValue(EARLY_RACE);
+    getBlockSet.mockResolvedValue(storedSet());
+    casUpdateBlockSet.mockResolvedValue({ ok: true, version: 2 });
+  });
+
+  it('is gated like the re-pin: not-linked, no-race, no-set, not-stale', async () => {
+    getActiveLink.mockResolvedValue(undefined);
+    expect(await restart()).toEqual({ ok: false, reason: 'not-linked' });
+    getActiveLink.mockResolvedValue({ id: 'l1' });
+    expect(await restart({ raceId: 'race-other' })).toEqual({ ok: false, reason: 'no-race' });
+    getBlockSet.mockResolvedValue(null);
+    expect(await restart()).toEqual({ ok: false, reason: 'no-set' });
+    getTargetRace.mockResolvedValue(RACE);
+    getBlockSet.mockResolvedValue(storedSet());
+    expect(await restart()).toEqual({ ok: false, reason: 'not-stale' });
+    expect(casUpdateBlockSet).not.toHaveBeenCalled();
+  });
+
+  it('writes the arithmetic draft from today by CAS, every block arithmetic, and announces the restart', async () => {
+    expect(await restart({ expectedVersion: 4 })).toEqual({ ok: true, version: 2 });
+
+    const params = casUpdateBlockSet.mock.calls[0][0];
+    expect(params).toMatchObject({ athleteId: ATHLETE, setId: 'set-1', expectedVersion: 4, startDate: TODAY });
+    expect(params.blocks).toEqual(
+      trainingBlocks(TODAY, EARLY_RACE.date).map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
+    );
+    expect(params.blocks.length).toBeGreaterThanOrEqual(2);
+    expect(params.events).toEqual([
+      {
+        actorType: 'head_coach',
+        actorId: COACH,
+        type: 'blocks_repinned',
+        payload: {
+          raceId: RACE.id,
+          raceName: 'Ironman Copenhagen',
+          from: '2027-08-15',
+          to: '2026-12-01',
+          dropped: SHAPED.map((b) => b.name),
+          restarted: true,
+        },
+      },
+    ]);
+  });
+
+  it('a set changed underneath is refused with what won', async () => {
+    casUpdateBlockSet.mockResolvedValue({ ok: false, reason: 'conflict' });
+    const won = storedSet({ version: 9 });
+    getBlockSet.mockResolvedValueOnce(storedSet()).mockResolvedValueOnce(won);
+
+    expect(await restart()).toEqual({
+      ok: false,
+      reason: 'conflict',
+      current: { version: 9, startDate: won.startDate, blocks: won.blocks },
+    });
   });
 });
