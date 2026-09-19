@@ -157,6 +157,29 @@ describe('main — the Stryker run', () => {
     expect(config.mutate).toEqual(['src/a.ts']);
   });
 
+  it('hands Stryker a glob that matches a [locale] path literally', () => {
+    // Stryker treats `mutate` entries as globs, and `[locale]` is a character
+    // class: it matches `src/app/l/…`, never the real directory. Every server
+    // action under the locale segment passed the gate with zero mutants this
+    // way. `[[]` is the one escape that survives Stryker's own path.resolve
+    // and backslash-to-slash normalisation; a backslash escape does not.
+    givenRun({ mutants: ['Killed'] });
+
+    main(['src/app/[locale]/settings-actions.ts']);
+
+    const config = JSON.parse(String(writeFileSync.mock.calls[0][1]));
+    expect(config.mutate).toEqual(['src/app/[[]locale]/settings-actions.ts']);
+  });
+
+  it('escapes every bracket segment on a path, not just the first', () => {
+    givenRun({ mutants: ['Killed'] });
+
+    main(['src/app/[locale]/[id]/actions.ts']);
+
+    const config = JSON.parse(String(writeFileSync.mock.calls[0][1]));
+    expect(config.mutate).toEqual(['src/app/[[]locale]/[[]id]/actions.ts']);
+  });
+
   it('keeps the shared junctions out of the sandbox', () => {
     // Stryker copies the project into a sandbox, and copyfile on a Windows
     // junction fails EPERM — so without this the gate does not run at all in
