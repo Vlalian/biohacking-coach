@@ -392,82 +392,102 @@ describe('Calendar — the drafted week the athlete has not decided on (training
 });
 
 /**
- * `training-architecture/06` — the health layer, drawn beside the plan.
- *
- * Option (a), decided 2026-09-11: a band above the seven day cells spanning
- * only the affected days; an injury chip at its left on every week the injury
- * is open; muted, never red; one click into the Health Drawer; and a persistent
+ * `training-architecture/06` → `showable-version/28a` — the health layer,
+ * drawn beside the plan. Rulings of 2026-09-17/18: two icons on every recorded
+ * session a record covers (signal while open, muted once over, forever), none
+ * on a proposed session; the illness band is gone; the health row is an
+ * always-shown two-status area that opens the drawer; and the persistent
  * "How's your body?" button for the athlete, never for the Head Coach.
  */
 vi.mock('./health-drawer', () => ({ HealthDrawer: () => <div data-testid="health-drawer" /> }));
 
-describe('the health layer (training-architecture/06)', () => {
-  const ILL_WEEK_START = '2026-08-17'; // TODAY is Wed 2026-08-19
-  const illness = { kind: 'illness' as const, id: 'ill_1', from: '2026-08-18', to: null, bother: null };
+describe('the health layer (training-architecture/06, showable-version/28a)', () => {
+  const illness = {
+    kind: 'illness' as const, id: 'ill_1', from: '2026-08-18', to: null, bother: null,
+    name: null, openedAt: new Date('2026-08-18T08:00:00Z'),
+  };
   const injury = {
     kind: 'injury' as const, id: 'inj_1', from: '2026-08-01', to: null,
     capacity: { swim: 'full' as const, bike: 'easy' as const, run: 'none' as const }, bother: 3,
+    name: 'left knee', openedAt: new Date('2026-08-01T08:00:00Z'),
+  };
+  const draft = {
+    id: 'd1', weekStart: '2026-08-17', visibleFrom: '2026-08-17', citations: [], approved: false, createdAt: new Date(),
+    sessions: [{ date: '2026-08-20', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: null }],
   };
 
-  it('renders byte-identical markup with no health prop and with an empty list — nothing is added for the healthy', () => {
-    expect(render({ health: [] })).toBe(render());
-    expect(render()).not.toContain('data-health');
+  it('a recorded session during an open injury carries the injury icon, signal-coloured, with the name in its label; a proposed session carries none', () => {
+    const html = render({ sessions: [session({ date: '2026-08-19' })], health: [injury], proposal: { kind: 'proposal', draft } });
+    expect(html).toMatch(/data-mark="injury"[^>]*data-open="true"/);
+    expect(html).toContain('left knee');
+    // Label and tooltip both (the ruling): the chip's title names the mark.
+    expect(html).toContain('title="Long ride · markInjury: left knee"');
+    expect(html).toContain('data-proposed');
+    expect(html.match(/data-mark=/g)).toHaveLength(1);
   });
 
-  it('draws an illness band over exactly the ill days of that week, and not into the future', () => {
-    const html = render({ health: [illness] });
-    const cells = [...html.matchAll(/data-health-day="([^"]+)"(?: data-ill="true")?/g)];
-    const ill = cells.filter((m) => m[0].includes('data-ill="true"')).map((m) => m[1]);
-    // Declared Tuesday the 18th; today is Wednesday the 19th: two days, no more.
-    expect(ill).toEqual(['2026-08-18', '2026-08-19']);
-    expect(html).toContain('healthIll');
-    expect(html).toContain(`data-health-week="${ILL_WEEK_START}"`);
+  it('after the injury closes, the same session keeps the icon, muted', () => {
+    const html = render({ sessions: [session({ date: '2026-08-19' })], health: [{ ...injury, to: '2026-08-20' }] });
+    expect(html).toMatch(/data-mark="injury"[^>]*data-open="false"/);
   });
 
-  it('draws an injury chip with the glance on every week the injury is open', () => {
-    const html = render({ health: [injury] });
-    const chips = html.match(/data-health-chip="inj_1"/g) ?? [];
-    // The calendar renders the weeks of the viewed month; the injury has been
-    // open since the 1st, so every one of them carries the chip.
-    expect(chips.length).toBeGreaterThanOrEqual(4);
-    expect(html).toContain('glance_none_run');
-    expect(html).toContain('glance_easy_bike');
+  it('a session on an illness day carries the illness icon; a session before it carries nothing', () => {
+    expect(render({ sessions: [session({ date: '2026-08-19' })], health: [illness] })).toMatch(/data-mark="illness"/);
+    expect(render({ sessions: [session({ date: '2026-08-17' })], health: [illness] })).not.toContain('data-mark=');
   });
 
-  it('leaves the sessions exactly as they were — the layer adds, it never restyles', () => {
-    const plain = render();
-    const layered = render({ health: [injury, illness] });
-    const chip = (html: string) => html.match(SESSION_AS_BUTTON)?.[0];
-    expect(chip(layered)).toBe(chip(plain));
-    const dayCell = (html: string) => html.match(/<div[^>]*data-day="2026-08-21"[^>]*>/)?.[0];
-    expect(dayCell(layered)).toBe(dayCell(plain));
+  it('marks the collapsed week’s dots too, tooltip included', () => {
+    // Session in the week of the 10th, collapsed (today is in the week of the 17th).
+    const html = render({ sessions: [session({ date: '2026-08-12' })], health: [injury] });
+    expect(html).toMatch(/data-mark="injury"/);
+    // The dot's title names the mark as the expanded chip's does (CodeRabbit, PR #86).
+    expect(html).toContain('title="Long ride · markInjury: left knee"');
   });
 
-  it('uses the muted tone, never the destructive one', () => {
-    const html = render({ health: [injury, illness] });
-    const layer = html.match(/<div[^>]*data-health-week[\s\S]*?<\/div>\s*<\/div>/g)?.join('') ?? '';
-    expect(layer).not.toContain('destructive');
-    expect(layer).not.toContain('red');
-    expect(layer).toContain('muted');
+  it('a marked chip that cannot be lifted still announces why (CodeRabbit, PR #86)', () => {
+    const html = render({ sessions: [session({ date: '2026-08-19', parked: true })], health: [injury] });
+    const chip = html.match(/<button[^>]*Long ride · markInjury[^>]*>/)?.[0] ?? '';
+    expect(chip).toMatch(/aria-label="[^"]*bounceParked[^"]*"/);
   });
 
-  it('draws nothing for a record closed before the week', () => {
-    const closed = { ...injury, to: '2026-08-10' };
-    const closedIllness = { ...illness, from: '2026-08-03', to: '2026-08-05' };
-    const html = render({ health: [closed, closedIllness] });
-    expect(html).not.toContain(`data-health-week="${ILL_WEEK_START}"`);
+  it('shows the two statuses on every week — healthy/uninjured on a clean week — and the band and chip are gone', () => {
+    const clean = render({});
+    expect(clean).toContain('data-health-status');
+    expect(clean).toContain('statusHealthy');
+    expect(clean).toContain('statusUninjured');
+    expect(clean).not.toMatch(/data-active="true"/);
+    const hurt = render({ health: [injury, illness] });
+    expect(hurt).toMatch(/data-status="injury"[^>]*data-active="true"/);
+    expect(hurt).toMatch(/data-status="illness"[^>]*data-active="true"/);
+    expect(hurt).toContain('statusInjured');
+    expect(hurt).toContain('statusIll');
+    expect(hurt).not.toContain('data-health-day');
+    expect(hurt).not.toContain('data-health-chip');
   });
 
-  it('offers "How\u2019s your body?" to the athlete whether or not anything is open, and never to the Head Coach', () => {
+  it('reads the current state: a healed record leaves every week’s status clean, an open one lights every week it touches', () => {
+    const weekOf = (html: string, start: string) =>
+      html.match(new RegExp(`data-health-status="${start}"[^>]*>[^]*?</div>`))?.[0] ?? '';
+    // Ran 1–10 Aug, healed: the week of the 10th keeps its marks, its status reads uninjured.
+    const healed = render({ health: [{ ...injury, to: '2026-08-10' }] });
+    expect(weekOf(healed, '2026-08-10')).not.toMatch(/data-active="true"/);
+    expect(weekOf(healed, '2026-08-17')).not.toMatch(/data-active="true"/);
+    // Still open since 1 Aug: both weeks read injured (the boundary before it is weekStatus's own test).
+    const open = render({ health: [injury] });
+    expect(weekOf(open, '2026-08-10')).toMatch(/data-status="injury"[^>]*data-active="true"/);
+    expect(weekOf(open, '2026-08-17')).toMatch(/data-status="injury"[^>]*data-active="true"/);
+  });
+
+  it('offers "How’s your body?" to the athlete whether or not anything is open, and never to the Head Coach', () => {
     expect(render()).toContain('healthButton');
     expect(render({ health: [injury] })).toContain('healthButton');
     expect(render({ readOnly: true, coachAthleteId: 'a1', health: [injury] })).not.toContain('healthButton');
   });
 
-  it('gives the Head Coach the same band and chip when the athlete shares them', () => {
-    const html = render({ readOnly: true, coachAthleteId: 'a1', health: [injury, illness] });
-    expect(html).toContain('data-health-chip="inj_1"');
-    expect(html).toContain('data-ill="true"');
+  it('gives the Head Coach the same marks when the athlete shares them', () => {
+    const html = render({ readOnly: true, coachAthleteId: 'a1', sessions: [session({ date: '2026-08-19' })], health: [injury, illness] });
+    expect(html).toMatch(/data-mark="injury"/);
+    expect(html).toMatch(/data-mark="illness"/);
   });
 });
 
