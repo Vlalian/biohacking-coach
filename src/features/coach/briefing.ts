@@ -1,4 +1,4 @@
-import type { BlockAuthor } from './training-blocks';
+import { holdsHeadCoachBlock, type BlockAuthor } from './training-blocks';
 import type { Onboarding } from './check-in';
 import { assertNoDirectIdentifier } from './check-in';
 import {
@@ -321,7 +321,7 @@ function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
     (b) =>
       `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}${b.name === blocks.phase ? ' · current' : ''}`,
   );
-  if (blocks.blocks.some((b) => b.authoredBy === 'head_coach')) lines.push(HEAD_COACH_BLOCKS_LINE);
+  if (holdsHeadCoachBlock(blocks)) lines.push(HEAD_COACH_BLOCKS_LINE);
   // The belt to the popup's braces (19): the popup is the mechanism, this is
   // what lets the Coach say "how is Sarah doing" truthfully in the meantime.
   if (blocks.staleSet) {

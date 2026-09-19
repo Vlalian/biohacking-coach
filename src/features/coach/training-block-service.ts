@@ -36,6 +36,7 @@ import {
   type TrainingBlock,
   type TrainingBlockSpec,
   fitsRace,
+  holdsHeadCoachBlock,
 } from './training-blocks';
 import { weekFeedbackFrom } from './weekly-session';
 
@@ -101,11 +102,6 @@ function weeksTo(today: string, raceDate: string): number {
     (new Date(`${raceDate}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) /
     (24 * 60 * 60 * 1000);
   return days / 7;
-}
-
-/** Whether any block in the set was a human's. */
-function holdsHeadCoachBlock(set: BlockSetRecord): boolean {
-  return set.blocks.some((b) => b.authoredBy === 'head_coach');
 }
 
 /**
@@ -513,17 +509,13 @@ async function loadStaleTarget(
 }
 
 /** The CAS write of a repair, its `blocks_repinned` event riding the same statement. */
-async function writeRepair(params: {
-  target: { race: RaceRow; set: BlockSetRecord };
-  headCoachId: string;
-  athleteId: string;
-  expectedVersion: number;
-  blocks: TrainingBlockSpec[];
-  startDate?: string;
-  dropped: string[];
-  restarted?: true;
-}): Promise<RepinBlockSetServiceResult> {
-  const { target, headCoachId, athleteId, expectedVersion, blocks, startDate, dropped, restarted } = params;
+async function writeRepair(
+  repair: HeadCoachRepair,
+  target: { race: RaceRow; set: BlockSetRecord },
+  write: { blocks: TrainingBlockSpec[]; startDate?: string; dropped: string[]; restarted?: true },
+): Promise<RepinBlockSetServiceResult> {
+  const { headCoachId, athleteId, expectedVersion } = repair;
+  const { blocks, startDate, dropped, restarted } = write;
   const { race, set } = target;
   const written = await casUpdateBlockSet({
     athleteId,
@@ -572,14 +564,7 @@ export async function repinBlockSetAsHeadCoach(params: HeadCoachRepair): Promise
       ? { ok: false, reason: 'too-few-blocks', dropped: repinned.dropped }
       : { ok: false, reason: 'invalid', problem: repinned.reason };
   }
-  return writeRepair({
-    target,
-    headCoachId: params.headCoachId,
-    athleteId: params.athleteId,
-    expectedVersion: params.expectedVersion,
-    blocks: repinned.blocks,
-    dropped: repinned.dropped,
-  });
+  return writeRepair(params, target, { blocks: repinned.blocks, dropped: repinned.dropped });
 }
 
 /**
@@ -603,11 +588,7 @@ export async function restartBlockSetFromDraftAsHeadCoach(
     endDate,
     authoredBy,
   }));
-  return writeRepair({
-    target,
-    headCoachId: params.headCoachId,
-    athleteId: params.athleteId,
-    expectedVersion: params.expectedVersion,
+  return writeRepair(params, target, {
     blocks: draft,
     startDate: params.today,
     dropped: target.set.blocks.map((b) => b.name),

@@ -355,6 +355,15 @@ export function isStaleSet(set: StoredBlockSet | null, raceDate: string): boolea
  * when the set fits, is empty, or there is none. The one sentence the Briefing
  * (19) and the popup both need: "the last block, 'Taper', still ends 15 Aug".
  */
+/**
+ * Whether any block in the set was a human's. The one rule behind 07's gate,
+ * 19's solo-case narration and the Briefing's line — and the SQL predicate in
+ * `getStaleBlockSetsForHeadCoach`, which says the same thing in JSONPath.
+ */
+export function holdsHeadCoachBlock(set: Pick<StoredBlockSet, 'blocks'>): boolean {
+  return set.blocks.some((b) => b.authoredBy === 'head_coach');
+}
+
 export function staleLastBlockOf(
   set: StoredBlockSet | null,
   raceDate: string,

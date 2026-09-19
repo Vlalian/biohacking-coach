@@ -1,4 +1,4 @@
-import { repinBlockSet, type StoredBlockSet } from './training-blocks';
+import { repinBlockSet, staleLastBlockOf, type StoredBlockSet } from './training-blocks';
 
 /**
  * Coach chores (`training-architecture/19`): the things waiting for a Head
@@ -65,7 +65,9 @@ export function repairFor(set: StoredBlockSet, raceDate: string): BlockSetRepair
 /** One chore per stale set, in the order the read gave them. */
 export function blockRepinChoresOf(stale: StaleBlockSetInput[]): BlockRepinChore[] {
   return stale.map(({ set, athleteName, raceName, raceDate }) => {
-    const last = set.blocks[set.blocks.length - 1];
+    // The read's WHERE is `isStaleSet` in SQL, so this is never null for a
+    // row it returned; the sentence is the Briefing's, from the one rule.
+    const last = staleLastBlockOf(set, raceDate);
     return {
       kind: 'repin-block-set',
       athleteId: set.athleteId,
@@ -73,8 +75,8 @@ export function blockRepinChoresOf(stale: StaleBlockSetInput[]): BlockRepinChore
       raceId: set.raceId,
       raceName,
       raceDate,
-      lastBlockName: last?.name ?? '',
-      lastBlockEnd: last?.endDate ?? '',
+      lastBlockName: last?.lastBlockName ?? '',
+      lastBlockEnd: last?.endsOn ?? '',
       version: set.version,
       repair: repairFor(set, raceDate),
     };

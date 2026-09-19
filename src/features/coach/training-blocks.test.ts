@@ -14,6 +14,7 @@ import {
   trainingBlocks,
   validateBlockSet,
   type StoredBlockSet,
+  holdsHeadCoachBlock,
   type TrainingBlockSpec,
 } from './training-blocks';
 
@@ -510,6 +511,17 @@ describe('fitsRace — the one test of whether a stored set still describes the 
     expect(staleLastBlockOf(set, '2027-08-15')).toBeNull();
     expect(staleLastBlockOf(null, '2027-08-29')).toBeNull();
     expect(staleLastBlockOf({ startDate: '2026-09-01', blocks: [] }, '2027-08-29')).toBeNull();
+  });
+});
+
+describe('holdsHeadCoachBlock', () => {
+  it('is true when any block in the set was a human\'s, false for a set the Coach alone drafted', () => {
+    const coach = { startDate: '2027-01-04', blocks: [{ name: 'Base', endDate: '2027-02-28', authoredBy: 'coach_ai' as const }] };
+    expect(holdsHeadCoachBlock(coach)).toBe(false);
+    expect(
+      holdsHeadCoachBlock({ ...coach, blocks: [...coach.blocks, { name: 'Taper', endDate: '2027-03-14', authoredBy: 'head_coach' as const }] }),
+    ).toBe(true);
+    expect(holdsHeadCoachBlock({ ...coach, blocks: [] })).toBe(false);
   });
 });
 

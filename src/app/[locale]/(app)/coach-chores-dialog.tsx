@@ -65,6 +65,16 @@ export function isOpen(row: RowState): row is Extract<RowState, { kind: 'idle' |
 
 const NEVER_CHANGES = () => () => {};
 
+/** What a row is keyed by: the set, not its position in a list that a refresh can reorder or shrink. */
+export function choreKey(chore: Pick<CoachChore, 'athleteId' | 'raceId'>): string {
+  return `${chore.athleteId}:${chore.raceId}`;
+}
+
+/** A chore's row, or its idle row when nothing has happened to it yet. */
+export function rowFor(rows: Readonly<Record<string, RowState>>, chore: CoachChore): RowState {
+  return rows[choreKey(chore)] ?? { kind: 'idle', repair: chore.repair };
+}
+
 function readDismissed(): boolean {
   try {
     return window.sessionStorage.getItem(DISMISSED_KEY) === '1';
@@ -104,12 +114,16 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
   const format = useFormatter();
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [rows, setRows] = useState<RowState[]>(chores.map((c) => ({ kind: 'idle', repair: c.repair })));
+  // Keyed by the set, not by index: a conflict refreshes `chores` from the
+  // server, and the list may have shrunk or reordered under the rows that
+  // already exist. A row must stay with its athlete.
+  const [rows, setRows] = useState<Record<string, RowState>>({});
+  const current = chores.map((c) => rowFor(rows, c));
 
-  const allDone = rows.every((r) => r.kind === 'done');
-  const anyDone = rows.some((r) => r.kind === 'done');
-  const anyOpen = rows.some(isOpen);
-  const anyPending = rows.some((r) => r.kind === 'pending');
+  const allDone = current.every((r) => r.kind === 'done');
+  const anyDone = current.some((r) => r.kind === 'done');
+  const anyOpen = current.some(isOpen);
+  const anyPending = current.some((r) => r.kind === 'pending');
 
   // "Not now" is a postponement and is remembered for the session; closing a
   // dialog with nothing left in it is not, and must not hide the next chore.
@@ -132,28 +146,28 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
   const day = (key: string) =>
     format.dateTime(new Date(`${key}T12:00:00Z`), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
-  const settle = (i: number, row: RowState) => setRows((rs) => rs.map((r, j) => (j === i ? row : r)));
+  const settle = (chore: CoachChore, row: RowState) => setRows((rs) => ({ ...rs, [choreKey(chore)]: row }));
 
-  async function repair(i: number, chore: BlockRepinChore, repairWith: BlockSetRepair) {
-    settle(i, { kind: 'pending', repair: repairWith });
+  async function repair(chore: BlockRepinChore, repairWith: BlockSetRepair) {
+    settle(chore, { kind: 'pending', repair: repairWith });
     const act = repairWith.kind === 'repin' ? repinBlockSetAction : restartBlockSetAction;
     const result = await act(chore.athleteId, chore.raceId, chore.version);
-    settle(i, rowAfterResult(repairWith, result));
+    settle(chore, rowAfterResult(repairWith, result));
     // What won is on the server; the next render builds the row from it.
     if (!result.ok && result.reason === 'conflict') router.refresh();
   }
 
-  const runRow = (i: number) => {
-    const row = rows[i];
+  const runRow = (chore: BlockRepinChore) => {
+    const row = rowFor(rows, chore);
     if (!isOpen(row)) return;
-    startTransition(() => repair(i, chores[i], row.repair));
+    startTransition(() => repair(chore, row.repair));
   };
 
   const runAll = () => {
     startTransition(async () => {
-      for (let i = 0; i < chores.length; i += 1) {
-        const row = rows[i];
-        if (isOpen(row)) await repair(i, chores[i], row.repair);
+      for (const chore of chores) {
+        const row = rowFor(rows, chore);
+        if (isOpen(row)) await repair(chore, row.repair);
       }
     });
   };
@@ -178,10 +192,10 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
         </div>
 
         <ol className="flex flex-col gap-4">
-          {chores.map((chore, i) => {
-            const row = rows[i];
+          {chores.map((chore) => {
+            const row = rowFor(rows, chore);
             return (
-              <li key={`${chore.athleteId}:${chore.raceId}`} className="flex flex-col gap-2 text-sm" data-state={row.kind}>
+              <li key={choreKey(chore)} className="flex flex-col gap-2 text-sm" data-state={row.kind}>
                 <p>
                   {t('moved', {
                     athlete: chore.athleteName,
@@ -203,7 +217,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
                   <button
                     type="button"
                     disabled={row.kind === 'pending'}
-                    onClick={() => runRow(i)}
+                    onClick={() => runRow(chore)}
                     className="self-start rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50"
                   >
                     {row.repair.kind === 'repin' ? t('repin', { day: day(chore.raceDate) }) : t('restart')}

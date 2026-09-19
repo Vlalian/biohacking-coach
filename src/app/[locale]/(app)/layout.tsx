@@ -214,12 +214,6 @@ export default async function AppShellLayout({
     });
   }
 
-  // The same trigger for a Head Coach's own open, one draft per athlete on
-  // their Roster (`/17`): the coach sees the draft a day before the athlete,
-  // and on that day the athlete has no reason to open the app — so the coach's
-  // open has to be what drafts it. Outside the athlete branch on purpose: a
-  // coach need not be an athlete. The service never throws; the catch is for
-  // whatever is outside it.
   // The Head Coach's chores (`training-architecture/19`): a stale block set on
   // their Roster is repaired from a dialog before the page, in one click. Read
   // **here, on the render path**, not in the `after()` below — a popup that
@@ -236,6 +230,12 @@ export default async function AppShellLayout({
     }
   }
 
+  // The same trigger for a Head Coach's own open, one draft per athlete on
+  // their Roster (`/17`): the coach sees the draft a day before the athlete,
+  // and on that day the athlete has no reason to open the app — so the coach's
+  // open has to be what drafts it. Outside the athlete branch on purpose: a
+  // coach need not be an athlete. The service never throws; the catch is for
+  // whatever is outside it.
   if (isHeadCoach) {
     const coachUserId = session!.user.id;
     after(async () => {

@@ -24,7 +24,7 @@ vi.mock('./coach/athlete/[athleteId]/block-actions', () => ({
   restartBlockSetAction: vi.fn(),
 }));
 
-const { CoachChoresDialog, CoachChoresDialogView, rowAfterResult, isOpen } = await import('./coach-chores-dialog');
+const { CoachChoresDialog, CoachChoresDialogView, rowAfterResult, isOpen, choreKey, rowFor } = await import('./coach-chores-dialog');
 
 const SARAH: CoachChore = {
   kind: 'repin-block-set',
@@ -128,6 +128,20 @@ describe('rowAfterResult — what a row shows after the server answered', () => 
       repair: repin,
     });
     expect(rowAfterResult(repin, { ok: false, reason: 'not-a-coach' })).toMatchObject({ kind: 'error' });
+  });
+
+  it('row state follows the chore, not its position — a refresh that drops one athlete cannot hand their button to the next', () => {
+    // Spec review 2026-09-19: rows were index-keyed, so after a conflict's
+    // router.refresh() shrank [Sarah, Thomas] to [Thomas], Sarah's error row
+    // (and Sarah's repair kind) rendered under Thomas, and "Re-pin" would
+    // have sent Thomas's set Sarah's repair. Keyed by athlete + race, a chore
+    // that has no row yet is idle with its own repair, and a row whose chore
+    // is gone is simply never read.
+    const rows = { [choreKey(SARAH)]: { kind: 'error' as const, reason: 'conflict', repair: SARAH.repair } };
+    expect(rowFor(rows, THOMAS)).toEqual({ kind: 'idle', repair: THOMAS.repair });
+    expect(rowFor(rows, SARAH)).toEqual({ kind: 'error', reason: 'conflict', repair: SARAH.repair });
+    expect(choreKey(SARAH)).toBe('a1:r1');
+    expect(choreKey(THOMAS)).not.toBe(choreKey(SARAH));
   });
 
   it('isOpen: idle and error rows still have a button; pending and done do not', () => {
