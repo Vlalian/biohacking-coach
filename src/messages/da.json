@@ -653,6 +653,107 @@
     "dataRightsBody": "Du kan hente en kopi af alt, appen har om dig, eller slette din konto og fjerne det hele. Begge dele finder du under Indstillinger.",
     "dataRightsLink": "Gå til Indstillinger"
   },
+  "Glossary": {
+    "title": "Ordliste",
+    "subtitle": "Træningssproget i din plan og i din Coachs beskeder",
+    "trainingTitle": "Træningsbegreber",
+    "sessionTitle": "Sessionstyper",
+    "raceTitle": "Løbstermer",
+    "training": {
+      "zone2": {
+        "term": "Zone 2",
+        "definition": "Lav aerob intensitet, hvor du kan holde en samtale. Grundlaget for udholdenhedstræning — udvikler fedtoxidation og mitokondrier over tid."
+      },
+      "vo2max": {
+        "term": "VO2max",
+        "definition": "Den maksimale mængde ilt din krop kan forbruge under træning. En vigtig forudsigelse af udholdenhedspræstation. Forbedres ved høj-intensitets intervaltræning."
+      },
+      "lactateThreshold": {
+        "term": "Laktatgrænse",
+        "definition": "Den intensitet, hvor mælkesyre akkumuleres hurtigere end den kan fjernes. Træning ved og omkring denne zone hæver loftet for bæredygtig indsats."
+      },
+      "ftp": {
+        "term": "FTP (Funktionel tærskeleffekt)",
+        "definition": "Den højeste gennemsnitlige watt, du kan opretholde i ca. en time på cyklen. Bruges til at sætte træningszoner for cykling."
+      },
+      "hrv": {
+        "term": "HRV (Pulsvariabilitet)",
+        "definition": "Variationen i tid mellem hjerteslag. Højere HRV indikerer generelt bedre restitution. Nyttigt til at bestemme, hvornår man skal presse på og hvornår man skal bakke af."
+      },
+      "tss": {
+        "term": "TSS (Træningsbelastningsscore)",
+        "definition": "Et enkelt tal der repræsenterer træningsbelastningen i en session, der kombinerer intensitet og varighed. Bruges til at spore kumulativ træthed og form over tid."
+      },
+      "aerobicBase": {
+        "term": "Aerob base",
+        "definition": "Den akkumulerede lavintensitetskondition, der underbygger al anden træning. En stærk base giver intenst arbejde et stabilt fundament at lande på."
+      },
+      "periodisation": {
+        "term": "Periodisering",
+        "definition": "Strukturering af træning i faser (base, opbygning, top, nedtrapning) så stress og restitution bevidst alterneres for at producere toppræstation på det rette tidspunkt."
+      }
+    },
+    "session": {
+      "brick": {
+        "term": "Brick-session",
+        "definition": "En træning der kombinerer to discipliner i forlængelse af hinanden — oftest cykel efterfulgt umiddelbart af løb. Træner benene i at tilpasse sig overgangen mellem discipliner."
+      },
+      "interval": {
+        "term": "Interval",
+        "definition": "Gentagne hårde indsatser adskilt af restitutionsperioder. Bruges til at akkumulere tid ved høj intensitet uden overdreven træthed."
+      },
+      "tempo": {
+        "term": "Tempo løb / tur",
+        "definition": "En vedvarende indsats ved eller nær laktatgrænsen. Komfortabelt hårdt — du kan tale i korte sætninger, ikke hele afsnit."
+      },
+      "lsd": {
+        "term": "Lang langsom distance (LSD)",
+        "definition": "En lang session ved Zone 2-intensitet. Opbygger aerob base, fedttilpasning og mental robusthed uden at akkumulere overdreven træthed."
+      },
+      "fartlek": {
+        "term": "Fartlek",
+        "definition": "Ustruktureret hastighedsleg inden for en ellers let session. Korte intensitetsudbrud efter eget skøn — nyttigt til at bryde monotonien og tilføje stimulus."
+      },
+      "recovery": {
+        "term": "Restitutionssession",
+        "definition": "En meget let, kort indsats designet til at fremme blodgennemstrømning og hjælpe restitution uden at tilføje meningsfuld træningsbelastning."
+      },
+      "openWater": {
+        "term": "Åbentvandssvøm",
+        "definition": "En svømmetur i naturligt vand (sø, hav, å) i modsætning til en pool. Involverer sigtning, udkast og våddragt-tilpasning — alle racespecifikke færdigheder."
+      }
+    },
+    "race": {
+      "transitions": {
+        "term": "T1 / T2",
+        "definition": "Skiftezoner. T1 er svøm-til-cykel; T2 er cykel-til-løb. Øvelse gør transitioner hurtigere og mindre stressende på løbsdagen."
+      },
+      "ageGroup": {
+        "term": "AG (Aldersgruppe)",
+        "definition": "Din konkurrencekategori baseret på alder, typisk i 5-årige bånd. De fleste amatørtriatleter konkurrerer i deres AG frem for samlet."
+      },
+      "wetsuitLegal": {
+        "term": "Våddragt tilladt",
+        "definition": "Vandtemperaturen er under grænsen (typisk 24,5°C for ikke-eliter), hvor våddragter er tilladt i konkurrence."
+      },
+      "dnf": {
+        "term": "DNF / DNS / DQ",
+        "definition": "Did Not Finish / Did Not Start / Diskvalificeret. Almindelige løbsudfald ud over en gennemførelse. DNS er nogle gange det klogeste valg ved skade."
+      },
+      "drafting": {
+        "term": "Udkast",
+        "definition": "At svømme eller cykle tæt bag en anden atlet for at reducere modstand. Tilladt ved svømning, forbudt på cyklen i de fleste amatørløb, tilladt ved løb."
+      },
+      "specialNeeds": {
+        "term": "Særlige behov",
+        "definition": "En taske du kan hente midt i løbet (normalt midt på cykel- og løbsdelen) med ekstra ernæring, et ekstra udstyrsstykke eller hvad du har brug for til anden halvdel."
+      },
+      "ironman": {
+        "term": "Ironman-distance",
+        "definition": "3,8 km svøm · 180 km cykel · 42,2 km løb. Fuld-distance triatlon. Også afholdt som 70.3 (halv-iron): 1,9 km svøm · 90 km cykel · 21,1 km løb."
+      }
+    }
+  },
   "FeedbackInterview": {
     "title": "Feedback-interview",
     "intro": "Dette er ikke Coach. Det er en interviewer, der stiller de spørgsmål, holdet bag appen gerne vil have svar på — så den kan spørge videre i stedet for at nøjes med én linje. Intet af det, du siger her, når din Coach.",

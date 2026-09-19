@@ -653,6 +653,107 @@
     "dataRightsBody": "You can download a copy of everything this app holds about you, or delete your account and erase all of it. Both live in Settings.",
     "dataRightsLink": "Go to Settings"
   },
+  "Glossary": {
+    "title": "Glossary",
+    "subtitle": "The training language in your plan and in your Coach’s messages",
+    "trainingTitle": "Training Concepts",
+    "sessionTitle": "Session Types",
+    "raceTitle": "Race Terms",
+    "training": {
+      "zone2": {
+        "term": "Zone 2",
+        "definition": "Low-intensity aerobic effort where you can hold a conversation. The foundation of endurance training — develops fat oxidation and mitochondrial density over time."
+      },
+      "vo2max": {
+        "term": "VO2max",
+        "definition": "The maximum rate at which your body can consume oxygen during exercise. A key predictor of endurance performance. Improved by high-intensity interval work."
+      },
+      "lactateThreshold": {
+        "term": "Lactate threshold",
+        "definition": "The intensity at which lactic acid accumulates in the blood faster than it can be cleared. Training at and around this zone raises the ceiling of sustainable effort."
+      },
+      "ftp": {
+        "term": "FTP (Functional Threshold Power)",
+        "definition": "The highest average power you can sustain for approximately one hour on the bike. Used to set training zones for cycling."
+      },
+      "hrv": {
+        "term": "HRV (Heart Rate Variability)",
+        "definition": "The variation in time between heartbeats. A higher HRV generally indicates better recovery. Useful for deciding when to push and when to back off."
+      },
+      "tss": {
+        "term": "TSS (Training Stress Score)",
+        "definition": "A single number representing the training load of a session, combining intensity and duration. Used to track cumulative fatigue and fitness over time."
+      },
+      "aerobicBase": {
+        "term": "Aerobic base",
+        "definition": "The accumulated low-intensity fitness that underlies all other training. A strong base allows higher intensity work to land on a stable foundation."
+      },
+      "periodisation": {
+        "term": "Periodisation",
+        "definition": "Structuring training into phases (base, build, peak, taper) so that stress and recovery are deliberately alternated to produce peak performance at the right time."
+      }
+    },
+    "session": {
+      "brick": {
+        "term": "Brick session",
+        "definition": "A workout combining two disciplines back-to-back — most commonly bike followed immediately by run. Trains your legs to adapt to the transition between disciplines."
+      },
+      "interval": {
+        "term": "Interval",
+        "definition": "Repeated hard efforts separated by recovery periods. Used to accumulate time at high intensity without excessive fatigue."
+      },
+      "tempo": {
+        "term": "Tempo run / ride",
+        "definition": "A sustained effort at or near lactate threshold. Comfortably hard — you can speak in short sentences, not full paragraphs."
+      },
+      "lsd": {
+        "term": "Long slow distance (LSD)",
+        "definition": "A long session at Zone 2 intensity. Builds aerobic base, fat adaptation, and mental resilience without accumulating excessive fatigue."
+      },
+      "fartlek": {
+        "term": "Fartlek",
+        "definition": "Unstructured speed play within an otherwise easy session. Short bursts of effort at your own discretion — useful for breaking monotony while adding stimulus."
+      },
+      "recovery": {
+        "term": "Recovery session",
+        "definition": "A very easy, short effort designed to promote blood flow and aid recovery without adding meaningful training stress."
+      },
+      "openWater": {
+        "term": "Open-water swim",
+        "definition": "A swim in natural water (lake, sea, river) as opposed to a pool. Involves sighting, drafting, and wetsuit adaptation — all race-specific skills."
+      }
+    },
+    "race": {
+      "transitions": {
+        "term": "T1 / T2",
+        "definition": "Transition zones. T1 is swim-to-bike; T2 is bike-to-run. Practice makes transitions faster and less stressful on race day."
+      },
+      "ageGroup": {
+        "term": "AG (Age group)",
+        "definition": "Your competitive category based on age, typically in 5-year bands. Most amateur triathletes compete in their AG rather than outright."
+      },
+      "wetsuitLegal": {
+        "term": "Wetsuit legal",
+        "definition": "Water temperature is below the cutoff (typically 24.5°C / 76°F for non-elites) where wetsuits are permitted in competition."
+      },
+      "dnf": {
+        "term": "DNF / DNS / DQ",
+        "definition": "Did Not Finish / Did Not Start / Disqualified. Common race outcomes beyond a finish. A DNS is sometimes the smartest choice when injured."
+      },
+      "drafting": {
+        "term": "Drafting",
+        "definition": "Swimming or cycling close behind another athlete to reduce drag. Legal in swim, banned on the bike in most amateur races, legal on the run."
+      },
+      "specialNeeds": {
+        "term": "Special needs",
+        "definition": "A bag you can collect mid-race (usually mid-bike and mid-run) containing extra nutrition, a spare kit item, or anything you need for the second half."
+      },
+      "ironman": {
+        "term": "Ironman distance",
+        "definition": "3.8 km swim · 180 km bike · 42.2 km run. The full-distance triathlon. Also contested as 70.3 (half-iron): 1.9 km swim · 90 km bike · 21.1 km run."
+      }
+    }
+  },
   "FeedbackInterview": {
     "title": "Feedback Interview",
     "intro": "This is not the Coach. It is an interviewer, asking the questions the people building this app want answered — so it can follow up on what you say instead of leaving it at one line. Nothing you say here reaches your Coach.",

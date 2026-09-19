@@ -224,7 +224,7 @@ describe('the Roster entry in the Navigation Drawer', () => {
     // The dual-role case the seed actually creates: a coach row alongside an
     // athlete row. Their own training is still why they open the app.
     const views = await viewsFor(true);
-    for (const view of ['training-plan', 'information', 'equipment', 'settings', 'privacy']) {
+    for (const view of ['training-plan', 'information', 'equipment', 'glossary', 'settings', 'privacy']) {
       expect(views).toContain(view);
     }
   });

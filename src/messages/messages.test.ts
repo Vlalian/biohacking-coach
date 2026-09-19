@@ -110,6 +110,13 @@ describe('message catalogues', () => {
       path === 'Onboarding.optSprint' ||
       path === 'Onboarding.optHalf' ||
       path === 'Onboarding.optFull';
+    // The Glossary's headwords (`eval-mvp-build/16`). A glossary entry is the
+    // technical term itself — VO2max, Fartlek, T1 / T2, DNF / DNS / DQ — so the
+    // Danish headword is legitimately the English one whenever Danish
+    // triathletes say it that way (the POC kept these verbatim too). Only the
+    // `.term` leaf is exempt; every `.definition` stays under the guard, which
+    // is where a forgotten translation would actually hide.
+    const headword = (path: string) => /^Glossary\.\w+\.\w+\.term$/.test(path);
     // Simple ICU placeholders are not words — "• {clause}" is structure, and is
     // identical in every language by definition. Deliberately narrow twice
     // over. First in shape: `\w+` inside the braces, so plural forms like
@@ -135,6 +142,7 @@ describe('message catalogues', () => {
     for (const [path, danish] of entries(da)) {
       const danishText = translatable(danish, path);
       if (danishText === '') continue;
+      if (headword(path)) continue;
 
       expect(danishText, `"${path}" is identical in Danish and English`).not.toBe(
         translatable(english.get(path) ?? '', path),
