@@ -25,8 +25,12 @@ export type HeadCoachNarratableType =
   | 'session_deleted'
   | 'session_moved';
 
-/** A Head Coach's Training Block edit (`training-architecture/08`) — rendered by {@link blockClause}. */
-export type BlockNarratableType = 'block_edited';
+/**
+ * A Head Coach's hand on the Training Blocks: an edit (`training-architecture/08`,
+ * rendered by {@link blockClause}) or a re-pin of a set the race moved out
+ * from under (`/19`, rendered by {@link blocksRepinnedClause}).
+ */
+export type BlockNarratableType = 'block_edited' | 'blocks_repinned';
 
 /** A Head Coach's hand on the drafted week or its day (`training-architecture/17`). */
 export type WeekNarratableType = 'weekly_session_day_set' | 'week_draft_approved';
@@ -183,11 +187,32 @@ function unrealisticClause(payload: unknown, t: Translate): string {
   });
 }
 
+/**
+ * The Coach's own shaping — or, in the solo case (`training-architecture/19`,
+ * ruling 2), its re-fit of a former Head Coach's blocks after the race moved
+ * and nobody was left linked to re-pin them. The second is a different
+ * sentence because it says whose blocks went: a fresh draft announced over a
+ * human's structure as if it had never been there would be the silent
+ * overwrite ADR 0003 forbids, one step removed.
+ */
 function blocksDraftedClause(payload: unknown, t: Translate): string {
+  const refitted = (payload as { refittedHeadCoachBlocks?: unknown } | null)?.refittedHeadCoachBlocks === true;
   const race = field(payload, 'raceName');
   const names = blockNames(payload);
-  if (!race || !names) return t('blocksDraftedNoDetail');
-  return t('blocksDrafted', { race, blocks: names.join(' · ') });
+  if (!race || !names) return t(refitted ? 'blocksRefittedNoDetail' : 'blocksDraftedNoDetail');
+  return t(refitted ? 'blocksRefitted' : 'blocksDrafted', { race, blocks: names.join(' · ') });
+}
+
+/**
+ * The Head Coach re-pinned a set to the race's new date (`training-architecture/19`),
+ * by one click or by starting over from the draft: one sentence either way,
+ * because what the athlete needs to know is the same — their blocks fit the
+ * race again, and whose hand did it.
+ */
+function blocksRepinnedClause(event: NarratableEvent, coachFirstNames: Record<string, string>, t: Translate): string {
+  const coach = (event.actorId ? coachFirstNames[event.actorId] : undefined) ?? t('yourHeadCoach');
+  const race = field(event.payload, 'raceName');
+  return race ? t('blocksRepinned', { coach, race }) : t('blocksRepinnedNoDetail', { coach });
 }
 
 const CLAUSE_KEY = {
@@ -336,6 +361,7 @@ export function composeNarration(
       return weekClause(e, coachFirstNames, t);
     }
     if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
+    if (e.type === 'blocks_repinned') return blocksRepinnedClause(e, coachFirstNames, t);
     return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
   });
   if (clauses.length === 1) return t('single', { clause: clauses[0] });

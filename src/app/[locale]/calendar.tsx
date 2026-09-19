@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { ChevronDown, ChevronsUpDown, Plus, type LucideIcon } from 'lucide-react';
+import { Bandage, ChevronDown, ChevronsUpDown, Pill, Plus, type LucideIcon } from 'lucide-react';
 import type { Session } from '@/features/session/session';
 import { dateKey, weekStartOf } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
@@ -19,7 +19,7 @@ import { DraftingCard } from './drafting-card';
 import type { CalendarSlotState } from '@/features/coach/week-draft-service';
 import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
-import { glanceParts, layerForWeek, type HealthSpan } from '@/features/health/health-layer';
+import { marksFor, weekStatus, type HealthMark, type HealthSpan } from '@/features/health/health-layer';
 
 /**
  * The seven header labels are formatted from these — Monday 1 January 2024 at
@@ -507,16 +507,8 @@ export function Calendar({
             onDragOverDay={setHoverDate}
             onDropDay={handleDrop}
             onToggleAvailability={toggleAvailability}
-            healthLayer={
-              health.length > 0
-                ? layerForWeek(
-                    week.days.map((d) => d.date),
-                    health,
-                    todayKey,
-                  )
-                : null
-            }
-            onOpenHealth={(span) => setHealthDrawer({ open: true, kind: span.kind, id: span.id })}
+            health={health}
+            onOpenHealth={(kind) => setHealthDrawer({ open: true, kind })}
           />
         ))}
       </div>
@@ -579,15 +571,16 @@ function WeekRow({
   onDragOverDay,
   onDropDay,
   onToggleAvailability,
-  healthLayer,
+  health,
   onOpenHealth,
 }: {
   week: Week;
   expanded: boolean;
   readOnly: boolean;
-  /** What of the athlete's health this week draws, or null for nothing at all. */
-  healthLayer: ReturnType<typeof layerForWeek> | null;
-  onOpenHealth: (span: HealthSpan) => void;
+  /** Every span, open and closed: the marks on a session outlive the record (28a). */
+  health: HealthSpan[];
+  /** Opens the Health Drawer on the newest open record of that kind. */
+  onOpenHealth: (kind: 'injury' | 'illness') => void;
   /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
    *  calendar is read-only and opens one (showable-version/20). */
   canOpenSession: boolean;
@@ -621,73 +614,40 @@ function WeekRow({
     timeZone: 'UTC',
   }).format(new Date(`${week.isoWeekStart}T00:00:00Z`));
 
-  const showHealth =
-    healthLayer !== null && (healthLayer.hasIllness || healthLayer.injuries.length > 0);
+  const status = weekStatus(
+    week.days.map((d) => d.date),
+    health,
+    todayKey,
+  );
 
   return (
     <div>
-      {/* The health layer, drawn ABOVE the seven day cells and beside the plan
-          (training-architecture/06, option a — Mads, 2026-09-11). An Illness is
-          a band over exactly the days it covered, the way an all-day event sits
-          above a day's items; an Injury is a chip at the left with what it
-          prevents, on every week it was open — a standing state, not a set of
-          days. Muted, never red: the point is "no alarm, no demand for an
-          explanation". Absent entirely for a healthy week, so the day cells and
-          Session Chips below are exactly what they always were. */}
-      {showHealth && healthLayer && (
-        <div
-          data-health-week={week.isoWeekStart}
-          className="grid grid-cols-1 border-b border-dashed border-border md:grid-cols-[56px_repeat(7,minmax(0,1fr))]"
-        >
-          <div className="flex flex-wrap items-center gap-1 px-2 py-1 md:col-span-8 md:pl-[64px]">
-            {healthLayer.injuries.map((span) => (
-              <button
-                key={span.id}
-                type="button"
-                data-health-chip={span.id}
-                onClick={() => onOpenHealth(span)}
-                className="flex h-[38px] items-center border border-border bg-muted/60 px-2 text-left transition-colors hover:border-signal"
-              >
-                <span className="block font-body text-[11px] font-medium leading-tight text-foreground">
-                  {t('healthInjury')}
-                </span>
-                <span className="ml-2 block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-                  {span.capacity
-                    ? glanceParts(span.capacity)
-                        .map((p) => t(`glance_${p.allowance}_${p.discipline}`))
-                        .join(' · ')
-                    : ''}
-                </span>
-              </button>
-            ))}
-          </div>
-          {healthLayer.hasIllness && (
-            <>
-              <span className="hidden md:block" />
-              {healthLayer.days.map((day, i) => {
-                const first = day.ill && (i === 0 || !healthLayer.days[i - 1].ill);
-                const span = healthLayer.illnesses.find((s) => s.id === day.illnessId) ?? null;
-                return (
-                  <div key={day.date} data-health-day={day.date} data-ill={day.ill || undefined} className="px-1 pb-1">
-                    {span && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenHealth(span)}
-                        // Only the first day carries visible text; the rest of
-                        // the band would otherwise be unlabelled focus stops.
-                        aria-label={t('healthIll')}
-                        className="block h-6 w-full bg-muted text-left font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        {first ? <span className="pl-2">{t('healthIll')}</span> : null}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </div>
-      )}
+      {/* The health status area, above the seven day cells and beside the plan
+          (training-architecture/06 → showable-version/28a, Mads 2026-09-18).
+          Always shown, so a clean week reads "healthy · uninjured" rather than
+          showing nothing: two statuses, each a door into the Health Drawer.
+          The illness band and the injury chip it replaces are gone; what a
+          record covered now shows on the sessions themselves (`Marks`).
+          Muted, never red — the point is "no alarm, no demand for an
+          explanation"; the open status carries the signal colour and nothing
+          more. */}
+      <div
+        data-health-status={week.isoWeekStart}
+        className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1 md:pl-[64px]"
+      >
+        <StatusButton
+          kind="injury"
+          active={status.injured}
+          label={status.injured ? t('statusInjured') : t('statusUninjured')}
+          onClick={() => onOpenHealth('injury')}
+        />
+        <StatusButton
+          kind="illness"
+          active={status.ill}
+          label={status.ill ? t('statusIll') : t('statusHealthy')}
+          onClick={() => onOpenHealth('illness')}
+        />
+      </div>
       {/* `CONTEXT.md`, Expanded Week: "Tapping a week row toggles it." Only the
           date label was a button, so the row and the glossary disagreed.
 
@@ -731,6 +691,10 @@ function WeekRow({
 
         {week.days.map((day) => {
           const rejection = dragging ? rejectionFor(day) : null;
+          // The icons every recorded session on this day carries (28a): an
+          // injury or illness whose span covers the day. Proposed sessions
+          // are the future and carry none.
+          const marks = marksFor(day.date, health, todayKey);
           const isHover = hoverDate === day.date && Boolean(dragging);
           const isBounce = bounce?.date === day.date;
 
@@ -818,6 +782,7 @@ function WeekRow({
                       key={s.id}
                       session={s}
                       t={t}
+                      marks={marks}
                       canDrag={canDrag}
                       refusal={liftRefusal(s, todayKey)}
                       // Omitted only where there is genuinely no drawer to
@@ -856,29 +821,31 @@ function WeekRow({
                     !canOpenSession ? (
                       <span
                         key={s.id}
-                        title={s.title ?? s.type}
+                        title={markedLabel(s.title ?? s.type, marks, t)}
                         role="img"
-                        aria-label={`${s.type} · ${s.status}`}
-                        className="-m-1.5 inline-flex items-center justify-center p-1.5"
+                        aria-label={markedLabel(`${s.type} · ${s.status}`, marks, t)}
+                        className="-m-1.5 inline-flex items-center justify-center gap-0.5 p-1.5"
                       >
                         <span
                           className={`inline-block h-2.5 w-2.5 rounded-full ${s.feedbackBody != null ? 'ring-1 ring-foreground/60 ring-offset-1' : ''}`}
                           style={dotStyle(s)}
                         />
+                        <Marks marks={marks} size={8} />
                       </span>
                     ) : (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => onOpenSession(s)}
-                        title={s.title ?? s.type}
-                        aria-label={`${s.type} · ${s.status}`}
-                        className="-m-1.5 inline-flex cursor-pointer items-center justify-center p-1.5"
+                        title={markedLabel(s.title ?? s.type, marks, t)}
+                        aria-label={markedLabel(`${s.type} · ${s.status}`, marks, t)}
+                        className="-m-1.5 inline-flex cursor-pointer items-center justify-center gap-0.5 p-1.5"
                       >
                         <span
                           className={`inline-block h-2.5 w-2.5 rounded-full ${s.feedbackBody != null ? 'ring-1 ring-foreground/60 ring-offset-1' : ''}`}
                           style={dotStyle(s)}
                         />
+                        <Marks marks={marks} size={8} />
                       </button>
                     ),
                   )}
@@ -949,9 +916,78 @@ function ProposedChip({
   );
 }
 
+/** The one icon per record kind, shared by the status area and the session marks. */
+const HEALTH_ICON: Record<'injury' | 'illness', LucideIcon> = { injury: Bandage, illness: Pill };
+
+/** One of the two statuses: icon + word, signal while a record of that kind is open this week. */
+function StatusButton({
+  kind,
+  active,
+  label,
+  onClick,
+}: {
+  kind: 'injury' | 'illness';
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  const Icon = HEALTH_ICON[kind];
+  return (
+    <button
+      type="button"
+      data-status={kind}
+      data-active={active ? 'true' : 'false'}
+      onClick={onClick}
+      className={[
+        'inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors hover:text-foreground',
+        active ? 'text-signal' : 'text-muted-foreground',
+      ].join(' ')}
+    >
+      <Icon className="h-3 w-3" aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
+/**
+ * The health icons a session carries (`showable-version/28a`): a bandage for
+ * an injury, a pill for an illness — signal while the record is open, muted
+ * once it is over, and never removed: a session done hurt was done hurt. One
+ * icon per record, so two open injuries are two bandages.
+ */
+function Marks({ marks, size }: { marks: HealthMark[]; size: number }) {
+  if (marks.length === 0) return null;
+  return (
+    <>
+      {marks.map((m, i) => {
+        const Icon = HEALTH_ICON[m.kind];
+        return (
+          <Icon
+            key={`${m.kind}-${i}`}
+            data-mark={m.kind}
+            data-open={m.open ? 'true' : 'false'}
+            aria-hidden="true"
+            style={{ width: size, height: size }}
+            className={['shrink-0', m.open ? 'text-signal' : 'text-muted-foreground/60'].join(' ')}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+/** The accessible name with the marks spelled out: "Endurance · planned · injury: left knee · ill". */
+function markedLabel(base: string, marks: HealthMark[], t: ReturnType<typeof useTranslations<'Calendar'>>): string {
+  const words = marks.map((m) =>
+    m.kind === 'injury' ? (m.label ? `${t('markInjury')}: ${m.label}` : t('markInjury')) : t('markIll'),
+  );
+  return [base, ...words].join(' · ');
+}
+
 function SessionChip({
   session,
   t,
+  marks,
   canDrag,
   refusal,
   onOpen,
@@ -960,6 +996,8 @@ function SessionChip({
 }: {
   session: Session;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
+  /** The health icons this session carries; empty for none. */
+  marks: HealthMark[];
   canDrag: boolean;
   /**
    * Why this session cannot be lifted, or null when it can — the reason rather
@@ -1002,14 +1040,30 @@ function SessionChip({
 
   const content = (
     <>
-      <span className="block truncate font-body text-[11px] font-medium leading-tight text-foreground">
-        {session.title ?? session.type}
+      <span className="flex items-center gap-1">
+        <span className="block min-w-0 flex-1 truncate font-body text-[11px] font-medium leading-tight text-foreground">
+          {session.title ?? session.type}
+        </span>
+        <Marks marks={marks} size={10} />
       </span>
       <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
         {session.duration ? `${session.duration}${t('minutes')}` : session.type}
       </span>
     </>
   );
+  // The marks are icons with no text, so the chip names them for a screen
+  // reader — the label is only set when there is something to say, leaving an
+  // unmarked chip's markup exactly what it was.
+  // An explicit label replaces the children-derived name, so it has to carry
+  // the refusal too or a marked frozen chip stops saying why it will not move
+  // (CodeRabbit, PR #86).
+  const markLabel =
+    marks.length > 0
+      ? [markedLabel(session.title ?? session.type, marks, t), refusalText].filter(Boolean).join(' · ')
+      : undefined;
+  // The hover tooltip names the marks as well as any refusal (the ruling asked
+  // for "label and tooltip"); unset when there is nothing to say.
+  const title = markLabel ?? refusalText;
 
   if (!onOpen) {
     return (
@@ -1017,7 +1071,8 @@ function SessionChip({
         draggable={draggable}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        title={refusalText}
+        title={title}
+        aria-label={markLabel}
         className={className}
         style={{ borderColor: color }}
       >
@@ -1034,7 +1089,8 @@ function SessionChip({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onOpen}
-      title={refusalText}
+      title={title}
+      aria-label={markLabel}
       className={className}
       style={{ borderColor: color }}
     >

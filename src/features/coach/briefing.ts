@@ -1,4 +1,4 @@
-import type { BlockAuthor } from './training-blocks';
+import { holdsHeadCoachBlock, type BlockAuthor } from './training-blocks';
 import type { Onboarding } from './check-in';
 import { assertNoDirectIdentifier } from './check-in';
 import {
@@ -146,6 +146,14 @@ export interface BriefingBlocks {
    */
   phase: string | null;
   raceUnrealistic: string | null;
+  /**
+   * The stored set no longer ends on race day (`training-architecture/19`):
+   * what the athlete sees, and what is listed here, is the arithmetic draft,
+   * while the set waits for the Head Coach's re-pin. Carried so the Coach
+   * can answer honestly rather than describe the draft as the plan. Absent
+   * or null when the set fits or there is none.
+   */
+  staleSet?: { lastBlockName: string; endsOn: string } | null;
 }
 
 export interface BriefingContext {
@@ -313,7 +321,16 @@ function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
     (b) =>
       `- ${b.name} · to ${b.endDate} · ${BLOCK_AUTHOR_LABEL[b.authoredBy]}${b.name === blocks.phase ? ' · current' : ''}`,
   );
-  if (blocks.blocks.some((b) => b.authoredBy === 'head_coach')) lines.push(HEAD_COACH_BLOCKS_LINE);
+  if (holdsHeadCoachBlock(blocks)) lines.push(HEAD_COACH_BLOCKS_LINE);
+  // The belt to the popup's braces (19): the popup is the mechanism, this is
+  // what lets the Coach say "how is Sarah doing" truthfully in the meantime.
+  if (blocks.staleSet) {
+    lines.push(
+      `The stored Training Blocks no longer fit the race date: the last block, "${blocks.staleSet.lastBlockName}", ` +
+        `still ends ${blocks.staleSet.endsOn}. The blocks listed above are the arithmetic draft; ` +
+        'the Head Coach re-pins the stored set from the notice on their next login.',
+    );
+  }
   if (blocks.raceUnrealistic) {
     lines.push(`The Coach has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
   }

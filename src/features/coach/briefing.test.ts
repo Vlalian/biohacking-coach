@@ -216,6 +216,19 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     expect(prompt).toContain('The Coach has flagged the Target Race as unrealistic: eleven months is short');
   });
 
+  it('carries one line while a stored set no longer fits the race, and none otherwise (training-architecture/19)', () => {
+    // The belt to the popup's braces: the Coach can answer "how is Sarah
+    // doing" honestly while the set waits for the Head Coach's click.
+    expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).not.toContain('no longer fit');
+    const prompt = renderBriefingPrompt(
+      ctx({ blocks: { ...coachOnly, staleSet: { lastBlockName: 'Taper', endsOn: '2027-06-01' } } }),
+    );
+    expect(prompt).toContain(
+      'The stored Training Blocks no longer fit the race date: the last block, "Taper", still ends 2027-06-01. ' +
+        'The blocks listed above are the arithmetic draft; the Head Coach re-pins the stored set from the notice on their next login.',
+    );
+  });
+
   it('says plainly there are none for an athlete with no Target Race', () => {
     expect(renderBriefingPrompt(ctx({ blocks: null }))).toContain('TRAINING BLOCKS: none');
     expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], phase: null, raceUnrealistic: null } }))).toContain(

@@ -15,7 +15,10 @@ import { getOpenConversations } from '@/features/coach/conversation-repository';
 import { selectOpenConversations } from '@/features/coach/conversation';
 import { getCheckInForWeek } from '@/features/coach/check-in-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
-import { logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { getCoachChores } from '@/features/coach/coach-chores-service';
+import type { CoachChore } from '@/features/coach/coach-chores';
+import { logCoachChoresFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { CoachChoresDialog } from './coach-chores-dialog';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
 import type { CheckInOfferInput } from '@/features/coach/weekly-offer';
 import { weekStartOf, today } from '@/lib/date';
@@ -23,13 +26,13 @@ import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import { chatStateOf } from '@/features/coach/coach-chat-service';
 
-// The Views this port has real pages for. Glossary joins this list as its own
-// task lands (lovable/briefs build order) — left out for now rather than
-// linking to a page that 404s.
+// The Views this port has real pages for — a View is listed here only once
+// its page exists, never ahead of it, so the drawer cannot link to a 404.
 const ATHLETE_VIEWS: ViewId[] = [
   'training-plan',
   'information',
   'equipment',
+  'glossary',
   'settings',
   'privacy',
 ];
@@ -183,6 +186,22 @@ export default async function AppShellLayout({
     });
   }
 
+  // The Head Coach's chores (`training-architecture/19`): a stale block set on
+  // their Roster is repaired from a dialog before the page, in one click. Read
+  // **here, on the render path**, not in the `after()` below — a popup that
+  // arrives a page late is the Briefing line the ticket refuses. One query,
+  // only for an account holding links; zero rows is the common case. Guarded
+  // like narration: a driver failure costs the coach the popup on this open,
+  // never the shell.
+  let chores: CoachChore[] = [];
+  if (isHeadCoach) {
+    try {
+      chores = await getCoachChores(session!.user.id);
+    } catch (error) {
+      logCoachChoresFailure(session!.user.id, error);
+    }
+  }
+
   // The same trigger for a Head Coach's own open, one draft per athlete on
   // their Roster (`/17`): the coach sees the draft a day before the athlete,
   // and on that day the athlete has no reason to open the app — so the coach's
@@ -215,6 +234,7 @@ export default async function AppShellLayout({
         />
       }
     >
+      {chores.length > 0 ? <CoachChoresDialog chores={chores} /> : null}
       {children}
     </ShellChrome>
   );

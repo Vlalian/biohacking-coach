@@ -814,6 +814,15 @@ export const injuries = pgTable(
     swim: text('swim').notNull().default('full'),
     bike: text('bike').notNull().default('full'),
     run: text('run').notNull().default('full'),
+    /**
+     * A short name for what and where — "left knee" — so the drawer and the
+     * calendar can tell two injuries apart (Mads, 2026-09-18, showable-
+     * version/28a). The injury's name, never the athlete's: ADR 0006 keeps
+     * every training table free of who. Optional, and **for human eyes only** like the thread and
+     * the Bother Rating: a body part is not a capacity, and the planner reads
+     * capacity. Nothing on a prompt path reads it.
+     */
+    name: text('name'),
     openedAt: timestamp('opened_at').notNull().defaultNow(),
     closedAt: timestamp('closed_at'),
     /**

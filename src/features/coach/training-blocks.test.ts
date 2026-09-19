@@ -3,6 +3,8 @@ import { addDays } from '@/lib/date';
 import {
   fitsRace,
   isStaleSet,
+  staleLastBlockOf,
+  repinBlockSet,
   applyBlockEdit,
   blockPosition,
   currentBlock,
@@ -12,6 +14,7 @@ import {
   trainingBlocks,
   validateBlockSet,
   type StoredBlockSet,
+  holdsHeadCoachBlock,
   type TrainingBlockSpec,
 } from './training-blocks';
 
@@ -501,5 +504,108 @@ describe('fitsRace — the one test of whether a stored set still describes the 
     expect(isStaleSet(null, '2027-08-15')).toBe(false);
     expect(isStaleSet(set, '2027-08-15')).toBe(false);
     expect(isStaleSet(set, '2027-08-29')).toBe(true);
+  });
+
+  it('staleLastBlockOf: the last block of a stale set, by name and end; null when it fits, is empty, or is absent', () => {
+    expect(staleLastBlockOf(set, '2027-08-29')).toEqual({ lastBlockName: 'Taper', endsOn: '2027-08-15' });
+    expect(staleLastBlockOf(set, '2027-08-15')).toBeNull();
+    expect(staleLastBlockOf(null, '2027-08-29')).toBeNull();
+    expect(staleLastBlockOf({ startDate: '2026-09-01', blocks: [] }, '2027-08-29')).toBeNull();
+  });
+});
+
+describe('holdsHeadCoachBlock', () => {
+  it('is true when any block in the set was a human\'s, false for a set the Coach alone drafted', () => {
+    const coach = { startDate: '2027-01-04', blocks: [{ name: 'Base', endDate: '2027-02-28', authoredBy: 'coach_ai' as const }] };
+    expect(holdsHeadCoachBlock(coach)).toBe(false);
+    expect(
+      holdsHeadCoachBlock({ ...coach, blocks: [...coach.blocks, { name: 'Taper', endDate: '2027-03-14', authoredBy: 'head_coach' as const }] }),
+    ).toBe(true);
+    expect(holdsHeadCoachBlock({ ...coach, blocks: [] })).toBe(false);
+  });
+});
+
+describe('repinBlockSet — the Head Coach re-pins a stale set to a moved race (training-architecture/19)', () => {
+  const START = '2026-09-14';
+  const set = {
+    startDate: START,
+    blocks: [
+      { name: 'Build the Volume', endDate: '2026-12-13', authoredBy: 'coach_ai' as const },
+      { name: 'Sharpen', endDate: '2027-02-14', authoredBy: 'head_coach' as const },
+      { name: 'Taper', endDate: '2027-03-14', authoredBy: 'coach_ai' as const },
+    ],
+  };
+
+  it('a race moved later extends the last block to the new day and drops nothing', () => {
+    expect(repinBlockSet(set, '2027-04-04')).toEqual({
+      ok: true,
+      blocks: [set.blocks[0], set.blocks[1], { ...set.blocks[2], endDate: '2027-04-04' }],
+      dropped: [],
+    });
+  });
+
+  it('a race moved earlier drops every block ending on or after the new day, then re-pins the last survivor', () => {
+    expect(repinBlockSet(set, '2027-03-01')).toEqual({
+      ok: true,
+      blocks: [set.blocks[0], { ...set.blocks[1], endDate: '2027-03-01' }],
+      dropped: ['Taper'],
+    });
+  });
+
+  it('a block ending exactly on the new race day survives as the last block — it already fits', () => {
+    // The ticket's draft said "on or after"; a block ending on race day is what
+    // `fitsRace` calls the last block, so dropping it would throw away a block
+    // that needed no repair. "Sharpen" stays, and two survivors is enough.
+    expect(repinBlockSet(set, '2027-02-14')).toEqual({
+      ok: true,
+      blocks: [set.blocks[0], set.blocks[1]],
+      dropped: ['Taper'],
+    });
+  });
+
+  it('the re-pinned survivor keeps its author: pinning to race day is the rule, not a judgement', () => {
+    const earlier = repinBlockSet(set, '2027-03-01');
+    expect(earlier.ok && earlier.blocks[1].authoredBy).toBe('head_coach');
+    const later = repinBlockSet(set, '2027-04-04');
+    expect(later.ok && later.blocks[2].authoredBy).toBe('coach_ai');
+  });
+
+  it('fewer than two survivors is too-few-blocks, naming what would have gone', () => {
+    expect(repinBlockSet(set, '2027-01-01')).toEqual({
+      ok: false,
+      reason: 'too-few-blocks',
+      dropped: ['Sharpen', 'Taper'],
+    });
+    // Before the set even starts: nothing survives.
+    expect(repinBlockSet(set, '2026-01-01')).toEqual({
+      ok: false,
+      reason: 'too-few-blocks',
+      dropped: ['Build the Volume', 'Sharpen', 'Taper'],
+    });
+  });
+
+  it('one survivor is too few even when the race moved only just past the first block', () => {
+    expect(repinBlockSet(set, '2026-12-20')).toEqual({
+      ok: false,
+      reason: 'too-few-blocks',
+      dropped: ['Sharpen', 'Taper'],
+    });
+  });
+
+  it('a set that already fits is returned unchanged', () => {
+    expect(repinBlockSet(set, '2027-03-14')).toEqual({ ok: true, blocks: set.blocks, dropped: [] });
+  });
+
+  it('runs the set validator on the result', () => {
+    // A stored name that has since become refusable — an identifier shape —
+    // is caught on the way out rather than written back.
+    const poisoned = {
+      startDate: START,
+      blocks: [
+        { name: 'Build', endDate: '2026-12-13', authoredBy: 'coach_ai' as const },
+        { name: 'mail me at x@y.dk', endDate: '2027-03-14', authoredBy: 'coach_ai' as const },
+      ],
+    };
+    expect(repinBlockSet(poisoned, '2027-04-04')).toEqual({ ok: false, reason: 'identifier', dropped: [] });
   });
 });

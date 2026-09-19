@@ -5,6 +5,7 @@ import {
   logBlockAdjustmentRefused,
   logBlockAdjustmentFailure,
   logWeekDraftFailure,
+  logCoachChoresFailure,
   logLookupFailure,
   logCoachDrift,
 } from './coach-log';
@@ -256,6 +257,28 @@ describe('logWeekDraftFailure — the after() boundary of the silent draft', () 
       throw new Error('no console');
     });
     expect(() => logWeekDraftFailure('a1', new Error('x'))).not.toThrow();
+    s.mockRestore();
+  });
+});
+
+describe('logCoachChoresFailure — the shell’s chores read (training-architecture/19)', () => {
+  it('writes one structured line keyed on the user id, with the error’s class and never its message', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logCoachChoresFailure('user_1', new Error('SELECT ... "synthetic_label":"Sarah"'));
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'coach_chores_failed',
+      userId: 'user_1',
+      errorType: 'error',
+    });
+    expect(s.mock.calls[0][0]).not.toContain('Sarah');
+    s.mockRestore();
+  });
+
+  it('never throws, even when console.error does', () => {
+    const s = vi.spyOn(console, 'error').mockImplementation(() => {
+      throw new Error('no console');
+    });
+    expect(() => logCoachChoresFailure('user_1', new Error('x'))).not.toThrow();
     s.mockRestore();
   });
 });

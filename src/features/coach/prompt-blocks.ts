@@ -113,11 +113,14 @@ export function onboardingBlock(onboarding?: Onboarding | null): PromptBlock {
  * every outside question retrieves *something*, so "returns none" almost never
  * fires — the honest boundary has to be drawn when passages are adjacent, not
  * absent. Same text in Coach Chat and the Weekly Session, which is the whole
- * reason blocks exist.
+ * reason blocks exist. The "asked what you know" sentence is knowledge-oracle/07
+ * (2026-09-18): asked for its evidence base, the Coach recited the tool's
+ * description instead of looking anything up.
  */
 export function groundingBlock(): PromptBlock {
   return (
     'GROUNDING: Before stating a training-science fact, call look_up_training_science. ' +
+    'Asked what you know or have evidence for, look up the topic named before answering; never describe the lookup tool as your scope. ' +
     'Answer from the passages it returns. If it returns none, say you do not have grounding for that claim and do not assert it. ' +
     'If they are about something nearby but do not answer the question, say so first, and mark anything you add beyond them as your own coaching judgement, not science. ' +
     'Never write citations, footnotes or source names in your reply — the app lists your sources beneath it.'

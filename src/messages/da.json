@@ -326,9 +326,13 @@
     "bounceNotYours": "Det er atletens egen session — den bliver, hvor de har lagt den.",
     "bounceError": "Det virkede ikke. Prøv igen.",
     "bounceParked": "Denne session holdes af en hviledag. Flyt hvileblokken først.",
+    "statusHealthy": "Rask",
+    "statusIll": "Syg",
+    "statusUninjured": "Uskadt",
+    "statusInjured": "Skadet",
+    "markInjury": "Skade",
+    "markIll": "Syg",
     "healthButton": "Hvordan har kroppen det?",
-    "healthIll": "Syg",
-    "healthInjury": "Skade",
     "glance_none_swim": "ingen svømning",
     "glance_none_bike": "ingen cykling",
     "glance_none_run": "ingen løb",
@@ -469,6 +473,7 @@
     "qConstraintsSub": "Valgfri — vælg alle der passer",
     "weeklyDay": "Ugentlig planlægningsdag",
     "weeklyDaySub": "Hvornår gennemgår du typisk din uge?",
+    "back": "Tilbage",
     "continue": "Fortsæt →",
     "finish": "Fuldfør opsætning →",
     "startTraining": "Start træning →",
@@ -624,12 +629,117 @@
     "blockRenamed": "{coach} omdøbte din blok \"{from}\" til \"{to}\"",
     "blockRebounded": "{coach} flyttede slutningen af din blok \"{name}\" til {day}",
     "blockRenamedAndRebounded": "{coach} omdøbte din blok \"{from}\" til \"{to}\" og flyttede dens slutning til {day}",
-    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke"
+    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke",
+    "blocksRepinned": "{coach} har tilpasset dine træningsblokke til den nye dato for {race}",
+    "blocksRepinnedNoDetail": "{coach} har tilpasset dine træningsblokke til den nye løbsdato",
+    "blocksRefitted": "De blokke, din Head Coach satte, passer ikke længere til den nye løbsdato, så jeg har tilpasset din træning frem mod {race}: {blocks}",
+    "blocksRefittedNoDetail": "De blokke, din Head Coach satte, passer ikke længere til den nye løbsdato, så jeg har tilpasset din træning frem mod dit løb"
   },
   "Privacy": {
     "dataRightsTitle": "Dine data",
     "dataRightsBody": "Du kan hente en kopi af alt, appen har om dig, eller slette din konto og fjerne det hele. Begge dele finder du under Indstillinger.",
     "dataRightsLink": "Gå til Indstillinger"
+  },
+  "Glossary": {
+    "title": "Ordliste",
+    "subtitle": "Træningssproget i din plan og i din Coachs beskeder",
+    "trainingTitle": "Træningsbegreber",
+    "sessionTitle": "Sessionstyper",
+    "raceTitle": "Løbstermer",
+    "training": {
+      "zone2": {
+        "term": "Zone 2",
+        "definition": "Lav aerob intensitet, hvor du kan holde en samtale. Grundlaget for udholdenhedstræning — udvikler fedtoxidation og mitokondrier over tid."
+      },
+      "vo2max": {
+        "term": "VO2max",
+        "definition": "Den maksimale mængde ilt din krop kan forbruge under træning. En vigtig forudsigelse af udholdenhedspræstation. Forbedres ved høj-intensitets intervaltræning."
+      },
+      "lactateThreshold": {
+        "term": "Laktatgrænse",
+        "definition": "Den intensitet, hvor mælkesyre akkumuleres hurtigere end den kan fjernes. Træning ved og omkring denne zone hæver loftet for bæredygtig indsats."
+      },
+      "ftp": {
+        "term": "FTP (Funktionel tærskeleffekt)",
+        "definition": "Den højeste gennemsnitlige watt, du kan opretholde i ca. en time på cyklen. Bruges til at sætte træningszoner for cykling."
+      },
+      "hrv": {
+        "term": "HRV (Pulsvariabilitet)",
+        "definition": "Variationen i tid mellem hjerteslag. Højere HRV indikerer generelt bedre restitution. Nyttigt til at bestemme, hvornår man skal presse på og hvornår man skal bakke af."
+      },
+      "tss": {
+        "term": "TSS (Træningsbelastningsscore)",
+        "definition": "Et enkelt tal der repræsenterer træningsbelastningen i en session, der kombinerer intensitet og varighed. Bruges til at spore kumulativ træthed og form over tid."
+      },
+      "aerobicBase": {
+        "term": "Aerob base",
+        "definition": "Den akkumulerede lavintensitetskondition, der underbygger al anden træning. En stærk base giver intenst arbejde et stabilt fundament at lande på."
+      },
+      "periodisation": {
+        "term": "Periodisering",
+        "definition": "Strukturering af træning i faser (base, opbygning, top, nedtrapning) så stress og restitution bevidst alterneres for at producere toppræstation på det rette tidspunkt."
+      }
+    },
+    "session": {
+      "brick": {
+        "term": "Brick-session",
+        "definition": "En træning der kombinerer to discipliner i forlængelse af hinanden — oftest cykel efterfulgt umiddelbart af løb. Træner benene i at tilpasse sig overgangen mellem discipliner."
+      },
+      "interval": {
+        "term": "Interval",
+        "definition": "Gentagne hårde indsatser adskilt af restitutionsperioder. Bruges til at akkumulere tid ved høj intensitet uden overdreven træthed."
+      },
+      "tempo": {
+        "term": "Tempo løb / tur",
+        "definition": "En vedvarende indsats ved eller nær laktatgrænsen. Komfortabelt hårdt — du kan tale i korte sætninger, ikke hele afsnit."
+      },
+      "lsd": {
+        "term": "Lang langsom distance (LSD)",
+        "definition": "En lang session ved Zone 2-intensitet. Opbygger aerob base, fedttilpasning og mental robusthed uden at akkumulere overdreven træthed."
+      },
+      "fartlek": {
+        "term": "Fartlek",
+        "definition": "Ustruktureret hastighedsleg inden for en ellers let session. Korte intensitetsudbrud efter eget skøn — nyttigt til at bryde monotonien og tilføje stimulus."
+      },
+      "recovery": {
+        "term": "Restitutionssession",
+        "definition": "En meget let, kort indsats designet til at fremme blodgennemstrømning og hjælpe restitution uden at tilføje meningsfuld træningsbelastning."
+      },
+      "openWater": {
+        "term": "Åbentvandssvøm",
+        "definition": "En svømmetur i naturligt vand (sø, hav, å) i modsætning til en pool. Involverer sigtning, drafting (at ligge på hjul) og våddragt-tilpasning — alle racespecifikke færdigheder."
+      }
+    },
+    "race": {
+      "transitions": {
+        "term": "T1 / T2",
+        "definition": "Skiftezoner. T1 er svøm-til-cykel; T2 er cykel-til-løb. Øvelse gør transitioner hurtigere og mindre stressende på løbsdagen."
+      },
+      "ageGroup": {
+        "term": "AG (Aldersgruppe)",
+        "definition": "Din konkurrencekategori baseret på alder, typisk i 5-årige bånd. De fleste amatørtriatleter konkurrerer i deres AG frem for samlet."
+      },
+      "wetsuitLegal": {
+        "term": "Våddragt tilladt",
+        "definition": "Vandtemperaturen er under grænsen (typisk 24,5°C for ikke-eliter), hvor våddragter er tilladt i konkurrence."
+      },
+      "dnf": {
+        "term": "DNF / DNS / DQ",
+        "definition": "Did Not Finish / Did Not Start / Diskvalificeret. Almindelige løbsudfald ud over en gennemførelse. DNS er nogle gange det klogeste valg ved skade."
+      },
+      "drafting": {
+        "term": "Drafting (at ligge på hjul)",
+        "definition": "At svømme eller cykle tæt bag en anden atlet for at reducere modstand. Tilladt ved svømning, forbudt på cyklen i de fleste amatørløb, tilladt ved løb."
+      },
+      "specialNeeds": {
+        "term": "Særlige behov",
+        "definition": "En taske du kan hente midt i løbet (normalt midt på cykel- og løbsdelen) med ekstra ernæring, et ekstra udstyrsstykke eller hvad du har brug for til anden halvdel."
+      },
+      "ironman": {
+        "term": "Ironman-distance",
+        "definition": "3,8 km svøm · 180 km cykel · 42,2 km løb. Fuld-distance triatlon. Også afholdt som 70.3 (halv-iron): 1,9 km svøm · 90 km cykel · 21,1 km løb."
+      }
+    }
   },
   "FeedbackInterview": {
     "title": "Feedback-interview",
@@ -657,6 +767,21 @@
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 uge} other {# uger}} til {race}"
   },
+  "CoachChores": {
+    "kicker": "Venter på dig",
+    "title": "{count, plural, one {Et løb er flyttet} other {# løb er flyttet}}",
+    "moved": "{athlete}s {race} er flyttet fra {from} til {to}.",
+    "stillEnds": "Den sidste blok, \"{block}\", slutter stadig {day}.",
+    "tooFew": "For få blokke ville overleve en tilpasning ({dropped} ville ryge), så start forfra fra udkastet i stedet.",
+    "nothing": "ingen",
+    "repin": "Tilpas til {day}",
+    "restart": "Start forfra fra udkastet",
+    "repinAll": "Tilpas alle",
+    "notNow": "Ikke nu",
+    "close": "Luk",
+    "done": "Klaret — blokkene passer til løbet igen.",
+    "error": "Det virkede ikke ({reason})."
+  },
   "BlockPanel": {
     "title": "Træningsblokke",
     "toward": "frem mod {race} den {date}",
@@ -667,7 +792,7 @@
     "authorCoach": "Coach",
     "authorYou": "Dig",
     "save": "Gem",
-    "stale": "Blokkene passer ikke længere til løbsdatoen — Coachen tegner dem op igen. Intet at redigere endnu.",
+    "stale": "Blokkene passer ikke længere til løbsdatoen. Tilpas dem fra beskeden ved næste login, ellers tegner Coachen dem op igen, når ingen Head Coach er tilknyttet. Intet at redigere endnu.",
     "conflict": "Ændret af en anden — det her er det gældende sæt.",
     "error": "Det virkede ikke ({reason})."
   },
@@ -749,6 +874,10 @@
     "allowNone": "Slet ikke",
     "declareInjury": "Sådan står det til",
     "imIll": "Jeg er syg – alt af for nu",
+    "nameLabel": "Hvad og hvor",
+    "namePlaceholder": "venstre knæ",
+    "declaredByMistake": "Oprettet ved en fejl",
+    "tooOld": "En registrering ældre end et døgn bliver stående; markér den som ovre i stedet.",
     "history": "Historik",
     "glance_none_swim": "ingen svømning",
     "glance_none_bike": "ingen cykling",

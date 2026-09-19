@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IllnessRow, InjuryRow } from '@/db/schema';
-import { glance, layerForWeek, spansFrom, type HealthSpan } from './health-layer';
+import { glance, marksFor, spansFrom, weekStatus, type HealthSpan } from './health-layer';
 
 /**
  * `training-architecture/06` — the health layer the calendar draws beside the
@@ -12,6 +12,7 @@ const injury = (over: Partial<InjuryRow> = {}): InjuryRow => ({
   swim: 'full',
   bike: 'easy',
   run: 'none',
+  name: null,
   openedAt: new Date('2026-09-02T09:30:00Z'),
   closedAt: null,
   bother: 3,
@@ -37,6 +38,8 @@ describe('spansFrom — rows become date spans', () => {
         to: null,
         capacity: { swim: 'full', bike: 'easy', run: 'none' },
         bother: 3,
+        name: null,
+        openedAt: new Date('2026-09-02T09:30:00Z'),
       },
     ]);
   });
@@ -48,8 +51,17 @@ describe('spansFrom — rows become date spans', () => {
 
   it('turns an illness into a span with no capacity — it removes every discipline', () => {
     expect(spansFrom([], [illness()])).toEqual<HealthSpan[]>([
-      { kind: 'illness', id: 'ill_1', from: '2026-09-08', to: null, bother: null },
+      { kind: 'illness', id: 'ill_1', from: '2026-09-08', to: null, bother: null, name: null, openedAt: new Date('2026-09-08T07:00:00Z') },
     ]);
+  });
+
+  it('carries the injury’s name and the raw openedAt, for the drawer line and the 24 h rule (showable-version/28a)', () => {
+    const [span] = spansFrom([injury({ name: 'left knee', openedAt: new Date('2026-09-10T08:00:00Z') })], []);
+    expect(span.name).toBe('left knee');
+    expect(span.openedAt).toEqual(new Date('2026-09-10T08:00:00Z'));
+    // An illness never has a name; an injury declared without one is null too.
+    expect(spansFrom([], [illness()])[0].name).toBeNull();
+    expect(spansFrom([injury({ name: null })], [])[0].name).toBeNull();
   });
 
   it('lists injuries before illnesses, each in the order given', () => {
@@ -58,65 +70,49 @@ describe('spansFrom — rows become date spans', () => {
   });
 });
 
-describe('layerForWeek — what a week row draws', () => {
-  const TODAY = '2026-09-11';
-  const week = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13'];
-  const ill: HealthSpan = { kind: 'illness', id: 'ill_1', from: '2026-09-08', to: null, bother: null };
-  const inj: HealthSpan = {
-    kind: 'injury', id: 'inj_1', from: '2026-08-20', to: null,
-    capacity: { swim: 'full', bike: 'easy', run: 'none' }, bother: 3,
+describe('marksFor — the icons a session carries (showable-version/28a)', () => {
+  const knee: HealthSpan = {
+    kind: 'injury', id: 'i1', name: 'left knee', from: '2026-09-10', to: null,
+    openedAt: new Date('2026-09-10T08:00Z'), capacity: { swim: 'full', bike: 'easy', run: 'none' }, bother: null,
+  };
+  const flu: HealthSpan = {
+    kind: 'illness', id: 'l1', name: null, from: '2026-09-02', to: '2026-09-05',
+    openedAt: new Date('2026-09-02T08:00Z'), bother: null,
   };
 
-  it('marks the ill days from the declaration up to today, not into the future', () => {
-    const layer = layerForWeek(week, [ill], TODAY);
-    expect(layer.days.map((d) => d.ill)).toEqual([false, true, true, true, true, false, false]);
+  it('an open injury marks every session from its start through today, whatever the discipline', () => {
+    expect(marksFor('2026-09-12', [knee], '2026-09-14')).toEqual([{ kind: 'injury', open: true, label: 'left knee' }]);
+    expect(marksFor('2026-09-10', [knee], '2026-09-14')).toHaveLength(1);
+    expect(marksFor('2026-09-14', [knee], '2026-09-14')).toHaveLength(1);
+    expect(marksFor('2026-09-09', [knee], '2026-09-14')).toEqual([]);
+    // Never the future: nobody has said the athlete will still be hurt tomorrow.
+    expect(marksFor('2026-09-15', [knee], '2026-09-14')).toEqual([]);
   });
 
-  it('bounds a closed illness by its close, even when today is later', () => {
-    const closed = { ...ill, to: '2026-09-09' };
-    expect(layerForWeek(week, [closed], TODAY).days.map((d) => d.ill)).toEqual([
-      false, true, true, false, false, false, false,
-    ]);
+  it('a closed record still marks its days, muted, forever', () => {
+    expect(marksFor('2026-09-04', [flu], '2026-09-14')).toEqual([{ kind: 'illness', open: false, label: null }]);
+    expect(marksFor('2026-09-05', [flu], '2026-09-14')).toHaveLength(1);
+    expect(marksFor('2026-09-06', [flu], '2026-09-14')).toEqual([]);
   });
 
-  it('lists an open injury on the week as a standing state, whatever the days', () => {
-    const layer = layerForWeek(week, [inj], TODAY);
-    expect(layer.injuries.map((s) => s.id)).toEqual(['inj_1']);
-    expect(layer.hasIllness).toBe(false);
+  it('a day inside both carries both, injury first', () => {
+    const marks = marksFor('2026-09-11', [{ ...flu, from: '2026-09-11', to: null }, knee], '2026-09-14');
+    expect(marks.map((m) => m.kind)).toEqual(['injury', 'illness']);
   });
 
-  it('shows an injury only on weeks it was open, and an illness only on weeks it touched', () => {
-    const later = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11'];
-    const closedInj = { ...inj, to: '2026-09-30' };
-    const layer = layerForWeek(later, [closedInj, ill], '2026-10-09');
-    expect(layer.injuries).toEqual([]);
-    // Still ill: an open illness runs to today, and today is in this week.
-    expect(layer.illnesses.map((s) => s.id)).toEqual(['ill_1']);
-    expect(layer.hasIllness).toBe(true);
-    expect(layer.days.every((d) => d.ill)).toBe(false);
-    expect(layer.days.filter((d) => d.ill)).toHaveLength(5);
-  });
-
-  it('names the illness each ill day belongs to, and lists the illnesses the week touched', () => {
-    const layer = layerForWeek(week, [ill, inj], TODAY);
-    expect(layer.days[1]).toEqual({ date: '2026-09-08', ill: true, illnessId: 'ill_1' });
-    expect(layer.days[0]).toEqual({ date: '2026-09-07', ill: false, illnessId: null });
-    expect(layer.illnesses.map((s) => s.id)).toEqual(['ill_1']);
-  });
-
-  it('lists no illness on a week it never touched, even while it is open elsewhere', () => {
-    const earlier = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09'];
-    const layer = layerForWeek(earlier, [ill], TODAY);
-    expect(layer.illnesses).toEqual([]);
-    expect(layer.hasIllness).toBe(false);
-  });
-
-  it('draws nothing for a healthy week', () => {
-    const layer = layerForWeek(week, [], TODAY);
-    expect(layer.hasIllness).toBe(false);
-    expect(layer.injuries).toEqual([]);
-    expect(layer.illnesses).toEqual([]);
-    expect(layer.days.some((d) => d.ill)).toBe(false);
+  it('weekStatus: injured/ill while a record is open and touches the week; a closed record leaves the status clean and its marks in place', () => {
+    const week = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20'];
+    expect(weekStatus(week, [knee], '2026-09-16')).toEqual({ injured: true, ill: false });
+    expect(weekStatus(week, [flu], '2026-09-16')).toEqual({ injured: false, ill: false });
+    expect(weekStatus(week, [{ ...flu, from: '2026-09-15', to: null }], '2026-09-16')).toEqual({ injured: false, ill: true });
+    // Opened Monday, healed Tuesday, today Wednesday: the status is the current
+    // state, so it reads uninjured — the Monday session keeps its muted mark
+    // (review, 2026-09-18: a signal "Injured" over a healed record was wrong).
+    expect(weekStatus(week, [{ ...knee, from: '2026-09-14', to: '2026-09-15' }], '2026-09-16')).toEqual({ injured: false, ill: false });
+    expect(weekStatus(week, [], '2026-09-16')).toEqual({ injured: false, ill: false });
+    // A week before the record: nothing yet. A past week it ran through: still open, so injured.
+    expect(weekStatus(['2026-09-07', '2026-09-08'], [knee], '2026-09-16')).toEqual({ injured: false, ill: false });
+    expect(weekStatus(['2026-09-10', '2026-09-11'], [knee], '2026-09-16')).toEqual({ injured: true, ill: false });
   });
 });
 

@@ -11,7 +11,7 @@ import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
 import { getRaces } from '@/features/race/race-repository';
 import { capacityFor } from '@/features/health/health-repository';
-import { currentPhase } from './training-blocks';
+import { currentPhase, staleLastBlockOf } from './training-blocks';
 import { getLatestUnrealisticFlag } from './training-block-repository';
 import { getResolvedBlocks } from './training-block-service';
 import {
@@ -86,10 +86,14 @@ async function buildBriefingSystem(
   // replaced is not this race's.
   const raceUnrealistic = resolved.race ? await getLatestUnrealisticFlag(athleteId, resolved.race.id) : null;
   const phase = currentPhase(today, resolved.blocks);
+  // A stored set the race moved out from under is listed as the draft the
+  // athlete sees, and said to be stale, until the Head Coach re-pins it (19).
+  const staleSet = resolved.race ? staleLastBlockOf(resolved.set, resolved.race.date) : null;
   const blocks = {
     blocks: resolved.blocks.map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
     phase,
     raceUnrealistic,
+    staleSet,
   };
 
   // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.

@@ -48,7 +48,44 @@ describe('WeekDraftReview', () => {
     // adjusts the preview as much as possible, so a session can move.
     expect(html.match(/<select\b/g)).toHaveLength(6);
     expect(html.match(/<input type="number"/g)).toHaveLength(3);
-    expect(html).toContain('value="easy spin"');
+    expect(html).toMatch(/<textarea[^>]*>easy spin<\/textarea>/);
+  });
+
+  it('renders each session as a card: the four short fields marked on line one, the note a full-width textarea below (training-architecture/31)', () => {
+    // Mads, 2026-09-18: "way too much information in one go; the note could
+    // be wider". One card per session, keyed as the rows were; every short
+    // field keeps its `data-field` marker so a test can find it.
+    const cards = html.match(/<li\b[^>]*>[\s\S]*?<\/li>/g) ?? [];
+    expect(cards).toHaveLength(3);
+    for (const card of cards) {
+      expect(card.match(/data-field="date"/g)).toHaveLength(1);
+      expect(card.match(/data-field="type"/g)).toHaveLength(1);
+      expect(card.match(/data-field="durationMinutes"/g)).toHaveLength(1);
+      expect(card.match(/data-field="zone"/g)).toHaveLength(1);
+      const note = card.match(/<textarea [^>]*>/g) ?? [];
+      expect(note).toHaveLength(1);
+      expect(note[0]).toContain('data-field="note"');
+      expect(note[0]).toMatch(/class="[^"]*w-full/);
+      expect(card.match(/data-action="remove"/g)).toHaveLength(1);
+      // The note comes after the four short fields, on its own line.
+      expect(card.indexOf('data-field="zone"')).toBeLessThan(card.indexOf('data-field="note"'));
+    }
+    // The textarea's value is the session's note, or empty when there is none.
+    expect(cards[0]).toMatch(/<textarea[^>]*>easy spin<\/textarea>/);
+    expect(cards[1]).toMatch(/<textarea[^>]*><\/textarea>/);
+    expect(cards[2]).toMatch(/<textarea[^>]*>long ride<\/textarea>/);
+    // No note is a single-line input any more.
+    expect(html).not.toMatch(/<input[^>]*data-field="note"/);
+  });
+
+  it('grows the note with its text: rows follow the line count, with `field-sizing: content` where the browser has it', () => {
+    const twoLines = renderToStaticMarkup(
+      <WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions: [{ ...DRAFT.sessions[0], note: 'easy spin\nkeep it flat' }] }} />,
+    );
+    expect(twoLines).toMatch(/<textarea[^>]*rows="2"[^>]*>easy spin\nkeep it flat<\/textarea>/);
+    // An empty note still shows one line to type into.
+    expect(html.match(/<textarea[^>]*rows="1"/g)).toHaveLength(3);
+    expect(html).toMatch(/<textarea[^>]*class="[^"]*field-sizing-content/);
   });
 
   it('offers a session exactly the seven days of the draft’s week to move to, the stored day selected', () => {

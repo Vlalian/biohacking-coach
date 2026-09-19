@@ -326,9 +326,13 @@
     "bounceNotYours": "This is the athlete's own session — it stays where they put it.",
     "bounceError": "That didn't work. Try again.",
     "bounceParked": "This session is held by a rest day. Move the rest block first.",
+    "statusHealthy": "Healthy",
+    "statusIll": "Ill",
+    "statusUninjured": "Uninjured",
+    "statusInjured": "Injured",
+    "markInjury": "Injury",
+    "markIll": "Ill",
     "healthButton": "How's your body?",
-    "healthIll": "Ill",
-    "healthInjury": "Injury",
     "glance_none_swim": "no swim",
     "glance_none_bike": "no bike",
     "glance_none_run": "no run",
@@ -469,6 +473,7 @@
     "qConstraintsSub": "Optional — select all that apply",
     "weeklyDay": "Weekly planning day",
     "weeklyDaySub": "When do you typically review your week?",
+    "back": "Back",
     "continue": "Continue →",
     "finish": "Complete setup →",
     "startTraining": "Start training →",
@@ -624,12 +629,117 @@
     "blockRenamed": "{coach} renamed your \"{from}\" block to \"{to}\"",
     "blockRebounded": "{coach} moved the end of your \"{name}\" block to {day}",
     "blockRenamedAndRebounded": "{coach} renamed your \"{from}\" block to \"{to}\" and moved its end to {day}",
-    "blockEditedNoDetail": "{coach} changed one of your training blocks"
+    "blockEditedNoDetail": "{coach} changed one of your training blocks",
+    "blocksRepinned": "{coach} re-fitted your training blocks to the new date of {race}",
+    "blocksRepinnedNoDetail": "{coach} re-fitted your training blocks to the new race date",
+    "blocksRefitted": "The blocks your Head Coach set no longer fit the new race date, so I've re-fitted your training toward {race}: {blocks}",
+    "blocksRefittedNoDetail": "The blocks your Head Coach set no longer fit the new race date, so I've re-fitted your training toward your race"
   },
   "Privacy": {
     "dataRightsTitle": "Your data",
     "dataRightsBody": "You can download a copy of everything this app holds about you, or delete your account and erase all of it. Both live in Settings.",
     "dataRightsLink": "Go to Settings"
+  },
+  "Glossary": {
+    "title": "Glossary",
+    "subtitle": "The training language in your plan and in your Coach’s messages",
+    "trainingTitle": "Training Concepts",
+    "sessionTitle": "Session Types",
+    "raceTitle": "Race Terms",
+    "training": {
+      "zone2": {
+        "term": "Zone 2",
+        "definition": "Low-intensity aerobic effort where you can hold a conversation. The foundation of endurance training — develops fat oxidation and mitochondrial density over time."
+      },
+      "vo2max": {
+        "term": "VO2max",
+        "definition": "The maximum rate at which your body can consume oxygen during exercise. A key predictor of endurance performance. Improved by high-intensity interval work."
+      },
+      "lactateThreshold": {
+        "term": "Lactate threshold",
+        "definition": "The intensity at which lactic acid accumulates in the blood faster than it can be cleared. Training at and around this zone raises the ceiling of sustainable effort."
+      },
+      "ftp": {
+        "term": "FTP (Functional Threshold Power)",
+        "definition": "The highest average power you can sustain for approximately one hour on the bike. Used to set training zones for cycling."
+      },
+      "hrv": {
+        "term": "HRV (Heart Rate Variability)",
+        "definition": "The variation in time between heartbeats. A higher HRV generally indicates better recovery. Useful for deciding when to push and when to back off."
+      },
+      "tss": {
+        "term": "TSS (Training Stress Score)",
+        "definition": "A single number representing the training load of a session, combining intensity and duration. Used to track cumulative fatigue and fitness over time."
+      },
+      "aerobicBase": {
+        "term": "Aerobic base",
+        "definition": "The accumulated low-intensity fitness that underlies all other training. A strong base allows higher intensity work to land on a stable foundation."
+      },
+      "periodisation": {
+        "term": "Periodisation",
+        "definition": "Structuring training into phases (base, build, peak, taper) so that stress and recovery are deliberately alternated to produce peak performance at the right time."
+      }
+    },
+    "session": {
+      "brick": {
+        "term": "Brick session",
+        "definition": "A workout combining two disciplines back-to-back — most commonly bike followed immediately by run. Trains your legs to adapt to the transition between disciplines."
+      },
+      "interval": {
+        "term": "Interval",
+        "definition": "Repeated hard efforts separated by recovery periods. Used to accumulate time at high intensity without excessive fatigue."
+      },
+      "tempo": {
+        "term": "Tempo run / ride",
+        "definition": "A sustained effort at or near lactate threshold. Comfortably hard — you can speak in short sentences, not full paragraphs."
+      },
+      "lsd": {
+        "term": "Long slow distance (LSD)",
+        "definition": "A long session at Zone 2 intensity. Builds aerobic base, fat adaptation, and mental resilience without accumulating excessive fatigue."
+      },
+      "fartlek": {
+        "term": "Fartlek",
+        "definition": "Unstructured speed play within an otherwise easy session. Short bursts of effort at your own discretion — useful for breaking monotony while adding stimulus."
+      },
+      "recovery": {
+        "term": "Recovery session",
+        "definition": "A very easy, short effort designed to promote blood flow and aid recovery without adding meaningful training stress."
+      },
+      "openWater": {
+        "term": "Open-water swim",
+        "definition": "A swim in natural water (lake, sea, river) as opposed to a pool. Involves sighting, drafting, and wetsuit adaptation — all race-specific skills."
+      }
+    },
+    "race": {
+      "transitions": {
+        "term": "T1 / T2",
+        "definition": "Transition zones. T1 is swim-to-bike; T2 is bike-to-run. Practice makes transitions faster and less stressful on race day."
+      },
+      "ageGroup": {
+        "term": "AG (Age group)",
+        "definition": "Your competitive category based on age, typically in 5-year bands. Most amateur triathletes compete in their AG rather than outright."
+      },
+      "wetsuitLegal": {
+        "term": "Wetsuit legal",
+        "definition": "Water temperature is below the cutoff (typically 24.5°C / 76°F for non-elites) where wetsuits are permitted in competition."
+      },
+      "dnf": {
+        "term": "DNF / DNS / DQ",
+        "definition": "Did Not Finish / Did Not Start / Disqualified. Common race outcomes beyond a finish. A DNS is sometimes the smartest choice when injured."
+      },
+      "drafting": {
+        "term": "Drafting",
+        "definition": "Swimming or cycling close behind another athlete to reduce drag. Legal in swim, banned on the bike in most amateur races, legal on the run."
+      },
+      "specialNeeds": {
+        "term": "Special needs",
+        "definition": "A bag you can collect mid-race (usually mid-bike and mid-run) containing extra nutrition, a spare kit item, or anything you need for the second half."
+      },
+      "ironman": {
+        "term": "Ironman distance",
+        "definition": "3.8 km swim · 180 km bike · 42.2 km run. The full-distance triathlon. Also contested as 70.3 (half-iron): 1.9 km swim · 90 km bike · 21.1 km run."
+      }
+    }
   },
   "FeedbackInterview": {
     "title": "Feedback Interview",
@@ -657,6 +767,21 @@
     "weekOf": "week {week} of {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 week} other {# weeks}} to {race}"
   },
+  "CoachChores": {
+    "kicker": "Waiting for you",
+    "title": "{count, plural, one {A race moved} other {# races moved}}",
+    "moved": "{athlete}'s {race} moved from {from} to {to}.",
+    "stillEnds": "The last block, \"{block}\", still ends {day}.",
+    "tooFew": "Too few blocks would survive a re-pin ({dropped} would go), so start over from the draft instead.",
+    "nothing": "nothing",
+    "repin": "Re-pin to {day}",
+    "restart": "Start over from the draft",
+    "repinAll": "Re-pin all",
+    "notNow": "Not now",
+    "close": "Close",
+    "done": "Done — the blocks fit the race again.",
+    "error": "That didn't work ({reason})."
+  },
   "BlockPanel": {
     "title": "Training Blocks",
     "toward": "toward {race} on {date}",
@@ -667,7 +792,7 @@
     "authorCoach": "Coach",
     "authorYou": "You",
     "save": "Save",
-    "stale": "These blocks no longer match the race date — the Coach will redraw them. Nothing to edit here yet.",
+    "stale": "These blocks no longer match the race date. Re-pin them from the notice on your next login, or the Coach redraws them once no Head Coach is linked. Nothing to edit here yet.",
     "conflict": "Changed by someone else — this is the current set.",
     "error": "That didn't work ({reason})."
   },
@@ -749,6 +874,10 @@
     "allowNone": "Not at all",
     "declareInjury": "That's where I'm at",
     "imIll": "I'm ill — everything off for now",
+    "nameLabel": "What and where",
+    "namePlaceholder": "left knee",
+    "declaredByMistake": "Declared by mistake",
+    "tooOld": "A record older than a day stays; mark it healed instead.",
     "history": "History",
     "glance_none_swim": "no swim",
     "glance_none_bike": "no bike",
