@@ -821,7 +821,7 @@ function WeekRow({
                     !canOpenSession ? (
                       <span
                         key={s.id}
-                        title={s.title ?? s.type}
+                        title={markedLabel(s.title ?? s.type, marks, t)}
                         role="img"
                         aria-label={markedLabel(`${s.type} · ${s.status}`, marks, t)}
                         className="-m-1.5 inline-flex items-center justify-center gap-0.5 p-1.5"
@@ -837,7 +837,7 @@ function WeekRow({
                         key={s.id}
                         type="button"
                         onClick={() => onOpenSession(s)}
-                        title={s.title ?? s.type}
+                        title={markedLabel(s.title ?? s.type, marks, t)}
                         aria-label={markedLabel(`${s.type} · ${s.status}`, marks, t)}
                         className="-m-1.5 inline-flex cursor-pointer items-center justify-center gap-0.5 p-1.5"
                       >
@@ -1054,10 +1054,16 @@ function SessionChip({
   // The marks are icons with no text, so the chip names them for a screen
   // reader — the label is only set when there is something to say, leaving an
   // unmarked chip's markup exactly what it was.
-  const markLabel = marks.length > 0 ? markedLabel(session.title ?? session.type, marks, t) : undefined;
+  // An explicit label replaces the children-derived name, so it has to carry
+  // the refusal too or a marked frozen chip stops saying why it will not move
+  // (CodeRabbit, PR #86).
+  const markLabel =
+    marks.length > 0
+      ? [markedLabel(session.title ?? session.type, marks, t), refusalText].filter(Boolean).join(' · ')
+      : undefined;
   // The hover tooltip names the marks as well as any refusal (the ruling asked
   // for "label and tooltip"); unset when there is nothing to say.
-  const title = [refusalText, markLabel].filter(Boolean).join(' · ') || undefined;
+  const title = markLabel ?? refusalText;
 
   if (!onOpen) {
     return (

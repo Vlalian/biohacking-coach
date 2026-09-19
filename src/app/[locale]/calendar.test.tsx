@@ -436,10 +436,18 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(render({ sessions: [session({ date: '2026-08-17' })], health: [illness] })).not.toContain('data-mark=');
   });
 
-  it('marks the collapsed week’s dots too', () => {
+  it('marks the collapsed week’s dots too, tooltip included', () => {
     // Session in the week of the 10th, collapsed (today is in the week of the 17th).
     const html = render({ sessions: [session({ date: '2026-08-12' })], health: [injury] });
     expect(html).toMatch(/data-mark="injury"/);
+    // The dot's title names the mark as the expanded chip's does (CodeRabbit, PR #86).
+    expect(html).toContain('title="Long ride · markInjury: left knee"');
+  });
+
+  it('a marked chip that cannot be lifted still announces why (CodeRabbit, PR #86)', () => {
+    const html = render({ sessions: [session({ date: '2026-08-19', parked: true })], health: [injury] });
+    const chip = html.match(/<button[^>]*Long ride · markInjury[^>]*>/)?.[0] ?? '';
+    expect(chip).toMatch(/aria-label="[^"]*bounceParked[^"]*"/);
   });
 
   it('shows the two statuses on every week — healthy/uninjured on a clean week — and the band and chip are gone', () => {

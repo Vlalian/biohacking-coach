@@ -93,8 +93,10 @@ export function HealthDrawer({
   function run(action: () => Promise<{ ok: boolean; reason?: string }>) {
     setError(null);
     startTransition(async () => {
-      const result = await action();
-      if (!result.ok) setError(result.reason === 'too-old' ? 'tooOld' : 'error');
+      // A rejected action (network, server) is an error like a refused one:
+      // without the catch the drawer shows nothing (CodeRabbit, PR #86).
+      const result = await action().catch(() => ({ ok: false as const }));
+      if (!result.ok) setError('reason' in result && result.reason === 'too-old' ? 'tooOld' : 'error');
       else router.refresh();
     });
   }

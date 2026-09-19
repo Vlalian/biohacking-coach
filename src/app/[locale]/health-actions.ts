@@ -53,12 +53,14 @@ export async function declareInjuryAction(
   if (!isCapacity(capacity)) return { ok: false, reason: 'invalid' };
   const rating = parseBother(bother);
   if (rating === undefined) return { ok: false, reason: 'invalid' };
+  const injuryName = parseName(name);
+  if (injuryName === undefined) return { ok: false, reason: 'invalid' };
 
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   // ← ticket 14's consent gate goes here, before the write.
-  await declareInjury(athleteId, capacity, rating, parseName(name));
+  await declareInjury(athleteId, capacity, rating, injuryName);
   revalidatePath('/', 'layout');
   return { ok: true };
 }
@@ -175,9 +177,17 @@ function parseBother(value: unknown): Bother | undefined {
   return inRange ? (value as number) : undefined;
 }
 
-/** A trimmed name, or null for none — blank is none, not an empty string. */
-function parseName(value: unknown): string | null {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
+/** The form's limit, enforced here too: the action is callable without the form. */
+const NAME_MAX = 60;
+
+/**
+ * A trimmed name, null for none (absent or blank), `undefined` for invalid —
+ * not a string, or longer than the form allows (CodeRabbit, PR #86).
+ */
+function parseName(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || value.length > NAME_MAX) return undefined;
+  const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
 }
 

@@ -181,6 +181,13 @@ describe('"reported by mistake" (showable-version/28a)', () => {
     expect(await declareInjuryAction(CANNOT_RUN, null, '   ')).toEqual({ ok: true });
     expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null, null);
   });
+
+  it('refuses a name longer than 60 characters, or one that is not a string — the form limit is not the boundary (CodeRabbit, PR #86)', async () => {
+    expect(await declareInjuryAction(CANNOT_RUN, null, 'x'.repeat(61))).toEqual({ ok: false, reason: 'invalid' });
+    expect(await declareInjuryAction(CANNOT_RUN, null, 42 as unknown as string)).toEqual({ ok: false, reason: 'invalid' });
+    expect(declareInjury).not.toHaveBeenCalled();
+    expect(await declareInjuryAction(CANNOT_RUN, null, 'x'.repeat(60))).toEqual({ ok: true });
+  });
 });
 
 describe('every action refuses a caller it cannot identify', () => {
