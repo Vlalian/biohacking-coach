@@ -25,6 +25,13 @@ export function answerText(payload: StepAnswer): string {
   switch (payload.step) {
     case 'language':
       return payload.language === 'da' ? 'Dansk' : 'English';
+    case 'name':
+      // Never the name. The transcript lands in `messages`, a training-side
+      // table keyed by athlete id, and a name may not (ADR 0006). The line
+      // records that the question was answered — chosen, or left blank.
+      return typeof payload.preferredName === 'string' && payload.preferredName.trim() !== ''
+        ? 'Chosen'
+        : '—';
     case 'experience':
       return payload.experienceLevel;
     case 'distance':

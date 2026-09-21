@@ -150,6 +150,15 @@ export const sessions = pgTable(
     origin: text('origin').notNull(),
     status: text('status').notNull().default('planned'),
     parked: boolean('parked').notNull().default(false),
+    // Why a parked session is parked. An Unavailable *Date* parks the day's
+    // planned training and names the day here; the session-level Unavailable
+    // toggle parks too but leaves this null. Clearing a date restores only the
+    // rows that name it, so the athlete's own per-session decision survives the
+    // day being marked and cleared around it (code-health issue 12). Null on a
+    // parked row means session-parked, which is also what every row parked
+    // before this column existed reads as — the conservative reading: nothing
+    // un-parks that the athlete did not ask to.
+    parkedByDate: date('parked_by_date', { mode: 'string' }),
     isTraining: boolean('is_training').notNull().default(true),
     duration: integer('duration'),
     zone: text('zone'),
@@ -436,9 +445,10 @@ export type NewCoachingLinkRow = typeof coachingLink.$inferInsert;
  * with them, which is right: a briefing is that coach's account of their own
  * coaching.
  *
- * `weeklySessionNumber` is the 1-based ordinal that selects the Weekly Session's
- * conversational arc (Session 1 welcomes, Session 4+ reviews); null for kinds
- * that have no such arc.
+ * `weeklySessionNumber` was the 1-based ordinal that selected the Weekly
+ * Session's conversational arc. The behaviour is retired
+ * (`training-architecture/21`); the column stays for old `weekly_session`
+ * rows and is null on everything written since.
  *
  * Retention and deletion of conversations are a GDPR-track question, not schema —
  * deliberately not decided here.
@@ -597,7 +607,9 @@ export type NewAthleteFeedbackRow = typeof athleteFeedback.$inferInsert;
  * Distinct from a Fixed Constraint (a recurring weekday, stored in the Athlete
  * Profile) — this is a single day. The row is passed to the next Weekly Session
  * so the Coach plans around it; the sessions that fell on the day are parked in
- * place (`sessions.status = 'unavailable'`, `parked = true`) rather than moved.
+ * place (`sessions.status = 'unavailable'`, `parked = true`,
+ * `parked_by_date = <the day>`) rather than moved. Clearing the day restores
+ * only the rows that name it.
  *
  * Cascade-deletes with its athlete, like every other training table (ADR 0006 —
  * training data keys off the opaque athlete id and carries no identity).
@@ -802,6 +814,15 @@ export const injuries = pgTable(
     swim: text('swim').notNull().default('full'),
     bike: text('bike').notNull().default('full'),
     run: text('run').notNull().default('full'),
+    /**
+     * A short name for what and where — "left knee" — so the drawer and the
+     * calendar can tell two injuries apart (Mads, 2026-09-18, showable-
+     * version/28a). The injury's name, never the athlete's: ADR 0006 keeps
+     * every training table free of who. Optional, and **for human eyes only** like the thread and
+     * the Bother Rating: a body part is not a capacity, and the planner reads
+     * capacity. Nothing on a prompt path reads it.
+     */
+    name: text('name'),
     openedAt: timestamp('opened_at').notNull().defaultNow(),
     closedAt: timestamp('closed_at'),
     /**

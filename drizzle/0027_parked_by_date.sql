@@ -1,0 +1,16 @@
+-- Why a parked session is parked (code-health issue 12).
+--
+-- An Unavailable Date parks the day's planned training and names the day
+-- here; the session-level Unavailable toggle parks too but writes null.
+-- Clearing a date now restores only the rows that name it, so the athlete's
+-- own per-session decision survives the day being marked and cleared.
+--
+-- Rows parked before this column existed stay null and are therefore treated
+-- as session-parked: clearing their day no longer restores them. That is the
+-- conservative reading, chosen over backfilling every parked row as
+-- date-parked. The migration cannot know which flow parked a given row, and
+-- the two errors are not symmetric — a session left parked is visible on the
+-- calendar and one tap from planned, while a session silently un-parked is
+-- the defect this column exists to end. No existing row is un-parked by this
+-- migration; nothing here changes data.
+ALTER TABLE "sessions" ADD COLUMN "parked_by_date" date;

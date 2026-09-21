@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import type { ProposedSession } from './weekly-session';
@@ -112,4 +112,39 @@ export async function getLatestPlanWrittenAt(
     .where(and(eq(events.athleteId, athleteId), eq(events.type, PLAN_EVENT.written)))
     .orderBy(asc(events.createdAt));
   return latestPlanWrittenAt(rows, weekStart);
+}
+
+/** What the athlete decided about a conversation's proposal, by name. */
+export type PlanDecision = 'written' | 'declined';
+
+/**
+ * The newest decision on this conversation's proposals after `since`, or null
+ * when none has been made (`training-architecture/24`).
+ *
+ * A week handed to a conversation is decided there, and the decision rows
+ * carry a conversation, never a week — so the draft history asks this to
+ * learn whether a discussed week was written, declined, or is still on the
+ * table. Bounded to after the handoff: an earlier decision in the same chat
+ * belongs to an earlier proposal.
+ */
+export async function latestPlanDecision(
+  athleteId: string,
+  conversationId: string,
+  since: Date,
+): Promise<PlanDecision | null> {
+  const [row] = await getDb()
+    .select({ type: events.type })
+    .from(events)
+    .where(
+      and(
+        eq(events.athleteId, athleteId),
+        inArray(events.type, [PLAN_EVENT.written, PLAN_EVENT.declined]),
+        sql`${events.payload} ->> 'conversationId' = ${conversationId}`,
+        gt(events.createdAt, since),
+      ),
+    )
+    .orderBy(desc(events.createdAt))
+    .limit(1);
+  if (!row) return null;
+  return row.type === PLAN_EVENT.written ? 'written' : 'declined';
 }

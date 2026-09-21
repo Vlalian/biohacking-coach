@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ADAPTIVE_FIELDS_BY_LEVEL,
   ONBOARDING_OPTIONS,
   ONBOARDING_STEPS,
   RACE_DISTANCES,
@@ -8,7 +9,10 @@ import {
   buildCommStyle,
   coachGreeting,
   completeProfile,
+  cursorAfter,
   nextStep,
+  previousStep,
+  stepAfter,
   toCoachOnboarding,
 } from './onboarding-flow';
 import en from '@/messages/en.json';
@@ -65,8 +69,12 @@ describe('the questionnaire shape', () => {
     // The order is the contract the progress rail and the resume point both
     // read. Distance sits before the race because it is asked of everyone,
     // including the athlete who has no race to describe.
+    // The name step sits right after the language, so it is asked in the
+    // athlete's language and is the first thing asked about the relationship
+    // rather than about training (preferred-name/02, ruled 2026-08-19).
     expect(ONBOARDING_STEPS).toEqual([
       'language',
+      'name',
       'experience',
       'distance',
       'race',
@@ -77,21 +85,29 @@ describe('the questionnaire shape', () => {
 });
 
 describe('nextStep', () => {
+  // The name step is answered by submission, like the optional steps: leaving
+  // it blank is an answer, so no answer key can mark it done.
+  const named = { name: true };
+
   it('walks the steps in order as answers arrive', () => {
     expect(nextStep({})).toBe('language');
-    expect(nextStep({ language: 'da' })).toBe('experience');
-    expect(nextStep({ language: 'da', experienceLevel: 'beginner' })).toBe('distance');
+    expect(nextStep({ language: 'da' })).toBe('name');
+    expect(nextStep({ language: 'da' }, named)).toBe('experience');
+    expect(nextStep({ language: 'da', experienceLevel: 'beginner' }, named)).toBe('distance');
     expect(
-      nextStep({ language: 'da', experienceLevel: 'beginner', raceDistance: 'Full' }),
+      nextStep({ language: 'da', experienceLevel: 'beginner', raceDistance: 'Full' }, named),
     ).toBe('race');
     expect(
-      nextStep({
-        language: 'da',
-        experienceLevel: 'beginner',
-        raceDistance: 'Full',
-        raceTarget: 'IM CPH',
-        raceDate: '2027-08-15',
-      }),
+      nextStep(
+        {
+          language: 'da',
+          experienceLevel: 'beginner',
+          raceDistance: 'Full',
+          raceTarget: 'IM CPH',
+          raceDate: '2027-08-15',
+        },
+        named,
+      ),
     ).toBe('adaptive');
   });
 
@@ -103,17 +119,90 @@ describe('nextStep', () => {
       raceTarget: 'IM CPH',
       raceDate: '2027-08-15',
     };
-    expect(nextStep(answers, { adaptive: true })).toBe('constraints');
-    expect(nextStep(answers, { adaptive: true, constraints: true })).toBe('done');
+    expect(nextStep(answers, { name: true, adaptive: true })).toBe('constraints');
+    expect(nextStep(answers, { name: true, adaptive: true, constraints: true })).toBe('done');
   });
 
   it('is the resume point: an interrupted flow restarts at the first unanswered step', () => {
-    // The athlete answered language + experience, refreshed mid-distance-question.
-    expect(nextStep({ language: 'en', experienceLevel: 'veteran' })).toBe('distance');
+    // The athlete answered language + name + experience, refreshed mid-distance-question.
+    expect(nextStep({ language: 'en', experienceLevel: 'veteran' }, { name: true })).toBe('distance');
+  });
+});
+
+// ── the name step — preferred-name/02 ────────────────────────────────────────
+
+describe('applyAnswer — the Preferred Name step', () => {
+  it('marks the step submitted and stores NOTHING in the answers — they land in a training table', () => {
+    const before = { language: 'en' };
+    const result = applyAnswer(before, {}, { step: 'name', preferredName: 'Mads' });
+    expect(result?.submitted).toEqual({ name: true });
+    expect(result?.answers).toEqual(before);
+    expect(JSON.stringify(result)).not.toContain('Mads');
+  });
+
+  it('accepts a blank or absent name as an answer — the Coach stays nameless', () => {
+    expect(applyAnswer({}, {}, { step: 'name' })?.submitted).toEqual({ name: true });
+    expect(applyAnswer({}, {}, { step: 'name', preferredName: '   ' })?.submitted).toEqual({ name: true });
+  });
+
+  it('refuses what the write boundary refuses: a non-string, an oversized or an identifier-shaped value', () => {
+    expect(applyAnswer({}, {}, { step: 'name', preferredName: 42 as unknown as string })).toBeNull();
+    expect(applyAnswer({}, {}, { step: 'name', preferredName: 'a'.repeat(41) })).toBeNull();
+    expect(applyAnswer({}, {}, { step: 'name', preferredName: 'mads@example.com' })).toBeNull();
+  });
+
+  it('never derives anything from the account name — the flow does not even see it', () => {
+    // Nothing in the flow takes a `user.name`; this pins that the step's only
+    // input is what the athlete typed. The one-tap prefill an earlier draft
+    // proposed was reversed by Mads on 2026-08-21.
+    const result = applyAnswer({}, {}, { step: 'name' });
+    expect(result?.answers).toEqual({});
   });
 });
 
 // ── applyAnswer — the validation gate ─────────────────────────────────────────
+
+describe('previousStep / stepAfter — the way back, and the walk forward again (showable-version/32)', () => {
+  it('previousStep walks the sequence back and stops at the first', () => {
+    expect(previousStep('language')).toBeNull();
+    // The name step sits between language and experience (preferred-name/02).
+    expect(previousStep('name')).toBe('language');
+    expect(previousStep('experience')).toBe('name');
+    expect(previousStep('distance')).toBe('experience');
+    expect(previousStep('race')).toBe('distance');
+    expect(previousStep('adaptive')).toBe('race');
+    expect(previousStep('constraints')).toBe('adaptive');
+  });
+
+  it('stepAfter walks forward in sequence regardless of what is answered, and ends at done', () => {
+    expect(stepAfter('language')).toBe('name');
+    expect(stepAfter('name')).toBe('experience');
+    expect(stepAfter('experience')).toBe('distance');
+    expect(stepAfter('distance')).toBe('race');
+    expect(stepAfter('race')).toBe('adaptive');
+    expect(stepAfter('adaptive')).toBe('constraints');
+    expect(stepAfter('constraints')).toBe('done');
+  });
+
+  it('names the adaptive fields each level asks, so a walk after a level change clears the other level’s answers (review, 2026-09-18)', () => {
+    // A beginner answered `motivation`, went Back, became intermediate: the
+    // intermediate panel never shows `motivation`, so it must not send it —
+    // `applyAnswer('adaptive')` stores every field it is sent.
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.beginner).toEqual(['availableHours', 'sportBackground', 'motivation']);
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.intermediate).toEqual(['availableHours', 'bestTime', 'weakestDiscipline', 'hasHumanCoach']);
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.veteran).toEqual(['availableHours', 'targetTime', 'trackedMetrics']);
+  });
+
+  it('cursorAfter: after re-answering an early step the walk continues to the next step in sequence, whatever the server says is first unanswered; done is done', () => {
+    // The server answers with the first *unanswered* step, and after Back
+    // that is the step the athlete had already reached — not the one after
+    // the one they just re-answered. The client owns the cursor.
+    expect(cursorAfter('experience', 'constraints')).toBe('distance');
+    expect(cursorAfter('race', 'adaptive')).toBe('adaptive');
+    expect(cursorAfter('constraints', 'done')).toBe('done');
+    expect(cursorAfter('language', 'done')).toBe('done');
+  });
+});
 
 describe('applyAnswer', () => {
   it('refuses values outside the closed option sets', () => {
@@ -270,9 +359,9 @@ describe('Race Distance is asked of every athlete, from a closed set', () => {
     // Deliberately not a property of the race: an athlete building toward an
     // Ironman with nothing booked still needs an Ironman-shaped week — the
     // winter-base athlete of *Distancens Arkitektur* §14.
-    expect(nextStep({ language: 'en', experienceLevel: 'veteran' })).toBe('distance');
+    expect(nextStep({ language: 'en', experienceLevel: 'veteran' }, { name: true })).toBe('distance');
     expect(
-      nextStep({ language: 'en', experienceLevel: 'veteran', raceDistance: 'Full' }),
+      nextStep({ language: 'en', experienceLevel: 'veteran', raceDistance: 'Full' }, { name: true }),
     ).toBe('race');
   });
 });
@@ -299,16 +388,19 @@ describe('a Race is optional, and saying so is an answer', () => {
     expect(after?.answers.raceDate).toBeUndefined();
 
     const unasked = {};
-    expect(nextStep({ language: 'en', experienceLevel: 'veteran', raceDistance: 'Half' }))
+    expect(nextStep({ language: 'en', experienceLevel: 'veteran', raceDistance: 'Half' }, { name: true }))
       .toBe('race');
     expect(
-      nextStep({
-        language: 'en',
-        experienceLevel: 'veteran',
-        raceDistance: 'Half',
-        ...after?.answers,
-        ...unasked,
-      }),
+      nextStep(
+        {
+          language: 'en',
+          experienceLevel: 'veteran',
+          raceDistance: 'Half',
+          ...after?.answers,
+          ...unasked,
+        },
+        { name: true },
+      ),
     ).toBe('adaptive');
   });
 
@@ -325,10 +417,9 @@ describe('a Race is optional, and saying so is an answer', () => {
       raceTarget: 'Ironman Copenhagen',
     } as const;
 
-    expect(nextStep(nameOnly, { adaptive: true, constraints: true })).toBe('race');
-    expect(
-      nextStep({ ...nameOnly, raceDate: '2027-08-15' }, { adaptive: true, constraints: true }),
-    ).toBe('done');
+    const rest = { name: true, adaptive: true, constraints: true };
+    expect(nextStep(nameOnly, rest)).toBe('race');
+    expect(nextStep({ ...nameOnly, raceDate: '2027-08-15' }, rest)).toBe('done');
   });
 
   it('refuses a race without a date, and a date that is not one', () => {

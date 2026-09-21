@@ -1,5 +1,5 @@
 import type { Citation } from '@/lib/citation';
-import { and, asc, count, desc, eq, gte, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
 import { SEQ_RETRIES, isSeqConflict } from './seq-conflict';
@@ -26,82 +26,23 @@ import {
  * 0006). No shape of these calls crosses athletes.
  */
 
+/**
+ * `weekly_session_number` is never written any more: the Weekly Session is
+ * retired (`training-architecture/21`) and the column stays only for the rows
+ * already written. Nothing here reads it either.
+ */
 export async function createConversation(input: {
   athleteId: string;
   kind: ConversationKind;
-  weeklySessionNumber?: number | null;
 }): Promise<Conversation> {
   const [row] = await getDb()
     .insert(conversations)
     .values({
       athleteId: input.athleteId,
       kind: input.kind,
-      weeklySessionNumber: input.weeklySessionNumber ?? null,
     })
     .returning();
   return toConversation(row);
-}
-
-/**
- * Deletes a conversation this athlete owns. Scoped to the owner in the WHERE, so
- * a conversation that is not theirs is never touched (ADR 0006).
- *
- * Narrow on purpose: this exists to undo a conversation that was created and
- * then could not be given its first message. A Weekly Session row counts toward
- * {@link countWeeklySessions} — and so toward the Presence Arc — from the moment
- * it exists, whether or not it holds anything, so an unusable row must not
- * survive. Not a general "delete my history" path; erasure is its own concern.
- */
-export async function deleteOwnedConversation(
-  athleteId: string,
-  conversationId: string,
-): Promise<void> {
-  await getDb()
-    .delete(conversations)
-    .where(and(eq(conversations.id, conversationId), eq(conversations.athleteId, athleteId)));
-}
-
-/**
- * How many Weekly Sessions this athlete has had. The next one is this + 1, which
- * selects the conversational arc (Session 1 welcomes, Session 4+ reviews).
- */
-export async function countWeeklySessions(athleteId: string): Promise<number> {
-  const [row] = await getDb()
-    .select({ n: count() })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.athleteId, athleteId),
-        eq(conversations.kind, 'weekly_session'),
-      ),
-    );
-  return row?.n ?? 0;
-}
-
-/**
- * Whether the athlete has already held a Weekly Session in the week containing
- * `weekStart` (a 'YYYY-MM-DD' Monday).
- *
- * This is the Weekly Session offer's "already done" test. It asks about the
- * *conversation*, not about whether a plan exists: an auto-drafted week must
- * still be offered for discussion, so a plan existing is not the same as the
- * athlete having held the session (coach-overlay issue 04, decision 4).
- */
-export async function hasHeldWeeklySessionInWeek(
-  athleteId: string,
-  weekStart: string,
-): Promise<boolean> {
-  const [row] = await getDb()
-    .select({ n: count() })
-    .from(conversations)
-    .where(
-      and(
-        eq(conversations.athleteId, athleteId),
-        eq(conversations.kind, 'weekly_session'),
-        gte(conversations.createdAt, new Date(`${weekStart}T00:00:00`)),
-      ),
-    );
-  return (row?.n ?? 0) > 0;
 }
 
 /**
@@ -131,9 +72,9 @@ export async function getOpenConversations(athleteId: string): Promise<Conversat
 /**
  * The athlete's most recent still-open conversation of a kind, or null.
  *
- * The Weekly Session page uses this to restore an in-progress session on refresh:
- * an open (`ended_at IS NULL`) conversation is one the athlete has not finalised,
- * so its transcript is picked back up rather than lost.
+ * Coach Chat, onboarding, the feedback interview and narration use this to pick
+ * a transcript back up: an open (`ended_at IS NULL`) conversation is one the
+ * athlete has not finalised, so it is resumed rather than lost.
  */
 export async function getLatestOpenConversation(
   athleteId: string,

@@ -1,5 +1,6 @@
 import type { EquipmentItem } from '@/features/equipment/equipment';
 import { assertNoDirectIdentifier } from '@/lib/identifiers';
+import type { PresenceStage } from './presence';
 
 /**
  * Re-exported, not redefined. The walk moved to `lib/identifiers.ts` for
@@ -194,7 +195,12 @@ export interface CheckIn {
   readiness?: Readiness;
   phase?: string;
   personaName?: string;
-  sessionCount?: number;
+  /**
+   * Where the Presence Arc stands: how much the Coach may claim to know
+   * (`presence.ts`). Decided from stored data — weeks of Session Reflections
+   * and Check-ins filed — never from sessions held.
+   */
+  presenceStage?: PresenceStage;
   commStyle?: string;
   experienceLevel?: string;
   language?: string;
@@ -266,7 +272,6 @@ export interface CheckIn {
   onboarding?: Onboarding | null;
   weeklySessionDay?: string;
   fixedConstraints?: string[];
-  weeklySessionNumber?: number;
 }
 
 

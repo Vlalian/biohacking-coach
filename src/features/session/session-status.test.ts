@@ -123,6 +123,48 @@ describe('toggleSkipSession — server authority', () => {
     expect(result).toEqual({ ok: false, reason: 'frozen' });
     expect(batch).not.toHaveBeenCalled();
   });
+
+  it("refuses another athlete's session", async () => {
+    limit.mockResolvedValue([row({ athleteId: 'someone_else' })]);
+
+    const result = await toggleSkipSession({ athleteId: OWNER, sessionId: 's1', today: TODAY });
+
+    expect(result).toEqual({ ok: false, reason: 'not-owner' });
+    expect(updateSet).not.toHaveBeenCalled();
+  });
+});
+
+// The write is conditional on the status the session was read in, and it says
+// so by reporting what it matched. These pin the conflict path and the event
+// the move log gets, which the toggles above only touch in passing.
+describe('applying a status transition', () => {
+  it('reports a conflict, and logs nothing, when the session changed under the read', async () => {
+    limit.mockResolvedValue([row({ status: 'planned' })]);
+    // The database found no row in the state the toggle read it in.
+    updateReturning.mockResolvedValue([]);
+
+    const result = await toggleSkipSession({ athleteId: OWNER, sessionId: 's1', today: TODAY });
+
+    expect(result).toEqual({ ok: false, reason: 'conflict' });
+    expect(insertValues).not.toHaveBeenCalled();
+    // The conflict is only detectable because the write asks for the matched
+    // rows back; a `returning()` with nothing selected would report nothing.
+    expect(updateReturning).toHaveBeenCalledWith({ id: expect.anything() });
+  });
+
+  it('records the event as the athlete’s own act on that session', async () => {
+    limit.mockResolvedValue([row({ status: 'planned' })]);
+
+    await toggleSkipSession({ athleteId: OWNER, sessionId: 's1', today: TODAY });
+
+    expect(insertValues).toHaveBeenCalledWith({
+      athleteId: OWNER,
+      actorType: 'athlete',
+      actorId: OWNER,
+      type: 'session_skipped',
+      payload: { sessionId: 's1' },
+    });
+  });
 });
 
 describe('toggleUnavailableSession — server authority', () => {
@@ -139,6 +181,20 @@ describe('toggleUnavailableSession — server authority', () => {
     expect(updateSet).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'unavailable', parked: true }),
     );
+  });
+
+  // The session-level toggle parks a session for the athlete's own reason, so
+  // it must never claim the day's: a row it parks carries `parkedByDate` null,
+  // which is what keeps clearing the day from restoring it (code-health issue
+  // 12). Asserted as the written value, not its absence — a toggle that merely
+  // left the column alone would inherit a date from an earlier day-park and
+  // reopen the same hole one round trip later.
+  it('parks for the athlete’s own reason: parkedByDate is written null, not the day', async () => {
+    limit.mockResolvedValue([row({ status: 'planned' })]);
+
+    await toggleUnavailableSession({ athleteId: OWNER, sessionId: 's1', today: TODAY });
+
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ parkedByDate: null }));
   });
 
   it('undoes unavailable back to planned and unparks it', async () => {
@@ -167,5 +223,18 @@ describe('toggleUnavailableSession — server authority', () => {
 
     expect(result).toEqual({ ok: false, reason: 'frozen' });
     expect(batch).not.toHaveBeenCalled();
+  });
+
+  it("refuses another athlete's session", async () => {
+    limit.mockResolvedValue([row({ athleteId: 'someone_else' })]);
+
+    const result = await toggleUnavailableSession({
+      athleteId: OWNER,
+      sessionId: 's1',
+      today: TODAY,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'not-owner' });
+    expect(updateSet).not.toHaveBeenCalled();
   });
 });

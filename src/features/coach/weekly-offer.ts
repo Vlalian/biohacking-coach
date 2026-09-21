@@ -1,6 +1,9 @@
 /**
- * Whether the Coach should offer the Weekly Session — the single sanctioned
- * proactive nudge (ADR 0007: "Offered every week, forced never").
+ * Whether the Coach should ask for a Check-in today — the single sanctioned
+ * proactive nudge (ADR 0007: "Offered every week, forced never"), repurposed
+ * when the Weekly Session was retired (amendment 2026-09-16;
+ * `training-architecture/21`): the reminder now opens the Check-in, scheduled
+ * on the Weekly Session Day before the week is drafted, never forced.
  *
  * Its own module, framework-free, because the decision is needed on *both*
  * sides: the server knows whether a session has been held this week, and only
@@ -24,35 +27,36 @@ export function effectiveWeeklySessionDay(value: string | null | undefined): str
 }
 
 /** The half of the nudge decision the server can answer. */
-export interface WeeklyOfferInput {
+export interface CheckInOfferInput {
   weeklySessionDay: string | null;
-  hasHeldWeeklySessionThisWeek: boolean;
+  /** Whether a Check-in is already filed for the week containing today. */
+  hasCheckedInThisWeek: boolean;
 }
 
 /**
  * True only on the athlete's stored Weekly Session Day, and only when they have
- * not already *held* a Weekly Session this week. "Flexible" (or unset) means no
- * preferred day, so no nudge — an athlete who declined to name a day is not
- * asking to be chased; they can still start one whenever they like.
+ * not already filed this week's Check-in. Skipping the reminder changes
+ * nothing — it is asked again on the next Weekly Session Day, and a Check-in
+ * filed late is simply the freshest signal for whatever prompt reads it next.
  *
- * The "already done" test is the conversation, not the plan. A week that has a
- * plan is not a week that has been discussed: once generation lands, an
- * auto-drafted week must still be offered, or generation would silence its own
- * offer (coach-overlay issue 04, decision 4).
+ * The "already done" test is the Check-in itself, not the plan: a drafted week
+ * is not a week the athlete has reported on, so the draft landing must not
+ * silence the reminder (the same reasoning as coach-overlay issue 04, decision
+ * 4, for the offer this replaced).
  *
  * Pure given its inputs: the caller supplies today's weekday and the answer to
- * the "already held" question, so this is decided without a clock or a query.
+ * the "already filed" question, so this is decided without a clock or a query.
  */
-export function shouldOfferWeeklySession(params: {
+export function shouldOfferCheckIn(params: {
   weeklySessionDay: string | null | undefined;
   todayWeekday: string;
-  hasHeldWeeklySessionThisWeek: boolean;
+  hasCheckedInThisWeek: boolean;
 }): boolean {
-  const { weeklySessionDay, todayWeekday, hasHeldWeeklySessionThisWeek } = params;
+  const { weeklySessionDay, todayWeekday, hasCheckedInThisWeek } = params;
   // "Flexible" is retired and an unset day reads as Sunday (CONTEXT.md,
-  // 2026-09-14): every athlete has a day, so every athlete gets the offer.
+  // 2026-09-14): every athlete has a day, so every athlete gets the reminder.
   if (effectiveWeeklySessionDay(weeklySessionDay) !== todayWeekday) return false;
-  return !hasHeldWeeklySessionThisWeek;
+  return !hasCheckedInThisWeek;
 }
 
 /**

@@ -169,6 +169,8 @@
     "themeSystem": "System",
     "languageLabel": "Athlete Language",
     "languageNote": "Applies to the app and your Coach right away. Sports terms like RPE and Zone 2 stay in English either way.",
+    "preferredNameLabel": "What the Coach calls you",
+    "preferredNameNote": "The name we send the Coach on your behalf. Leave it empty and we send none. Your account name is not sent — but anything you type yourself, in a note or a message, reaches the Coach as written.",
     "raceTargetLabel": "Race target",
     "raceTargetNote": "The race you are training for. Everything in your plan is built backwards from it.",
     "raceTargetPlaceholder": "e.g. Ironman Copenhagen, 16 August 2026",
@@ -275,7 +277,8 @@
     "subtitle": "Ask the Coach about this athlete.",
     "intro": "The Coach has read this athlete's data — open a briefing to hear its read and ask questions.",
     "start": "Open briefing",
-    "starting": "Opening…",
+    "opening": "Opening…",
+    "starting": "Reading the week… about {seconds} seconds",
     "thinking": "Coach is thinking…",
     "inputLabel": "Ask the Coach about this athlete",
     "placeholder": "How has their sleep trended?",
@@ -316,7 +319,7 @@
     "legend": "Session Type",
     "today": "Today",
     "double": "Double",
-    "bouncePastDay": "That day has already happened — sessions only move forward within the week.",
+    "bouncePastDay": "That day has already happened — a move says when a session is scheduled, and nothing is scheduled into the past. If you did it that day, log it there instead.",
     "bounceOtherWeek": "Sessions move within their own Mon–Sun week. Ask your Coach to reshape the week.",
     "bounceFrozen": "This session is already completed — the training record is immutable.",
     "bounceConflict": "Your Head Coach changed this session while it was open. Your move was not applied — refresh to see theirs.",
@@ -325,9 +328,13 @@
     "bounceNotYours": "This is the athlete's own session — it stays where they put it.",
     "bounceError": "That didn't work. Try again.",
     "bounceParked": "This session is held by a rest day. Move the rest block first.",
+    "statusHealthy": "Healthy",
+    "statusIll": "Ill",
+    "statusUninjured": "Uninjured",
+    "statusInjured": "Injured",
+    "markInjury": "Injury",
+    "markIll": "Ill",
     "healthButton": "How's your body?",
-    "healthIll": "Ill",
-    "healthInjury": "Injury",
     "glance_none_swim": "no swim",
     "glance_none_bike": "no bike",
     "glance_none_run": "no run",
@@ -435,6 +442,7 @@
     "coachLabel": "Your Coach",
     "stepOf": "Step {step} of {total}",
     "stepLanguage": "Language",
+    "stepName": "Name",
     "stepExperience": "Experience",
     "stepRace": "Race",
     "stepAdaptive": "About you",
@@ -443,6 +451,9 @@
     "nextLabel": "Next",
     "nextValue": "Your first Week Plan is on the calendar",
     "qLanguage": "Which language do you prefer?",
+    "qName": "What should the Coach call you?",
+    "qNameSub": "A first name, a nickname, anything you like — or nothing. This is the name we send the Coach on your behalf; your account name is not. What you type yourself in a message reaches the Coach as written. You can change it in Settings.",
+    "skipName": "Skip — no name",
     "qExperience": "How many Ironman-distance races have you completed?",
     "qExperienceSub": "Including 70.3 and full-distance finishes",
     "expBeginner": "This will be my first",
@@ -468,6 +479,7 @@
     "qConstraintsSub": "Optional — select all that apply",
     "weeklyDay": "Weekly planning day",
     "weeklyDaySub": "When do you typically review your week?",
+    "back": "Back",
     "continue": "Continue →",
     "finish": "Complete setup →",
     "startTraining": "Start training →",
@@ -516,10 +528,21 @@
   },
   "CoachThread": {
     "title": "Coach",
-    "planWeek": "Plan my week",
-    "offerBody": "It's your planning day. I've read how your body's been — want to look at next week together?",
-    "offerAccept": "Let's plan",
-    "offerDismiss": "Not now"
+    "offerBody": "It's your check-in day. Before I draft next week — how are you arriving at it? Takes a minute, and it's fine to skip.",
+    "offerAccept": "Check in",
+    "offerDismiss": "Not now",
+    "checkInError": "That didn't save. Try again, or skip it for this week."
+  },
+  "CheckIn": {
+    "intro": "Before the week is drafted — how are you arriving at it? Answer against your own normal, not anyone else's.",
+    "energy": "Energy",
+    "body": "Physical condition",
+    "sleep": "Sleep quality",
+    "signal": "Anything the Coach should know about this week?",
+    "signalPlaceholder": "Optional — e.g. legs heavy after Tuesday",
+    "signalHint": "Your AI Coach reads this. Keep it to how training felt — not medical detail.",
+    "submit": "Save check-in",
+    "skip": "Skip this week"
   },
   "CoachChat": {
     "coachLabel": "Coach",
@@ -544,18 +567,6 @@
     "thumbSave": "Save"
   },
   "WeeklySession": {
-    "title": "Weekly Session",
-    "backToChat": "Back to Coach",
-    "coachLabel": "Coach",
-    "youLabel": "You",
-    "headCoachLabel": "Head Coach",
-    "intro": "Your once-a-week sit-down with your Coach — review the week and plan the next.",
-    "start": "Start Weekly Session",
-    "starting": "Starting…",
-    "thinking": "Coach is thinking…",
-    "inputLabel": "Your message to Coach",
-    "placeholder": "Type your reply…",
-    "send": "Send",
     "savePlan": "Save this plan",
     "cancelPlan": "Not this week",
     "reviewPlan": "Review plan",
@@ -565,28 +576,7 @@
     "proposalPending": "{count, plural, one {Coach proposed # session} other {Coach proposed # sessions}} — save or cancel when ready.",
     "proposalStale": "This plan has rolled into a new day. Cancel it and ask your Coach for a fresh week.",
     "minutes": "{count} min",
-    "planned": "{count, plural, =0 {Plan saved — a rest week} one {Plan saved — # session} other {Plan saved — # sessions}}",
-    "ended": "This Weekly Session is done. Your plan is on the calendar.",
-    "consentRequired": "Your Coach is paused until you agree to how your data is processed.",
-    "consentRequiredLink": "Open Privacy & consent",
-    "error": "That didn't work. Try again.",
-    "coachUnavailable": "Your Coach didn't answer that one. Nothing was lost — send it again.",
-    "ranOutOfRoom": "Your Coach ran out of room for that answer. Ask for a smaller change, or one week at a time.",
-    "unsafeContent": "Something saved in your training — a note or a piece of gear — looks like an email address or phone number. Your Coach can't read that. Edit it out and try again.",
-    "drewOn": "What I drew on",
-    "thumbUp": "This helped",
-    "thumbDown": "This was off",
-    "thumbComment": "Anything you want to add? (optional)",
-    "thumbSave": "Save",
-    "checkInIntro": "Before we plan — how are you arriving at this week? Answer against your own normal, not anyone else's.",
-    "checkInEnergy": "Energy",
-    "checkInBody": "Physical condition",
-    "checkInSleep": "Sleep quality",
-    "checkInSignal": "Anything the Coach should know about this week?",
-    "checkInSignalPlaceholder": "Optional — e.g. legs heavy after Tuesday",
-    "checkInSubmit": "Continue",
-    "checkInSkip": "Skip this week",
-    "checkInSignalHint": "Your AI Coach reads this. Keep it to how training felt — not medical detail."
+    "planned": "{count, plural, =0 {Plan saved — a rest week} one {Plan saved — # session} other {Plan saved — # sessions}}"
   },
   "Messaging": {
     "title": "Coaching Channel",
@@ -626,7 +616,8 @@
     "yourHeadCoach": "Your Head Coach",
     "recently": "recently",
     "blocksDrafted": "I've shaped your training toward {race}: {blocks}",
-    "weekDrafted": "I've drafted next week for you — have a look at your plan when you're ready",
+    "weekDrafted": "I've drafted a training week for you — have a look at your plan when you're ready",
+    "weekDraftedFrom": "I've drafted a training week for you, starting {day} — have a look at your plan when you're ready",
     "weeklyDaySet": "{coach} moved your weekly planning day to {day}",
     "weeklyDaySetNoDetail": "{coach} changed your weekly planning day",
     "weekDraftShaped": "{coach} shaped next week's plan before it reached you",
@@ -644,12 +635,117 @@
     "blockRenamed": "{coach} renamed your \"{from}\" block to \"{to}\"",
     "blockRebounded": "{coach} moved the end of your \"{name}\" block to {day}",
     "blockRenamedAndRebounded": "{coach} renamed your \"{from}\" block to \"{to}\" and moved its end to {day}",
-    "blockEditedNoDetail": "{coach} changed one of your training blocks"
+    "blockEditedNoDetail": "{coach} changed one of your training blocks",
+    "blocksRepinned": "{coach} re-fitted your training blocks to the new date of {race}",
+    "blocksRepinnedNoDetail": "{coach} re-fitted your training blocks to the new race date",
+    "blocksRefitted": "The blocks your Head Coach set no longer fit the new race date, so I've re-fitted your training toward {race}: {blocks}",
+    "blocksRefittedNoDetail": "The blocks your Head Coach set no longer fit the new race date, so I've re-fitted your training toward your race"
   },
   "Privacy": {
     "dataRightsTitle": "Your data",
     "dataRightsBody": "You can download a copy of everything this app holds about you, or delete your account and erase all of it. Both live in Settings.",
     "dataRightsLink": "Go to Settings"
+  },
+  "Glossary": {
+    "title": "Glossary",
+    "subtitle": "The training language in your plan and in your Coach’s messages",
+    "trainingTitle": "Training Concepts",
+    "sessionTitle": "Session Types",
+    "raceTitle": "Race Terms",
+    "training": {
+      "zone2": {
+        "term": "Zone 2",
+        "definition": "Low-intensity aerobic effort where you can hold a conversation. The foundation of endurance training — develops fat oxidation and mitochondrial density over time."
+      },
+      "vo2max": {
+        "term": "VO2max",
+        "definition": "The maximum rate at which your body can consume oxygen during exercise. A key predictor of endurance performance. Improved by high-intensity interval work."
+      },
+      "lactateThreshold": {
+        "term": "Lactate threshold",
+        "definition": "The intensity at which lactic acid accumulates in the blood faster than it can be cleared. Training at and around this zone raises the ceiling of sustainable effort."
+      },
+      "ftp": {
+        "term": "FTP (Functional Threshold Power)",
+        "definition": "The highest average power you can sustain for approximately one hour on the bike. Used to set training zones for cycling."
+      },
+      "hrv": {
+        "term": "HRV (Heart Rate Variability)",
+        "definition": "The variation in time between heartbeats. A higher HRV generally indicates better recovery. Useful for deciding when to push and when to back off."
+      },
+      "tss": {
+        "term": "TSS (Training Stress Score)",
+        "definition": "A single number representing the training load of a session, combining intensity and duration. Used to track cumulative fatigue and fitness over time."
+      },
+      "aerobicBase": {
+        "term": "Aerobic base",
+        "definition": "The accumulated low-intensity fitness that underlies all other training. A strong base allows higher intensity work to land on a stable foundation."
+      },
+      "periodisation": {
+        "term": "Periodisation",
+        "definition": "Structuring training into phases (base, build, peak, taper) so that stress and recovery are deliberately alternated to produce peak performance at the right time."
+      }
+    },
+    "session": {
+      "brick": {
+        "term": "Brick session",
+        "definition": "A workout combining two disciplines back-to-back — most commonly bike followed immediately by run. Trains your legs to adapt to the transition between disciplines."
+      },
+      "interval": {
+        "term": "Interval",
+        "definition": "Repeated hard efforts separated by recovery periods. Used to accumulate time at high intensity without excessive fatigue."
+      },
+      "tempo": {
+        "term": "Tempo run / ride",
+        "definition": "A sustained effort at or near lactate threshold. Comfortably hard — you can speak in short sentences, not full paragraphs."
+      },
+      "lsd": {
+        "term": "Long slow distance (LSD)",
+        "definition": "A long session at Zone 2 intensity. Builds aerobic base, fat adaptation, and mental resilience without accumulating excessive fatigue."
+      },
+      "fartlek": {
+        "term": "Fartlek",
+        "definition": "Unstructured speed play within an otherwise easy session. Short bursts of effort at your own discretion — useful for breaking monotony while adding stimulus."
+      },
+      "recovery": {
+        "term": "Recovery session",
+        "definition": "A very easy, short effort designed to promote blood flow and aid recovery without adding meaningful training stress."
+      },
+      "openWater": {
+        "term": "Open-water swim",
+        "definition": "A swim in natural water (lake, sea, river) as opposed to a pool. Involves sighting, drafting, and wetsuit adaptation — all race-specific skills."
+      }
+    },
+    "race": {
+      "transitions": {
+        "term": "T1 / T2",
+        "definition": "Transition zones. T1 is swim-to-bike; T2 is bike-to-run. Practice makes transitions faster and less stressful on race day."
+      },
+      "ageGroup": {
+        "term": "AG (Age group)",
+        "definition": "Your competitive category based on age, typically in 5-year bands. Most amateur triathletes compete in their AG rather than outright."
+      },
+      "wetsuitLegal": {
+        "term": "Wetsuit legal",
+        "definition": "Water temperature is below the cutoff (typically 24.5°C / 76°F for non-elites) where wetsuits are permitted in competition."
+      },
+      "dnf": {
+        "term": "DNF / DNS / DQ",
+        "definition": "Did Not Finish / Did Not Start / Disqualified. Common race outcomes beyond a finish. A DNS is sometimes the smartest choice when injured."
+      },
+      "drafting": {
+        "term": "Drafting",
+        "definition": "Swimming or cycling close behind another athlete to reduce drag. Legal in swim, banned on the bike in most amateur races, legal on the run."
+      },
+      "specialNeeds": {
+        "term": "Special needs",
+        "definition": "A bag you can collect mid-race (usually mid-bike and mid-run) containing extra nutrition, a spare kit item, or anything you need for the second half."
+      },
+      "ironman": {
+        "term": "Ironman distance",
+        "definition": "3.8 km swim · 180 km bike · 42.2 km run. The full-distance triathlon. Also contested as 70.3 (half-iron): 1.9 km swim · 90 km bike · 21.1 km run."
+      }
+    }
   },
   "FeedbackInterview": {
     "title": "Feedback Interview",
@@ -677,6 +773,21 @@
     "weekOf": "week {week} of {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 week} other {# weeks}} to {race}"
   },
+  "CoachChores": {
+    "kicker": "Waiting for you",
+    "title": "{count, plural, one {A race moved} other {# races moved}}",
+    "moved": "{athlete}'s {race} moved from {from} to {to}.",
+    "stillEnds": "The last block, \"{block}\", still ends {day}.",
+    "tooFew": "Too few blocks would survive a re-pin ({dropped} would go), so start over from the draft instead.",
+    "nothing": "nothing",
+    "repin": "Re-pin to {day}",
+    "restart": "Start over from the draft",
+    "repinAll": "Re-pin all",
+    "notNow": "Not now",
+    "close": "Close",
+    "done": "Done — the blocks fit the race again.",
+    "error": "That didn't work ({reason})."
+  },
   "BlockPanel": {
     "title": "Training Blocks",
     "toward": "toward {race} on {date}",
@@ -687,7 +798,7 @@
     "authorCoach": "Coach",
     "authorYou": "You",
     "save": "Save",
-    "stale": "These blocks no longer match the race date — the Coach will redraw them. Nothing to edit here yet.",
+    "stale": "These blocks no longer match the race date. Re-pin them from the notice on your next login, or the Coach redraws them once no Head Coach is linked. Nothing to edit here yet.",
     "conflict": "Changed by someone else — this is the current set.",
     "error": "That didn't work ({reason})."
   },
@@ -710,6 +821,22 @@
     "approved": "Approved. It reaches the athlete on their planning day.",
     "approvedChanged": "Approved with your changes. The athlete will be told you shaped it.",
     "stale": "This draft was replaced. Reload to see the current one.",
+    "error": "That didn't work ({reason})."
+  },
+  "DraftingCard": {
+    "drafting": "The Coach is drafting the week… about {seconds} seconds.",
+    "notYet": "Not yet — it will be here next time you open the app."
+  },
+  "RedraftCard": {
+    "title": "No plan for that week",
+    "lead": "You left the week of {week} as it was. The Coach can draft it once more.",
+    "redraft": "Draft my week",
+    "drafting": "The Coach is drafting the week — about {seconds} seconds. It will appear here.",
+    "alreadyPlanned": "That week already has a plan.",
+    "draftPending": "A draft for that week is already waiting for you.",
+    "notDeclined": "That week was not declined, so there is nothing to draft again — ask the Coach instead.",
+    "noWindow": "No day of that week can hold training.",
+    "consentRequired": "To draft a week, first allow AI coaching under Privacy.",
     "error": "That didn't work ({reason})."
   },
   "ProposalCard": {
@@ -753,6 +880,10 @@
     "allowNone": "Not at all",
     "declareInjury": "That's where I'm at",
     "imIll": "I'm ill — everything off for now",
+    "nameLabel": "What and where",
+    "namePlaceholder": "left knee",
+    "declaredByMistake": "Declared by mistake",
+    "tooOld": "A record older than a day stays; mark it healed instead.",
     "history": "History",
     "glance_none_swim": "no swim",
     "glance_none_bike": "no bike",
@@ -760,5 +891,11 @@
     "glance_easy_swim": "easy swim",
     "glance_easy_bike": "easy bike",
     "glance_easy_run": "easy run"
+  },
+  "PreferredName": {
+    "placeholder": "e.g. Mads, Captain, M",
+    "realNameWarning": "That is your real name. The Coach will use it exactly as you typed it.",
+    "useAnyway": "Use it anyway",
+    "pickAnother": "Pick something else"
   }
 }

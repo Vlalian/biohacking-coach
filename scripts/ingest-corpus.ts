@@ -1,4 +1,5 @@
 import '../src/db/load-env';
+import { guardDatabase } from './db-guard/protected-database';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { extractArticleText } from '../src/features/knowledge-oracle/jats';
@@ -131,6 +132,10 @@ async function readCachedText(slug: string): Promise<string | null> {
 
 async function main(): Promise<void> {
   const live = hasFlag('live');
+  // Only the live run writes (delete/insert on knowledge_sources and
+  // knowledge_chunks); a dry run must keep working with no DATABASE_URL at
+  // all, so the guard is asked only when there is something to write.
+  if (live) guardDatabase(process.env.DATABASE_URL, process.argv);
   const sources = admittedSources();
 
   console.log(`Knowledge Oracle corpus — ${sources.length} admitted sources\n`);

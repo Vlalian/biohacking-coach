@@ -55,19 +55,24 @@ export async function resolveAthlete(): Promise<Athlete | null> {
 }
 
 /**
- * The athlete plus their chosen language — what the Coach actions need. The
- * language lives on the user (`ui_prefs`), not in training data, so it is read
- * through the user seam and passed onward as plain data.
+ * The athlete plus their chosen language and Preferred Name — what the Coach
+ * actions need. Both live on the user (`ui_prefs`), not in training data, so
+ * they are read through the user seam and passed onward as plain data.
+ *
+ * The Preferred Name is the one name that reaches a prompt, and this is the
+ * only place it is read for an athlete's own conversations (`preferred-name/02`):
+ * resolved here, handed to the service, handed to the prompt builder as a
+ * parameter. `user.name` is never read for this — it is not a fallback.
  */
 export async function resolveAthleteWithLanguage(): Promise<
-  { ok: true; athlete: Athlete; language?: string } | AuthFailure
+  { ok: true; athlete: Athlete; language?: string; preferredName?: string } | AuthFailure
 > {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, reason: 'not-authenticated' };
   const athlete = await getAthleteByUserId(session.user.id);
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
   const prefs = await getUiPrefs(session.user.id);
-  return { ok: true, athlete, language: prefs.language };
+  return { ok: true, athlete, language: prefs.language, preferredName: prefs.preferredName };
 }
 
 /**

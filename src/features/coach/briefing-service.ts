@@ -11,7 +11,7 @@ import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
 import { getRaces } from '@/features/race/race-repository';
 import { capacityFor } from '@/features/health/health-repository';
-import { currentPhase } from './training-blocks';
+import { currentPhase, staleLastBlockOf } from './training-blocks';
 import { getLatestUnrealisticFlag } from './training-block-repository';
 import { getResolvedBlocks } from './training-block-service';
 import {
@@ -22,6 +22,7 @@ import {
   getOwnedBriefing,
 } from './conversation-repository';
 import type { Message } from './conversation';
+import { getPreferredNameForAthlete } from '@/features/user-prefs/user-prefs-repository';
 import {
   BRIEFING_OPENER,
   buildBriefingContext,
@@ -81,15 +82,28 @@ async function buildBriefingSystem(
   // 0003; the Training Blocks are the horizon that calendar is built toward).
   // The Coach's own "unrealistic" verdict travels with the blocks for the same
   // reason: it is the Coach's judgement, not the athlete's report.
-  const [plan, resolved] = await Promise.all([getBriefingPlan(athleteId), getResolvedBlocks(athleteId, today)]);
+  const [plan, resolved, preferredName] = await Promise.all([
+    getBriefingPlan(athleteId),
+    getResolvedBlocks(athleteId, today),
+    // What the athlete chose for the Coach to call them (`preferred-name/02`),
+    // read through the user seam for the *linked* athlete — the action cannot
+    // resolve it, since the signed-in user here is the Head Coach. Ungated by
+    // Link Visibility: a pseudonym the athlete picked, for a coach who already
+    // sees their real name on the Roster.
+    getPreferredNameForAthlete(athleteId),
+  ]);
   // Scoped to the current Target Race: a verdict on a race the athlete has since
   // replaced is not this race's.
   const raceUnrealistic = resolved.race ? await getLatestUnrealisticFlag(athleteId, resolved.race.id) : null;
   const phase = currentPhase(today, resolved.blocks);
+  // A stored set the race moved out from under is listed as the draft the
+  // athlete sees, and said to be stale, until the Head Coach re-pins it (19).
+  const staleSet = resolved.race ? staleLastBlockOf(resolved.set, resolved.race.date) : null;
   const blocks = {
     blocks: resolved.blocks.map(({ name, endDate, authoredBy }) => ({ name, endDate, authoredBy })),
     phase,
     raceUnrealistic,
+    staleSet,
   };
 
   // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.
@@ -106,7 +120,7 @@ async function buildBriefingSystem(
       }))
     : null;
 
-  const ctx = buildBriefingContext({ today, plan, blocks, reports, transcripts, language });
+  const ctx = buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName });
   return renderBriefingPrompt(ctx);
 }
 

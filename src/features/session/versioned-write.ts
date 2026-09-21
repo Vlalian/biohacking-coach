@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { events, sessions } from '@/db/schema';
+import { parkedByDateAfterMoveTo } from '@/features/availability/parking';
 import { describeConflict, type AttemptedChange, type SessionConflict } from './conflict';
 import { toSession } from './session';
 
@@ -79,6 +80,11 @@ async function readCurrent(athleteId: string, sessionId: string) {
 /**
  * Applies a content or placement change, but only to the version the caller
  * read. Bumps the version so the next stale writer is caught in turn.
+ *
+ * A placement change also carries the session's parking provenance to the new
+ * day ({@link parkedByDateAfterMoveTo}). That column is not content and is not
+ * versioned (ADR 0010) — it is derived from `date`, so it is written wherever
+ * `date` is, under every caller, rather than trusted to each of them.
  */
 export async function casUpdateSession(params: {
   athleteId: string;
@@ -93,7 +99,12 @@ export async function casUpdateSession(params: {
 
   const updated = await db
     .update(sessions)
-    .set({ ...set, version: expectedVersion + 1, updatedAt: new Date() })
+    .set({
+      ...set,
+      ...(set.date !== undefined ? { parkedByDate: parkedByDateAfterMoveTo(set.date) } : {}),
+      version: expectedVersion + 1,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(sessions.id, sessionId),

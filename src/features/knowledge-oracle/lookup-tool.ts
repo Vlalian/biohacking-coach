@@ -19,9 +19,10 @@ export const LOOKUP_TOOL_NAME = 'look_up_training_science';
 export const LOOKUP_TOOL: CoachTool = {
   name: LOOKUP_TOOL_NAME,
   description:
-    'Look up the training-science evidence behind a claim BEFORE you state it as fact — ' +
-    'why an easy day is easy, how much intensity a week should carry, what the research ' +
-    'says about tapering, fuelling, sleep or recovery. Answer from the passages returned. ' +
+    'Look up the training-science evidence behind a claim BEFORE you state it as fact, and ' +
+    'when the athlete asks what you know or can back with evidence — look up the topic they ' +
+    'name rather than describing this tool. Any physiology, load, intensity, tapering, ' +
+    'fuelling, sleep or recovery claim. Answer from the passages returned. ' +
     'Do NOT call this for how the athlete feels, for logistics or scheduling, for ' +
     'acknowledgements, or for anything that is not a training-science claim.',
   input_schema: {
@@ -31,7 +32,9 @@ export const LOOKUP_TOOL: CoachTool = {
     properties: {
       question: {
         type: 'string',
-        description: 'The training-science question, in plain words, without any personal details.',
+        description:
+          'The training-science question, in English (the corpus is English — translate it if the ' +
+          'athlete wrote in another language), in plain words, without any personal details.',
       },
     },
   },

@@ -85,7 +85,8 @@ describe('answerOnboardingStep', () => {
     );
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.step).toBe('experience');
+    // The name step follows the language (preferred-name/02).
+    if (result.ok) expect(result.step).toBe('name');
     // The transcript records the exchange under kind=onboarding.
     expect(createConversation).toHaveBeenCalledWith({
       athleteId: 'athlete_1',
@@ -115,7 +116,7 @@ describe('answerOnboardingStep', () => {
           raceDate: '2026-08-30',
           hasHumanCoach: 'Yes',
         },
-        onboardingSubmitted: { adaptive: true },
+        onboardingSubmitted: { name: true, adaptive: true },
       },
     });
 
@@ -172,7 +173,7 @@ describe('answerOnboardingStep', () => {
           raceDistance: 'Olympic',
           noRaceYet: true,
         },
-        onboardingSubmitted: { adaptive: true },
+        onboardingSubmitted: { name: true, adaptive: true },
       },
     });
 
@@ -201,7 +202,7 @@ describe('getOnboardingState — resumption', () => {
     const midway = athlete({
       profile: {
         onboardingAnswers: { language: 'en', experienceLevel: 'veteran' },
-        onboardingSubmitted: {},
+        onboardingSubmitted: { name: true },
       },
     });
     const state = await getOnboardingState(midway);

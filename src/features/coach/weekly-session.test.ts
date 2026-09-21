@@ -1,18 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import type { Athlete } from '@/features/athlete/athlete';
 import type { Session } from '@/features/session/session';
-import type { Message } from './conversation';
 import {
   buildWeeklyCheckIn,
   proposedToNewSessionRows,
   reflectionScoreToTen,
   skippedFrom,
-  toWeeklyApiMessages,
   validateProposedPlan,
   weekFeedbackFrom,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   PROPOSE_WEEK_PLAN_TOOL,
-  WEEKLY_OPENER,
   type Readiness,
 } from './weekly-session';
 import { resolveBlocks, trainingBlocks } from './training-blocks';
@@ -76,7 +73,7 @@ describe('buildWeeklyCheckIn', () => {
       athlete(),
       TODAY_KEY,
       READINESS,
-      3,
+      'building',
       'da',
       [],
       TARGET_RACE,
@@ -97,7 +94,7 @@ describe('buildWeeklyCheckIn', () => {
       language: 'da',
       fixedConstraints: ['Sunday'],
       weeklySessionDay: 'Monday',
-      weeklySessionNumber: 3,
+      presenceStage: 'building',
     });
     // No name/email fields on the check-in — personaName is never set from data.
     expect(checkIn.personaName).toBeUndefined();
@@ -105,26 +102,26 @@ describe('buildWeeklyCheckIn', () => {
   });
 
   it('defaults language to English when the user has not chosen one', () => {
-    const checkIn = buildWeeklyCheckIn(athlete({ profile: null }), TODAY_KEY, READINESS, 1);
+    const checkIn = buildWeeklyCheckIn(athlete({ profile: null }), TODAY_KEY, READINESS, 'cold_start');
     expect(checkIn.language).toBe('en');
     expect(checkIn.onboarding).toBeUndefined();
   });
 
   it('carries the equipment items passed in, defaulting to none', () => {
-    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1).equipment).toEqual([]);
+    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 'cold_start').equipment).toEqual([]);
 
     const items = [
       { id: 'e1', category: 'bike' as const, name: 'Canyon Speedmax', details: null, addedDate: '2026-08-01' },
     ];
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1, undefined, items);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 'cold_start', undefined, items);
     expect(checkIn.equipment).toEqual(items);
   });
 
-  it('sets sessionCount to coaching-relationship depth, not weekly frequency', () => {
-    // trainingSessionsPerWeek is 6 in the fixture; `sessions=` must be the count
-    // of prior Weekly Sessions, never the 6-a-week cadence.
-    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1).sessionCount).toBe(0);
-    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 4).sessionCount).toBe(3);
+  it('carries the Presence Arc stage as coaching-relationship depth, never weekly frequency', () => {
+    // trainingSessionsPerWeek is 6 in the fixture; the depth the prompt reads
+    // is the stage decided from data (`presence.ts`), never the 6-a-week cadence.
+    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 'cold_start').presenceStage).toBe('cold_start');
+    expect(buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 'full').presenceStage).toBe('full');
   });
 
   it('fails closed when an identifier would reach a prompt', () => {
@@ -134,7 +131,7 @@ describe('buildWeeklyCheckIn', () => {
         onboarding: { motivation: 'reach me at mads@example.com' },
       },
     });
-    expect(() => buildWeeklyCheckIn(leaky, TODAY_KEY, READINESS, 1)).toThrow(/identifier/i);
+    expect(() => buildWeeklyCheckIn(leaky, TODAY_KEY, READINESS, 'cold_start')).toThrow(/identifier/i);
   });
 });
 
@@ -204,20 +201,6 @@ describe('skippedFrom', () => {
         session({ status: 'completed' }),
       ]),
     ).toEqual([{ date: '2026-07-13', sessionType: 'Recovery' }]);
-  });
-});
-
-describe('toWeeklyApiMessages', () => {
-  it('opens with the user primer then alternates from the transcript', () => {
-    const transcript: Message[] = [
-      { id: 'm0', role: 'coach_ai', content: 'Welcome.', seq: 0, citations: [], createdAt: new Date() },
-      { id: 'm1', role: 'athlete', content: 'In rhythm.', seq: 1, citations: [], createdAt: new Date() },
-    ];
-    expect(toWeeklyApiMessages(transcript)).toEqual([
-      { role: 'user', content: WEEKLY_OPENER },
-      { role: 'assistant', content: 'Welcome.' },
-      { role: 'user', content: 'In rhythm.' },
-    ]);
   });
 });
 
@@ -560,7 +543,7 @@ describe('proposedToNewSessionRows', () => {
 // otherwise in words.
 describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
   it('carries no readiness at all when there is no Check-in', () => {
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 1);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 'cold_start');
 
     expect(checkIn.readiness).toBeUndefined();
     // Absent, not present-and-undefined: an explicit `readiness: undefined`
@@ -573,7 +556,7 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
       athlete(),
       TODAY_KEY,
       null,
-      3,
+      'building',
       undefined,
       [],
       TARGET_RACE,
@@ -586,7 +569,7 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
 
     expect(checkIn.phase).toBe('Block 1 of 5');
     expect(checkIn.experienceLevel).toBe('intermediate');
-    expect(checkIn.sessionCount).toBe(2);
+    expect(checkIn.presenceStage).toBe('building');
   });
 
   it('carries the whole report when a real Check-in supplied one', () => {
@@ -594,7 +577,7 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
     // no test for a partial readiness: `Readiness` requires all five, so a
     // half-filled one does not compile — which is the point of nesting it rather
     // than hanging five optional fields off CheckIn.
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 1);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, READINESS, 'cold_start');
 
     expect(checkIn.readiness).toEqual(READINESS);
   });
@@ -609,7 +592,7 @@ describe('buildWeeklyCheckIn — the resolved Training Blocks (training-architec
         { name: 'Taper', endDate: TARGET_RACE.date, authoredBy: 'coach_ai' },
       ],
     });
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 3, undefined, [], TARGET_RACE, null, null, [], null, shaped);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 'building', undefined, [], TARGET_RACE, null, null, [], null, shaped);
 
     expect(checkIn.phase).toBe('Build the Volume');
     expect(checkIn.blockWeek).toBe('week 1 of 10');
@@ -618,7 +601,7 @@ describe('buildWeeklyCheckIn — the resolved Training Blocks (training-architec
   it('keeps the race and drops the phase when no blocks were resolved', () => {
     // The honest rendering for a caller that could not resolve blocks: the
     // race line still says where the horizon is; nothing claims a phase.
-    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 3, undefined, [], TARGET_RACE);
+    const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 'building', undefined, [], TARGET_RACE);
     expect(checkIn.raceTarget).toBe('Ironman Copenhagen');
     expect(checkIn.phase).toBeUndefined();
   });
@@ -634,7 +617,7 @@ describe('buildWeeklyCheckIn — the other races (training-architecture/09)', ()
     isTarget: false, createdAt: new Date('2026-06-02T10:00:00Z'),
   };
   const build = (races: (typeof target)[], planWrittenAt: Date | null, today = TODAY_KEY) =>
-    buildWeeklyCheckIn(athlete(), today, null, 3, 'en', [], TARGET_RACE, null, null, races, planWrittenAt);
+    buildWeeklyCheckIn(athlete(), today, null, 'building', 'en', [], TARGET_RACE, null, null, races, planWrittenAt);
 
   it('carries no race fields at all when there are no races beyond the target', () => {
     const checkIn = build([target], null);

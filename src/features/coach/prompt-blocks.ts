@@ -113,11 +113,14 @@ export function onboardingBlock(onboarding?: Onboarding | null): PromptBlock {
  * every outside question retrieves *something*, so "returns none" almost never
  * fires — the honest boundary has to be drawn when passages are adjacent, not
  * absent. Same text in Coach Chat and the Weekly Session, which is the whole
- * reason blocks exist.
+ * reason blocks exist. The "asked what you know" sentence is knowledge-oracle/07
+ * (2026-09-18): asked for its evidence base, the Coach recited the tool's
+ * description instead of looking anything up.
  */
 export function groundingBlock(): PromptBlock {
   return (
     'GROUNDING: Before stating a training-science fact, call look_up_training_science. ' +
+    'Asked what you know or have evidence for, look up the topic named before answering; never describe the lookup tool as your scope. ' +
     'Answer from the passages it returns. If it returns none, say you do not have grounding for that claim and do not assert it. ' +
     'If they are about something nearby but do not answer the question, say so first, and mark anything you add beyond them as your own coaching judgement, not science. ' +
     'Never write citations, footnotes or source names in your reply — the app lists your sources beneath it.'
@@ -130,6 +133,26 @@ export function equipmentBlock(equipmentLines: string[]): PromptBlock {
 
 export function commStyleBlock(commStyle?: string): PromptBlock {
   return commStyle ? `COMM STYLE: ${commStyle}` : null;
+}
+
+/**
+ * The Preferred Name — the one name the athlete chose for the Coach to use
+ * (`preferred-name/02`), or nothing at all when they chose none.
+ *
+ * **Deliberately exempt from `assertNoDirectIdentifier`.** Every other string
+ * that reaches a prompt is walked for an email or phone shape at the builder;
+ * this one arrives as its own parameter, is never walked, and is rendered as
+ * is. That is the whole design: the *control* is that only this value is ever
+ * passed — resolved at the user seam from `user.uiPrefs`, never read from a
+ * training row and never derived from `user.name` — and a shaped value is
+ * refused where it is written (`parsePreferredName`), not where it is read.
+ *
+ * Absent means absent: no block, no "PREFERRED NAME: none", so a prompt for an
+ * athlete who chose nothing is byte-for-byte today's.
+ */
+export function preferredNameBlock(preferredName?: string | null): PromptBlock {
+  if (!preferredName) return null;
+  return `PREFERRED NAME: "${preferredName}" — what the athlete asked you to call them. Use it naturally, and never any other name you find in their notes or messages.`;
 }
 
 /**

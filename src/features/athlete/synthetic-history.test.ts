@@ -5,7 +5,10 @@ import {
   SYNTHETIC_PROFILES,
   toAthleteRow,
   toSessionRows,
+  openInjuryFor,
+  raceDateFor,
 } from './synthetic-history';
+import { currentPhase, trainingBlocks } from '@/features/coach/training-blocks';
 import { detectPatterns } from '@/features/coach/pattern-insight';
 
 /**
@@ -304,6 +307,17 @@ describe('the two shipped profiles', () => {
     }
   });
 
+  it('carry isTraining from the session rather than asserting it', () => {
+    // The row used to hardcode `isTraining: true` whatever the session said —
+    // harmless while every generated session is training, and a lie the moment
+    // one is not. Carried from the session since code-health/13.
+    const profile = SYNTHETIC_PROFILES[0];
+    const [first] = generateSyntheticHistory(profile, 1, TODAY, 1234).sessions;
+    expect(first.isTraining).toBe(true);
+    const [row] = toSessionRows(profile, [{ ...first, isTraining: false }]);
+    expect(row.isTraining).toBe(false);
+  });
+
   it('carry no real identity, only a fabricated label', () => {
     for (const p of SYNTHETIC_PROFILES) {
       // ADR 0006: syntheticLabel is the one place a name may sit in a training
@@ -330,5 +344,92 @@ describe('the weekly template is drawn in order', () => {
     const { sessions } = generate(profile, 1);
 
     expect(sessions.map((s) => s.type)).toEqual(profile.week.slice(0, sessions.length));
+  });
+});
+
+describe('Nadia Holm — the third persona (code-health/16)', () => {
+  const nadia = () => {
+    const p = SYNTHETIC_PROFILES.find((x) => x.syntheticLabel === 'Nadia Holm');
+    if (!p) throw new Error('Nadia Holm is not a shipped profile');
+    return p;
+  };
+
+  it('is an intermediate pointed at an Olympic-distance race six weeks from today', () => {
+    const p = nadia();
+    expect(p.experienceLevel).toBe('intermediate');
+    expect(p.raceDistance).toBe('Olympic');
+    // Six weeks from the seed's own clock, not a stored date: the Training
+    // Phase is derived from the Target Race (training-architecture/03), so a
+    // race that stays six weeks out keeps her in the last block on every reseed.
+    expect(raceDateFor(p, TODAY)).toBe('2026-10-14');
+    expect(raceDateFor(p, new Date(2027, 0, 5))).toBe('2027-02-16');
+  });
+
+  it('carries an open Injury in the athlete-facing record only', () => {
+    const injury = openInjuryFor(nadia(), TODAY);
+    expect(injury).not.toBeNull();
+    // What it prevents, per discipline — the only half a prompt sees (ADR 0011).
+    expect(injury!.run).toBe('none');
+    expect(injury!.bike).toBe('easy');
+    expect(injury!.swim).toBe('full');
+    expect(injury!.closedAt).toBeNull();
+    expect(injury!.openedAt!.getTime()).toBeLessThan(TODAY.getTime());
+    // No detail thread, ever: nothing here is free text.
+    expect(Object.keys(injury!).sort()).toEqual(
+      ['athleteId', 'bike', 'bother', 'closedAt', 'id', 'openedAt', 'run', 'swim'],
+    );
+    expect(injury!.athleteId).toBe(nadia().id);
+  });
+
+  it('has no injury for the two clean personas', () => {
+    expect(openInjuryFor(SYNTHETIC_PROFILES[0], TODAY)).toBeNull();
+    expect(openInjuryFor(SYNTHETIC_PROFILES[1], TODAY)).toBeNull();
+  });
+
+  it('missed at least five sessions in the last two weeks — since the injury opened', () => {
+    const { sessions } = generateSyntheticHistory(nadia(), 10, TODAY, 1234);
+    const twoWeeksAgo = '2026-08-19';
+    const recent = sessions.filter((s) => s.date >= twoWeeksAgo);
+    const skipped = recent.filter((s) => s.status === 'skipped');
+    expect(skipped.length).toBeGreaterThanOrEqual(5);
+    // Every session since the injury opened is a miss, and a miss carries no
+    // Session Reflection — there was nothing to reflect on.
+    const opened = '2026-08-21';
+    for (const s of sessions.filter((x) => x.date >= opened)) {
+      expect(s.status).toBe('skipped');
+      expect(s.feedbackBody).toBeNull();
+    }
+    // Before it, she trained: the history is a person who stopped, not a flake.
+    const before = sessions.filter((s) => s.date < opened);
+    expect(before.filter((s) => s.status === 'completed').length).toBeGreaterThan(before.length * 0.8);
+  });
+
+  it('counts the day the injury opened as a miss, not the day after', () => {
+    // Yesterday's session always exists (the most recent week's first slot),
+    // so an injury that opened yesterday must have stopped it.
+    const p = nadia();
+    const injury = { ...p.injury!, daysOpen: 1 };
+    const { sessions } = generateSyntheticHistory({ ...p, injury }, 2, TODAY, 1234);
+    const yesterday = sessions.find((s) => s.date === '2026-09-01');
+    expect(yesterday?.status).toBe('skipped');
+    expect(sessions.filter((s) => s.date < '2026-09-01' && s.status === 'completed').length).toBeGreaterThan(0);
+  });
+
+  it('sits in a different derived Training Phase from the other two', () => {
+    const today = '2026-09-02';
+    const phases = SYNTHETIC_PROFILES.map((p) =>
+      currentPhase(today, trainingBlocks(today, raceDateFor(p, TODAY))),
+    );
+    expect(phases.every((x) => x !== null)).toBe(true);
+    expect(new Set(phases).size).toBe(3);
+    // Six weeks out is the shortest horizon the arithmetic divides: two blocks,
+    // and today falls in the first of them.
+    expect(phases[2]).toBe('Block 1 of 2');
+  });
+
+  it('leaves Alex and Sam exactly as they were', () => {
+    // The fixed-date personas resolve to their stored date whatever the clock says.
+    expect(raceDateFor(SYNTHETIC_PROFILES[0], TODAY)).toBe('2027-06-19');
+    expect(raceDateFor(SYNTHETIC_PROFILES[1], new Date(2030, 0, 1))).toBe('2027-08-21');
   });
 });

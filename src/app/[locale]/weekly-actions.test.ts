@@ -4,16 +4,12 @@ const {
   currentAthlete,
   saveCheckIn,
   assertAiCoachingConsent,
-  startWeeklySession,
-  continueWeeklySession,
   commitWeeklyPlan,
   declineWeeklyPlan,
   revalidatePath,
 } = vi.hoisted(() => ({
   currentAthlete: vi.fn(),
   assertAiCoachingConsent: vi.fn<() => Promise<{ ok: boolean }>>(async () => ({ ok: true })),
-  startWeeklySession: vi.fn<() => Promise<unknown>>(async () => ({ ok: true })),
-  continueWeeklySession: vi.fn<() => Promise<unknown>>(async () => ({ ok: true })),
   commitWeeklyPlan: vi.fn<() => Promise<{ ok: boolean; reason?: string }>>(async () => ({
     ok: true,
   })),
@@ -34,23 +30,22 @@ vi.mock('@/features/coach/check-in-repository', () => ({ saveCheckIn }));
 vi.mock('./current-actor', () => ({ resolveAthleteWithLanguage: currentAthlete }));
 vi.mock('@/features/coach/weekly-session-service', () => ({
   commitWeeklyPlan,
-  continueWeeklySession,
   declineWeeklyPlan,
-  startWeeklySession,
 }));
 
-const {
-  saveCheckInAction,
-  startWeeklySessionAction,
-  sendWeeklyMessageAction,
-  commitWeeklyPlanAction,
-} = await import('./weekly-actions');
+const { saveCheckInAction, commitWeeklyPlanAction, declineWeeklyPlanAction } =
+  await import('./weekly-actions');
 
 const REPORT = { energy: 6, body: 7, sleepQuality: 5, notableSignal: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  currentAthlete.mockResolvedValue({ ok: true, athlete: { id: 'athlete_1' }, language: 'en' });
+  currentAthlete.mockResolvedValue({
+    ok: true,
+    athlete: { id: 'athlete_1' },
+    language: 'en',
+    preferredName: 'Mads',
+  });
   assertAiCoachingConsent.mockResolvedValue({ ok: true });
   commitWeeklyPlan.mockResolvedValue({ ok: true });
   vi.useFakeTimers();
@@ -88,8 +83,8 @@ describe('saveCheckInAction', () => {
   });
 
   it('is deliberately not gated on AI consent', async () => {
-    // Filing a Check-in sends nothing anywhere. It reaches a prompt only when a
-    // Weekly Session starts, and that path has its own gate. Refusing to let an
+    // Filing a Check-in sends nothing anywhere. It reaches a prompt only when
+    // the Coach next speaks, and that path has its own gate. Refusing to let an
     // athlete record how they feel — because of a consent covering something
     // they have not done — would be the gate doing a job that is not its own.
     await saveCheckInAction(REPORT);
@@ -155,57 +150,29 @@ describe('the notable signal, on its way to a prompt', () => {
 });
 
 /**
- * The three actions that make the Coach process the athlete's data.
- *
- * These pre-date `training-architecture/05` and had no tests at all — the file
- * had none, so the whole server surface of the Weekly Session sat at 0%
- * coverage. Covered here because this slice built the harness for it, and
- * because these are where the consent gate is actually enforced: a gate nothing
- * exercises is a gate nobody knows still works.
+ * The Weekly Session's start and send actions lived here until the behavior
+ * was retired (`training-architecture/21`), with the consent gate they
+ * enforced; Coach Chat's own action carries that gate now. What is left is
+ * the athlete's decision on a proposed week, which every conversation lands on.
  */
-describe('the actions that reach the Coach are gated on consent', () => {
-  it('starts a Weekly Session for a consenting athlete, with today and their language', async () => {
-    startWeeklySession.mockResolvedValue({ ok: true });
-
-    await expect(startWeeklySessionAction()).resolves.toEqual({ ok: true });
-
-    expect(startWeeklySession).toHaveBeenCalledWith({ id: 'athlete_1' }, '2026-09-10', 'en');
-  });
-
+describe('the plan decisions are authenticated, never gated on consent', () => {
   it.each([
-    ['startWeeklySessionAction', () => startWeeklySessionAction()],
-    ['sendWeeklyMessageAction', () => sendWeeklyMessageAction('conv_1', 'hello')],
-  ])('refuses %s without current consent, before any prompt is assembled', async (_name, call) => {
-    assertAiCoachingConsent.mockResolvedValue({ ok: false });
-
-    await expect(call()).resolves.toEqual({ ok: false, reason: 'consent-required' });
-    expect(startWeeklySession).not.toHaveBeenCalled();
-    expect(continueWeeklySession).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['startWeeklySessionAction', () => startWeeklySessionAction()],
-    ['sendWeeklyMessageAction', () => sendWeeklyMessageAction('conv_1', 'hello')],
     ['commitWeeklyPlanAction', () => commitWeeklyPlanAction('conv_1')],
+    ['declineWeeklyPlanAction', () => declineWeeklyPlanAction('conv_1')],
   ])('refuses %s when nobody is signed in', async (_name, call) => {
     currentAthlete.mockResolvedValue({ ok: false, reason: 'not-authenticated' });
 
     await expect(call()).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
-    expect(assertAiCoachingConsent).not.toHaveBeenCalled();
+    expect(commitWeeklyPlan).not.toHaveBeenCalled();
+    expect(declineWeeklyPlan).not.toHaveBeenCalled();
   });
 
-  it('passes the athlete turn on with today and their language', async () => {
-    continueWeeklySession.mockResolvedValue({ ok: true });
+  it('passes the decline to the service for the signed-in athlete', async () => {
+    // A cancel sends nothing to the Coach, so there is no consent to check.
+    await expect(declineWeeklyPlanAction('conv_1')).resolves.toEqual({ ok: true });
 
-    await sendWeeklyMessageAction('conv_1', 'how should I pace Sunday?');
-
-    expect(continueWeeklySession).toHaveBeenCalledWith(
-      { id: 'athlete_1' },
-      'conv_1',
-      'how should I pace Sunday?',
-      '2026-09-10',
-      'en',
-    );
+    expect(declineWeeklyPlan).toHaveBeenCalledWith({ id: 'athlete_1' }, 'conv_1');
+    expect(assertAiCoachingConsent).not.toHaveBeenCalled();
   });
 });
 

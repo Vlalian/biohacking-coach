@@ -24,6 +24,25 @@ import { provisionAthlete } from '../features/athlete/athlete-provisioning';
  */
 
 /**
+ * The deployment variables the origin rules read. Exactly these five — no
+ * index signature, so a misspelt key in a test is a type error, not a silent
+ * `undefined`. {@link deployEnv} picks them out of `process.env`.
+ */
+type DeployEnv = {
+  BETTER_AUTH_URL?: string;
+  VERCEL_ENV?: string;
+  VERCEL_URL?: string;
+  VERCEL_BRANCH_URL?: string;
+  VERCEL_PROJECT_PRODUCTION_URL?: string;
+};
+
+function deployEnv(): DeployEnv {
+  const { BETTER_AUTH_URL, VERCEL_ENV, VERCEL_URL, VERCEL_BRANCH_URL, VERCEL_PROJECT_PRODUCTION_URL } =
+    process.env;
+  return { BETTER_AUTH_URL, VERCEL_ENV, VERCEL_URL, VERCEL_BRANCH_URL, VERCEL_PROJECT_PRODUCTION_URL };
+}
+
+/**
  * The base URL better-auth signs cookies and builds callbacks against.
  *
  * Derived, not hardcoded (slice 03): locally it is `BETTER_AUTH_URL` from
@@ -33,20 +52,43 @@ import { provisionAthlete } from '../features/athlete/athlete-provisioning';
  * better-auth infers the origin from the request — the point is it is never an
  * *invalid* string, which is what crashed the first deploy.
  */
-function resolveBaseURL(): string | undefined {
-  if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+export function resolveBaseURL(env: DeployEnv): string | undefined {
+  if (env.BETTER_AUTH_URL) return env.BETTER_AUTH_URL;
   // VERCEL_PROJECT_PRODUCTION_URL holds the *production* origin on every
   // deployment, previews included — so a preview must use its own VERCEL_URL,
   // or auth would sign against production and break on the branch URL. Switch on
   // VERCEL_ENV to pick the right one.
   const vercelHost =
-    process.env.VERCEL_ENV === 'production'
-      ? process.env.VERCEL_PROJECT_PRODUCTION_URL
-      : process.env.VERCEL_URL;
+    env.VERCEL_ENV === 'production' ? env.VERCEL_PROJECT_PRODUCTION_URL : env.VERCEL_URL;
   return vercelHost ? `https://${vercelHost}` : undefined;
 }
 
-const baseURL = resolveBaseURL();
+/**
+ * The origins a sign-in may come from: the base URL, plus — on a preview — the
+ * deployment's git-branch alias.
+ *
+ * Vercel serves one preview on two hosts. `VERCEL_URL` is the unique
+ * per-deployment host and is what {@link resolveBaseURL} uses; the PR comment
+ * and the dashboard link the *branch alias* (`VERCEL_BRANCH_URL`,
+ * `<project>-git-<branch>-<team>.vercel.app`). Only the first was trusted, so
+ * every sign-in from a linked preview failed with "Invalid origin" while the
+ * same deployment on its unique host worked (found testing PR #77). Both hosts
+ * are the same build, so both are trusted. Production and local keep their one
+ * origin.
+ */
+export function resolveTrustedOrigins(env: DeployEnv): string[] {
+  const base = resolveBaseURL(env);
+  if (!base) return [];
+  // `preview` exactly: `vercel dev` (`development`) and a local `.env.local`
+  // that pulled a `VERCEL_BRANCH_URL` must not widen the trusted set.
+  const branchAlias =
+    env.VERCEL_ENV === 'preview' && env.VERCEL_BRANCH_URL
+      ? `https://${env.VERCEL_BRANCH_URL}`
+      : undefined;
+  return branchAlias && branchAlias !== base ? [base, branchAlias] : [base];
+}
+
+const baseURL = resolveBaseURL(deployEnv());
 
 export const auth = betterAuth({
   database: drizzleAdapter(getDb(), { provider: 'pg' }),
@@ -54,7 +96,7 @@ export const auth = betterAuth({
   // Explicit so it is never inferred wrong behind Vercel's proxy; undefined
   // locally is fine (better-auth reads the request origin).
   baseURL,
-  trustedOrigins: baseURL ? [baseURL] : [],
+  trustedOrigins: resolveTrustedOrigins(deployEnv()),
 
   // Email/password login is always on. Self-*registration* is switched off on
   // the deployment and left on locally and in tests (slice 16, route 10 ballot

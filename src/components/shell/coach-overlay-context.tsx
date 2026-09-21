@@ -31,15 +31,15 @@ export const CoachOverlayContext = createContext<{
   reference: CoachReference | null;
   setReference: (reference: CoachReference | null) => void;
   /**
-   * Whether the athlete has waved off this week's Weekly Session offer.
+   * Whether the athlete has waved off this week's Check-in reminder.
    *
    * Lives here, above the overlay, on purpose: the overlay unmounts when
    * closed, so holding this inside it made the "single sanctioned nudge"
    * (ADR 0007) reappear on every reopen and every View change. Owned by
    * ShellChrome, which persists across both.
    */
-  weeklyOfferDismissed: boolean;
-  dismissWeeklyOffer: () => void;
+  checkInOfferDismissed: boolean;
+  dismissCheckInOffer: () => void;
   /**
    * A Coach Chat handed a drafted week somewhere other than the overlay —
    * "Discuss with the Coach" on the calendar (`training-architecture/18`, into

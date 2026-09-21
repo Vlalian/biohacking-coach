@@ -169,6 +169,8 @@
     "themeSystem": "Automatisk",
     "languageLabel": "Atletsprog",
     "languageNote": "Gælder appen og din Coach med det samme. Sportsudtryk som RPE og Zone 2 forbliver på engelsk uanset sprog.",
+    "preferredNameLabel": "Hvad Coachen kalder dig",
+    "preferredNameNote": "Det navn, vi sender til Coachen på dine vegne. Lad feltet stå tomt, så sender vi intet. Dit kontonavn sendes ikke — men det, du selv skriver i en note eller en besked, kommer frem til Coachen, præcis som du har skrevet det.",
     "raceTargetLabel": "Løbsmål",
     "raceTargetNote": "Det løb du træner frem mod. Hele din plan er bygget baglæns fra det.",
     "raceTargetPlaceholder": "F.eks. Ironman København, 16. august 2026",
@@ -275,7 +277,8 @@
     "subtitle": "Spørg Coachen om denne atlet.",
     "intro": "Coachen har læst denne atlets data — åbn en briefing for at høre dens vurdering og stille spørgsmål.",
     "start": "Åbn briefing",
-    "starting": "Åbner…",
+    "opening": "Åbner…",
+    "starting": "Læser ugen… cirka {seconds} sekunder",
     "thinking": "Coachen tænker…",
     "inputLabel": "Spørg Coachen om denne atlet",
     "placeholder": "Spørg om søvn, belastning eller restitution",
@@ -316,7 +319,7 @@
     "legend": "Session Type",
     "today": "I dag",
     "double": "Dobbelt",
-    "bouncePastDay": "Den dag er allerede overstået — sessioner flyttes kun fremad i ugen.",
+    "bouncePastDay": "Den dag er allerede overstået — et flyt siger, hvornår en session er planlagt, og intet planlægges bagud. Har du trænet den dag, så registrér det dér i stedet.",
     "bounceOtherWeek": "Sessioner flyttes kun inden for deres egen mandag–søndag-uge. Bed din Coach om at omlægge ugen.",
     "bounceFrozen": "Denne session er allerede gennemført — træningsjournalen kan ikke ændres.",
     "bounceConflict": "Din Head Coach ændrede denne session, mens den var åben. Dit flyt blev ikke gennemført — genindlæs for at se deres.",
@@ -325,9 +328,13 @@
     "bounceNotYours": "Det er atletens egen session — den bliver, hvor de har lagt den.",
     "bounceError": "Det virkede ikke. Prøv igen.",
     "bounceParked": "Denne session holdes af en hviledag. Flyt hvileblokken først.",
+    "statusHealthy": "Rask",
+    "statusIll": "Syg",
+    "statusUninjured": "Uskadt",
+    "statusInjured": "Skadet",
+    "markInjury": "Skade",
+    "markIll": "Syg",
     "healthButton": "Hvordan har kroppen det?",
-    "healthIll": "Syg",
-    "healthInjury": "Skade",
     "glance_none_swim": "ingen svømning",
     "glance_none_bike": "ingen cykling",
     "glance_none_run": "ingen løb",
@@ -435,6 +442,7 @@
     "coachLabel": "Din Coach",
     "stepOf": "Trin {step} af {total}",
     "stepLanguage": "Sprog",
+    "stepName": "Navn",
     "stepExperience": "Erfaring",
     "stepRace": "Løb",
     "stepAdaptive": "Om dig",
@@ -443,6 +451,9 @@
     "nextLabel": "Næste",
     "nextValue": "Din første ugeplan ligger klar i kalenderen",
     "qLanguage": "Hvilket sprog foretrækker du?",
+    "qName": "Hvad skal Coachen kalde dig?",
+    "qNameSub": "Et fornavn, et kælenavn, hvad du vil — eller ingenting. Det er det navn, vi sender til Coachen på dine vegne; dit kontonavn sendes ikke. Det, du selv skriver i en besked, kommer frem til Coachen, præcis som du har skrevet det. Du kan ændre det under Indstillinger.",
+    "skipName": "Spring over — intet navn",
     "qExperience": "Hvor mange Ironman-distanceløb har du gennemført?",
     "qExperienceSub": "Inkl. 70.3 og fuld distance",
     "expBeginner": "Det bliver mit første",
@@ -468,6 +479,7 @@
     "qConstraintsSub": "Valgfri — vælg alle der passer",
     "weeklyDay": "Ugentlig planlægningsdag",
     "weeklyDaySub": "Hvornår gennemgår du typisk din uge?",
+    "back": "Tilbage",
     "continue": "Fortsæt →",
     "finish": "Fuldfør opsætning →",
     "startTraining": "Start træning →",
@@ -516,10 +528,21 @@
   },
   "CoachThread": {
     "title": "Coach",
-    "planWeek": "Planlæg min uge",
-    "offerBody": "Det er din planlægningsdag. Jeg har læst, hvordan din krop har haft det — skal vi kigge på næste uge sammen?",
-    "offerAccept": "Lad os planlægge",
-    "offerDismiss": "Ikke nu"
+    "offerBody": "Det er din check-in-dag. Før jeg laver et udkast til næste uge — hvordan møder du den? Det tager et minut, og du må gerne springe over.",
+    "offerAccept": "Tjek ind",
+    "offerDismiss": "Ikke nu",
+    "checkInError": "Det blev ikke gemt. Prøv igen, eller spring over i denne uge."
+  },
+  "CheckIn": {
+    "intro": "Før ugen bliver lagt — hvordan møder du den? Svar ud fra dit eget normale, ikke andres.",
+    "energy": "Energi",
+    "body": "Fysisk tilstand",
+    "sleep": "Søvnkvalitet",
+    "signal": "Noget din Coach bør vide om ugen?",
+    "signalPlaceholder": "Valgfrit — fx tunge ben efter tirsdag",
+    "signalHint": "Din AI Coach læser dette. Hold dig til hvordan træningen føltes — ikke helbredsoplysninger.",
+    "submit": "Gem check-in",
+    "skip": "Spring over i denne uge"
   },
   "CoachChat": {
     "coachLabel": "Coach",
@@ -544,18 +567,6 @@
     "thumbSave": "Gem"
   },
   "WeeklySession": {
-    "title": "Ugentlig session",
-    "backToChat": "Tilbage til Coach",
-    "coachLabel": "Coach",
-    "youLabel": "Dig",
-    "headCoachLabel": "Cheftræner",
-    "intro": "Din ugentlige snak med din Coach — se ugen igennem, og planlæg den næste.",
-    "start": "Start ugentlig session",
-    "starting": "Starter…",
-    "thinking": "Coach tænker…",
-    "inputLabel": "Din besked til Coach",
-    "placeholder": "Skriv dit svar…",
-    "send": "Send svar",
     "savePlan": "Gem denne plan",
     "cancelPlan": "Ikke denne uge",
     "reviewPlan": "Se planen",
@@ -565,28 +576,7 @@
     "proposalPending": "{count, plural, one {Coach foreslog # session} other {Coach foreslog # sessioner}} — gem eller annullér, når du er klar.",
     "proposalStale": "Denne plan er rullet ind i en ny dag. Annullér den, og bed din Coach om en ny uge.",
     "minutes": "{count} minutter",
-    "planned": "{count, plural, =0 {Plan gemt — en hvileuge} one {Plan gemt — # session} other {Plan gemt — # sessioner}}",
-    "ended": "Denne ugentlige session er færdig. Din plan ligger i kalenderen.",
-    "consentRequired": "Din Coach er sat på pause, indtil du accepterer, hvordan dine data behandles.",
-    "consentRequiredLink": "Åbn Privatliv & samtykke",
-    "error": "Det virkede ikke. Prøv igen.",
-    "coachUnavailable": "Din Coach svarede ikke på den. Intet gik tabt — send den igen.",
-    "ranOutOfRoom": "Din Coach løb tør for plads til det svar. Bed om en mindre ændring, eller én uge ad gangen.",
-    "unsafeContent": "Noget gemt i din træning — en note eller et stykke udstyr — ligner en e-mailadresse eller et telefonnummer. Din Coach kan ikke læse det. Fjern det, og prøv igen.",
-    "drewOn": "Det jeg trak på",
-    "thumbUp": "Det her hjalp",
-    "thumbDown": "Det her ramte forkert",
-    "thumbComment": "Vil du tilføje noget? (valgfrit)",
-    "thumbSave": "Gem",
-    "checkInIntro": "Før vi planlægger — hvordan møder du ugen? Svar ud fra dit eget normale, ikke andres.",
-    "checkInEnergy": "Energi",
-    "checkInBody": "Fysisk tilstand",
-    "checkInSleep": "Søvnkvalitet",
-    "checkInSignal": "Noget din Coach bør vide om ugen?",
-    "checkInSignalPlaceholder": "Valgfrit — fx tunge ben efter tirsdag",
-    "checkInSubmit": "Fortsæt",
-    "checkInSkip": "Spring over i denne uge",
-    "checkInSignalHint": "Din AI Coach læser dette. Hold dig til hvordan træningen føltes — ikke helbredsoplysninger."
+    "planned": "{count, plural, =0 {Plan gemt — en hvileuge} one {Plan gemt — # session} other {Plan gemt — # sessioner}}"
   },
   "Messaging": {
     "title": "Coaching Channel",
@@ -626,7 +616,8 @@
     "yourHeadCoach": "Din Head Coach",
     "recently": "for nylig",
     "blocksDrafted": "Jeg har formet din træning frem mod {race}: {blocks}",
-    "weekDrafted": "Jeg har lavet et udkast til næste uge — kig på din plan, når du har tid",
+    "weekDrafted": "Jeg har lavet et udkast til en træningsuge — kig på din plan, når du har tid",
+    "weekDraftedFrom": "Jeg har lavet et udkast til en træningsuge, der starter {day} — kig på din plan, når du har tid",
     "weeklyDaySet": "{coach} flyttede din ugentlige planlægningsdag til {day}",
     "weeklyDaySetNoDetail": "{coach} ændrede din ugentlige planlægningsdag",
     "weekDraftShaped": "{coach} justerede næste uges plan, før den nåede dig",
@@ -644,12 +635,117 @@
     "blockRenamed": "{coach} omdøbte din blok \"{from}\" til \"{to}\"",
     "blockRebounded": "{coach} flyttede slutningen af din blok \"{name}\" til {day}",
     "blockRenamedAndRebounded": "{coach} omdøbte din blok \"{from}\" til \"{to}\" og flyttede dens slutning til {day}",
-    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke"
+    "blockEditedNoDetail": "{coach} ændrede en af dine træningsblokke",
+    "blocksRepinned": "{coach} har tilpasset dine træningsblokke til den nye dato for {race}",
+    "blocksRepinnedNoDetail": "{coach} har tilpasset dine træningsblokke til den nye løbsdato",
+    "blocksRefitted": "De blokke, din Head Coach satte, passer ikke længere til den nye løbsdato, så jeg har tilpasset din træning frem mod {race}: {blocks}",
+    "blocksRefittedNoDetail": "De blokke, din Head Coach satte, passer ikke længere til den nye løbsdato, så jeg har tilpasset din træning frem mod dit løb"
   },
   "Privacy": {
     "dataRightsTitle": "Dine data",
     "dataRightsBody": "Du kan hente en kopi af alt, appen har om dig, eller slette din konto og fjerne det hele. Begge dele finder du under Indstillinger.",
     "dataRightsLink": "Gå til Indstillinger"
+  },
+  "Glossary": {
+    "title": "Ordliste",
+    "subtitle": "Træningssproget i din plan og i din Coachs beskeder",
+    "trainingTitle": "Træningsbegreber",
+    "sessionTitle": "Sessionstyper",
+    "raceTitle": "Løbstermer",
+    "training": {
+      "zone2": {
+        "term": "Zone 2",
+        "definition": "Lav aerob intensitet, hvor du kan holde en samtale. Grundlaget for udholdenhedstræning — udvikler fedtoxidation og mitokondrier over tid."
+      },
+      "vo2max": {
+        "term": "VO2max",
+        "definition": "Den maksimale mængde ilt din krop kan forbruge under træning. En vigtig forudsigelse af udholdenhedspræstation. Forbedres ved høj-intensitets intervaltræning."
+      },
+      "lactateThreshold": {
+        "term": "Laktatgrænse",
+        "definition": "Den intensitet, hvor mælkesyre akkumuleres hurtigere end den kan fjernes. Træning ved og omkring denne zone hæver loftet for bæredygtig indsats."
+      },
+      "ftp": {
+        "term": "FTP (Funktionel tærskeleffekt)",
+        "definition": "Den højeste gennemsnitlige watt, du kan opretholde i ca. en time på cyklen. Bruges til at sætte træningszoner for cykling."
+      },
+      "hrv": {
+        "term": "HRV (Pulsvariabilitet)",
+        "definition": "Variationen i tid mellem hjerteslag. Højere HRV indikerer generelt bedre restitution. Nyttigt til at bestemme, hvornår man skal presse på og hvornår man skal bakke af."
+      },
+      "tss": {
+        "term": "TSS (Træningsbelastningsscore)",
+        "definition": "Et enkelt tal der repræsenterer træningsbelastningen i en session, der kombinerer intensitet og varighed. Bruges til at spore kumulativ træthed og form over tid."
+      },
+      "aerobicBase": {
+        "term": "Aerob base",
+        "definition": "Den akkumulerede lavintensitetskondition, der underbygger al anden træning. En stærk base giver intenst arbejde et stabilt fundament at lande på."
+      },
+      "periodisation": {
+        "term": "Periodisering",
+        "definition": "Strukturering af træning i faser (base, opbygning, top, nedtrapning) så stress og restitution bevidst alterneres for at producere toppræstation på det rette tidspunkt."
+      }
+    },
+    "session": {
+      "brick": {
+        "term": "Brick-session",
+        "definition": "En træning der kombinerer to discipliner i forlængelse af hinanden — oftest cykel efterfulgt umiddelbart af løb. Træner benene i at tilpasse sig overgangen mellem discipliner."
+      },
+      "interval": {
+        "term": "Interval",
+        "definition": "Gentagne hårde indsatser adskilt af restitutionsperioder. Bruges til at akkumulere tid ved høj intensitet uden overdreven træthed."
+      },
+      "tempo": {
+        "term": "Tempo løb / tur",
+        "definition": "En vedvarende indsats ved eller nær laktatgrænsen. Komfortabelt hårdt — du kan tale i korte sætninger, ikke hele afsnit."
+      },
+      "lsd": {
+        "term": "Lang langsom distance (LSD)",
+        "definition": "En lang session ved Zone 2-intensitet. Opbygger aerob base, fedttilpasning og mental robusthed uden at akkumulere overdreven træthed."
+      },
+      "fartlek": {
+        "term": "Fartlek",
+        "definition": "Ustruktureret hastighedsleg inden for en ellers let session. Korte intensitetsudbrud efter eget skøn — nyttigt til at bryde monotonien og tilføje stimulus."
+      },
+      "recovery": {
+        "term": "Restitutionssession",
+        "definition": "En meget let, kort indsats designet til at fremme blodgennemstrømning og hjælpe restitution uden at tilføje meningsfuld træningsbelastning."
+      },
+      "openWater": {
+        "term": "Åbentvandssvøm",
+        "definition": "En svømmetur i naturligt vand (sø, hav, å) i modsætning til en pool. Involverer sigtning, drafting (at ligge på hjul) og våddragt-tilpasning — alle racespecifikke færdigheder."
+      }
+    },
+    "race": {
+      "transitions": {
+        "term": "T1 / T2",
+        "definition": "Skiftezoner. T1 er svøm-til-cykel; T2 er cykel-til-løb. Øvelse gør transitioner hurtigere og mindre stressende på løbsdagen."
+      },
+      "ageGroup": {
+        "term": "AG (Aldersgruppe)",
+        "definition": "Din konkurrencekategori baseret på alder, typisk i 5-årige bånd. De fleste amatørtriatleter konkurrerer i deres AG frem for samlet."
+      },
+      "wetsuitLegal": {
+        "term": "Våddragt tilladt",
+        "definition": "Vandtemperaturen er under grænsen (typisk 24,5°C for ikke-eliter), hvor våddragter er tilladt i konkurrence."
+      },
+      "dnf": {
+        "term": "DNF / DNS / DQ",
+        "definition": "Did Not Finish / Did Not Start / Diskvalificeret. Almindelige løbsudfald ud over en gennemførelse. DNS er nogle gange det klogeste valg ved skade."
+      },
+      "drafting": {
+        "term": "Drafting (at ligge på hjul)",
+        "definition": "At svømme eller cykle tæt bag en anden atlet for at reducere modstand. Tilladt ved svømning, forbudt på cyklen i de fleste amatørløb, tilladt ved løb."
+      },
+      "specialNeeds": {
+        "term": "Særlige behov",
+        "definition": "En taske du kan hente midt i løbet (normalt midt på cykel- og løbsdelen) med ekstra ernæring, et ekstra udstyrsstykke eller hvad du har brug for til anden halvdel."
+      },
+      "ironman": {
+        "term": "Ironman-distance",
+        "definition": "3,8 km svøm · 180 km cykel · 42,2 km løb. Fuld-distance triatlon. Også afholdt som 70.3 (halv-iron): 1,9 km svøm · 90 km cykel · 21,1 km løb."
+      }
+    }
   },
   "FeedbackInterview": {
     "title": "Feedback-interview",
@@ -677,6 +773,21 @@
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {1 uge} other {# uger}} til {race}"
   },
+  "CoachChores": {
+    "kicker": "Venter på dig",
+    "title": "{count, plural, one {Et løb er flyttet} other {# løb er flyttet}}",
+    "moved": "{athlete}s {race} er flyttet fra {from} til {to}.",
+    "stillEnds": "Den sidste blok, \"{block}\", slutter stadig {day}.",
+    "tooFew": "For få blokke ville overleve en tilpasning ({dropped} ville ryge), så start forfra fra udkastet i stedet.",
+    "nothing": "ingen",
+    "repin": "Tilpas til {day}",
+    "restart": "Start forfra fra udkastet",
+    "repinAll": "Tilpas alle",
+    "notNow": "Ikke nu",
+    "close": "Luk",
+    "done": "Klaret — blokkene passer til løbet igen.",
+    "error": "Det virkede ikke ({reason})."
+  },
   "BlockPanel": {
     "title": "Træningsblokke",
     "toward": "frem mod {race} den {date}",
@@ -687,7 +798,7 @@
     "authorCoach": "Coach",
     "authorYou": "Dig",
     "save": "Gem",
-    "stale": "Blokkene passer ikke længere til løbsdatoen — Coachen tegner dem op igen. Intet at redigere endnu.",
+    "stale": "Blokkene passer ikke længere til løbsdatoen. Tilpas dem fra beskeden ved næste login, ellers tegner Coachen dem op igen, når ingen Head Coach er tilknyttet. Intet at redigere endnu.",
     "conflict": "Ændret af en anden — det her er det gældende sæt.",
     "error": "Det virkede ikke ({reason})."
   },
@@ -710,6 +821,22 @@
     "approved": "Godkendt. Det når atleten på deres planlægningsdag.",
     "approvedChanged": "Godkendt med dine ændringer. Atleten får at vide, at du har justeret den.",
     "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
+    "error": "Det virkede ikke ({reason})."
+  },
+  "DraftingCard": {
+    "drafting": "Coachen laver et udkast til ugen… cirka {seconds} sekunder.",
+    "notYet": "Ikke endnu — det er her, næste gang du åbner appen."
+  },
+  "RedraftCard": {
+    "title": "Ingen plan for den uge",
+    "lead": "Du lod ugen fra {week} være, som den var. Coachen kan lave et udkast én gang til.",
+    "redraft": "Lav et udkast til min uge",
+    "drafting": "Coachen laver et udkast til ugen — cirka {seconds} sekunder. Det dukker op her.",
+    "alreadyPlanned": "Den uge har allerede en plan.",
+    "draftPending": "Der venter allerede et udkast til den uge på dig.",
+    "notDeclined": "Den uge blev ikke afvist, så der er ikke noget at lave om — spørg Coachen i stedet.",
+    "noWindow": "Ingen dag i den uge kan rumme træning.",
+    "consentRequired": "For at få et udkast skal du først tillade AI-coaching under Privatliv.",
     "error": "Det virkede ikke ({reason})."
   },
   "ProposalCard": {
@@ -753,6 +880,10 @@
     "allowNone": "Slet ikke",
     "declareInjury": "Sådan står det til",
     "imIll": "Jeg er syg – alt af for nu",
+    "nameLabel": "Hvad og hvor",
+    "namePlaceholder": "venstre knæ",
+    "declaredByMistake": "Oprettet ved en fejl",
+    "tooOld": "En registrering ældre end et døgn bliver stående; markér den som ovre i stedet.",
     "history": "Historik",
     "glance_none_swim": "ingen svømning",
     "glance_none_bike": "ingen cykling",
@@ -760,5 +891,11 @@
     "glance_easy_swim": "let svømning",
     "glance_easy_bike": "let cykling",
     "glance_easy_run": "let løb"
+  },
+  "PreferredName": {
+    "placeholder": "f.eks. Mads, Kaptajn, M",
+    "realNameWarning": "Det er dit rigtige navn. Coachen bruger det præcis, som du har skrevet det.",
+    "useAnyway": "Brug det alligevel",
+    "pickAnother": "Vælg noget andet"
   }
 }

@@ -1,4 +1,3 @@
-import { detectPatterns } from './pattern-insight';
 import {
   CONSTRAINT_SIGNALS,
   assemble,
@@ -7,17 +6,18 @@ import {
   groundingBlock,
   onboardingBlock,
   openingBlock,
+  preferredNameBlock,
   buildEquipmentLines,
   type PromptBlock,
 } from './prompt-blocks';
-import { planningWindow, type PlanningWindow } from './planning-window';
+import type { PlanningWindow } from './planning-window';
 import type { SkeletonDay } from './week-draft';
 import type { ProposedSession } from './weekly-session';
-import { effectiveWeeklySessionDay } from './weekly-offer';
 import type { RetrievedPassage } from '@/features/knowledge-oracle/retrieval';
 import type { Citation } from '@/lib/citation';
 import { ADJUST_TRAINING_BLOCKS_TOOL_NAME, type BlockAdjustmentContext } from './block-adjustment';
 import type { TrainingBlock } from './training-blocks';
+import type { PresenceStage } from './presence';
 import { assertNoDirectIdentifier } from './check-in';
 import type { SessionOrigin } from '@/features/session/session';
 import type { WeekSession } from './week';
@@ -26,23 +26,26 @@ import type {
   RaceMention,
   Readiness,
   SessionContext,
-  SessionHistoryItem,
-  SkippedSession,
-  WeekActivity,
   WeekFeedbackEntry,
 } from './check-in';
 
 /**
- * The Coach's athlete-facing prompts: the Weekly Session and Coach Chat.
+ * The Coach's athlete-facing prompts: Coach Chat, the silent week draft and the
+ * block adjustment. (The Weekly Session's prompt lived here until the behavior
+ * was retired — ADR 0007, amended 2026-09-16, `training-architecture/21`.)
  *
  * Everything here is deterministic given its inputs — plain data in, prompt
  * strings out, no DB, no HTTP, no Anthropic client. The clock is the one seam to
  * the outside world and it is passed in (`today`) rather than read here, so a
  * prompt renders the same on any machine at any time and tests need no mocking.
  *
- * No real identity ever reaches these strings. The check-in builder that feeds
- * this module enforces GDPR decision 1, and both renderers assert it again
- * themselves so a caller that assembled its own context cannot route around it.
+ * No real identity ever reaches these strings from the athlete's record. The
+ * check-in builder that feeds this module enforces GDPR decision 1, and both
+ * renderers assert it again themselves so a caller that assembled its own
+ * context cannot route around it. The one name that does reach them is the
+ * **Preferred Name** the athlete chose for the Coach (`preferred-name/02`):
+ * passed as its own parameter from the user seam, never read from a training
+ * row, and deliberately outside the assertion — see `preferredNameBlock`.
  *
  * How a prompt is *assembled* lives in `prompt-blocks`; what the Coach notices
  * across weeks lives in `pattern-insight`. This module is the copy and the order.
@@ -53,7 +56,7 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// ── Weekly Session prompt ─────────────────────────────────────────────────────
+// ── The week, as the prompts read it ─────────────────────────────────────────
 
 // One-based: a Double's position is 1, 2, 3 - never 0 - so the list starts at
 // '1st' rather than carrying an empty slot nothing can reach.
@@ -94,43 +97,6 @@ const dayReference = (dateKey: string): string => `${weekdayShort(dateKey)} ${da
 const qualifiedType = (sessionType: string, position?: number): string =>
   `${position ? `${ordinal(position)} ` : ''}${sessionType}`;
 
-/**
- * Natural references for skipped sessions: date + type, with the position
- * qualifier ("2nd Endurance") only when two same-type sessions share a day.
- * Entity ids never appear in prompts.
- */
-export function formatSkippedSessions(
-  skippedSessions?: SkippedSession[],
-): string | null {
-  if (!skippedSessions || skippedSessions.length === 0) return null;
-  return skippedSessions
-    .map((s) => {
-      return `${dayReference(s.date)}: ${qualifiedType(s.sessionType, s.position)}, skipped`;
-    })
-    .join('; ');
-}
-
-/**
- * The week's Session Moves and Athlete Session creations as natural references —
- * date + type, position qualifier only for same-type Doubles, never entity ids.
- * Silent Pattern Insight material for the Weekly Session.
- */
-export function formatWeekActivity(weekActivity?: WeekActivity | null): string | null {
-  if (!weekActivity) return null;
-  const lines: string[] = [];
-  (weekActivity.moves || []).forEach((m) => {
-    lines.push(
-      `- moved ${dayReference(m.from)} ${qualifiedType(m.sessionType, m.position)} to ${dayReference(m.to)}`,
-    );
-  });
-  (weekActivity.creations || []).forEach((c) => {
-    lines.push(
-      `- added ${dayReference(c.dateKey)} ${c.sessionType}${c.retro ? ' (retro-logged as done)' : ''}`,
-    );
-  });
-  return lines.length > 0 ? lines.join('\n') : null;
-}
-
 const FEEDBACK_EMOJI = ['😫', '😕', '😐', '🙂', '😄'];
 const emojiForScore = (val: number): string =>
   FEEDBACK_EMOJI[Math.round(((val - 1) * 4) / 9)] || '—';
@@ -160,112 +126,31 @@ export function formatWeekFeedback(
     .join('\n');
 }
 
+/**
+ * What the week draft's prompt reads about the athlete's week. Until
+ * `training-architecture/21` this also carried pattern insights, skipped
+ * sessions and the week's moves for the Weekly Session's prompt; that prompt
+ * is gone, and the draft never rendered them, so they went with it.
+ */
 export interface WeeklyContext {
   checkIn: CheckIn;
-  patterns: string[];
   feedbackSummary: string | null;
-  skippedSessions: SkippedSession[];
   unavailableDates: string[];
-  weekActivityLines: string | null;
   today: string;
-  /**
-   * The drafted week already staged on this conversation as its pending
-   * proposal (`training-architecture/18`, "discuss"). Set by the caller after
-   * assembly; absent on every other Weekly Session.
-   */
-  stagedProposal?: ProposedSession[];
 }
 
 export function buildWeeklyContext(
   checkIn: CheckIn,
   weekFeedback: WeekFeedbackEntry[] = [],
-  // Stryker disable next-line ArrayDeclaration: equivalent. `detectPatterns`
-  // returns [] for anything shorter than PATTERN_THRESHOLDS.minOccurrences (3),
-  // so a one-element default is indistinguishable from an empty one.
-  sessionHistory: SessionHistoryItem[] = [],
-  skippedSessions: SkippedSession[] = [],
   unavailableDates: string[] = [],
-  weekActivity: WeekActivity | null = null,
   today: string = todayISO(),
 ): WeeklyContext {
   return {
     checkIn,
-    patterns: detectPatterns(sessionHistory),
     feedbackSummary: formatWeekFeedback(weekFeedback),
-    skippedSessions,
     unavailableDates,
-    weekActivityLines: formatWeekActivity(weekActivity),
     today,
   };
-}
-
-// ── Weekly Session blocks ─────────────────────────────────────────────────────
-
-const ARC_SESSION_1 = `ARC — SESSION 1:
-
-P1 WELCOME:
-First meeting. Know athlete only from onboarding (name, race, experience, and the ONBOARDING PROFILE below). No history, feedback, patterns. Don't fake familiarity.
-Don't ask "how did the week feel" — no week yet. Don't re-ask anything in ONBOARDING PROFILE — reference it as known. Welcome briefly, ask ONE physical state question: "Where are you right now physically — in rhythm or starting from scratch?" Wait.
-
-P2 INTAKE:
-Acknowledge what they say. Factor in injuries, gaps, fitness level. Brief. Only ask what onboarding didn't cover.
-
-P3 FIRST WEEK:
-Propose week. Explain reasoning more than usual — first exposure to coaching style. Name what you're building toward, not just sessions. "This is my starting point — does it fit?" Adjust. Close → see FIRST SESSION ORIENTATION.`;
-
-const ARC_SESSION_2 = `ARC — SESSION 2:
-
-P1 CHECK-IN:
-One week history. Concrete debrief — not broad self-assessment. Ask: sessions, what felt hard, body response. 1-2 questions.
-
-P2 REVIEW:
-Acknowledge. Cross-ref feedback (may be sparse). Still building athlete picture — say so. Reference session 1 and onboarding. Name plan vs reality.
-
-P3 PLANNING:
-Build week 2 from week 1 learnings. Name connections: "legs heavy Thu → protect recovery earlier." Present sessions, ask if it works, adjust. Close with send-off, open door.`;
-
-const ARC_SESSION_3 = `ARC — SESSION 3:
-
-P1 OPENING:
-Two weeks history — early relationship. Reference something specific from last session/feedback. Don't fake pattern knowledge. Ask: "Last week you mentioned X — how did that play out?"
-
-P2 REVIEW:
-Standard review, limited history caveat. Declare uncertainty. Two consistent weeks → "starting to notice a pattern."
-
-P3 PLANNING:
-Standard. Factor early patterns silently — surface only if 2+ weeks consistent.`;
-
-const ARC_SESSION_4_PLUS = `ARC — SESSION 4+:
-
-P1 REFLECTIVE PROMPT:
-Ask 1-2 questions before giving your read. Pick most relevant: physical state, energy/sleep, mental load, perceived progress, health flags. Wait.
-
-P2 WEEK REVIEW:
-Acknowledge. Synthesise self-assessment + feedback + signals. Name patterns, strong sessions, warnings. Flag gaps between athlete self-read and data.
-
-P3 PLANNING:
-Lead with plan. Present sessions, load, reasoning. "Does that work, or anything needs moving?" Adjust. Close with send-off + open door.`;
-
-/**
- * The Presence Arc, as the Coach's instructions for this week's conversation
- * (CONTEXT.md — Weeks 1, 2, 3, then 4+). The arc is earned, not simulated: each
- * stage tells the Coach exactly how much history it may claim to have.
- *
- * The race target rides on session 1 only, where it belongs to the P3 close.
- */
-function arcBlock(
-  weeklySessionNumber: number | undefined,
-  raceTarget?: string | null,
-): string {
-  if (weeklySessionNumber === 1) {
-    const race = raceTarget
-      ? `\nRACE: ${raceTarget} — name once in P3 close (e.g. "This is your start toward [race]"). Not as greeting.`
-      : '';
-    return `${ARC_SESSION_1}${race}`;
-  }
-  if (weeklySessionNumber === 2) return ARC_SESSION_2;
-  if (weeklySessionNumber === 3) return ARC_SESSION_3;
-  return ARC_SESSION_4_PLUS;
 }
 
 /**
@@ -281,71 +166,6 @@ function planningWindowLine(window: PlanningWindow): string {
   return window.fellThrough
     ? `${span} Nothing is plannable in the rest of this week, so the plan starts next week — say when training starts, plainly, rather than leaving an empty week unexplained.`
     : `${span} Plan these days only; a later week is not yours to write.`;
-}
-
-/**
- * The athlete's Weekly Session Day and today's, when they differ; nothing on
- * the day itself.
- *
- * Since 2026-09-14 every athlete has a day ("Flexible" is retired and reads as
- * Sunday), so the only silence is on the day itself. Until
- * `training-architecture/20` this line ended with a question — "Plan rest of
- * this week or from next Monday?" — that offered a week the server refused:
- * PR #57 bounded the write to this week's remainder on purpose. The window is
- * the server's to choose and the PLANNING WINDOW line above states it; this
- * line now states the day and asks nothing.
- */
-function planningDayLine(today: string, weeklySessionDay?: string): string | null {
-  const prefDay = effectiveWeeklySessionDay(weeklySessionDay);
-
-  // Stryker disable next-line StringLiteral: same as `weekdayShort` above -
-  // only distinguishable in a timezone behind UTC, which this suite is not.
-  const dayOfWeek = new Date(today + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'long',
-  });
-  if (dayOfWeek === prefDay) return null;
-
-  return `PLANNING DAY: Preferred ${prefDay}, today ${dayOfWeek}.`;
-}
-
-/**
- * Today, the days the plan may cover, the Weekly Session Day question, and the
- * athlete's Fixed Constraints — the facts about *when* that the Coach plans
- * around.
- *
- * Starting the Weekly Session on the preferred day plans the week ahead without
- * asking; on any other day the Coach asks which week it is planning (CONTEXT.md,
- * Weekly Session Day).
- *
- * The PLANNING WINDOW line is rendered **unconditionally**, and that is the
- * point of it (`showable-version/11`). PLANNING DAY below is conditional on a
- * preferred day being set, and `Flexible` is one of four onboarding choices — so
- * a Flexible athlete, or one who skipped the question, was told nothing at all
- * about which week was being planned, and the Coach planned the week ahead every
- * time without asking. The spec did not cover its own option.
- *
- * Note this line only *tells* the Coach the window. The bound that makes it true
- * is in `validateProposedPlan`, which drops anything outside it — a prompt line
- * is a request, and the same ticket exists because that was mistaken for a rule.
- */
-function todayBlock(
-  today: string,
-  window: PlanningWindow,
-  weeklySessionDay?: string,
-  fixedConstraints?: string[],
-): string {
-  const lines = [`TODAY: ${today}`];
-
-  lines.push(planningWindowLine(window));
-
-  const planningDay = planningDayLine(today, weeklySessionDay);
-  if (planningDay) lines.push(planningDay);
-
-  if (fixedConstraints && fixedConstraints.length > 0) {
-    lines.push(`NO TRAINING ON: ${fixedConstraints.join(', ')}`);
-  }
-
-  return lines.join('\n');
 }
 
 /**
@@ -519,13 +339,13 @@ function tuneUpWindowLine(window: { from: string; to: string } | null | undefine
 /** The STATE line — coaching intelligence, never quoted back to the athlete. */
 function stateBlock(s: {
   phase?: string;
-  sessionCount?: number;
+  presenceStage?: PresenceStage;
   experienceLevel?: string;
   readiness?: Readiness;
 }): string {
   const parts = [
     tag('phase', s.phase),
-    tag('sessions', s.sessionCount),
+    tag('presence', s.presenceStage),
     readinessTokens(s.readiness) || null,
     `xp=${s.experienceLevel || 'intermediate'}`,
   ].filter((part): part is string => part !== null);
@@ -566,28 +386,61 @@ ${feedbackSummary}`;
   return 'No feedback this week, and no check-in data — go on what the athlete tells you.';
 }
 
-/** Pattern Insight: surfaced at most once, and only when multi-week consistent. */
-function patternsBlock(patterns: string[]): PromptBlock {
-  if (patterns.length === 0) return null;
-  return `PATTERNS: ${patterns.join('; ')}.
-Strong (multi-week) → surface ONE in P2: "I've noticed X, pretty common at this stage. Does that match?" Not data/criticism. Max one per session.
-Weak → shape plan silently.`;
+// ── The Presence Arc ──────────────────────────────────────────────────────────
+
+/**
+ * The Presence Arc, as the Coach's instructions for how much it may claim to
+ * know (CONTEXT.md, re-keyed 2026-09-16). The stage is decided from stored data
+ * — weeks of Session Reflections and Check-ins filed (`presence.ts`) — so the
+ * arc is earned, not simulated: each stage tells the Coach exactly how much
+ * history it has. Provisional by Mads's ruling; the honest floor, not the design.
+ */
+const PRESENCE_COLD_START = `PRESENCE — COLD START:
+You know this athlete only from onboarding and what they tell you now: no reflections, no check-ins, no history. Don't fake familiarity or recall a week you haven't seen. Ask one grounding question before you assume — where they are physically right now — and explain your reasoning more than usual; this is their first exposure to how you coach.`;
+
+const PRESENCE_BUILDING = `PRESENCE — BUILDING:
+You have a week or two of their reflections and check-ins. Reference something specific you actually have; say plainly the picture is still forming. Declare uncertainty where evidence is thin — two consistent weeks is "starting to notice a pattern", never more.`;
+
+const PRESENCE_FULL = `PRESENCE — FULL:
+Several weeks of reflections and check-ins. Synthesise their self-assessment, session feedback and signals; name patterns, strong sessions and warnings, and flag gaps between how they read themselves and what the data says.`;
+
+/** The stage's instructions, or nothing when a caller supplied no stage. */
+function presenceBlock(stage: PresenceStage | undefined): PromptBlock {
+  switch (stage) {
+    case 'cold_start':
+      return PRESENCE_COLD_START;
+    case 'building':
+      return PRESENCE_BUILDING;
+    case 'full':
+      return PRESENCE_FULL;
+    default:
+      return null;
+  }
 }
 
-const FIRST_SESSION_ORIENTATION = `FIRST SESSION ORIENTATION:
-After send-off, weave 3-4 sentences — coach orienting athlete, not product tour:
+const FIRST_CONVERSATION_ORIENTATION = `FIRST CONVERSATION ORIENTATION:
+Before closing, weave 2-3 sentences — coach orienting athlete, not product tour:
 1. Training Plan tab — tap sessions to log body/mind; that's how I learn what works for you
 2. Equipment tab — add gear for more specific advice
 3. Glossary — unfamiliar terms, it's there
-4. Coach Chat — "question mid-week? Find me in Coach Chat."`;
+Only while the athlete is new (this block is present until their first Check-in or rated week) — if an earlier turn in this conversation already did it, do not repeat it.`;
 
-const EQUIPMENT_NUDGE = `EQUIPMENT NUDGE: One sentence in planning — don't know what they train on; Equipment tab helps you be specific. Once only.`;
+const EQUIPMENT_NUDGE = `EQUIPMENT NUDGE: One sentence when it fits — don't know what they train on; Equipment tab helps you be specific. Once only.`;
 
-
-/** The week's skips, or nothing when the athlete missed none. */
-function skippedBlock(skippedSessions?: SkippedSession[]): PromptBlock {
-  if (!skippedSessions || skippedSessions.length === 0) return null;
-  return `SKIPPED: ${formatSkippedSessions(skippedSessions)} — mention naturally in review, no justification needed.`;
+/**
+ * The Guided Tour's beat for this conversation, or nothing.
+ *
+ * Both beats are the Coach's voice rather than a UI overlay (ADR 0001), and
+ * they moved with the arc when it was re-keyed: orientation while the Coach is
+ * at cold start (the first conversation ever, in practice), and the Equipment
+ * nudge while the picture is building — but only while the tab is still empty,
+ * because a nudge to fill in something already filled in reads as a Coach that
+ * has not looked.
+ */
+function guidedTourBlock(stage: PresenceStage | undefined, hasEquipment: boolean): PromptBlock {
+  if (stage === 'cold_start') return FIRST_CONVERSATION_ORIENTATION;
+  if (stage === 'building' && !hasEquipment) return EQUIPMENT_NUDGE;
+  return null;
 }
 
 /**
@@ -599,150 +452,6 @@ function skippedBlock(skippedSessions?: SkippedSession[]): PromptBlock {
 function unavailableBlock(unavailableDates?: string[]): PromptBlock {
   if (!unavailableDates || unavailableDates.length === 0) return null;
   return `UNAVAILABLE: ${unavailableDates.join(', ')} — no sessions, don't mention unless athlete raises it.`;
-}
-
-/** What the athlete rearranged themselves - silent background, never a challenge. */
-function weekActivityBlock(weekActivityLines: string | null): PromptBlock {
-  if (!weekActivityLines) return null;
-  return `WEEK ACTIVITY (silent background — the athlete arranged their own week. NEVER challenge or raise these in the moment; read them as Pattern Insight material only):
-${weekActivityLines}`;
-}
-
-export function renderWeeklyPrompt(ctx: WeeklyContext): string {
-  // Same reason as buildChatPrompt: the assertion belongs at the prompt builder,
-  // so a caller that assembled the context itself cannot route around the one in
-  // `buildWeeklyCheckIn`. Idempotent — asserting twice costs a walk, missing it
-  // once costs an identifier reaching Anthropic.
-  assertNoDirectIdentifier(ctx.checkIn);
-  // The staged week's notes are the Coach's own by the time they arrive
-  // (approval strips the Head Coach's), but this is the boundary and it
-  // asserts on every input regardless of what the caller promised. Email and
-  // phone shapes; names are the origin guard's job (CodeRabbit, PR #69). No
-  // guard: the assertion no-ops on an absent value, and a guard nothing can
-  // distinguish is a branch no test can hold.
-  assertNoDirectIdentifier(ctx.stagedProposal);
-
-  const {
-    patterns,
-    feedbackSummary,
-    skippedSessions,
-    unavailableDates,
-    weekActivityLines,
-    today,
-  } = ctx;
-  const {
-    readiness,
-    phase,
-    commStyle,
-    experienceLevel,
-    sessionCount,
-    language,
-    weeklySessionDay,
-    fixedConstraints,
-    equipment,
-    weeklySessionNumber,
-    raceTarget,
-    raceDistance,
-    raceDate,
-    blockWeek,
-    tuneUps,
-    lateRaces,
-    tuneUpWindow,
-    tuneUpEveEasy,
-    capacity,
-    notableSignal,
-    onboarding,
-  } = ctx.checkIn;
-  const races = { tuneUps, lateRaces, tuneUpWindow, tuneUpEveEasy };
-
-  const equipmentLines = buildEquipmentLines(equipment);
-  const hasEquipment = equipmentLines.length > 0;
-
-  // Same rule the server enforces on the way back in, asked here so the Coach is
-  // told the bound rather than discovering it as a silently dropped session.
-  const window = planningWindow(today, fixedConstraints, unavailableDates);
-
-
-  return assemble([
-    openingBlock(language, 'Weekly Session — primary structured conversation, once per week.'),
-
-    `POSTURE: Confident, evidence-led, direct. ${HOLD_POSITION} No markdown, lists, platitudes.`,
-
-    groundingBlock(),
-
-    arcBlock(weeklySessionNumber, raceTarget),
-
-    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
-
-    // What the athlete's body currently allows, or nothing at all when nothing
-    // is restricted (ADR 0011). Already a sentence when it arrives — this file
-    // never sees an injury record, only what one permits.
-    capacity ?? null,
-
-    // The athlete's own words about their week. Quoted rather than paraphrased,
-    // and labelled as theirs, so the Coach cannot mistake it for an app-derived
-    // signal or repeat it back as its own observation.
-    notableSignal ? `ATHLETE SAID (their words, this week): "${notableSignal}"` : null,
-
-    todayBlock(today, window, weeklySessionDay, fixedConstraints),
-
-    equipmentBlock(equipmentLines),
-
-    stateBlock({ phase, sessionCount, experienceLevel, readiness }),
-
-    noDataBlock(readiness),
-
-    onboardingBlock(onboarding),
-
-    lastWeekFeedbackBlock(feedbackSummary, readiness),
-
-    commStyleBlock(commStyle),
-
-    patternsBlock(patterns),
-
-    skippedBlock(skippedSessions),
-
-    unavailableBlock(unavailableDates),
-
-    weekActivityBlock(weekActivityLines),
-
-    stagedProposalBlock(ctx.stagedProposal),
-
-    DOUBLES,
-
-    SAVING_THE_PLAN,
-
-    CONSTRAINT_SIGNALS,
-
-    dataUseBlock(readiness),
-
-    guidedTourBlock(weeklySessionNumber, hasEquipment),
-  ]);
-}
-
-/**
- * The Guided Tour's beat for this week, or nothing.
- *
- * Two beats, and both are the Coach's voice rather than a UI overlay (ADR 0001):
- * session 1 orients the athlete, and sessions 2-3 nudge about Equipment — but
- * only while the tab is still empty, because a nudge to fill in something already
- * filled in reads as a Coach that has not looked.
- */
-function guidedTourBlock(
-  weeklySessionNumber: number | undefined,
-  hasEquipment: boolean,
-): PromptBlock {
-  if (weeklySessionNumber === 1) return FIRST_SESSION_ORIENTATION;
-  if (hasEquipment) return null;
-  return isEquipmentNudgeWeek(weeklySessionNumber) ? EQUIPMENT_NUDGE : null;
-}
-
-/** Sessions 2 and 3 only — early enough to matter, late enough not to crowd week 1. */
-function isEquipmentNudgeWeek(weeklySessionNumber: number | undefined): boolean {
-  // Stryker disable next-line ConditionalExpression: equivalent. The guard
-  // narrows for TypeScript; at runtime `undefined >= 2` is already false.
-  if (weeklySessionNumber === undefined) return false;
-  return weeklySessionNumber >= 2 && weeklySessionNumber <= 3;
 }
 
 // ── Coach Chat prompt ─────────────────────────────────────────────────────────
@@ -802,6 +511,12 @@ export function buildChatPrompt(
   sessionContext: SessionContext | null = null,
   week: WeekSession[] = [],
   planning: ChatPlanning | null = null,
+  /**
+   * The Preferred Name (`preferred-name/02`): its own parameter, resolved at
+   * the user seam, so that it is visibly the one input the assertion below is
+   * not run over — see `preferredNameBlock`. Null when the athlete chose none.
+   */
+  preferredName: string | null = null,
 ): string {
   // Asserted here, at the prompt builder, because that is where AGENTS.md says
   // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
@@ -816,7 +531,7 @@ export function buildChatPrompt(
     phase,
     commStyle,
     experienceLevel,
-    sessionCount,
+    presenceStage,
     language,
     fixedConstraints,
     equipment,
@@ -835,6 +550,7 @@ export function buildChatPrompt(
   const races = { tuneUps, lateRaces, tuneUpWindow, tuneUpEveEasy };
 
   const noTrain = noTrainFragment(fixedConstraints);
+  const equipmentLines = buildEquipmentLines(equipment);
 
   return assemble([
     openingBlock(
@@ -844,7 +560,13 @@ export function buildChatPrompt(
 
     `POSTURE: Confident, evidence-led, direct. Real conversation — respond to what they're asking. One follow-up if needed. Concise. ${HOLD_POSITION} No markdown, no lists unless athlete asks for breakdown.`,
 
+    preferredNameBlock(preferredName),
+
     groundingBlock(),
+
+    // How much the Coach may claim to know, decided from what it has
+    // (`training-architecture/21`); the Weekly Session used to carry this arc.
+    presenceBlock(presenceStage),
 
     `TODAY: ${today}`,
 
@@ -852,18 +574,17 @@ export function buildChatPrompt(
 ${[
   tag('phase', phase),
   `xp=${experienceLevel || 'intermediate'}`,
-  tag('sessions', sessionCount),
 ]
   .filter((part): part is string => part !== null)
   .join(' ')}${readinessFragment(readiness)}${noTrain}`,
 
-    // The same horizon the Weekly Session plans against. Chat used to carry
+    // The same horizon the week draft plans against. Chat used to carry
     // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
     // was answered by a Coach that did not know when the race was.
     horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
 
     // What the athlete's body currently allows, or nothing at all when nothing
-    // is restricted (ADR 0011) — the same sentence the Weekly Session carries.
+    // is restricted (ADR 0011) — the same sentence the week draft carries.
     // Chat is where "should I do tomorrow's intervals?" gets asked, and until
     // training-architecture/06 it was answered by a Coach that did not know the
     // athlete could not run.
@@ -878,13 +599,13 @@ ${[
 
     weekBlock(week),
 
-    equipmentBlock(buildEquipmentLines(equipment)),
+    equipmentBlock(equipmentLines),
 
     onboardingBlock(onboarding),
 
     // The one conversation may agree a week (`training-architecture/20`): the
     // bound the server will enforce, the week already on the table if one was
-    // brought in, and the two lines the Weekly Session has always carried.
+    // brought in, and the two lines the Weekly Session carried before it.
     ...chatPlanningBlocks(planning),
 
     CONSTRAINT_SIGNALS,
@@ -893,12 +614,33 @@ ${[
 
     commStyleBlock(commStyle),
 
-    "PRIVACY: Never use athlete's name. Second person only. No PII reproduction.",
+    privacyLine(preferredName),
+
+    guidedTourBlock(presenceStage, equipmentLines.length > 0),
   ]);
 }
 
 /**
- * The planning half of the chat prompt, in the order the Weekly Session renders
+ * The Coach Chat privacy line, in one of two forms.
+ *
+ * **This is a behavioural instruction to the model, not a control** (AGENTS.md:
+ * an instruction in a system prompt is not a control). The control is what
+ * reaches the prompt at all: no name from any training row (ADR 0006), and the
+ * Preferred Name only when the athlete chose one. What this line does is stop
+ * the model *echoing* a name it finds in a session note or a message — which
+ * the identifier assertion cannot see — and, once a Preferred Name is
+ * supplied, stop it contradicting itself by refusing the name it was just
+ * given. Without one, the line is exactly the one every athlete has had.
+ */
+function privacyLine(preferredName: string | null): string {
+  if (!preferredName) {
+    return "PRIVACY: Never use athlete's name. Second person only. No PII reproduction.";
+  }
+  return 'PRIVACY: Call the athlete only by the PREFERRED NAME above. Never use any other name you find in their notes or messages. Second person otherwise. No PII reproduction.';
+}
+
+/**
+ * The planning half of the chat prompt, in the order the Weekly Session rendered
  * the same lines; nothing at all when the chat was given no window.
  *
  * The staged week is the Coach's own by the time it arrives (approval strips
@@ -1095,7 +837,7 @@ export function renderBlockAdjustmentPrompt(ctx: BlockAdjustmentContext): string
 // ── The silent week draft (training-architecture/16) ─────────────────────────
 
 /**
- * Everything the Weekly Session prompt reasons from, plus the week being
+ * Everything the Weekly Session prompt reasoned from, plus the week being
  * drafted: its window, the computed skeleton the Coach adjusts, and the
  * training science retrieved for it. Assembled by the draft service; rendered
  * by {@link renderWeekDraftPrompt}.
@@ -1196,7 +938,7 @@ ${lines.join('\n')}`;
 /**
  * The system prompt for drafting a week with nobody in the room.
  *
- * The Weekly Session's blocks where they still apply — horizon, capacity, the
+ * The retired Weekly Session's blocks where they still apply — horizon, capacity, the
  * athlete's own words, state, last week's reflections, unavailable days — and
  * none of its conversation: no arc, no check-in questions, no guided tour.
  * There is no athlete to ask, so the prompt says what it knows and what it
@@ -1210,7 +952,7 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
     readiness,
     phase,
     experienceLevel,
-    sessionCount,
+    presenceStage,
     language,
     fixedConstraints,
     raceTarget,
@@ -1239,7 +981,7 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
 
     draftWindowBlock(today, window, fixedConstraints),
 
-    stateBlock({ phase, sessionCount, experienceLevel, readiness }),
+    stateBlock({ phase, presenceStage, experienceLevel, readiness }),
 
     lastWeekFeedbackBlock(feedbackSummary, readiness),
 

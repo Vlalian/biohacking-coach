@@ -6,6 +6,7 @@ const {
   getActiveLink,
   getSharedTranscripts,
   getAthleteById,
+  getPreferredNameForAthlete,
   getBriefingPlan,
   getBriefingReflections,
   callCoach,
@@ -19,6 +20,7 @@ const {
   getActiveLink: vi.fn(),
   getSharedTranscripts: vi.fn((): Promise<unknown[] | null> => Promise.resolve(null)),
   getAthleteById: vi.fn(),
+  getPreferredNameForAthlete: vi.fn((): Promise<string | null> => Promise.resolve(null)),
   getBriefingPlan: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
   getBriefingReflections: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
   callCoach: vi.fn<
@@ -44,6 +46,7 @@ const { getTargetRace, getRaces } = vi.hoisted(() => ({
 }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getPreferredNameForAthlete }));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
   getBriefingReflections,
@@ -91,6 +94,27 @@ beforeEach(() => {
     { id: 'm0', role: 'coach_ai', content: 'my read', seq: 0, createdAt: new Date() },
   ]);
   getMessages.mockResolvedValue([]);
+});
+
+describe('startBriefing — the Preferred Name (preferred-name/02)', () => {
+  it('refers to the athlete by the name they chose, read through the user seam for the linked athlete', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getPreferredNameForAthlete.mockResolvedValue('Mads');
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getPreferredNameForAthlete).toHaveBeenCalledWith('a1');
+    expect(lastSystem()).toContain('by the name they chose, "Mads"');
+  });
+
+  it('keeps the nameless third person when the athlete chose none', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getPreferredNameForAthlete.mockResolvedValue(null);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('never use a real name');
+  });
 });
 
 describe('startBriefing — the link gate', () => {
@@ -357,6 +381,38 @@ describe('startBriefing — the prompt material the rest of the suite does not r
     // ...including which block is now — the profile's phase line is gone with
     // the reports, so the block list has to say it (CodeRabbit, PR #65).
     expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach · current');
+  });
+
+  it('says the stored set is stale while it is, and drops the line once it fits again (training-architecture/19)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    const race = { id: 'r1', name: 'IM', date: '2027-09-05' };
+    const set = {
+      id: 's1',
+      athleteId: 'a1',
+      raceId: 'r1',
+      startDate: '2026-06-01',
+      version: 2,
+      blocks: [
+        { name: 'Build', endDate: '2026-12-01', authoredBy: 'coach_ai' },
+        { name: 'Taper', endDate: '2027-08-15', authoredBy: 'head_coach' },
+      ],
+    };
+    const draft = [
+      { index: 1, total: 2, name: 'Block 1 of 2', startDate: TODAY, endDate: '2027-03-01', authoredBy: 'arithmetic' },
+      { index: 2, total: 2, name: 'Block 2 of 2', startDate: '2027-03-02', endDate: '2027-09-05', authoredBy: 'arithmetic' },
+    ];
+    getResolvedBlocks.mockResolvedValue({ race, set, blocks: draft });
+
+    await startBriefing('coach_1', 'a1', TODAY);
+    expect(lastSystem()).toContain('no longer fit the race date: the last block, "Taper", still ends 2027-08-15');
+
+    getResolvedBlocks.mockResolvedValue({
+      race,
+      set: { ...set, blocks: [set.blocks[0], { ...set.blocks[1], endDate: '2027-09-05' }] },
+      blocks: draft,
+    });
+    await startBriefing('coach_1', 'a1', TODAY);
+    expect(lastSystem()).not.toContain('no longer fit');
   });
 
   it('reads no verdict at all for an athlete with no Target Race', async () => {

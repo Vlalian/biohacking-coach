@@ -18,6 +18,7 @@ import type { RosterEntry } from './coach';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { draftDueWeek, HEAD_COACH_LEAD_DAYS, type WeekDraft } from './week-draft';
 import { getPendingWeekDraft } from './week-draft-repository';
+import { draftInFlight } from './week-draft-service';
 import { canHeadCoachEditContent } from './head-coach-authority';
 import { getResolvedBlocks, type ResolvedBlocks } from './training-block-service';
 import { isStaleSet, type TrainingBlock } from './training-blocks';
@@ -113,6 +114,8 @@ export type CoachAthleteView = {
   weeklySessionDay: string | null;
   /** The drafted week awaiting the coach's approval, read without the athlete's day-early filter; null when none. */
   pendingDraft: WeekDraft | null;
+  /** The previewed week being drafted right now, so the page can say so instead of showing nothing (`/29`); null otherwise. */
+  draftInFlight: { weekStart: string } | null;
   /**
    * The athlete's Injuries and Illnesses as calendar spans, or **null** when
    * `share_athlete_reports` is off (`training-architecture/06`). Null and never
@@ -163,7 +166,7 @@ export async function getCoachAthleteView(
   // The week the coach previews: the one the athlete's next cycle drafts for,
   // a day early (17). Plan structure, so outside the visibility branch too.
   const weeklySessionDay = storedDayOf(athlete);
-  const pendingDraft = await coachPreviewDraft(athleteId, athlete, todayKey);
+  const { pendingDraft, draftInFlight: inFlight } = await coachPreview(athleteId, athlete, todayKey);
 
   const calendarSessions = applyVisibilityToSessions(
     calendarRows.map(toSession),
@@ -207,6 +210,7 @@ export async function getCoachAthleteView(
     blocks: blocksViewOf(horizon, todayKey),
     weeklySessionDay,
     pendingDraft,
+    draftInFlight: inFlight,
   };
 }
 
@@ -221,17 +225,34 @@ export function awaitsReview(pending: WeekDraft | null): boolean {
 }
 
 /**
- * The draft a Head Coach previews for this athlete today: the one due for the
- * athlete's next cycle, read a day early and without the athlete's visibility
- * filter (`/17`). The athlete row is passed in because both callers already
- * hold it.
+ * The week a Head Coach previews for this athlete today: the athlete's next
+ * cycle, a day early (`/17`). Read without the athlete's visibility filter.
+ * The athlete row is passed in because both callers already hold it.
  */
-async function coachPreviewDraft(
+function previewWeekOf(athlete: Awaited<ReturnType<typeof getAthleteById>>, todayKey: string): string {
+  return draftDueWeek(todayKey, storedDayOf(athlete), HEAD_COACH_LEAD_DAYS);
+}
+
+/**
+ * The preview, and — when there is none — whether it is being drafted right
+ * now (`/29`). Only a draft for the previewed week counts: the gate may be
+ * drafting this week's remainder for a new athlete (`/24`), and this page does
+ * not show that week, so saying "drafting" would promise a card that never
+ * comes.
+ */
+async function coachPreview(
   athleteId: string,
   athlete: Awaited<ReturnType<typeof getAthleteById>>,
   todayKey: string,
-): Promise<WeekDraft | null> {
-  return getPendingWeekDraft(athleteId, draftDueWeek(todayKey, storedDayOf(athlete), HEAD_COACH_LEAD_DAYS));
+): Promise<{ pendingDraft: WeekDraft | null; draftInFlight: { weekStart: string } | null }> {
+  const previewWeek = previewWeekOf(athlete, todayKey);
+  const pendingDraft = await getPendingWeekDraft(athleteId, previewWeek);
+  if (pendingDraft) return { pendingDraft, draftInFlight: null };
+  const inFlight = await draftInFlight(athleteId, todayKey);
+  if (inFlight?.weekStart === previewWeek) return { pendingDraft: null, draftInFlight: { weekStart: previewWeek } };
+  // Nothing in flight: the draft may have landed between the two reads, so
+  // read the preview once more before showing neither (CodeRabbit, PR #78).
+  return { pendingDraft: await getPendingWeekDraft(athleteId, previewWeek), draftInFlight: null };
 }
 
 /** A Roster row, plus whether a drafted week is waiting for this coach's eye. */
@@ -247,7 +268,7 @@ export async function getRosterWithReviews(coachId: string, todayKey: string): P
   return Promise.all(
     roster.map(async (entry) => {
       const athlete = await getAthleteById(entry.athleteId);
-      const pending = await coachPreviewDraft(entry.athleteId, athlete, todayKey);
+      const pending = await getPendingWeekDraft(entry.athleteId, previewWeekOf(athlete, todayKey));
       return { ...entry, awaitingReview: awaitsReview(pending) };
     }),
   );

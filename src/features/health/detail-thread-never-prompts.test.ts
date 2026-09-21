@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, sep } from 'node:path';
-import { buildWeeklyContext, renderWeeklyPrompt } from '@/features/coach/prompts';
+import { buildChatPrompt } from '@/features/coach/prompts';
 import { capacityStatement } from './capacity';
 import type { CheckIn } from '@/features/coach/check-in';
 
@@ -21,7 +21,7 @@ describe('the detail thread does not reach the model', () => {
     phase: 'Block 1 of 4',
     commStyle: '',
     experienceLevel: 'intermediate',
-    sessionCount: 5,
+    presenceStage: 'full',
     language: 'English',
     weeklySessionDay: 'Monday',
     fixedConstraints: [],
@@ -34,12 +34,7 @@ describe('the detail thread does not reach the model', () => {
       false,
     );
 
-    const prompt = renderWeeklyPrompt(
-      buildWeeklyContext(
-        { ...BASE, weeklySessionNumber: 4, capacity },
-        [], [], [], [], null, '2026-08-18',
-      ),
-    );
+    const prompt = buildChatPrompt({ ...BASE, presenceStage: 'full', capacity }, '2026-08-18');
 
     // The capacity half is there.
     expect(prompt).toContain('no run');

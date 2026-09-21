@@ -39,6 +39,10 @@ const NARRATABLE_TYPES = [
   // (`training-architecture/08`): the plan's structure changed by a hand that
   // is not the athlete's, which is exactly what the rule is for.
   'block_edited',
+  // A Head Coach re-pinning a set the race moved out from under, or starting
+  // it over from the draft (`training-architecture/19`): the same hand on the
+  // same structure.
+  'blocks_repinned',
   // The Head Coach moving the athlete's Weekly Session Day, and shaping the
   // drafted week before it reached them (`training-architecture/17`). The
   // second narrates only when something changed — an unchanged approval is

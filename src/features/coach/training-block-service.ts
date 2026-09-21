@@ -1,5 +1,5 @@
 import { getAthleteById } from '@/features/athlete/athlete-repository';
-import { getActiveLink } from './coach-repository';
+import { getActiveLink, getLinkForAthlete } from './coach-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { getTargetRace } from '@/features/race/race-repository';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
@@ -16,7 +16,7 @@ import {
 } from './block-adjustment';
 import { getCheckInForWeek } from './check-in-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
-import { callCoach } from './coach-client';
+import { callCoach, isCoachDisabled } from './coach-client';
 import { renderBlockAdjustmentPrompt } from './prompts';
 import {
   casUpdateBlockSet,
@@ -26,14 +26,17 @@ import {
 } from './training-block-repository';
 import {
   applyBlockEdit,
+  repinBlockSet,
   resolveBlocks,
   trainingBlocks,
   validateBlockSet,
   type BlockEditInput,
   type BlockEditProblem,
+  type BlockSetProblem,
   type TrainingBlock,
   type TrainingBlockSpec,
   fitsRace,
+  holdsHeadCoachBlock,
 } from './training-blocks';
 import { weekFeedbackFrom } from './weekly-session';
 
@@ -88,6 +91,7 @@ export type AdjustmentOutcome =
   | 'already-adjusted'
   | 'head-coach-owned'
   | 'coach-failed'
+  | 'coach-disabled'
   | 'malformed'
   | 'refused'
   | 'lost-race'
@@ -102,16 +106,33 @@ function weeksTo(today: string, raceDate: string): number {
 
 /**
  * The cheap gate: whether a stored set means there is nothing for the Coach to
- * do. A set that ends on race day is done. A set that holds any Head Coach block
- * is theirs, whether or not it still fits the race — the Coach may suggest
- * through the Briefing, never redraw. Anything else (no set, or a stale one the
- * Coach itself drafted) is open.
+ * do. A set that ends on race day is done. A stale set that holds a Head Coach
+ * block is theirs **while the athlete has an active Coaching Link** — the Coach
+ * may suggest through the Briefing, never redraw; the Head Coach re-pins it
+ * from the popup on login (`training-architecture/19`). The authority rule
+ * protects a relationship, not a kind of person (CONTEXT.md), so once the link
+ * is severed nobody is left to repair the set and the ordinary redraft runs
+ * (ruling 2, 2026-09-15). The link is read only when it decides something:
+ * the common path — no set, or a set that fits — costs no extra query.
+ * Anything else (no set, or a stale one the Coach itself drafted) is open.
  */
-function gateOn(set: BlockSetRecord | null, race: RaceRow): AdjustmentOutcome | null {
+async function gateOn(set: BlockSetRecord | null, race: RaceRow): Promise<AdjustmentOutcome | null> {
   if (!set) return null;
   if (fitsRace(set, race.date)) return 'already-adjusted';
-  if (set.blocks.some((b) => b.authoredBy === 'head_coach')) return 'head-coach-owned';
-  return null;
+  if (!holdsHeadCoachBlock(set)) return null;
+  return (await getLinkForAthlete(set.athleteId)) ? 'head-coach-owned' : null;
+}
+
+/**
+ * The eight-week rule keeps the Coach from redrawing a plan close to the race.
+ * It protects a plan that still describes the race; a set past {@link gateOn}
+ * with a human's block still in it is stale with nobody linked to repair it,
+ * and that one is re-fitted whatever the distance (Mads, 2026-09-19, on
+ * ruling 2 of `training-architecture/19`).
+ */
+function tooCloseToRedraw(today: string, race: RaceRow, existing: BlockSetRecord | null): boolean {
+  if (weeksTo(today, race.date) >= MIN_WEEKS_TO_ADJUST) return false;
+  return existing === null || !holdsHeadCoachBlock(existing);
 }
 
 /** Everything the briefing carries, gathered in one round of reads. */
@@ -207,6 +228,11 @@ async function writeAdjustment(
         raceId: race.id,
         raceName: race.name,
         blocks: adjustment.blocks.map(({ name, endDate }) => ({ name, endDate })),
+        // The solo case (19, ruling 2): a former Head Coach's blocks no longer
+        // fit the moved race and nobody is linked to re-pin them, so the Coach
+        // re-fits the set — and says whose blocks it was, rather than announce
+        // a fresh draft over a human's structure as if it had never been there.
+        ...(existing && holdsHeadCoachBlock(existing) ? { refittedHeadCoachBlocks: true } : {}),
       },
     },
     // Not a re-plan: the blocks are written regardless. This is the one extra
@@ -252,13 +278,15 @@ async function writeAdjustment(
  * and one set read, then nothing. Never throws.
  */
 export async function ensureBlocksAdjusted(athleteId: string, today: string): Promise<AdjustmentOutcome> {
+  // Same rule as the week draft: a switched-off Coach is an outcome, not a
+  // failure, and costs no read and no log.
+  if (isCoachDisabled()) return 'coach-disabled';
   const race = await getTargetRace(athleteId);
   if (!race) return 'no-race';
-  if (weeksTo(today, race.date) < MIN_WEEKS_TO_ADJUST) return 'too-close';
-
   const existing = await getBlockSet(athleteId, race.id);
-  const gated = gateOn(existing, race);
+  const gated = await gateOn(existing, race);
   if (gated) return gated;
+  if (tooCloseToRedraw(today, race, existing)) return 'too-close';
 
   const ctx = await gatherContext(athleteId, today, race, trainingBlocks(today, race.date));
   const asked = await askCoach(athleteId, ctx);
@@ -283,7 +311,8 @@ export type EditBlockResult =
   // panel shows the arithmetic draft; the rows underneath are the old set, so
   // an edit by position would land on blocks nobody is looking at — and the
   // CAS would let it through, because the version matches. Refused until the
-  // Coach redraws the set (07) or a Head Coach re-pins it, which is not built.
+  // Coach redraws the set (07) or a Head Coach re-pins it from the popup on
+  // login (19, `repinBlockSetAsHeadCoach`).
   | { ok: false; reason: 'stale-set' }
   | { ok: false; reason: 'invalid'; problem: BlockEditProblem }
   // The set changed under the coach — 07's background draft, or another
@@ -444,4 +473,136 @@ async function writeEdit(params: {
 
   const current = await getBlockSet(athleteId, raceId);
   return { ok: false, reason: 'conflict', current: snapshotOf(current ?? set) };
+}
+
+// ── The Head Coach's re-pin (slice 19) ────────────────────────────────────────
+
+export type RepinBlockSetServiceResult =
+  | { ok: true; version: number }
+  // In order: no active link; not the Target Race or already run; nothing
+  // stored; the set already ends on race day (someone got there first).
+  | { ok: false; reason: 'not-linked' | 'no-race' | 'no-set' | 'not-stale' }
+  // The race moved so early that fewer than two blocks survive: the row offers
+  // the arithmetic draft instead, and says what would have gone.
+  | { ok: false; reason: 'too-few-blocks'; dropped: string[] }
+  | { ok: false; reason: 'invalid'; problem: BlockSetProblem }
+  // The set changed under the popup — the refusal carries what won (ADR 0010).
+  | { ok: false; reason: 'conflict'; current: BlockSetSnapshot };
+
+interface HeadCoachRepair {
+  headCoachId: string;
+  athleteId: string;
+  raceId: string;
+  /** The version the popup showed; never one read here, or the check passes by construction. */
+  expectedVersion: number;
+  today: string;
+}
+
+/**
+ * The race and the stale set a repair applies to, or the refusal that stops
+ * it. Link gate first, and nothing below it runs without one: an absent Head
+ * Coach repairs nothing.
+ */
+async function loadStaleTarget(
+  params: HeadCoachRepair,
+): Promise<{ race: RaceRow; set: BlockSetRecord } | RepinBlockSetServiceResult> {
+  const { headCoachId, athleteId, raceId, today } = params;
+  const link = await getActiveLink(headCoachId, athleteId);
+  if (!link) return { ok: false, reason: 'not-linked' };
+
+  const race = await editableRace(athleteId, raceId, today);
+  if (!race) return { ok: false, reason: 'no-race' };
+
+  const set = await getBlockSet(athleteId, race.id);
+  if (!set) return { ok: false, reason: 'no-set' };
+  if (fitsRace(set, race.date)) return { ok: false, reason: 'not-stale' };
+  return { race, set };
+}
+
+/** The CAS write of a repair, its `blocks_repinned` event riding the same statement. */
+async function writeRepair(
+  repair: HeadCoachRepair,
+  target: { race: RaceRow; set: BlockSetRecord },
+  write: { blocks: TrainingBlockSpec[]; startDate?: string; dropped: string[]; restarted?: true },
+): Promise<RepinBlockSetServiceResult> {
+  const { headCoachId, athleteId, expectedVersion } = repair;
+  const { blocks, startDate, dropped, restarted } = write;
+  const { race, set } = target;
+  const written = await casUpdateBlockSet({
+    athleteId,
+    setId: set.id,
+    expectedVersion,
+    blocks,
+    ...(startDate ? { startDate } : {}),
+    events: [
+      {
+        actorType: 'head_coach',
+        actorId: headCoachId,
+        type: 'blocks_repinned',
+        payload: {
+          raceId: race.id,
+          raceName: race.name,
+          from: set.blocks[set.blocks.length - 1].endDate,
+          to: race.date,
+          dropped,
+          ...(restarted ? { restarted } : {}),
+        },
+      },
+    ],
+  });
+  if (written.ok) return { ok: true, version: written.version };
+
+  const current = await getBlockSet(athleteId, race.id);
+  return { ok: false, reason: 'conflict', current: snapshotOf(current ?? set) };
+}
+
+/**
+ * A linked Head Coach re-pins a stale set to the race's new date in one click
+ * (`training-architecture/19`, ruling 1): a human's structure stays a human's,
+ * so the repair is theirs, not the Coach's. Link gate, then the pure
+ * {@link repinBlockSet}, then a compare-and-swap on the version the popup was
+ * showing, the event in the same statement — a repair that lost writes nothing
+ * and announces nothing. The set's start is untouched: the blocks that survive
+ * are the same blocks, on the same days.
+ */
+export async function repinBlockSetAsHeadCoach(params: HeadCoachRepair): Promise<RepinBlockSetServiceResult> {
+  const target = await loadStaleTarget(params);
+  if ('ok' in target) return target;
+
+  const repinned = repinBlockSet(target.set, target.race.date);
+  if (!repinned.ok) {
+    return repinned.reason === 'too-few-blocks'
+      ? { ok: false, reason: 'too-few-blocks', dropped: repinned.dropped }
+      : { ok: false, reason: 'invalid', problem: repinned.reason };
+  }
+  return writeRepair(params, target, { blocks: repinned.blocks, dropped: repinned.dropped });
+}
+
+/**
+ * The other button: a race moved so early that re-pinning leaves fewer than
+ * two blocks, so the Head Coach starts over from the arithmetic draft. The
+ * draft is materialised from today, every block `arithmetic`, over the stale
+ * set by the same CAS — it replaces rather than deletes, because the race
+ * keeps its id and a delete-then-insert would race 07's background draft on
+ * the unique index. Announced as a re-pin that dropped every old block, with
+ * `restarted` set, so the athlete hears one sentence either way.
+ */
+export async function restartBlockSetFromDraftAsHeadCoach(
+  params: HeadCoachRepair,
+): Promise<RepinBlockSetServiceResult> {
+  const target = await loadStaleTarget(params);
+  if ('ok' in target) return target;
+
+  // Never empty: `editableRace` has already refused a race on or before today.
+  const draft = trainingBlocks(params.today, target.race.date).map(({ name, endDate, authoredBy }) => ({
+    name,
+    endDate,
+    authoredBy,
+  }));
+  return writeRepair(params, target, {
+    blocks: draft,
+    startDate: params.today,
+    dropped: target.set.blocks.map((b) => b.name),
+    restarted: true,
+  });
 }

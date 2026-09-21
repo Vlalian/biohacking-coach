@@ -82,11 +82,18 @@ export default async function AthletePage({
       // athlete on a finished questionnaire.
       if (step !== 'done') {
         return (
-          <main className="relative h-screen">
+          // h-dvh, as the shell (showable-version/30): the questionnaire has free-text
+          // fields, and the phone's keyboard resizes the viewport like the file picker.
+          <main className="relative h-dvh">
             <div className="absolute right-4 top-4 z-10">
               <SignOutButton />
             </div>
-            <OnboardingFlow initial={{ step, answers }} />
+            {/*
+              The account name goes to the client for the name step's real-name
+              warning only (`preferred-name/02`) — the same field Settings
+              already shows the athlete; nothing is prefilled from it.
+            */}
+            <OnboardingFlow initial={{ step, answers, accountName: session.user.name }} />
           </main>
         );
       }

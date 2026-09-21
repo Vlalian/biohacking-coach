@@ -88,6 +88,22 @@ describe('renderBriefingPrompt — transcripts gated by shareAiTranscripts', () 
     const prompt = renderBriefingPrompt(ctx({ transcripts: null }));
     expect(prompt).toContain('has not shared their private Coach Chat');
   });
+
+  it('still renders an old Weekly Session transcript under its own heading (training-architecture/21)', () => {
+    // The behavior is retired and nothing writes the kind any more, but the
+    // rows already written are the athlete's history and the Head Coach's to
+    // read while transcripts are shared — the reader keeps its label.
+    const prompt = renderBriefingPrompt(
+      ctx({
+        transcripts: [
+          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Coach: good — then we build'] },
+          { kind: 'coach_chat', lines: ['Athlete: I felt tired'] },
+        ],
+      }),
+    );
+    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nCoach: good — then we build');
+    expect(prompt).toContain('[Coach Chat]\nAthlete: I felt tired');
+  });
 });
 
 describe('buildBriefingContext — no direct identifier reaches the prompt (GDPR decision 1)', () => {
@@ -200,6 +216,19 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     expect(prompt).toContain('The Coach has flagged the Target Race as unrealistic: eleven months is short');
   });
 
+  it('carries one line while a stored set no longer fits the race, and none otherwise (training-architecture/19)', () => {
+    // The belt to the popup's braces: the Coach can answer "how is Sarah
+    // doing" honestly while the set waits for the Head Coach's click.
+    expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).not.toContain('no longer fit');
+    const prompt = renderBriefingPrompt(
+      ctx({ blocks: { ...coachOnly, staleSet: { lastBlockName: 'Taper', endsOn: '2027-06-01' } } }),
+    );
+    expect(prompt).toContain(
+      'The stored Training Blocks no longer fit the race date: the last block, "Taper", still ends 2027-06-01. ' +
+        'The blocks listed above are the arithmetic draft; the Head Coach re-pins the stored set from the notice on their next login.',
+    );
+  });
+
   it('says plainly there are none for an athlete with no Target Race', () => {
     expect(renderBriefingPrompt(ctx({ blocks: null }))).toContain('TRAINING BLOCKS: none');
     expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], phase: null, raceUnrealistic: null } }))).toContain(
@@ -261,6 +290,28 @@ describe('renderBriefingPrompt — golden', () => {
         }),
       ),
     ).toMatchSnapshot();
+  });
+});
+
+describe('renderBriefingPrompt — the Preferred Name (preferred-name/02)', () => {
+  it('with none set, the posture is exactly what it was: third person, never a real name', () => {
+    const prompt = renderBriefingPrompt(ctx());
+    expect(prompt).toBe(renderBriefingPrompt(ctx({ preferredName: null })));
+    expect(prompt).toContain('Refer to the athlete in the third person; never use a real name.');
+    expect(prompt).not.toContain('PREFERRED NAME');
+  });
+
+  it('with one set, refers to the athlete by it and permits no other name', () => {
+    const prompt = renderBriefingPrompt(ctx({ preferredName: 'Mads' }));
+    expect(prompt).toContain('Refer to the athlete in the third person, by the name they chose, "Mads", and by no other name');
+    expect(prompt).not.toContain('never use a real name.');
+    expect(prompt).toMatchSnapshot();
+  });
+
+  it('carries the name through buildBriefingContext without walking it for identifiers', () => {
+    const built = buildBriefingContext({ today: '2026-08-08', plan, reports: null, transcripts: null, preferredName: 'Mads' });
+    expect(built.preferredName).toBe('Mads');
+    expect(buildBriefingContext({ today: '2026-08-08', plan, reports: null, transcripts: null }).preferredName).toBeNull();
   });
 });
 

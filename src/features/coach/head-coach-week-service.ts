@@ -2,6 +2,7 @@ import { mergeAthleteProfile, getAthleteById } from '@/features/athlete/athlete-
 import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import { getActiveLink } from './coach-repository';
+import { draftLanded } from './week-draft-service';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { validateProposedPlan, type ProposedSession } from './weekly-session';
 import { weekWindow } from './week-draft';
@@ -111,7 +112,7 @@ export async function approveWeekDraft(params: {
 
 /**
  * The coach's sessions as the server accepts them for that week, or null — the
- * same validator the Weekly Session and the athlete's accept use, against the
+ * same validator the athlete's accept uses, against the
  * draft's own week.
  */
 function acceptedSessions(weekStart: string, today: string, sessions: unknown): ProposedSession[] | null {
@@ -132,7 +133,7 @@ function sessionsArrayLength(input: unknown): number {
  * **A Head Coach's note is never sent** (`prompts.ts:sessionNote`, Mads
  * 2026-08-21): it is a third party's prose about the athlete, and a name in it
  * is invisible to the identifier assertion. The approved sessions become the
- * athlete's proposal — staged into a Weekly Session prompt on "discuss",
+ * athlete's proposal — staged into the chat's prompt on "discuss",
  * written as `origin: 'coach'` rows on "accept" — and on both routes a note
  * the coach typed would travel as if the Coach had written it, past a guard
  * that keys on origin. So it is stripped here, at the one write, rather than
@@ -167,4 +168,15 @@ function sameSessions(a: ProposedSession[], b: ProposedSession[]): boolean {
       x.note === y.note
     );
   });
+}
+
+/**
+ * The coach page's poll read (`training-architecture/29`): whether the
+ * previewed week's draft has landed, behind the same link gate as every
+ * Head Coach act — an unlinked coach is told "not yet" and nothing is read.
+ */
+export async function coachDraftLanded(headCoachId: string, athleteId: string, weekStart: string): Promise<boolean> {
+  const link = await getActiveLink(headCoachId, athleteId);
+  if (!link) return false;
+  return draftLanded(athleteId, weekStart);
 }

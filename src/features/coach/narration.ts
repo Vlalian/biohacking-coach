@@ -25,8 +25,12 @@ export type HeadCoachNarratableType =
   | 'session_deleted'
   | 'session_moved';
 
-/** A Head Coach's Training Block edit (`training-architecture/08`) — rendered by {@link blockClause}. */
-export type BlockNarratableType = 'block_edited';
+/**
+ * A Head Coach's hand on the Training Blocks: an edit (`training-architecture/08`,
+ * rendered by {@link blockClause}) or a re-pin of a set the race moved out
+ * from under (`/19`, rendered by {@link blocksRepinnedClause}).
+ */
+export type BlockNarratableType = 'block_edited' | 'blocks_repinned';
 
 /** A Head Coach's hand on the drafted week or its day (`training-architecture/17`). */
 export type WeekNarratableType = 'weekly_session_day_set' | 'week_draft_approved';
@@ -143,18 +147,36 @@ function isCoachEvent(
  * naming no human. A `coach_ai` event pushed through {@link clause} would have
  * been attributed to a person who did nothing.
  */
-function coachClause(event: NarratableEvent, t: Translate): string {
+function coachClause(event: NarratableEvent, t: Translate, weekdayOf: WeekdayOf): string {
   switch (event.type) {
-    // A drafted week (`training-architecture/16`): one sentence, no detail —
-    // the proposal itself is on the calendar, and a list of sessions here
-    // would be a second copy of it. Malformed or not, the sentence is the same.
     case 'week_drafted':
-      return t('weekDrafted');
+      return weekDraftedClause(event.payload, t, weekdayOf);
     case 'race_flagged_unrealistic':
       return unrealisticClause(event.payload, t);
     default:
       return blocksDraftedClause(event.payload, t);
   }
+}
+
+/**
+ * A drafted week (`training-architecture/16`): one sentence, no session list —
+ * the proposal itself is on the calendar. It names the day training starts,
+ * the earliest session's, because the draft may be this week's remainder or
+ * next week (`/24`) and "next week" would be wrong half the time; with no
+ * dated session, or a malformed payload, the sentence has no day.
+ */
+function weekDraftedClause(payload: unknown, t: Translate, weekdayOf: WeekdayOf): string {
+  const first = firstSessionDate(payload);
+  return first ? t('weekDraftedFrom', { day: weekdayOf(first) }) : t('weekDrafted');
+}
+
+/** The earliest `date` among the payload's sessions, or undefined when none is dated. */
+function firstSessionDate(payload: unknown): string | undefined {
+  const sessions = (payload as { sessions?: unknown } | null)?.sessions;
+  if (!Array.isArray(sessions)) return undefined;
+  // ISO date keys sort as dates and `sort` puts undefined last, so the first
+  // is the earliest dated session — or undefined when none is dated.
+  return sessions.map((s) => field(s, 'date')).sort()[0];
 }
 
 /** No weekday here, unlike every session clause: a race is months out and its weekday says nothing. */
@@ -165,11 +187,32 @@ function unrealisticClause(payload: unknown, t: Translate): string {
   });
 }
 
+/**
+ * The Coach's own shaping — or, in the solo case (`training-architecture/19`,
+ * ruling 2), its re-fit of a former Head Coach's blocks after the race moved
+ * and nobody was left linked to re-pin them. The second is a different
+ * sentence because it says whose blocks went: a fresh draft announced over a
+ * human's structure as if it had never been there would be the silent
+ * overwrite ADR 0003 forbids, one step removed.
+ */
 function blocksDraftedClause(payload: unknown, t: Translate): string {
+  const refitted = (payload as { refittedHeadCoachBlocks?: unknown } | null)?.refittedHeadCoachBlocks === true;
   const race = field(payload, 'raceName');
   const names = blockNames(payload);
-  if (!race || !names) return t('blocksDraftedNoDetail');
-  return t('blocksDrafted', { race, blocks: names.join(' · ') });
+  if (!race || !names) return t(refitted ? 'blocksRefittedNoDetail' : 'blocksDraftedNoDetail');
+  return t(refitted ? 'blocksRefitted' : 'blocksDrafted', { race, blocks: names.join(' · ') });
+}
+
+/**
+ * The Head Coach re-pinned a set to the race's new date (`training-architecture/19`),
+ * by one click or by starting over from the draft: one sentence either way,
+ * because what the athlete needs to know is the same — their blocks fit the
+ * race again, and whose hand did it.
+ */
+function blocksRepinnedClause(event: NarratableEvent, coachFirstNames: Record<string, string>, t: Translate): string {
+  const coach = (event.actorId ? coachFirstNames[event.actorId] : undefined) ?? t('yourHeadCoach');
+  const race = field(event.payload, 'raceName');
+  return race ? t('blocksRepinned', { coach, race }) : t('blocksRepinnedNoDetail', { coach });
 }
 
 const CLAUSE_KEY = {
@@ -313,11 +356,12 @@ export function composeNarration(
   // and a list item are each finished — punctuation differs by language, and it
   // is copy, not logic.
   const clauses = events.map((e) => {
-    if (isCoachEvent(e)) return coachClause(e, t);
+    if (isCoachEvent(e)) return coachClause(e, t, weekdayOf);
     if (e.type === 'weekly_session_day_set' || e.type === 'week_draft_approved') {
       return weekClause(e, coachFirstNames, t);
     }
     if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
+    if (e.type === 'blocks_repinned') return blocksRepinnedClause(e, coachFirstNames, t);
     return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
   });
   if (clauses.length === 1) return t('single', { clause: clauses[0] });

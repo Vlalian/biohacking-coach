@@ -273,10 +273,41 @@ describe('composeNarration — the Coach announcing its own blocks (training-arc
     }
   });
 
-  it('announces a drafted week in one sentence, naming no human, whatever the payload', () => {
+  it('announces a drafted week by when training starts — the earliest session’s weekday — naming no human', () => {
+    // `training-architecture/24`: the draft may be this week's remainder or
+    // next week, so the sentence names the first day rather than "next week",
+    // and says when training starts (the showable-version/11 fall-through rule).
+    const out = composeNarration(
+      [
+        {
+          id: 'ev_w',
+          actorId: null,
+          type: 'week_drafted',
+          payload: { weekStart: '2026-09-21', sessions: [{ date: '2026-09-23' }, { date: '2026-09-22' }, { date: '2026-09-27' }] },
+          createdAt: new Date('2026-09-16T08:00:00Z'),
+        },
+      ],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=weekDraftedFrom(day=day:2026-09-22))');
+    expect(out).not.toContain('Lars');
+
+    // An undated session among dated ones is skipped, not counted as earliest.
+    const mixed = composeNarration(
+      [{ id: 'ev_w', actorId: null, type: 'week_drafted', payload: { sessions: [{ note: 'x' }, { date: '2026-09-24' }] }, createdAt: new Date() }],
+      {},
+      t,
+      weekday,
+    );
+    expect(mixed).toBe('single(clause=weekDraftedFrom(day=day:2026-09-24))');
+  });
+
+  it('announces a drafted week with no dated session in one sentence with no day, whatever the payload', () => {
     // `training-architecture/16`: the proposal itself is on the calendar, so the
     // sentence carries no session list — and a malformed payload says the same.
-    for (const payload of [{ weekStart: '2026-09-21', sessions: [] }, null, {}]) {
+    for (const payload of [{ weekStart: '2026-09-21', sessions: [] }, { sessions: [{ note: 'x' }] }, null, {}]) {
       const out = composeNarration(
         [{ id: 'ev_w', actorId: null, type: 'week_drafted', payload, createdAt: new Date('2026-09-16T08:00:00Z') }],
         { coach_1: 'Lars' },
@@ -483,5 +514,67 @@ describe('composeNarration — the Head Coach’s hand on the drafted week and i
   it('narrates an approval that changed the week as the coach shaping it', () => {
     const out = composeNarration([ev('week_draft_approved', { changed: true, weekStart: '2026-09-21' })], { coach_1: 'Lars' }, t, weekday);
     expect(out).toBe('single(clause=weekDraftShaped(coach=Lars))');
+  });
+});
+
+describe('composeNarration — a moved race is re-pinned (training-architecture/19)', () => {
+  const at = new Date('2026-09-18T08:00:00Z');
+  const repinned = (payload: unknown, actorId: string | null = 'coach_1'): NarratableEvent => ({
+    id: 'ev_r',
+    actorId,
+    type: 'blocks_repinned',
+    payload,
+    createdAt: at,
+  });
+
+  it('tells the athlete the acting coach re-fitted their blocks to the new date of the race', () => {
+    const out = composeNarration(
+      [repinned({ raceId: 'r1', raceName: 'Ironman Copenhagen', from: '2027-08-15', to: '2027-09-05', dropped: [] })],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blocksRepinned(coach=Lars,race=Ironman Copenhagen))');
+  });
+
+  it('says the same for a start-over — the structure was re-fitted either way', () => {
+    const out = composeNarration(
+      [repinned({ raceId: 'r1', raceName: 'IM', from: '2027-08-15', to: '2026-12-01', dropped: ['Taper'], restarted: true })],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blocksRepinned(coach=Lars,race=IM))');
+  });
+
+  it('falls back to "your Head Coach" and to the raceless sentence', () => {
+    expect(composeNarration([repinned({}, null)], {}, t, weekday)).toBe(
+      'single(clause=blocksRepinnedNoDetail(coach=yourHeadCoach))',
+    );
+    expect(composeNarration([repinned(null)], { coach_1: 'Lars' }, t, weekday)).toBe(
+      'single(clause=blocksRepinnedNoDetail(coach=Lars))',
+    );
+  });
+
+  it('the solo case: the Coach says whose blocks it re-fitted when it redrew a former Head Coach’s set', () => {
+    const drafted: NarratableEvent = {
+      id: 'ev_d',
+      actorId: null,
+      type: 'blocks_drafted',
+      payload: {
+        raceId: 'r1',
+        raceName: 'IM',
+        blocks: [{ name: 'Base' }, { name: 'Taper' }],
+        refittedHeadCoachBlocks: true,
+      },
+      createdAt: at,
+    };
+    expect(composeNarration([drafted], {}, t, weekday)).toBe(
+      'single(clause=blocksRefitted(race=IM,blocks=Base · Taper))',
+    );
+    // Without detail the plain sentence still says whose blocks went.
+    expect(
+      composeNarration([{ ...drafted, payload: { refittedHeadCoachBlocks: true } }], {}, t, weekday),
+    ).toBe('single(clause=blocksRefittedNoDetail)');
   });
 });

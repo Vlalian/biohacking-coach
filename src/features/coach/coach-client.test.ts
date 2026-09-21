@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // `server-only` throws outside a React Server Component bundle; stub it so the
 // adapter can be imported in a plain test. The Anthropic SDK is replaced with a
@@ -6,15 +6,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 const create = vi.fn();
+const constructed = vi.fn();
 vi.mock('@anthropic-ai/sdk', () => ({
   default: class {
     messages = { create };
+    constructor(options: unknown) {
+      constructed(options);
+    }
   },
 }));
 
 process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key';
 
-const { callCoach } = await import('./coach-client');
+const { callCoach, CoachDisabledError } = await import('./coach-client');
 
 beforeEach(() => {
   create.mockReset();
@@ -244,4 +248,145 @@ describe('callCoach — a turn that both speaks and calls a tool', () => {
     expect(reply.text).toBe('Let me check that.\n\nThursday stays easy.');
     expect(reply.toolCalls).toEqual([{ name: 'look_up_training_science', input: { question: 'q' } }]);
   });
+});
+
+describe('callCoach — COACH_DISABLED (frontend-quality/07)', () => {
+  const input = { system: 'S', messages: [{ role: 'user' as const, content: 'hi' }], maxTokens: 100 };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('refuses before touching the network when the switch is set outside production', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('COACH_DISABLED', '1');
+    const error = await callCoach(input).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CoachDisabledError);
+    expect((error as Error).name).toBe('CoachDisabledError');
+    expect((error as Error).message).toBe('The Coach is disabled (COACH_DISABLED is set).');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('ignores the switch in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('COACH_DISABLED', '1');
+    create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: {} });
+    await expect(callCoach(input)).resolves.toEqual({ text: 'hi', toolCalls: [] });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls as normal when the switch is unset, or set to anything but 1', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('COACH_DISABLED', '0');
+    create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: {} });
+    await callCoach(input);
+    vi.stubEnv('COACH_DISABLED', '');
+    await callCoach(input);
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('callCoach — the client and the empty-reply error, pinned', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('refuses to build a client without a key, and says where the key goes', async () => {
+    vi.resetModules();
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('COACH_DISABLED', '');
+    const fresh = await import('./coach-client');
+    const error = await fresh
+      .callCoach({ system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 10 })
+      .catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('ANTHROPIC_API_KEY is not set');
+    expect((error as Error).message).toContain('.env.local');
+    expect((error as Error).message).toContain('Vercel environment variable');
+    expect((error as Error).message).toContain('never ship to the browser');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('names the stop reason and the rule in the empty-reply error', async () => {
+    create.mockResolvedValue({ content: [], stop_reason: 'max_tokens', usage: {} });
+    const error = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 10,
+    }).catch((e: unknown) => e as Error);
+    expect((error as Error).name).toBe('EmptyCoachReplyError');
+    expect((error as Error).message).toContain('stop_reason: max_tokens');
+    expect((error as Error).message).toContain('An empty turn is never stored');
+    expect((error as Error).message).toContain('replayed as history');
+  });
+
+  it('says "unknown" when the API gave no stop reason', async () => {
+    create.mockResolvedValue({ content: [], stop_reason: null, usage: {} });
+    const error = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 10,
+    }).catch((e: unknown) => e as Error);
+    expect((error as Error).message).toContain('stop_reason: unknown');
+  });
+
+  it('drops a tool_use block from the text and keeps the words around it', async () => {
+    create
+      .mockResolvedValueOnce({
+        content: [
+          { type: 'text', text: 'Before ' },
+          { type: 'tool_use', id: 't1', name: 'propose_week', input: {} },
+          { type: 'text', text: ' after' },
+        ],
+        usage: {},
+      })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'closing' }], usage: {} });
+    const reply = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 10,
+    });
+    expect(reply.toolCalls).toHaveLength(1);
+    expect(reply.text).not.toContain('undefined');
+  });
+
+  it('joins only the text blocks, in order, and trims the result', async () => {
+    // The filter is by block *type*, not by whether a block happens to carry
+    // `text`: a non-text block with a text field must not leak into the reply.
+    create.mockResolvedValue({
+      content: [
+        { type: 'thinking', thinking: 'x', text: 'LEAK' },
+        { type: 'text', text: '  Hello' },
+        { type: 'text', text: ' world  ' },
+      ],
+      usage: {},
+    });
+    const reply = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 10,
+    });
+    expect(reply.text).toBe('Hello world');
+  });
+});
+
+describe('callCoach — one client per process, built with the timeout and retry policy', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('constructs the SDK client once, with the key, a 60 s timeout and one retry', async () => {
+    vi.resetModules();
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-test-key');
+    vi.stubEnv('COACH_DISABLED', '');
+    constructed.mockClear();
+    create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: {} });
+    const fresh = await import('./coach-client');
+    const input = { system: 'S', messages: [{ role: 'user' as const, content: 'hi' }], maxTokens: 10 };
+    await fresh.callCoach(input);
+    await fresh.callCoach(input);
+    expect(constructed).toHaveBeenCalledTimes(1);
+    expect(constructed).toHaveBeenCalledWith({ apiKey: 'sk-ant-test-key', timeout: 60_000, maxRetries: 1 });
+  });
+
 });

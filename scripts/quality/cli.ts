@@ -115,6 +115,20 @@ export const MUTATION_EXEMPT = ['scripts/quality/cli.ts'];
  */
 export const SANDBOX_IGNORE = ['.scratch', '.agents', '.claude', 'poc', 'docs/agents', '.next'];
 
+/**
+ * A repo path as a Stryker `mutate` entry that matches it, and only it.
+ *
+ * Stryker reads `mutate` as globs, and `[locale]` is a character class: as a
+ * glob, `src/app/[locale]/x.ts` names `src/app/l/x.ts` and nothing real, so
+ * Stryker found no file, generated no mutants, and the gate reported every
+ * server action under the locale segment as clean. `[[]` is the one escape
+ * that survives Stryker's own `path.resolve` and backslash-to-slash
+ * normalisation of the pattern; a `\[` would be flattened on Windows.
+ */
+function asMutateGlob(path: string): string {
+  return path.replaceAll('[', '[[]');
+}
+
 /** One Stryker run scoped to exactly the ticket's files. */
 function collectMutants(files: string[]): MutantReport[] {
   const dir = mkdtempSync(join(tmpdir(), 'onkel-mut-'));
@@ -130,7 +144,7 @@ function collectMutants(files: string[]): MutantReport[] {
       // argument — a repo-wide run is minutes, this is seconds.
       // The exemption is applied here rather than by dropping the file from
       // `files`, so it still gets a CRAP score and still appears in the report.
-      mutate: files.filter((f) => !MUTATION_EXEMPT.includes(f)),
+      mutate: files.filter((f) => !MUTATION_EXEMPT.includes(f)).map(asMutateGlob),
       reporters: ['json'],
       jsonReporter: { fileName: reportPath },
       tempDirName: join(dir, 'stryker-tmp'),
