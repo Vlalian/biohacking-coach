@@ -88,7 +88,12 @@ export default async function AthletePage({
             <div className="absolute right-4 top-4 z-10">
               <SignOutButton />
             </div>
-            <OnboardingFlow initial={{ step, answers }} />
+            {/*
+              The account name goes to the client for the name step's real-name
+              warning only (`preferred-name/02`) — the same field Settings
+              already shows the athlete; nothing is prefilled from it.
+            */}
+            <OnboardingFlow initial={{ step, answers, accountName: session.user.name }} />
           </main>
         );
       }

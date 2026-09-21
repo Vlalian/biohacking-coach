@@ -94,6 +94,7 @@ async function renderSystem(
   language?: string,
   referenceSessionId?: string | null,
   conversationId: string | null = null,
+  preferredName: string | null = null,
 ): Promise<{ system: string; window: PlanningWindow }> {
   const [
     equipmentItems,
@@ -175,6 +176,10 @@ async function renderSystem(
       reference ? toSessionContext(reference) : null,
       weekFrom(weekSessions, reference?.id),
       { window, stagedProposal: facts.staged },
+      // The one name that reaches the prompt by choice (`preferred-name/02`):
+      // resolved at the user seam by the action and threaded here as plain
+      // data, beside the language and for the same reason.
+      preferredName,
     ),
     window,
   };
@@ -285,6 +290,8 @@ export async function sendCoachChatMessage(
   today: string,
   language?: string,
   referenceSessionId?: string | null,
+  /** What the athlete chose for the Coach to call them, or null (`preferred-name/02`). */
+  preferredName: string | null = null,
 ): Promise<SendChatResult> {
   // What this turn staged, if anything — filled in after the store, read after
   // the turn. Null on every turn where the Coach proposed nothing.
@@ -303,6 +310,7 @@ export async function sendCoachChatMessage(
         language,
         referenceSessionId,
         conversationId,
+        preferredName,
       );
       // One grounding per turn (`knowledge-oracle/05`): the lookup tool, its
       // resolver, and — after the model has answered — the citations it earned.

@@ -34,6 +34,7 @@ describe('sendCoachChatMessageAction', () => {
       ok: true,
       athlete: ATHLETE,
       language: 'da',
+      preferredName: 'Mads',
     });
     assertAiCoachingConsent.mockResolvedValue({ ok: true });
     sendCoachChatMessage.mockResolvedValue({ ok: true });
@@ -45,7 +46,8 @@ describe('sendCoachChatMessageAction', () => {
 
     expect(result).toEqual({ ok: true });
     // The Reference travels as an id the server re-resolves (ADR 0006), and
-    // the date is the server's, not the browser's.
+    // the date is the server's, not the browser's. The Preferred Name comes
+    // from the same user seam as the language (`preferred-name/02`).
     expect(sendCoachChatMessage).toHaveBeenCalledWith(
       ATHLETE,
       null,
@@ -53,7 +55,18 @@ describe('sendCoachChatMessageAction', () => {
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       'da',
       'sess_9',
+      'Mads',
     );
+  });
+
+  it('sends null, not undefined, when the athlete chose no Preferred Name', async () => {
+    resolveAthleteWithLanguage.mockResolvedValue({ ok: true, athlete: ATHLETE, language: 'da' });
+    assertAiCoachingConsent.mockResolvedValue({ ok: true });
+    sendCoachChatMessage.mockResolvedValue({ ok: true });
+
+    await sendCoachChatMessageAction(INPUT);
+
+    expect(sendCoachChatMessage.mock.calls[0][6]).toBeNull();
   });
 
   it('normalises a missing Reference to null rather than undefined', async () => {
@@ -69,6 +82,7 @@ describe('sendCoachChatMessageAction', () => {
       INPUT.content,
       expect.any(String),
       undefined,
+      null,
       null,
     );
   });

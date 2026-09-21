@@ -9,6 +9,7 @@ import { Check, Download, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-rea
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
+import { PreferredNameField } from '@/components/preferred-name-field';
 import type { AddRaceResult, SettingsActionResult } from './settings-actions';
 import { RacesSection, type SettingsRace } from './settings-races';
 import type { DeleteAccountResult } from './erasure-actions';
@@ -39,6 +40,8 @@ export interface SettingsCoachingLink {
 export interface SettingsViewProps {
   profile: SettingsProfile;
   language: string;
+  /** What the Coach calls the athlete (`preferred-name/02`); '' when none. */
+  preferredName: string;
   coachingLink: SettingsCoachingLink | null;
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
   onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
@@ -49,6 +52,7 @@ export interface SettingsViewProps {
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onUpdateLanguage: (language: string) => Promise<SettingsActionResult>;
+  onUpdatePreferredName: (value: string) => Promise<SettingsActionResult>;
   onSetLinkVisibility: (
     section: 'shareAthleteReports' | 'shareAiTranscripts',
     on: boolean,
@@ -85,6 +89,7 @@ const DAY_KEYS = [
 export function SettingsView({
   profile,
   language,
+  preferredName,
   coachingLink,
   onUpdateCommunicationStyle,
   onAddRace,
@@ -95,6 +100,7 @@ export function SettingsView({
   onAddFixedConstraint,
   onRemoveFixedConstraint,
   onUpdateLanguage,
+  onUpdatePreferredName,
   onSetLinkVisibility,
   onSeverCoachingLink,
   onDeleteAccount,
@@ -118,7 +124,13 @@ export function SettingsView({
 
         <ProfileSection name={profile.name} email={profile.email} />
 
-        <PreferencesSection language={language} onUpdateLanguage={onUpdateLanguage} />
+        <PreferencesSection
+          language={language}
+          onUpdateLanguage={onUpdateLanguage}
+          preferredName={preferredName}
+          accountName={profile.name}
+          onUpdatePreferredName={onUpdatePreferredName}
+        />
 
         <TrainingSection
           communicationStyle={profile.communicationStyle}
@@ -205,9 +217,15 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 function PreferencesSection({
   language,
   onUpdateLanguage,
+  preferredName,
+  accountName,
+  onUpdatePreferredName,
 }: {
   language: string;
   onUpdateLanguage: (language: string) => Promise<SettingsActionResult>;
+  preferredName: string;
+  accountName: string;
+  onUpdatePreferredName: (value: string) => Promise<SettingsActionResult>;
 }) {
   const t = useTranslations('Settings');
   const { theme, setTheme } = useTheme();
@@ -281,7 +299,72 @@ function PreferencesSection({
         </div>
         {error && <FieldError message={t('error')} />}
       </div>
+
+      <PreferredNameSetting
+        value={preferredName}
+        accountName={accountName}
+        onSave={onUpdatePreferredName}
+      />
     </Section>
+  );
+}
+
+/**
+ * The Preferred Name, editable after onboarding as the Athlete Language is
+ * (`preferred-name/02`). The field and its real-name warning are the shared
+ * `PreferredNameField`, so this screen cannot drift from onboarding on the one
+ * rule that matters; what is local is the save dance every Settings free-text
+ * field performs. Saving an emptied field clears the name.
+ */
+function PreferredNameSetting({
+  value,
+  accountName,
+  onSave,
+}: {
+  value: string;
+  accountName: string;
+  onSave: (value: string) => Promise<SettingsActionResult>;
+}) {
+  const t = useTranslations('Settings');
+  const [saved, setSaved] = useState(value);
+  const [dirty, setDirty] = useState(false);
+  const { status, reset, run } = useSaveStatus();
+
+  async function save(next: string) {
+    if (await run(() => onSave(next))) {
+      setSaved(next.trim());
+      setDirty(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        {t('preferredNameLabel')}
+      </p>
+      <p className="mb-2 mt-1 font-body text-xs text-muted-foreground">{t('preferredNameNote')}</p>
+      <PreferredNameField
+        accountName={accountName}
+        initialValue={value}
+        disabled={status === 'saving'}
+        onChange={(draft) => {
+          setDirty(draft.trim() !== saved);
+          reset();
+        }}
+        onCommit={save}
+        actions={(commit, draft) => (
+          <div className="flex items-center gap-3">
+            <SaveButton
+              onClick={() => commit(draft)}
+              disabled={!dirty || status === 'saving'}
+              pending={status === 'saving'}
+              label={t('save')}
+            />
+            <SaveStatus status={status} t={t} />
+          </div>
+        )}
+      />
+    </div>
   );
 }
 

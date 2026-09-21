@@ -6,6 +6,7 @@ const {
   getActiveLink,
   getSharedTranscripts,
   getAthleteById,
+  getPreferredNameForAthlete,
   getBriefingPlan,
   getBriefingReflections,
   callCoach,
@@ -19,6 +20,7 @@ const {
   getActiveLink: vi.fn(),
   getSharedTranscripts: vi.fn((): Promise<unknown[] | null> => Promise.resolve(null)),
   getAthleteById: vi.fn(),
+  getPreferredNameForAthlete: vi.fn((): Promise<string | null> => Promise.resolve(null)),
   getBriefingPlan: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
   getBriefingReflections: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
   callCoach: vi.fn<
@@ -44,6 +46,7 @@ const { getTargetRace, getRaces } = vi.hoisted(() => ({
 }));
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getPreferredNameForAthlete }));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
   getBriefingReflections,
@@ -91,6 +94,27 @@ beforeEach(() => {
     { id: 'm0', role: 'coach_ai', content: 'my read', seq: 0, createdAt: new Date() },
   ]);
   getMessages.mockResolvedValue([]);
+});
+
+describe('startBriefing — the Preferred Name (preferred-name/02)', () => {
+  it('refers to the athlete by the name they chose, read through the user seam for the linked athlete', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getPreferredNameForAthlete.mockResolvedValue('Mads');
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(getPreferredNameForAthlete).toHaveBeenCalledWith('a1');
+    expect(lastSystem()).toContain('by the name they chose, "Mads"');
+  });
+
+  it('keeps the nameless third person when the athlete chose none', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getPreferredNameForAthlete.mockResolvedValue(null);
+
+    await startBriefing('coach_1', 'a1', TODAY);
+
+    expect(lastSystem()).toContain('never use a real name');
+  });
 });
 
 describe('startBriefing — the link gate', () => {

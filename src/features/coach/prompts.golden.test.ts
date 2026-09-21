@@ -85,6 +85,12 @@ describe('golden — the Coach Chat prompt', () => {
     expect(buildChatPrompt(BASE, TODAY)).toMatchSnapshot();
   });
 
+  // preferred-name/02: the one name that reaches a prompt, by the athlete's
+  // choice. Pinned beside the nameless case above, which must not move.
+  it('renders identically with a Preferred Name', () => {
+    expect(buildChatPrompt(BASE, TODAY, null, [], null, 'Mads')).toMatchSnapshot();
+  });
+
   // training-architecture/20: the one conversation may agree a week. The bound
   // and the staged week render exactly as the Weekly Session renders them.
   it('renders identically with a planning window and a staged week', () => {

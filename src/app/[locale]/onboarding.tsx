@@ -15,18 +15,27 @@ import {
   cursorAfter,
   previousStep,
 } from '@/features/onboarding/onboarding-flow';
+import { PreferredNameField } from '@/components/preferred-name-field';
 import { answerOnboardingAction } from './onboarding-actions';
 
 /**
  * MCQ onboarding, Coach-voice-only (ADR 0001): every question is the Coach
  * talking — no wizard chrome beyond a step counter, no mascots, no tooltips.
  *
- * The flow is the POC's question set: language → experience → race → adaptive
- * (per level) → constraints. Answers persist server-side step by step, so a
- * refresh resumes at the first unanswered step (`initial` carries that state).
- * Choosing Dansk switches the next-intl locale immediately — the UI re-renders
- * in Danish and the Coach's language preference is stored with the user — and
- * touches nothing else.
+ * The flow is the POC's question set plus one: language → name → experience →
+ * distance → race → adaptive (per level) → constraints. Answers persist
+ * server-side step by step, so a refresh resumes at the first unanswered step
+ * (`initial` carries that state). Choosing Dansk switches the next-intl locale
+ * immediately — the UI re-renders in Danish and the Coach's language preference
+ * is stored with the user — and touches nothing else.
+ *
+ * The name step (`preferred-name/02`) asks what the Coach should call the
+ * athlete: an **empty** field, nothing prefilled, skippable to nothing. It is
+ * not the Lovable brief's identity step — the account name already lives on
+ * the auth user (ADR 0006) and is never read for this. `accountName` reaches
+ * this component for one purpose only: to warn when what the athlete types is
+ * their real name, so a real name arrives only after they read a sentence
+ * saying so (see `PreferredNameField`).
  *
  * Visual language ported from the Lovable design (iron-insight-grid,
  * onboarding-session brief): race-bib header with a step progress rail,
@@ -48,6 +57,8 @@ import { answerOnboardingAction } from './onboarding-actions';
 export interface OnboardingInitial {
   step: OnboardingStepId;
   answers: OnboardingAnswers;
+  /** `user.name`, for the real-name warning on the name step only. */
+  accountName: string;
 }
 
 type UiState = {
@@ -60,6 +71,7 @@ type UiState = {
 
 const STEPS: OnboardingStepId[] = [
   'language',
+  'name',
   'experience',
   'distance',
   'race',
@@ -69,6 +81,7 @@ const STEPS: OnboardingStepId[] = [
 
 const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   language: 'stepLanguage',
+  name: 'stepName',
   experience: 'stepExperience',
   distance: 'stepDistance',
   race: 'stepRace',
@@ -226,6 +239,40 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 <OptionTile label="English" selected={state.answers.language === 'en'} onClick={() => chooseLanguage('en')} />
                 <OptionTile label="Dansk" selected={state.answers.language === 'da'} onClick={() => chooseLanguage('da')} />
               </div>
+            </div>
+          ) : state.step === 'name' ? (
+            <div className="space-y-4">
+              <StepHeading title={t('qName')} help={t('qNameSub')} />
+              {/*
+                Empty by default and never derived from the account name (Mads,
+                2026-08-21): a prefilled first name accepted in one tap would be
+                the app sending a real name in the common case, with the default
+                deciding rather than the athlete. Blank is an answer — the Coach
+                stays nameless — and Continue with an empty field means the same
+                as Skip, so neither path can get stuck.
+              */}
+              <PreferredNameField
+                accountName={initial.accountName}
+                disabled={pending}
+                onCommit={(value) =>
+                  submit({ step: 'name', preferredName: value.trim() || undefined })
+                }
+                actions={(commit, draft) => (
+                  <div className="flex flex-wrap items-center gap-4">
+                    <PrimaryButton onClick={() => commit(draft)} disabled={pending} pending={pending}>
+                      {t('continue')}
+                    </PrimaryButton>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => submit({ step: 'name' })}
+                      className="font-body text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+                    >
+                      {t('skipName')}
+                    </button>
+                  </div>
+                )}
+              />
             </div>
           ) : state.step === 'experience' ? (
             <div className="space-y-4">

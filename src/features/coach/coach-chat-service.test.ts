@@ -166,6 +166,18 @@ describe('sendCoachChatMessage', () => {
     expect(result).toMatchObject({ ok: true, conversationId: 'conv_new' });
   });
 
+  // preferred-name/02: the one name the athlete chose reaches the prompt as a
+  // builder parameter — threaded from the action, never read from a training
+  // row. Without one the prompt is exactly what it was.
+  it('hands the Preferred Name to the prompt, and nothing about a name without one', async () => {
+    await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12', 'en', null, 'Mads');
+    expect(callCoach.mock.calls[0][0].system).toContain('PREFERRED NAME: "Mads"');
+
+    callCoach.mockClear();
+    await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12', 'en', null);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('PREFERRED NAME');
+  });
+
   it('reuses an existing conversation rather than starting a second', async () => {
     getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
 

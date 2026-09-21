@@ -40,7 +40,12 @@ const REPORT = { energy: 6, body: 7, sleepQuality: 5, notableSignal: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  currentAthlete.mockResolvedValue({ ok: true, athlete: { id: 'athlete_1' }, language: 'en' });
+  currentAthlete.mockResolvedValue({
+    ok: true,
+    athlete: { id: 'athlete_1' },
+    language: 'en',
+    preferredName: 'Mads',
+  });
   assertAiCoachingConsent.mockResolvedValue({ ok: true });
   commitWeeklyPlan.mockResolvedValue({ ok: true });
   vi.useFakeTimers();

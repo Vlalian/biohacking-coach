@@ -36,7 +36,7 @@ const ANSWERED: OnboardingAnswers = {
 };
 
 function render(step: OnboardingStepId, answers: OnboardingAnswers = {}) {
-  return renderToStaticMarkup(<OnboardingFlow initial={{ step, answers }} />);
+  return renderToStaticMarkup(<OnboardingFlow initial={{ step, answers, accountName: 'Mads' }} />);
 }
 
 describe('OnboardingFlow — the way back', () => {

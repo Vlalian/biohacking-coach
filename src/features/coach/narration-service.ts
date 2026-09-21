@@ -45,15 +45,11 @@ export async function narratePendingEvents(
   // every later turn — so a name written here would reach the model for the rest
   // of the athlete's history, not just once.
   //
-  // So attribution renders as the neutral "your Head Coach" until a **preferred
-  // name** exists — a self-chosen handle that is not identity. That feature is
-  // not built (`athlete.display_name` was renamed to `synthetic_label` in
-  // migration 0001, and it only ever covered athletes with no user row), and the
-  // placement question is still open in `coach-eval-mvp-route/06`.
-  //
-  // The empty map is the seam that feature plugs into: the composer already
-  // attributes per acting coach rather than per current link, so when preferred
-  // names land, only this line changes.
+  // The Preferred Name exists now (`user.ui_prefs.preferredName`,
+  // `preferred-name/02`) — but it is the *athlete's* chosen name, and the person
+  // being attributed here is the Head Coach, who has none the athlete chose. So
+  // attribution stays the neutral "your Head Coach", on purpose: the empty map
+  // is a decision, not a seam waiting for a feature.
   const content = composeNarration(pending, {}, t, weekdayOf);
   // Defensive: the composer only returns null for an empty list, which is
   // already handled. Checked anyway so a future change there can never mint a

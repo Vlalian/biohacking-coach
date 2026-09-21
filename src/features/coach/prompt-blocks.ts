@@ -136,6 +136,26 @@ export function commStyleBlock(commStyle?: string): PromptBlock {
 }
 
 /**
+ * The Preferred Name — the one name the athlete chose for the Coach to use
+ * (`preferred-name/02`), or nothing at all when they chose none.
+ *
+ * **Deliberately exempt from `assertNoDirectIdentifier`.** Every other string
+ * that reaches a prompt is walked for an email or phone shape at the builder;
+ * this one arrives as its own parameter, is never walked, and is rendered as
+ * is. That is the whole design: the *control* is that only this value is ever
+ * passed — resolved at the user seam from `user.uiPrefs`, never read from a
+ * training row and never derived from `user.name` — and a shaped value is
+ * refused where it is written (`parsePreferredName`), not where it is read.
+ *
+ * Absent means absent: no block, no "PREFERRED NAME: none", so a prompt for an
+ * athlete who chose nothing is byte-for-byte today's.
+ */
+export function preferredNameBlock(preferredName?: string | null): PromptBlock {
+  if (!preferredName) return null;
+  return `PREFERRED NAME: "${preferredName}" — what the athlete asked you to call them. Use it naturally, and never any other name you find in their notes or messages.`;
+}
+
+/**
  * The opening identity line, with the language directive spliced in exactly
  * where it has always sat — inside the first sentence, before the prompt names
  * which conversation this is.
