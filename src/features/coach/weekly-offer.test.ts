@@ -1,27 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveWeeklySessionDay, localWeekday, shouldOfferWeeklySession } from './weekly-offer';
+import { effectiveWeeklySessionDay, localWeekday, shouldOfferCheckIn } from './weekly-offer';
 
-describe('shouldOfferWeeklySession', () => {
+describe('shouldOfferCheckIn', () => {
   const base = {
     weeklySessionDay: 'Monday',
     todayWeekday: 'Monday',
-    hasHeldWeeklySessionThisWeek: false,
+    hasCheckedInThisWeek: false,
   };
 
-  it('offers on the preferred day when no Weekly Session has been held', () => {
-    expect(shouldOfferWeeklySession(base)).toBe(true);
+  it('asks on the Weekly Session Day when no Check-in is filed for the week', () => {
+    expect(shouldOfferCheckIn(base)).toBe(true);
   });
 
   it('stays silent on any other day', () => {
-    expect(shouldOfferWeeklySession({ ...base, todayWeekday: 'Wednesday' })).toBe(false);
+    expect(shouldOfferCheckIn({ ...base, todayWeekday: 'Wednesday' })).toBe(false);
   });
 
-  it('stays silent once the athlete has held this week’s session', () => {
-    // The nudge is an offer to talk, not a reminder to talk again.
-    expect(shouldOfferWeeklySession({ ...base, hasHeldWeeklySessionThisWeek: true })).toBe(false);
+  it('stays silent once this week’s Check-in is filed', () => {
+    // The reminder asks for a report, not for the same report twice.
+    expect(shouldOfferCheckIn({ ...base, hasCheckedInThisWeek: true })).toBe(false);
   });
 
-  // The "still offers for a drafted week" regression is pinned in
+  // The "still asks for a drafted week" regression is pinned in
   // `(app)/layout.test.tsx`: this function takes no plan input, so a test here
   // could never fail it (review of 07, 2026-09-15).
 
@@ -30,16 +30,16 @@ describe('shouldOfferWeeklySession', () => {
     // proposed week has to arrive on some day, so the stored value reads as
     // Sunday until the athlete (or their Head Coach) picks one (CONTEXT.md).
     expect(
-      shouldOfferWeeklySession({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Sunday' }),
+      shouldOfferCheckIn({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Sunday' }),
     ).toBe(true);
     expect(
-      shouldOfferWeeklySession({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Monday' }),
+      shouldOfferCheckIn({ ...base, weeklySessionDay: 'Flexible', todayWeekday: 'Monday' }),
     ).toBe(false);
   });
 
   it('reads no stored day as Sunday too', () => {
-    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: null, todayWeekday: 'Sunday' })).toBe(true);
-    expect(shouldOfferWeeklySession({ ...base, weeklySessionDay: undefined, todayWeekday: 'Monday' })).toBe(false);
+    expect(shouldOfferCheckIn({ ...base, weeklySessionDay: null, todayWeekday: 'Sunday' })).toBe(true);
+    expect(shouldOfferCheckIn({ ...base, weeklySessionDay: undefined, todayWeekday: 'Monday' })).toBe(false);
   });
 });
 

@@ -25,6 +25,8 @@ vi.mock('./health-actions', () => ({
   declareIllnessAction: vi.fn(),
   closeInjuryAction: vi.fn(),
   closeIllnessAction: vi.fn(),
+  deleteInjuryAction: vi.fn(),
+  deleteIllnessAction: vi.fn(),
   addHealthNoteAction: vi.fn(),
   setBotherAction: vi.fn(),
   readHealthNotesAction: vi.fn(async () => ({ ok: true, notes: [] })),
@@ -39,11 +41,16 @@ const { HealthDrawer } = await import('./health-drawer');
 const openInjury: HealthSpan = {
   kind: 'injury', id: 'inj_1', from: '2026-09-02', to: null,
   capacity: { swim: 'full', bike: 'easy', run: 'none' }, bother: 3,
+  name: 'left knee', openedAt: new Date('2026-09-02T08:00:00Z'),
 };
-const openIllness: HealthSpan = { kind: 'illness', id: 'ill_1', from: '2026-09-08', to: null, bother: null };
+const openIllness: HealthSpan = {
+  kind: 'illness', id: 'ill_1', from: '2026-09-08', to: null, bother: null,
+  name: null, openedAt: new Date('2026-09-08T08:00:00Z'),
+};
 const closedInjury: HealthSpan = {
   kind: 'injury', id: 'inj_0', from: '2026-06-01', to: '2026-06-20',
   capacity: { swim: 'none', bike: 'full', run: 'full' }, bother: 2,
+  name: null, openedAt: new Date('2026-06-01T08:00:00Z'),
 };
 
 function render(props: Partial<Parameters<typeof HealthDrawer>[0]> = {}) {
@@ -105,6 +112,38 @@ describe('HealthDrawer — the athlete', () => {
   it('opens straight onto the record that was clicked', () => {
     const html = render({ state: { open: true, kind: 'injury', id: 'inj_1' } });
     expect(html).toContain('data-selected="inj_1"');
+  });
+
+  it('lists open records expanded with the name and dates on line one and the glance on line two; past ones collapsed under the fold (28a)', () => {
+    const html = render({ spans: [openInjury, closedInjury] });
+    expect(html).toMatch(/data-record="inj_1"[^>]*data-open="true"/);
+    // Line one: the name; an unnamed injury falls back to the kind label.
+    expect(html).toMatch(/data-record="inj_1"[^]*?left knee[^]*?since\(/);
+    expect(html).toMatch(/<details[^>]*data-history-fold/);
+    expect(html).toMatch(/data-record="inj_0"[^>]*data-open="false"/);
+    expect(html).toMatch(/data-record="inj_0"[^]*?injuryLabel/);
+    // The past record is collapsed: its own details, closed, with the line as summary.
+    expect(html).toMatch(/<details[^>]*data-record="inj_0"/);
+    expect(html).not.toMatch(/<details[^>]*data-record="inj_0"[^>]* open[ =>]/);
+  });
+
+  it('offers "declared by mistake" only on a record younger than 24 h, and only to the athlete', () => {
+    const young = { ...openInjury, openedAt: new Date(Date.now() - 3_600_000) };
+    expect(render({ spans: [young] })).toContain('data-action="delete"');
+    const old = { ...openInjury, openedAt: new Date(Date.now() - 48 * 3_600_000) };
+    expect(render({ spans: [old] })).not.toContain('data-action="delete"');
+    expect(render({ spans: [young], coachAthleteId: 'a1' })).not.toContain('data-action="delete"');
+  });
+
+  it('the declare form asks for a name', () => {
+    expect(render({ spans: [] })).toContain('data-field="name"');
+  });
+
+  it('opened with a kind and no id, selects the newest open record of that kind', () => {
+    const later: HealthSpan = { ...openInjury, id: 'inj_2', from: '2026-09-09', openedAt: new Date('2026-09-09T08:00:00Z') };
+    const html = render({ spans: [openInjury, later, openIllness], state: { open: true, kind: 'injury' } });
+    expect(html).toContain('data-selected="inj_2"');
+    expect(render({ spans: [openInjury, openIllness], state: { open: true, kind: 'illness' } })).toContain('data-selected="ill_1"');
   });
 
   it('renders nothing when closed', () => {

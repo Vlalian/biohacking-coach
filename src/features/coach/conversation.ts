@@ -48,9 +48,10 @@ export interface Conversation {
 }
 
 /**
- * The two open conversations the app shell restores, chosen from whatever this
- * athlete has open. Both can be open at once by design: the resting Coach Chat,
- * and an in-progress Weekly Session on top of it.
+ * The open conversation the app shell restores, chosen from whatever this
+ * athlete has open. Until `training-architecture/21` a Weekly Session could sit
+ * on top of the chat; that behaviour is retired, and an old open
+ * `weekly_session` row is left as history, not restored.
  *
  * Selected **by name**, deliberately, and this is the one place that decision is
  * made. A `feedback` interview is also an open conversation belonging to the
@@ -61,13 +62,11 @@ export interface Conversation {
  * it is never inherited by being open.
  */
 export interface OpenConversations {
-  weeklySession: Conversation | null;
   coachChat: Conversation | null;
 }
 
 export function selectOpenConversations(open: Conversation[]): OpenConversations {
   return {
-    weeklySession: open.find((c) => c.kind === 'weekly_session') ?? null,
     coachChat: open.find((c) => c.kind === 'coach_chat') ?? null,
   };
 }

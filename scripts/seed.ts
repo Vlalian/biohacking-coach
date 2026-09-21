@@ -1,4 +1,5 @@
 import '../src/db/load-env';
+import { guardDatabase } from './db-guard/protected-database';
 import { and, eq, or } from 'drizzle-orm';
 import { getDb } from '../src/db';
 import {
@@ -356,6 +357,8 @@ async function seed(argv: string[]) {
   await seedMadsAsCoach(await madsUserId(madsEmail), personaIds);
 }
 
+// The one check before any write: never production by accident (db-guard).
+guardDatabase(process.env.DATABASE_URL, process.argv);
 seed(process.argv.slice(2))
   .then(() => process.exit(0))
   .catch((err) => {

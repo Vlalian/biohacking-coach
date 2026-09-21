@@ -30,7 +30,10 @@ export function resolveAthleteName(
 }
 
 /**
- * The only place the app reads the coach roster out of Postgres.
+ * Where the app reads the coach roster out of Postgres — with one deliberate
+ * exception: `getStaleBlockSetsForHeadCoach` in `training-block-repository.ts`
+ * joins the links itself, so the Head Coach's login chores cost one read
+ * rather than a roster read plus a fan-out (`training-architecture/19`).
  *
  * Every read here is scoped to the coach resolved from the authenticated
  * session upstream, and to *active* links — a severed link revokes access by

@@ -10,11 +10,17 @@ import { approveWeekDraftAction, type ApproveActionResult } from './week-draft-a
 
 /**
  * The Head Coach's review of the week the Coach drafted, a day before the
- * athlete sees it (`training-architecture/17`). One row per proposed session,
- * every field editable — the day among them — plus remove on each row and one
+ * athlete sees it (`training-architecture/17`). One card per proposed session,
+ * every field editable — the day among them — plus remove on each card and one
  * add. Mads, 2026-09-16: the coach adjusts the preview as much as possible;
  * this is core, and it has to be easy to do and to understand, so every
  * power is a visible control and nothing needs a second step on the calendar.
+ *
+ * The card (`training-architecture/31`, Mads's smoke run of PR #78: "way too
+ * much information in one go; the note could be wider"): line one holds the
+ * four short fields — day, type, minutes, zone — and remove; line two is the
+ * note, full width, a textarea that grows with its text. On a phone the short
+ * fields wrap to a second line and the note keeps the full width.
  *
  * The day is a choice among the seven days of the draft's week and nothing
  * else: the server refuses any other day, so the panel never offers one. One
@@ -49,6 +55,13 @@ const toSessions = (rows: Row[]) =>
 
 /** Monday through Sunday of the draft's week — the only days a session may sit on. */
 const daysOf = (weekStart: string): string[] => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+/**
+ * The note textarea's `rows`: one per line of text, so the note is readable
+ * where the browser lacks `field-sizing: content` (Tailwind's
+ * `field-sizing-content` grows it live where it is supported).
+ */
+const rowsFor = (note: string): number => note.split('\n').length;
 
 export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft: WeekDraft | null }) {
   const t = useTranslations('WeekDraftReview');
@@ -95,54 +108,63 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
 
       <ol className="flex flex-col gap-2">
         {rows.map((row) => (
-          <li key={row.key} className="grid grid-cols-[auto_1fr_auto_auto_1fr_auto] items-end gap-3">
-            <label className="flex flex-col gap-1 text-xs">
-              {t('day')}
-              <select className={field} data-field="date" value={row.date} onChange={(e) => edit(row.key, 'date', e.target.value)}>
-                {days.map((day) => (
-                  <option key={day} value={day}>
-                    {day}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs">
-              {t('type')}
-              <select className={field} value={row.type} onChange={(e) => edit(row.key, 'type', e.target.value)}>
-                {PLAN_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs">
-              {t('duration')}
-              <input
-                type="number"
-                min={1}
-                className={`w-20 ${field}`}
-                value={row.durationMinutes}
-                onChange={(e) => edit(row.key, 'durationMinutes', e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs">
-              {t('zone')}
-              <input className={`w-16 ${field}`} value={row.zone} onChange={(e) => edit(row.key, 'zone', e.target.value)} />
-            </label>
+          <li key={row.key} className="flex flex-col gap-2 rounded border p-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-xs">
+                {t('day')}
+                <select className={field} data-field="date" value={row.date} onChange={(e) => edit(row.key, 'date', e.target.value)}>
+                  {days.map((day) => (
+                    <option key={day} value={day}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                {t('type')}
+                <select className={field} data-field="type" value={row.type} onChange={(e) => edit(row.key, 'type', e.target.value)}>
+                  {PLAN_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                {t('duration')}
+                <input
+                  type="number"
+                  min={1}
+                  className={`w-20 ${field}`}
+                  data-field="durationMinutes"
+                  value={row.durationMinutes}
+                  onChange={(e) => edit(row.key, 'durationMinutes', e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                {t('zone')}
+                <input className={`w-16 ${field}`} data-field="zone" value={row.zone} onChange={(e) => edit(row.key, 'zone', e.target.value)} />
+              </label>
+              <button
+                type="button"
+                data-action="remove"
+                onClick={() => remove(row.key)}
+                className="ml-auto rounded border px-2 py-1 text-sm text-muted-foreground hover:text-foreground"
+                aria-label={t('remove')}
+              >
+                {t('remove')}
+              </button>
+            </div>
             <label className="flex flex-col gap-1 text-xs">
               {t('note')}
-              <input className={field} value={row.note} onChange={(e) => edit(row.key, 'note', e.target.value)} />
+              <textarea
+                className={`w-full field-sizing-content resize-none ${field}`}
+                data-field="note"
+                rows={rowsFor(row.note)}
+                value={row.note}
+                onChange={(e) => edit(row.key, 'note', e.target.value)}
+              />
             </label>
-            <button
-              type="button"
-              data-action="remove"
-              onClick={() => remove(row.key)}
-              className="rounded border px-2 py-1 text-sm text-muted-foreground hover:text-foreground"
-              aria-label={t('remove')}
-            >
-              {t('remove')}
-            </button>
           </li>
         ))}
       </ol>

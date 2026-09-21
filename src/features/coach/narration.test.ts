@@ -516,3 +516,65 @@ describe('composeNarration — the Head Coach’s hand on the drafted week and i
     expect(out).toBe('single(clause=weekDraftShaped(coach=Lars))');
   });
 });
+
+describe('composeNarration — a moved race is re-pinned (training-architecture/19)', () => {
+  const at = new Date('2026-09-18T08:00:00Z');
+  const repinned = (payload: unknown, actorId: string | null = 'coach_1'): NarratableEvent => ({
+    id: 'ev_r',
+    actorId,
+    type: 'blocks_repinned',
+    payload,
+    createdAt: at,
+  });
+
+  it('tells the athlete the acting coach re-fitted their blocks to the new date of the race', () => {
+    const out = composeNarration(
+      [repinned({ raceId: 'r1', raceName: 'Ironman Copenhagen', from: '2027-08-15', to: '2027-09-05', dropped: [] })],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blocksRepinned(coach=Lars,race=Ironman Copenhagen))');
+  });
+
+  it('says the same for a start-over — the structure was re-fitted either way', () => {
+    const out = composeNarration(
+      [repinned({ raceId: 'r1', raceName: 'IM', from: '2027-08-15', to: '2026-12-01', dropped: ['Taper'], restarted: true })],
+      { coach_1: 'Lars' },
+      t,
+      weekday,
+    );
+    expect(out).toBe('single(clause=blocksRepinned(coach=Lars,race=IM))');
+  });
+
+  it('falls back to "your Head Coach" and to the raceless sentence', () => {
+    expect(composeNarration([repinned({}, null)], {}, t, weekday)).toBe(
+      'single(clause=blocksRepinnedNoDetail(coach=yourHeadCoach))',
+    );
+    expect(composeNarration([repinned(null)], { coach_1: 'Lars' }, t, weekday)).toBe(
+      'single(clause=blocksRepinnedNoDetail(coach=Lars))',
+    );
+  });
+
+  it('the solo case: the Coach says whose blocks it re-fitted when it redrew a former Head Coach’s set', () => {
+    const drafted: NarratableEvent = {
+      id: 'ev_d',
+      actorId: null,
+      type: 'blocks_drafted',
+      payload: {
+        raceId: 'r1',
+        raceName: 'IM',
+        blocks: [{ name: 'Base' }, { name: 'Taper' }],
+        refittedHeadCoachBlocks: true,
+      },
+      createdAt: at,
+    };
+    expect(composeNarration([drafted], {}, t, weekday)).toBe(
+      'single(clause=blocksRefitted(race=IM,blocks=Base · Taper))',
+    );
+    // Without detail the plain sentence still says whose blocks went.
+    expect(
+      composeNarration([{ ...drafted, payload: { refittedHeadCoachBlocks: true } }], {}, t, weekday),
+    ).toBe('single(clause=blocksRefittedNoDetail)');
+  });
+});

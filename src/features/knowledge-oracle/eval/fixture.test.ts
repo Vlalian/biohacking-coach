@@ -20,4 +20,12 @@ describe('the eval athlete', () => {
     expect(EVAL_ATHLETE.phase).toBeTruthy();
     expect(EVAL_ATHLETE.experienceLevel).toBeTruthy();
   });
+
+  it('is mid-relationship: full presence, so the Coach may synthesise rather than orient', () => {
+    // The fixture used to be "session 9"; the Presence Arc is keyed on data now
+    // (`training-architecture/21`), and the equivalent posture is full.
+    expect(EVAL_ATHLETE.presenceStage).toBe('full');
+    expect(evalSystemPrompt()).toContain('PRESENCE — FULL');
+    expect(evalSystemPrompt()).not.toContain('FIRST CONVERSATION ORIENTATION');
+  });
 });

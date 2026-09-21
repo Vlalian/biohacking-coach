@@ -87,8 +87,8 @@ export function ShellChrome({
   // Coach" on a Session Drawer, cleared once the Coach has answered about it.
   const [reference, setReference] = useState<CoachReference | null>(null);
   // Held here rather than in the overlay: the overlay unmounts when closed, so
-  // owning this below would re-offer the Weekly Session on every reopen.
-  const [weeklyOfferDismissed, setWeeklyOfferDismissed] = useState(false);
+  // owning this below would ask for the Check-in again on every reopen.
+  const [checkInOfferDismissed, setCheckInOfferDismissed] = useState(false);
   // A drafted week taken into the chat from the calendar (18/20): the thread consumes it.
   const [chatSeed, setChatSeed] = useState<ChatSeed | null>(null);
 
@@ -140,8 +140,8 @@ export function ShellChrome({
         setOpen: setCoachOpen,
         reference,
         setReference,
-        weeklyOfferDismissed,
-        dismissWeeklyOffer: () => setWeeklyOfferDismissed(true),
+        checkInOfferDismissed,
+        dismissCheckInOffer: () => setCheckInOfferDismissed(true),
         chatSeed,
         setChatSeed,
       }}

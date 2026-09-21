@@ -219,6 +219,21 @@ export function logWeekDraftFailure(athleteId: string, error: unknown): void {
 }
 
 /**
+ * The shell's chores read (`training-architecture/19`): one query before
+ * render for a Head Coach's stale sets. A driver failure there costs the coach
+ * the popup on this open, not the shell — the sets stay stale, the read
+ * retries on the next open. Keyed on the user id, because the read is scoped
+ * to the coach's links and no athlete is named at this level.
+ */
+export function logCoachChoresFailure(userId: string, error: unknown): void {
+  try {
+    console.error(JSON.stringify({ event: 'coach_chores_failed', userId, errorType: errorType(error) }));
+  } catch {
+    // Deliberately silent: see above.
+  }
+}
+
+/**
  * Writes one structured line when a Coach reply names a source in its own words
  * (`knowledge-oracle/05`, decision 3: the reply stays silent about sources; the
  * app lists them). **A check that logs, never a rewrite** — the reply is stored

@@ -11,30 +11,28 @@ import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { holdsActiveCoachingLinks } from '@/features/coach/coach-repository';
-import {
-  getOpenConversations,
-  getMessages,
-  hasHeldWeeklySessionInWeek,
-} from '@/features/coach/conversation-repository';
+import { getOpenConversations } from '@/features/coach/conversation-repository';
 import { selectOpenConversations } from '@/features/coach/conversation';
-import { getPendingProposal } from '@/features/coach/plan-proposal-repository';
+import { getCheckInForWeek } from '@/features/coach/check-in-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
-import { logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { getCoachChores } from '@/features/coach/coach-chores-service';
+import type { CoachChore } from '@/features/coach/coach-chores';
+import { logCoachChoresFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { CoachChoresDialog } from './coach-chores-dialog';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
-import type { WeeklyOfferInput } from '@/features/coach/weekly-offer';
+import type { CheckInOfferInput } from '@/features/coach/weekly-offer';
 import { weekStartOf, today } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
 import type { CoachChatInitial } from '../coach-chat';
 import { chatStateOf } from '@/features/coach/coach-chat-service';
-import type { WeeklySessionInitial } from '../weekly-session';
 
-// The Views this port has real pages for. Glossary joins this list as its own
-// task lands (lovable/briefs build order) — left out for now rather than
-// linking to a page that 404s.
+// The Views this port has real pages for — a View is listed here only once
+// its page exists, never ahead of it, so the drawer cannot link to a 404.
 const ATHLETE_VIEWS: ViewId[] = [
   'training-plan',
   'information',
   'equipment',
+  'glossary',
   'settings',
   'privacy',
 ];
@@ -55,7 +53,7 @@ function availableViewsFor(isHeadCoach: boolean): ViewId[] {
 
 /**
  * Shared frame for every View (ADR 0007): Navigation Drawer, theme cycle, and
- * the Coach Overlay hosting the Weekly Session / Coach Chat. Guards session
+ * the Coach Overlay hosting Coach Chat. Guards session
  * the same way every View page already does; the heavier consent/onboarding
  * gates stay on the root page — an athlete only reaches here after passing
  * them, so re-running them per View would be redundant, not defense in depth.
@@ -82,14 +80,11 @@ export default async function AppShellLayout({
   const isHeadCoach = await holdsActiveCoachingLinks(session!.user.id);
   const firstName = session!.user.name.trim().split(/\s+/)[0] ?? '';
 
-  // Restore an in-progress Weekly Session on refresh: the transcript is server
-  // state, so a page reload picks it back up rather than losing it (ADR 0006).
-  let weeklyInitial: WeeklySessionInitial | null = null;
-  // The Coach Chat thread — the overlay's baseline mode (ADR 0007). Resumed
+  // The Coach Chat thread — the one conversation (ADR 0007). Resumed
   // read-only: opening the overlay must never mint a conversation or call the
   // API, so a chat is created lazily on the athlete's first message.
   let chatInitial: CoachChatInitial | null = null;
-  let weeklyOffer: WeeklyOfferInput | null = null;
+  let checkInOffer: CheckInOfferInput | null = null;
 
   if (athlete) {
     const todayKey = today();
@@ -127,17 +122,18 @@ export default async function AppShellLayout({
       logNarrationFailure(athlete.id, error);
     }
 
-    // One query for whatever is open, across kinds — the Overlay is one surface
-    // hosting several behaviors (ADR 0007) — and then an explicit selection by
-    // name. The query is generic; the *restore* is not, and must not be: a
-    // `feedback` interview is open too, and belongs nowhere near the Overlay
-    // (`selectOpenConversations`).
-    const [openConversations, heldWeeklySession] = await Promise.all([
+    // One query for whatever is open, across kinds, and then an explicit
+    // selection by name. The query is generic; the *restore* is not, and must
+    // not be: a `feedback` interview is open too, and belongs nowhere near the
+    // Overlay (`selectOpenConversations`). An old open `weekly_session` is
+    // not restored either — the behavior is retired (`training-architecture/21`)
+    // and there is no screen for it; its transcript still renders for a Head
+    // Coach through the shared-transcript reader.
+    const [openConversations, thisWeeksCheckIn] = await Promise.all([
       getOpenConversations(athlete.id),
-      hasHeldWeeklySessionInWeek(athlete.id, weekStartOf(todayKey)),
+      getCheckInForWeek(athlete.id, weekStartOf(todayKey)),
     ]);
-    const { weeklySession: open, coachChat: openChat } =
-      selectOpenConversations(openConversations);
+    const { coachChat: openChat } = selectOpenConversations(openConversations);
     // The transcript and the week awaiting a decision, if the chat holds one —
     // a refresh mid-decision must not lose the card (`training-architecture/20`).
     const chat = openChat ? await chatStateOf(athlete.id, openChat.id) : null;
@@ -147,28 +143,6 @@ export default async function AppShellLayout({
     const chatRatings = chat
       ? await getRatingsForConversation(athlete.id, chat.conversationId)
       : {};
-
-    if (open) {
-      const transcript = await getMessages(open.id);
-      // A refresh mid-decision must not lose the pending plan: restore the
-      // proposal too, so the confirm/cancel popup reappears.
-      const pending = await getPendingProposal(athlete.id, open.id);
-      const weeklyRatings = await getRatingsForConversation(athlete.id, open.id);
-      weeklyInitial = {
-        conversationId: open.id,
-        weeklySessionNumber: open.weeklySessionNumber ?? 1,
-        messages: transcript.map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          seq: m.seq,
-          citations: m.citations,
-          rating: weeklyRatings[m.id] ?? null,
-        })),
-        proposal: pending ? { sessions: pending.sessions } : null,
-        ended: false,
-      };
-    }
 
     if (chat) {
       chatInitial = {
@@ -185,14 +159,15 @@ export default async function AppShellLayout({
       };
     }
 
-    // The single sanctioned proactive nudge (ADR 0007) — the server supplies the
-    // half it knows and stops there. Which weekday it is *for the athlete* is
-    // decided in the browser: the profile stores no timezone, so resolving the
-    // day here would read the server's clock, and a nudge decided at 23:30 in
-    // Copenhagen would be answering for a UTC date that already rolled over.
-    weeklyOffer = {
+    // The single sanctioned proactive nudge (ADR 0007), now the Check-in
+    // reminder — the server supplies the half it knows and stops there. Which
+    // weekday it is *for the athlete* is decided in the browser: the profile
+    // stores no timezone, so resolving the day here would read the server's
+    // clock, and a nudge decided at 23:30 in Copenhagen would be answering for
+    // a UTC date that already rolled over.
+    checkInOffer = {
       weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
-      hasHeldWeeklySessionThisWeek: heldWeeklySession,
+      hasCheckedInThisWeek: thisWeeksCheckIn !== null,
     };
 
     // The silent week draft (`training-architecture/16`) runs here, **after the
@@ -209,6 +184,22 @@ export default async function AppShellLayout({
         logWeekDraftFailure(athleteId, error);
       }
     });
+  }
+
+  // The Head Coach's chores (`training-architecture/19`): a stale block set on
+  // their Roster is repaired from a dialog before the page, in one click. Read
+  // **here, on the render path**, not in the `after()` below — a popup that
+  // arrives a page late is the Briefing line the ticket refuses. One query,
+  // only for an account holding links; zero rows is the common case. Guarded
+  // like narration: a driver failure costs the coach the popup on this open,
+  // never the shell.
+  let chores: CoachChore[] = [];
+  if (isHeadCoach) {
+    try {
+      chores = await getCoachChores(session!.user.id);
+    } catch (error) {
+      logCoachChoresFailure(session!.user.id, error);
+    }
   }
 
   // The same trigger for a Head Coach's own open, one draft per athlete on
@@ -237,13 +228,13 @@ export default async function AppShellLayout({
       coachContent={
         <CoachThread
           chatInitial={chatInitial}
-          weeklyInitial={weeklyInitial}
           athleteFirstName={firstName}
           raceTarget={athlete?.raceTarget}
-          weeklyOffer={weeklyOffer}
+          checkInOffer={checkInOffer}
         />
       }
     >
+      {chores.length > 0 ? <CoachChoresDialog chores={chores} /> : null}
       {children}
     </ShellChrome>
   );

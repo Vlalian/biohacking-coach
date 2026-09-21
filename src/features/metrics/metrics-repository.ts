@@ -50,6 +50,12 @@ export async function getMetricsInput(athleteId: string): Promise<MetricsInput> 
             AND ${messages.role} = 'athlete'`,
       ),
 
+    // Athlete turns in the retired kind. The Weekly Session stopped being a
+    // behavior on 2026-09-16 (`training-architecture/21`) and nothing writes
+    // `weekly_session` any more, but the rows already written are activity the
+    // athlete really had, and dropping the read would make retention decay for
+    // every tester who was here before the change. Kept, and kept out of the
+    // engagement signal it never fed — see `activityDays` below.
     db
       .select({ createdAt: messages.createdAt })
       .from(messages)
@@ -94,8 +100,11 @@ export async function getMetricsInput(athleteId: string): Promise<MetricsInput> 
     chatTurnWeeks: chatTurnRows.map((r) => weekStartOf(dayOf(r.createdAt))),
     planDeclinedWeeks: declinedRows.map((r) => weekStartOf(dayOf(r.createdAt))),
     // Weekly Session turns feed *activity* (retention) below and nothing else:
-    // they are deliberately not an engagement signal, because the session runs
-    // until the athlete agrees, so its length measures how long agreeing took.
+    // they were deliberately never an engagement signal, because the session
+    // ran until the athlete agreed, so its length measured how long agreeing
+    // took. Engagement is the Coach Chat read above — the one conversation
+    // since the Weekly Session was retired — so it does not decay to zero now
+    // that nothing new is written in the old kind.
     //
     // "Activity" is the athlete doing something the app recorded — a session
     // that happened, or a turn they typed. A planned session they have not

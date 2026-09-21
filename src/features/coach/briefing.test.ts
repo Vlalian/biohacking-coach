@@ -88,6 +88,22 @@ describe('renderBriefingPrompt — transcripts gated by shareAiTranscripts', () 
     const prompt = renderBriefingPrompt(ctx({ transcripts: null }));
     expect(prompt).toContain('has not shared their private Coach Chat');
   });
+
+  it('still renders an old Weekly Session transcript under its own heading (training-architecture/21)', () => {
+    // The behavior is retired and nothing writes the kind any more, but the
+    // rows already written are the athlete's history and the Head Coach's to
+    // read while transcripts are shared — the reader keeps its label.
+    const prompt = renderBriefingPrompt(
+      ctx({
+        transcripts: [
+          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Coach: good — then we build'] },
+          { kind: 'coach_chat', lines: ['Athlete: I felt tired'] },
+        ],
+      }),
+    );
+    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nCoach: good — then we build');
+    expect(prompt).toContain('[Coach Chat]\nAthlete: I felt tired');
+  });
 });
 
 describe('buildBriefingContext — no direct identifier reaches the prompt (GDPR decision 1)', () => {
@@ -198,6 +214,19 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     );
     expect(prompt).toContain('Block 1 of 2 · to 2027-01-10 · draft');
     expect(prompt).toContain('The Coach has flagged the Target Race as unrealistic: eleven months is short');
+  });
+
+  it('carries one line while a stored set no longer fits the race, and none otherwise (training-architecture/19)', () => {
+    // The belt to the popup's braces: the Coach can answer "how is Sarah
+    // doing" honestly while the set waits for the Head Coach's click.
+    expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).not.toContain('no longer fit');
+    const prompt = renderBriefingPrompt(
+      ctx({ blocks: { ...coachOnly, staleSet: { lastBlockName: 'Taper', endsOn: '2027-06-01' } } }),
+    );
+    expect(prompt).toContain(
+      'The stored Training Blocks no longer fit the race date: the last block, "Taper", still ends 2027-06-01. ' +
+        'The blocks listed above are the arithmetic draft; the Head Coach re-pins the stored set from the notice on their next login.',
+    );
   });
 
   it('says plainly there are none for an athlete with no Target Race', () => {

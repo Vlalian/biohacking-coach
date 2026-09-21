@@ -16,6 +16,7 @@ import { proposalTurnTools } from './proposal-tools';
 import { capacityFor } from '@/features/health/health-repository';
 import { getResolvedBlocks } from './training-block-service';
 import { getCheckInForWeek } from './check-in-repository';
+import { getPresenceStage } from './presence-repository';
 import { notableSignalFrom, readinessFrom } from './check-in';
 import {
   buildWeeklyCheckIn,
@@ -32,10 +33,10 @@ import type { PlanningWindow } from './planning-window';
 import type { CoachReply } from './coach-client';
 
 /**
- * Coach Chat — the Coach Overlay's *baseline* mode (ADR 0007): the open-ended,
- * athlete-led conversation the Coach is having whenever it is not running a
- * structured behavior. Not a separate room; the Weekly Session is entered from
- * inside the same surface.
+ * Coach Chat — the Coach Overlay's one conversation (ADR 0007, amended
+ * 2026-09-16): open-ended and athlete-led, and since `training-architecture/21`
+ * also where a week is discussed and agreed; the Weekly Session that used to
+ * sit on top of it is retired.
  *
  * Server-side orchestration only. A turn is taken by
  * {@link takeConversationTurn}, which reaches `coach-client` (and so
@@ -46,8 +47,8 @@ import type { CoachReply } from './coach-client';
  * session id is checked against that owner by the repository, never trusted
  * (ADR 0006).
  *
- * Unlike the Weekly Session, a Coach Chat is never "ended" by the app — it is
- * the resting conversation, so it stays open and is resumed on every visit.
+ * A Coach Chat is never "ended" by the app — it is the resting conversation,
+ * so it stays open and is resumed on every visit.
  */
 
 /**
@@ -106,6 +107,7 @@ async function renderSystem(
     capacity,
     unavailableDates,
     facts,
+    presenceStage,
   ] = await Promise.all([
     getEquipmentItems(athlete.id),
     getSessionsForWeek(athlete.id, weekStartOf(today)),
@@ -132,6 +134,11 @@ async function renderSystem(
     // list the Weekly Session reads (`training-architecture/20`).
     getUnavailableDates(athlete.id),
     conversationFacts(athlete.id, conversationId),
+    // How much the Coach may claim to know: the Presence Arc, read from weeks
+    // of Session Reflections and Check-ins filed (`training-architecture/21`).
+    // A Check-in filed at any time — after the week was drafted, say — is
+    // simply the freshest signal for this, the next prompt that reads it.
+    getPresenceStage(athlete.id),
   ]);
 
   // The week this conversation may propose: the whole of a week brought in to
@@ -140,15 +147,11 @@ async function renderSystem(
   // 2026-09-16).
   const window = conversationWindow(today, facts.discussedWeek, fixedConstraintsOf(athlete), unavailableDates);
 
-  // `sessionCount` on a Coach Chat is coaching-relationship depth, the same as
-  // the Weekly Session's — how many Weekly Sessions have come before. Passing 1
-  // yields 0, the honest value for an athlete the Coach has not yet planned a
-  // week with.
   const checkIn = buildWeeklyCheckIn(
     athlete,
     today,
     readinessFrom(checkInRow),
-    1,
+    presenceStage,
     language,
     equipmentItems,
     horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,

@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { boundFileText, inferSessionType, parseGpx } from './garmin';
 import {
   buildChatPrompt,
-  formatWeekActivity,
-  formatSkippedSessions,
 } from '@/features/coach/prompts';
 
 /**
@@ -117,18 +115,4 @@ describe('the prompt seams carry no file-derived text', () => {
     expect(prompt).not.toContain(CTRL);
   });
 
-  it('a hostile file type cannot ride into a Week Activity prompt line', () => {
-    const sessionType = inferSessionType(INJECTION); // → 'Endurance'
-    const activity =
-      formatWeekActivity({
-        moves: [{ from: '2026-07-13', to: '2026-07-15', sessionType }],
-        creations: [],
-      }) ?? '';
-    const skipped = formatSkippedSessions([{ date: '2026-07-14', sessionType }]);
-    for (const text of [activity, skipped]) {
-      expect(text).not.toContain('IGNORE');
-      expect(text).not.toContain(CTRL);
-    }
-    expect(activity).toContain('Endurance');
-  });
 });

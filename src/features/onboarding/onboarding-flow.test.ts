@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ADAPTIVE_FIELDS_BY_LEVEL,
   ONBOARDING_OPTIONS,
   ONBOARDING_STEPS,
   RACE_DISTANCES,
@@ -8,7 +9,10 @@ import {
   buildCommStyle,
   coachGreeting,
   completeProfile,
+  cursorAfter,
   nextStep,
+  previousStep,
+  stepAfter,
   toCoachOnboarding,
 } from './onboarding-flow';
 import en from '@/messages/en.json';
@@ -157,6 +161,48 @@ describe('applyAnswer — the Preferred Name step', () => {
 });
 
 // ── applyAnswer — the validation gate ─────────────────────────────────────────
+
+describe('previousStep / stepAfter — the way back, and the walk forward again (showable-version/32)', () => {
+  it('previousStep walks the sequence back and stops at the first', () => {
+    expect(previousStep('language')).toBeNull();
+    // The name step sits between language and experience (preferred-name/02).
+    expect(previousStep('name')).toBe('language');
+    expect(previousStep('experience')).toBe('name');
+    expect(previousStep('distance')).toBe('experience');
+    expect(previousStep('race')).toBe('distance');
+    expect(previousStep('adaptive')).toBe('race');
+    expect(previousStep('constraints')).toBe('adaptive');
+  });
+
+  it('stepAfter walks forward in sequence regardless of what is answered, and ends at done', () => {
+    expect(stepAfter('language')).toBe('name');
+    expect(stepAfter('name')).toBe('experience');
+    expect(stepAfter('experience')).toBe('distance');
+    expect(stepAfter('distance')).toBe('race');
+    expect(stepAfter('race')).toBe('adaptive');
+    expect(stepAfter('adaptive')).toBe('constraints');
+    expect(stepAfter('constraints')).toBe('done');
+  });
+
+  it('names the adaptive fields each level asks, so a walk after a level change clears the other level’s answers (review, 2026-09-18)', () => {
+    // A beginner answered `motivation`, went Back, became intermediate: the
+    // intermediate panel never shows `motivation`, so it must not send it —
+    // `applyAnswer('adaptive')` stores every field it is sent.
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.beginner).toEqual(['availableHours', 'sportBackground', 'motivation']);
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.intermediate).toEqual(['availableHours', 'bestTime', 'weakestDiscipline', 'hasHumanCoach']);
+    expect(ADAPTIVE_FIELDS_BY_LEVEL.veteran).toEqual(['availableHours', 'targetTime', 'trackedMetrics']);
+  });
+
+  it('cursorAfter: after re-answering an early step the walk continues to the next step in sequence, whatever the server says is first unanswered; done is done', () => {
+    // The server answers with the first *unanswered* step, and after Back
+    // that is the step the athlete had already reached — not the one after
+    // the one they just re-answered. The client owns the cursor.
+    expect(cursorAfter('experience', 'constraints')).toBe('distance');
+    expect(cursorAfter('race', 'adaptive')).toBe('adaptive');
+    expect(cursorAfter('constraints', 'done')).toBe('done');
+    expect(cursorAfter('language', 'done')).toBe('done');
+  });
+});
 
 describe('applyAnswer', () => {
   it('refuses values outside the closed option sets', () => {
