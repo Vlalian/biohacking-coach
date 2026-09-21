@@ -69,5 +69,11 @@
     "typescript": "^5",
     "vitest": "^4.1.10"
   },
-  "description": "An AI coaching product for Ironman trainees"
+  "description": "An AI coaching product for Ironman trainees",
+  "overrides": {
+    "qs": "^6.15.2",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
+  }
 }
