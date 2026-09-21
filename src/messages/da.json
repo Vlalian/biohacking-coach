@@ -317,7 +317,7 @@
     "legend": "Session Type",
     "today": "I dag",
     "double": "Dobbelt",
-    "bouncePastDay": "Den dag er allerede overstået — sessioner flyttes kun fremad i ugen.",
+    "bouncePastDay": "Den dag er allerede overstået — et flyt siger, hvornår en session er planlagt, og intet planlægges bagud. Har du trænet den dag, så registrér det dér i stedet.",
     "bounceOtherWeek": "Sessioner flyttes kun inden for deres egen mandag–søndag-uge. Bed din Coach om at omlægge ugen.",
     "bounceFrozen": "Denne session er allerede gennemført — træningsjournalen kan ikke ændres.",
     "bounceConflict": "Din Head Coach ændrede denne session, mens den var åben. Dit flyt blev ikke gennemført — genindlæs for at se deres.",
