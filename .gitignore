@@ -45,6 +45,9 @@ coverage/
 /poc/
 /docs/*
 !/docs/adr/
+# Working rules pointed at from AGENTS.md (2026-09-18): every agent on every
+# clone needs them, so they are tracked like the ADRs.
+!/docs/rules/
 /.agents/
 /.claude/
 /skills-lock.json

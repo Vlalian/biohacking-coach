@@ -272,9 +272,12 @@ foreach ($rel in $FileCopies.Keys) {
   Write-Host "  copied $rel  (per-session by design)" -ForegroundColor DarkGray
 }
 
-# 4. Gitignored CLAUDE.md that @-imports the canonical root docs by absolute path.
-#    AGENTS.md is tracked, so it comes from the worktree's own checkout - that way
-#    a branch that CHANGES the rules is read with its own version of them.
+# 4. Gitignored CLAUDE.md. AGENTS.md is tracked, so it is imported RELATIVELY
+#    from the worktree's own checkout - that way a branch that CHANGES the rules
+#    is read with its own version of them, and the docs/rules/ links inside it
+#    resolve to the same checkout. (Until 2026-09-18 this imported the main
+#    folder's AGENTS.md by absolute path, which contradicted this comment.)
+#    The generated brief is imported by absolute path because it is gitignored.
 #    CONTEXT.md and OVERVIEW.md are gitignored here and, since 2026-09-11, are
 #    SYMLINKS in the main folder pointing into $Docs (bc-docs\CONTEXT.md and
 #    bc-docs\OVERVIEW.md), so they are versioned with the tracker and the Stop
@@ -287,7 +290,7 @@ foreach ($rel in $FileCopies.Keys) {
 #    whole files is what keeps a session's opening context at ~6k tokens rather
 #    than ~41k (2026-09-15). Rebuild it with scripts/context-brief.mjs.
 $claudeMd = @"
-@$MainFwd/AGENTS.md
+@AGENTS.md
 @$MainFwd/CONTEXT-BRIEF.md
 "@
 # WriteAllText writes UTF-8 WITHOUT a BOM (Set-Content -Encoding utf8 would add one,
