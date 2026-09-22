@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidDateKey, weekStartOf, addDays, formatFullDate } from './date';
+import { isValidDateKey, weekStartOf, addDays, formatFullDate, daysBetween } from './date';
 
 describe('isValidDateKey', () => {
   it('accepts a canonical real day', () => {
@@ -51,5 +51,15 @@ describe('weekStartOf / addDays', () => {
   it('addDays crosses month boundaries', () => {
     expect(addDays('2026-07-31', 1)).toBe('2026-08-01');
     expect(addDays('2026-08-01', -1)).toBe('2026-07-31');
+  });
+});
+
+describe('daysBetween — whole days from one key to another', () => {
+  it('counts forward, backward and zero, ignoring DST', () => {
+    expect(daysBetween('2026-09-22', '2026-09-23')).toBe(1);
+    expect(daysBetween('2026-09-22', '2026-12-20')).toBe(89);
+    expect(daysBetween('2026-09-23', '2026-09-22')).toBe(-1);
+    expect(daysBetween('2026-03-28', '2026-03-30')).toBe(2);
+    expect(daysBetween('2026-09-22', '2026-09-22')).toBe(0);
   });
 });

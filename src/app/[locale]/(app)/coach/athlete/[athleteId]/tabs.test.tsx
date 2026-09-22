@@ -177,15 +177,15 @@ describe('the Plan tab — the planning-day card (training-architecture/28)', ()
     getPreferredNameForAthlete.mockResolvedValue('Sarah');
     const tree = await render(PlanPage as Page);
     expect(getPreferredNameForAthlete).toHaveBeenCalledWith('a1');
-    const card = find(tree, 'PlanningDayCard');
+    const card = find(tree, 'WeeklySessionDayCard');
     expect(card).not.toBeNull();
     expect(card!.props).toMatchObject({ athleteId: 'a1', athleteName: 'Sarah', locale: 'en', race: null });
     expect(typeof card!.props.todayKey).toBe('string');
   });
 
-  it('falls back to the athlete name when no Preferred Name is set', async () => {
+  it('hands the card no name when no Preferred Name is set — the card says "the athlete", never the account name', async () => {
     getPreferredNameForAthlete.mockResolvedValue(null);
-    const card = find(await render(PlanPage as Page), 'PlanningDayCard');
-    expect(card!.props.athleteName).toBe('Mads');
+    const card = find(await render(PlanPage as Page), 'WeeklySessionDayCard');
+    expect(card!.props.athleteName).toBeNull();
   });
 });

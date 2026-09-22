@@ -5,8 +5,16 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { effectiveWeeklySessionDay } from '@/features/coach/weekly-offer';
-import { dayChoice, nextDraftDates, type DayChoice, type RaceFacts } from '@/features/coach/planning-day';
-import { setWeeklySessionDayAction, type SetDayActionResult } from './day-actions';
+import {
+  coachSeesDay,
+  commitDayChoice,
+  dayChoice,
+  dayMessageKey,
+  nextDraftDates,
+  type DayChoice,
+  type RaceFacts,
+} from '@/features/coach/weekly-session-day';
+import { setWeeklySessionDayAction } from './day-actions';
 
 /**
  * The athlete's Weekly Session Day, stated as a fact and explained
@@ -27,11 +35,9 @@ import { setWeeklySessionDayAction, type SetDayActionResult } from './day-action
  */
 
 const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
-const DAY_KEYS = ['dayMonday', 'dayTuesday', 'dayWednesday', 'dayThursday', 'dayFriday', 'daySaturday', 'daySunday'] as const;
 
-function dayKeyOf(day: string): (typeof DAY_KEYS)[number] {
-  return DAY_KEYS[DAYS.indexOf(day)] ?? 'daySunday';
-}
+/** The ruled card bolds the day, "you" and the name; the strings carry `<b>` tags for `t.rich`. */
+const bold = { b: (chunks: React.ReactNode) => <b>{chunks}</b> };
 
 /** `Tue 22 Sep` / `tir. 22. sep.` — the short form the calendar header uses. */
 function shortDate(key: string, locale: string): string {
@@ -40,7 +46,7 @@ function shortDate(key: string, locale: string): string {
   );
 }
 
-export function PlanningDayCard({
+export function WeeklySessionDayCard({
   athleteId,
   value,
   todayKey,
@@ -52,7 +58,8 @@ export function PlanningDayCard({
   athleteId: string;
   value: string | null;
   todayKey: string;
-  athleteName: string;
+  /** The Preferred Name, or null — the card then says "the athlete" (the ruling), never the account name. */
+  athleteName: string | null;
   race: RaceFacts | null;
   locale: string;
   /** Test seam only: render the card mid-choice. Never passed by the page. */
@@ -65,30 +72,24 @@ export function PlanningDayCard({
   const [choice, setChoice] = useState<DayChoice>({ current: value, proposed: initialProposed, write: null });
   const [notice, setNotice] = useState<string | null>(null);
 
-  const effective = effectiveWeeklySessionDay(choice.current);
+  const name = athleteName ?? t('theAthlete');
   const dates = nextDraftDates(todayKey, choice.current);
-  const dayName = tDays(dayKeyOf(effective));
-  const coachDay = tDays(dayKeyOf(DAYS[(DAYS.indexOf(effective) + 6) % 7]));
+  const dayName = tDays(dayMessageKey(effectiveWeeklySessionDay(choice.current)));
+  const coachDay = tDays(dayMessageKey(coachSeesDay(choice.current)));
 
   const confirm = () => {
-    const next = dayChoice(choice, { type: 'confirm' });
-    if (!next.write) return;
-    setChoice(next);
     startTransition(async () => {
       setNotice(null);
-      const result: SetDayActionResult = await setWeeklySessionDayAction(athleteId, next.write!);
-      if (result.ok) {
-        setChoice(dayChoice(next, { type: 'written' }));
-        router.refresh();
-        return;
-      }
-      setChoice(dayChoice(next, { type: 'cancel' }));
-      setNotice(t('error', { reason: result.reason }));
+      const { state, error } = await commitDayChoice(choice, (day) => setWeeklySessionDayAction(athleteId, day));
+      setChoice(state);
+      if (error) setNotice(t('error', { reason: error }));
+      else router.refresh();
     });
   };
 
   const stepArgs = {
-    name: athleteName,
+    ...bold,
+    name,
     coachDay,
     day: dayName,
     weekStart: shortDate(dates.weekStart, locale),
@@ -96,19 +97,20 @@ export function PlanningDayCard({
   };
 
   return (
-    <section className="w-full max-w-3xl rounded-lg border p-4" data-planning-day-card="">
-      <h2 className="font-display text-lg leading-tight text-foreground">{t('headline', { name: athleteName, day: dayName })}</h2>
-      <p className="mt-1 font-body text-sm text-foreground">{t('intro', { name: athleteName, day: dayName })}</p>
+    <section className="w-full max-w-3xl rounded-lg border p-4" data-weekly-session-day-card="">
+      <h2 className="font-display text-lg leading-tight text-foreground">{t.rich('headline', { ...bold, name, day: dayName })}</h2>
+      <p className="mt-1 font-body text-sm text-foreground">{t.rich('intro', { ...bold, name, day: dayName })}</p>
       <p className="mt-2 font-body text-sm text-muted-foreground">
-        {t('nextDraft', {
-          name: athleteName,
+        {t.rich('nextDraft', {
+          ...bold,
+          name,
           coachDate: shortDate(dates.coachSees, locale),
           athleteDate: shortDate(dates.athleteSees, locale),
         })}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t('pickerLabel')}>
-        {DAYS.map((day, i) => {
+        {DAYS.map((day) => {
           const isCurrent = choice.current === day;
           const isProposed = choice.proposed === day;
           return (
@@ -126,7 +128,7 @@ export function PlanningDayCard({
                     : 'border-border text-muted-foreground'
               }`}
             >
-              {tDays(DAY_KEYS[i])}
+              {tDays(dayMessageKey(day))}
             </button>
           );
         })}
@@ -134,7 +136,7 @@ export function PlanningDayCard({
 
       {choice.proposed && (
         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3" data-day-confirm="">
-          <p className="font-body text-sm text-foreground">{t('confirmQuestion', { day: tDays(dayKeyOf(choice.proposed)) })}</p>
+          <p className="font-body text-sm text-foreground">{t('confirmQuestion', { day: tDays(dayMessageKey(choice.proposed)) })}</p>
           <button
             type="button"
             data-action="confirm-day"
@@ -162,12 +164,12 @@ export function PlanningDayCard({
         <ol className="mt-2 list-decimal space-y-2 pl-5 font-body text-sm text-foreground">
           <li>
             {race
-              ? t('step1', { ...stepArgs, race: race.name, weeks: race.weeksOut, block: race.blockName ?? t('noBlock') })
-              : t('step1NoRace', stepArgs)}
+              ? t.rich('step1', { ...stepArgs, race: race.name, weeks: race.weeksOut, block: race.blockName ?? t('noBlock') })
+              : t.rich('step1NoRace', stepArgs)}
           </li>
-          <li>{t('step2', stepArgs)}</li>
-          <li>{t('step3', stepArgs)}</li>
-          <li>{t('step4', stepArgs)}</li>
+          <li>{t.rich('step2', stepArgs)}</li>
+          <li>{t.rich('step3', stepArgs)}</li>
+          <li>{t.rich('step4', stepArgs)}</li>
         </ol>
         <p className="mt-2 font-body text-sm text-muted-foreground">{t('changing')}</p>
       </details>

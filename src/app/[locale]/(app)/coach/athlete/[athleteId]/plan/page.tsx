@@ -2,9 +2,9 @@ import { loadCoachAthlete, NotACoach } from '../coach-athlete-guard';
 import { PrescribePanel } from '../prescribe-panel';
 import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
-import { PlanningDayCard } from '../planning-day-card';
+import { WeeklySessionDayCard } from '../weekly-session-day-card';
 import { getPreferredNameForAthlete } from '@/features/user-prefs/user-prefs-repository';
-import { displayNameFor, raceFacts } from '@/features/coach/planning-day';
+import { displayNameFor, raceFacts } from '@/features/coach/weekly-session-day';
 import { WeekDraftReview } from '../week-draft-review';
 import { DraftingCard } from '@/app/[locale]/drafting-card';
 
@@ -62,11 +62,11 @@ export default async function CoachAthletePlanPage({
       )}
       {/* The athlete's Weekly Session Day as a stated fact, with the dates it
           drives and a confirmed change (training-architecture/28). */}
-      <PlanningDayCard
+      <WeeklySessionDayCard
         athleteId={athleteId}
         value={view.weeklySessionDay}
         todayKey={todayKey}
-        athleteName={displayNameFor(preferredName, view.athleteName)}
+        athleteName={displayNameFor(preferredName)}
         race={raceFacts(todayKey, view.blocks)}
         locale={locale}
       />

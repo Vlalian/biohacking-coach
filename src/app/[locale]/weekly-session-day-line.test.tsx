@@ -15,17 +15,17 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-const { PlanningDayLine } = await import('./planning-day-line');
+const { WeeklySessionDayLine } = await import('./weekly-session-day-line');
 
-describe('PlanningDayLine — the athlete’s one line about their cycle (training-architecture/28)', () => {
+describe('WeeklySessionDayLine — the athlete’s one line about their cycle (training-architecture/28)', () => {
   it('says which evening the draft is written and which day it is shown, and links to Settings', () => {
-    const html = renderToStaticMarkup(<PlanningDayLine weeklySessionDay="Wednesday" />);
+    const html = renderToStaticMarkup(<WeeklySessionDayLine weeklySessionDay="Wednesday" />);
     expect(html).toContain('text(coachDay=dayTuesday(),day=dayWednesday())');
     expect(html).toContain('href="/settings"');
     expect(html).toContain('change()');
   });
 
   it('with no stored day reads Sunday, written on Saturday', () => {
-    expect(renderToStaticMarkup(<PlanningDayLine weeklySessionDay={null} />)).toContain('text(coachDay=daySaturday(),day=daySunday())');
+    expect(renderToStaticMarkup(<WeeklySessionDayLine weeklySessionDay={null} />)).toContain('text(coachDay=daySaturday(),day=daySunday())');
   });
 });

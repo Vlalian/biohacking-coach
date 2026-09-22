@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { dayChoice, displayNameFor, nextDraftDates, raceFacts } from './planning-day';
+import { describe, it, expect, vi } from 'vitest';
+import { coachSeesDay, commitDayChoice, dayChoice, dayMessageKey, displayNameFor, nextDraftDates, raceFacts } from './weekly-session-day';
+import { HEAD_COACH_LEAD_DAYS } from './week-draft';
 import { trainingBlocks } from './training-blocks';
 
 const TUE = '2026-09-22'; // a Tuesday
@@ -73,11 +74,51 @@ describe('dayChoice — changing the day is a confirmed step', () => {
   });
 });
 
-describe('displayNameFor — the Preferred Name where one exists', () => {
-  it('prefers the Preferred Name, falls back to the athlete name, ignores whitespace', () => {
-    expect(displayNameFor('Sarah', 'S. Jensen')).toBe('Sarah');
-    expect(displayNameFor(null, 'S. Jensen')).toBe('S. Jensen');
-    expect(displayNameFor('  ', 'S. Jensen')).toBe('S. Jensen');
-    expect(displayNameFor(' Sarah ', 'S. Jensen')).toBe('Sarah');
+describe('displayNameFor — the Preferred Name where one exists, else nothing', () => {
+  it('returns the trimmed Preferred Name, or null for the card to say "the athlete" (the ruling)', () => {
+    expect(displayNameFor('Sarah')).toBe('Sarah');
+    expect(displayNameFor(' Sarah ')).toBe('Sarah');
+    expect(displayNameFor(null)).toBeNull();
+    expect(displayNameFor('  ')).toBeNull();
+    expect(displayNameFor(undefined)).toBeNull();
+  });
+});
+
+describe('coachSeesDay — the weekday the coach gets the draft, from the lead constant', () => {
+  it('is HEAD_COACH_LEAD_DAYS before the athlete’s day, wrapping the week', () => {
+    expect(HEAD_COACH_LEAD_DAYS).toBe(1); // the ruling this file leans on; a change moves every expectation below
+    expect(coachSeesDay('Wednesday')).toBe('Tuesday');
+    expect(coachSeesDay('Monday')).toBe('Sunday');
+    expect(coachSeesDay(null)).toBe('Saturday'); // no stored day reads Sunday
+  });
+});
+
+describe('dayMessageKey — the Settings catalogue key for a weekday', () => {
+  it('maps each weekday, and an unknown value to Sunday', () => {
+    expect(dayMessageKey('Monday')).toBe('dayMonday');
+    expect(dayMessageKey('Sunday')).toBe('daySunday');
+    expect(dayMessageKey('Funday')).toBe('daySunday');
+  });
+});
+
+describe('commitDayChoice — the card’s glue between the reducer and the action', () => {
+  const proposing = { current: 'Wednesday', proposed: 'Thursday', write: null };
+
+  it('writes the proposed day exactly once and reports the written state', async () => {
+    const write = vi.fn(async () => ({ ok: true as const }));
+    expect(await commitDayChoice(proposing, write)).toEqual({ state: { current: 'Thursday', proposed: null, write: null }, error: null });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledWith('Thursday');
+  });
+
+  it('on a refused write, keeps the current day, clears the proposal and returns the reason', async () => {
+    const write = vi.fn(async () => ({ ok: false as const, reason: 'not-linked' as const }));
+    expect(await commitDayChoice(proposing, write)).toEqual({ state: { current: 'Wednesday', proposed: null, write: null }, error: 'not-linked' });
+  });
+
+  it('with nothing proposed, writes nothing', async () => {
+    const write = vi.fn(async () => ({ ok: true as const }));
+    expect(await commitDayChoice({ current: 'Wednesday', proposed: null, write: null }, write)).toEqual({ state: { current: 'Wednesday', proposed: null, write: null }, error: null });
+    expect(write).not.toHaveBeenCalled();
   });
 });

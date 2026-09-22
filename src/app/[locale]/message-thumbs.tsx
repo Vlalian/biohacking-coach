@@ -135,7 +135,7 @@ function ThumbButton({
         'border px-1.5 py-1 transition-colors disabled:opacity-40',
         active
           ? 'border-signal text-signal'
-          : 'border-transparent text-muted-foreground hover:border-border hover:text-muted-foreground',
+          : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
       ].join(' ')}
     >
       {children}

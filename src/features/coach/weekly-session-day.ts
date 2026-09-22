@@ -1,6 +1,8 @@
-import { addDays } from '@/lib/date';
+import { addDays, daysBetween } from '@/lib/date';
 import { cycleAnchor, HEAD_COACH_LEAD_DAYS } from './week-draft';
 import { currentBlock, type TrainingBlock } from './training-blocks';
+import { effectiveWeeklySessionDay } from './weekly-offer';
+import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 
 /**
  * What the planning-day card says about the cycle (`training-architecture/28`)
@@ -26,15 +28,11 @@ export interface NextDraftDates {
  * The next draft's dates, strictly after the current cycle's anchor: on the
  * planning day itself the draft has already landed, so "next" is a week on.
  */
-export function nextDraftDates(
-  today: string,
-  weeklySessionDay: string | null | undefined,
-  leadDays = HEAD_COACH_LEAD_DAYS,
-): NextDraftDates {
+export function nextDraftDates(today: string, weeklySessionDay: string | null | undefined): NextDraftDates {
   const athleteSees = addDays(cycleAnchor(today, weeklySessionDay), 7);
   return {
     athleteSees,
-    coachSees: addDays(athleteSees, -leadDays),
+    coachSees: addDays(athleteSees, -HEAD_COACH_LEAD_DAYS),
     weekStart: athleteSees,
     weekEnd: addDays(athleteSees, 6),
   };
@@ -48,8 +46,6 @@ export interface RaceFacts {
   blockName: string | null;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
  * The race and block facts the expanded card names, or null with no race —
  * the card then shortens its first step rather than inventing a horizon.
@@ -59,7 +55,7 @@ export function raceFacts(
   horizon: { raceName: string; raceDate: string; blocks: TrainingBlock[] } | null,
 ): RaceFacts | null {
   if (!horizon) return null;
-  const days = (Date.parse(`${horizon.raceDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS;
+  const days = daysBetween(today, horizon.raceDate);
   return {
     name: horizon.raceName,
     weeksOut: Math.max(0, Math.ceil(days / 7)),
@@ -98,8 +94,54 @@ export function dayChoice(state: DayChoice, event: DayChoiceEvent): DayChoice {
   return (TRANSITIONS[event.type] as (state: DayChoice, event: DayChoiceEvent) => DayChoice)(state, event);
 }
 
-/** The name the card calls the athlete: their Preferred Name when set (preferred-name/02), else the account name. */
-export function displayNameFor(preferred: string | null | undefined, athleteName: string): string {
+/**
+ * The name the card calls the athlete: their Preferred Name when set
+ * (preferred-name/02), else null — and the card then says "the athlete", as
+ * the ruling has it, never the account name.
+ */
+export function displayNameFor(preferred: string | null | undefined): string | null {
   const chosen = preferred?.trim();
-  return chosen ? chosen : athleteName;
+  return chosen ? chosen : null;
+}
+
+// ── Weekday names ─────────────────────────────────────────────────────────────
+
+const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
+const DAY_KEYS = ['dayMonday', 'dayTuesday', 'dayWednesday', 'dayThursday', 'dayFriday', 'daySaturday', 'daySunday'] as const;
+
+/** The `Settings` catalogue key naming a weekday; an unknown value reads as Sunday, as `effectiveWeeklySessionDay` does. */
+export function dayMessageKey(day: string): (typeof DAY_KEYS)[number] {
+  return DAY_KEYS[DAYS.indexOf(day)] ?? 'daySunday';
+}
+
+/**
+ * The weekday the coach first sees the draft: `HEAD_COACH_LEAD_DAYS` before
+ * the athlete's day. Derived from the constant like the dates are, so the two
+ * cannot disagree if the lead ever changes.
+ */
+export function coachSeesDay(weeklySessionDay: string | null | undefined): string {
+  const index = DAYS.indexOf(effectiveWeeklySessionDay(weeklySessionDay));
+  return DAYS[(index - HEAD_COACH_LEAD_DAYS + 7) % 7];
+}
+
+// ── The write ─────────────────────────────────────────────────────────────────
+
+export type DayWriteResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Confirm, as the card runs it: one write of the proposed day, then the state
+ * the card shows next. A refused write keeps the stored day, drops the
+ * proposal and hands back the reason for the notice. Nothing proposed, nothing
+ * written. Pure apart from the `write` it is given, so the "writes once" rule
+ * is a test with a mock rather than a click.
+ */
+export async function commitDayChoice(
+  state: DayChoice,
+  write: (day: string) => Promise<DayWriteResult>,
+): Promise<{ state: DayChoice; error: string | null }> {
+  const confirmed = dayChoice(state, { type: 'confirm' });
+  if (!confirmed.write) return { state: confirmed, error: null };
+  const result = await write(confirmed.write);
+  if (result.ok) return { state: dayChoice(confirmed, { type: 'written' }), error: null };
+  return { state: dayChoice(confirmed, { type: 'cancel' }), error: result.reason };
 }
