@@ -183,11 +183,14 @@ describe('no component lowers text contrast with an opacity modifier', () => {
   const SRC = fileURLToPath(new URL('..', import.meta.url));
   const TEXT_ALPHA = /\b(?:placeholder:)?text-(?:muted-foreground|foreground)\/\d+\b/g;
 
+  // Components only (`.tsx`), snapshot folders skipped: the class strings live
+  // in markup, and a whole-tree read under coverage instrumentation is what
+  // pushes the repo's scan tests past their timeout on a loaded machine.
   function sourceFiles(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const full = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(full);
-      return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [full] : [];
+      if (entry.isDirectory()) return entry.name === '__snapshots__' ? [] : sourceFiles(full);
+      return /\.tsx$/.test(entry.name) && !/\.test\.tsx$/.test(entry.name) ? [full] : [];
     });
   }
 
