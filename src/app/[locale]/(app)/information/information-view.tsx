@@ -227,7 +227,7 @@ export function InformationView({
             {vm.favPanels.map((p) => railItem(p, true))}
             {vm.groups.map((g) => (
               <div key={g.familyKey}>
-                <div className="px-2 pt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+                <div className="px-2 pt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                   {t(g.familyKey)}
                 </div>
                 {g.panels.map((p) => railItem(p, false))}

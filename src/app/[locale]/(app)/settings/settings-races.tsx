@@ -169,7 +169,7 @@ function AddRaceForm({
           placeholder={t('raceTargetPlaceholder')}
           maxLength={120}
           aria-label={t('raceTargetLabel')}
-          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
         <input
           type="date"

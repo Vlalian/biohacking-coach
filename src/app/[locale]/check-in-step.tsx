@@ -132,7 +132,7 @@ export function CheckInStep({
           maxLength={500}
           disabled={pending}
           placeholder={t('signalPlaceholder')}
-          className="mt-1.5 w-full resize-none border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+          className="mt-1.5 w-full resize-none border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
       </label>
 

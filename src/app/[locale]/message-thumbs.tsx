@@ -94,7 +94,7 @@ export function MessageThumbs({
             maxLength={280}
             placeholder={labels.commentPlaceholder}
             aria-label={labels.commentPlaceholder}
-            className="w-full max-w-[42ch] border border-border bg-panel px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/60"
+            className="w-full max-w-[42ch] border border-border bg-panel px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground"
           />
           <button
             type="button"
@@ -135,7 +135,7 @@ function ThumbButton({
         'border px-1.5 py-1 transition-colors disabled:opacity-40',
         active
           ? 'border-signal text-signal'
-          : 'border-transparent text-muted-foreground/50 hover:border-border hover:text-muted-foreground',
+          : 'border-transparent text-muted-foreground hover:border-border hover:text-muted-foreground',
       ].join(' ')}
     >
       {children}

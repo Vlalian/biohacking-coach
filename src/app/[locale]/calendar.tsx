@@ -968,7 +968,7 @@ function Marks({ marks, size }: { marks: HealthMark[]; size: number }) {
             data-open={m.open ? 'true' : 'false'}
             aria-hidden="true"
             style={{ width: size, height: size }}
-            className={['shrink-0', m.open ? 'text-signal' : 'text-muted-foreground/60'].join(' ')}
+            className={['shrink-0', m.open ? 'text-signal' : 'text-muted-foreground'].join(' ')}
           />
         );
       })}
