@@ -300,7 +300,6 @@
     "error": "That didn't work. Check your details and try again."
   },
   "Calendar": {
-    "proposedChip": "proposed",
     "discussing": "Next week is being discussed with the Coach — open the Coach to finish.",
     "empty": "No sessions planned yet.",
     "rate": "Rate {type} session",

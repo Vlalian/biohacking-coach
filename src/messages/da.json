@@ -300,7 +300,6 @@
     "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
   },
   "Calendar": {
-    "proposedChip": "foreslået",
     "discussing": "Næste uge er ved at blive drøftet med Coachen — åbn Coachen for at afslutte.",
     "empty": "Ingen sessioner planlagt endnu.",
     "rate": "Bedøm {type}-session",

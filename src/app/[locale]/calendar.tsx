@@ -17,7 +17,6 @@ import { ProposalCard } from './proposal-card';
 import { RedraftCard } from './redraft-card';
 import { DraftingCard } from './drafting-card';
 import type { CalendarSlotState } from '@/features/coach/week-draft-service';
-import type { ProposedSession } from '@/features/coach/weekly-session';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
 import { marksFor, weekStatus, type HealthMark, type HealthSpan } from '@/features/health/health-layer';
 
@@ -132,8 +131,6 @@ type Day = {
   isPast: boolean;
   isUnavailableDate: boolean;
   sessions: Session[];
-  /** The drafted week's sessions on this day — a proposal, not a session (training-architecture/18). */
-  proposed: ProposedSession[];
 };
 
 type Week = {
@@ -146,7 +143,6 @@ function buildWeeks(
   todayKey: string,
   byDate: Map<string, Session[]>,
   unavailable: Set<string>,
-  byDateProposed: Map<string, ProposedSession[]> = new Map(),
 ): Week[] {
   const year = reference.getFullYear();
   const month = reference.getMonth();
@@ -165,7 +161,6 @@ function buildWeeks(
       isPast: key < todayKey,
       isUnavailableDate: unavailable.has(key),
       sessions: byDate.get(key) ?? [],
-      proposed: byDateProposed.get(key) ?? [],
     });
   };
 
@@ -299,17 +294,10 @@ export function Calendar({
     else byDate.set(s.date, [s]);
   }
   const unavailable = new Set(unavailableDates);
-  // Ghosted onto the days they would land on — only the draft's own week can
-  // carry them, because that is the only week a draft names.
-  const byDateProposed = new Map<string, ProposedSession[]>();
-  if (proposal?.kind === 'proposal') {
-    for (const p of proposal.draft.sessions) {
-      const list = byDateProposed.get(p.date);
-      if (list) list.push(p);
-      else byDateProposed.set(p.date, [p]);
-    }
-  }
-  const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable, byDateProposed);
+  // The drafted week lives in the card above the grid and nowhere else
+  // (training-architecture/25): a proposal is not a session, and a grid that
+  // ghosted one taught the athlete it shows things it does not mean.
+  const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable);
   const allExpanded = weeks.length > 0 && weeks.every((w) => expanded.includes(w.isoWeekStart));
   const hasAnySession = sessions.length > 0;
 
@@ -799,9 +787,6 @@ function WeekRow({
                       {t('double')}
                     </span>
                   )}
-                  {day.proposed.map((p, i) => (
-                    <ProposedChip key={`${p.date}-${i}`} session={p} t={t} />
-                  ))}
                 </div>
               ) : (
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -849,17 +834,6 @@ function WeekRow({
                       </button>
                     ),
                   )}
-                  {day.proposed.map((p, i) => (
-                    <span
-                      key={`${p.date}-${i}`}
-                      role="img"
-                      aria-label={proposedLabel(p, t('proposedChip'))}
-                      title={p.type}
-                      className="-m-1.5 inline-flex items-center justify-center p-1.5"
-                    >
-                      <span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-muted-foreground" />
-                    </span>
-                  ))}
                 </div>
               )}
             </div>
@@ -872,46 +846,6 @@ function WeekRow({
           {t(bounce.messageKey)}
         </p>
       )}
-    </div>
-  );
-}
-
-/**
- * A proposed session, ghosted where it would land (`training-architecture/18`).
- * The size of a Session Chip so the row does not jump; a dashed border and a
- * muted tone so it reads as not-yet. Not draggable, no drawer, no rating — a
- * proposal is not a session, and every control a session has is withheld.
- */
-
-/**
- * The accessible name of a proposed session, in either rendering: what the eye
- * sees, type and minutes, then the "proposed" marker. One helper for the
- * collapsed dot and the full chip so the two cannot drift (CodeRabbit, PR #69).
- */
-function proposedLabel(session: ProposedSession, proposedWord: string): string {
-  return [session.type, session.durationMinutes ? `${session.durationMinutes} min` : null, proposedWord].filter(Boolean).join(' · ');
-}
-
-function ProposedChip({
-  session,
-  t,
-}: {
-  session: ProposedSession;
-  t: ReturnType<typeof useTranslations<'Calendar'>>;
-}) {
-  return (
-    <div
-      role="note"
-      aria-label={proposedLabel(session, t('proposedChip'))}
-      data-proposed=""
-      className="block w-full border border-dashed border-muted-foreground/60 px-1.5 py-1 text-left"
-    >
-      <span className="block truncate font-body text-[11px] font-medium leading-tight text-muted-foreground">
-        {session.type}
-      </span>
-      <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-        {session.durationMinutes ? `${session.durationMinutes} min` : t('proposedChip')}
-      </span>
     </div>
   );
 }
