@@ -16,6 +16,7 @@ import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
 import { BlockStrip } from '../../block-strip';
+import { PlanningDayLine } from '../../planning-day-line';
 import { Calendar } from '../../calendar';
 import { GarminUpload } from '../../garmin-upload';
 import { DetectedActivities } from '../../detected-activities';
@@ -113,6 +114,8 @@ export default async function TrainingPlanPage({
         race={horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null}
         blocks={horizon.blocks}
       />
+      {/* One line on the athlete's own cycle (training-architecture/28); the day is changed in Settings. */}
+      {athlete && <PlanningDayLine weeklySessionDay={athlete.profile?.weeklySessionDay} />}
       <Calendar
         sessions={trainingSessions}
         unavailableDates={unavailableDates}

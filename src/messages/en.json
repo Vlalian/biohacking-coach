@@ -802,9 +802,26 @@
     "error": "That didn't work ({reason})."
   },
   "CoachDay": {
-    "label": "Athlete's weekly planning day",
-    "note": "When next week reaches them. You see the draft the day before.",
+    "headline": "{name}'s weekly planning day: {day}",
+    "intro": "{name}'s training week starts on {day}. Every week the Coach drafts the next seven days, you get to look first, and {name} decides.",
+    "nextDraft": "Next draft: you {coachDate} · {name} {athleteDate}",
+    "pickerLabel": "Weekly planning day",
+    "confirmQuestion": "Change the day to {day}? It applies from the next draft.",
+    "confirm": "Change day",
+    "cancel": "Keep it",
+    "howTitle": "How the weekly cycle works",
+    "step1": "The Coach drafts. On {coachDay}, the day before the planning day, the Coach writes a proposal for {weekStart} – {weekEnd}, based on the race ({race}, {weeks, plural, =1 {1 week} other {# weeks}} out), the current Training Block ({block}), how last week went, and anything reported in the Check-in: an injury, an illness, or days marked unavailable.",
+    "step1NoRace": "The Coach drafts. On {coachDay}, the day before the planning day, the Coach writes a proposal for {weekStart} – {weekEnd}, based on how last week went and anything reported in the Check-in: an injury, an illness, or days marked unavailable.",
+    "step2": "You look first. From {coachDay} the draft shows here, above the calendar. You can move, add or remove sessions before {name} sees it. Anything you change is shown to {name} as coming from you, by name.",
+    "step3": "{name} decides. On {day} the draft appears on {name}'s Training Plan: accept it, discuss it with the Coach (the Coach can then redraft), or leave it. Only an accepted week goes on the calendar; the Coach never writes to it on its own.",
+    "step4": "If nobody acts. The draft stays a proposal. Nothing is scheduled until it is accepted, and it can still be accepted later in the week.",
+    "changing": "Change the day only if the real training week starts on a different day. It applies from the next draft; the current proposal is not redrawn.",
+    "noBlock": "no block yet",
     "error": "That didn't work ({reason})."
+  },
+  "PlanningDayLine": {
+    "text": "Your week is drafted every {coachDay} evening and shown to you {day}: accept it, discuss it, or leave it.",
+    "change": "Change the day in Settings"
   },
   "WeekDraftReview": {
     "title": "Next week, drafted",

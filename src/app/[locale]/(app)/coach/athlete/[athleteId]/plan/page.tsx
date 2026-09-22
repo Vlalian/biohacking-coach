@@ -2,7 +2,9 @@ import { loadCoachAthlete, NotACoach } from '../coach-athlete-guard';
 import { PrescribePanel } from '../prescribe-panel';
 import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
-import { WeeklyDayField } from '../weekly-day-field';
+import { PlanningDayCard } from '../planning-day-card';
+import { getPreferredNameForAthlete } from '@/features/user-prefs/user-prefs-repository';
+import { displayNameFor, raceFacts } from '@/features/coach/planning-day';
 import { WeekDraftReview } from '../week-draft-review';
 import { DraftingCard } from '@/app/[locale]/drafting-card';
 
@@ -29,6 +31,10 @@ export default async function CoachAthletePlanPage({
   if (!context.ok) return <NotACoach />;
 
   const { view, todayKey } = context;
+  // The Preferred Name is read through the user seam for the linked athlete
+  // (preferred-name/02), here rather than in the roster view: only this card
+  // addresses the athlete by name.
+  const preferredName = await getPreferredNameForAthlete(athleteId);
 
   return (
     <>
@@ -54,7 +60,16 @@ export default async function CoachAthletePlanPage({
       {view.draftInFlight && (
         <DraftingCard weekStart={view.draftInFlight.weekStart} waiter={{ side: 'coach', athleteId }} />
       )}
-      <WeeklyDayField athleteId={athleteId} value={view.weeklySessionDay} />
+      {/* The athlete's Weekly Session Day as a stated fact, with the dates it
+          drives and a confirmed change (training-architecture/28). */}
+      <PlanningDayCard
+        athleteId={athleteId}
+        value={view.weeklySessionDay}
+        todayKey={todayKey}
+        athleteName={displayNameFor(preferredName, view.athleteName)}
+        race={raceFacts(todayKey, view.blocks)}
+        locale={locale}
+      />
       <CoachCalendar
         athleteId={athleteId}
         sessions={view.calendarSessions}

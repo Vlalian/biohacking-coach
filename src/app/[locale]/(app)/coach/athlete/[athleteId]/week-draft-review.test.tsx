@@ -21,7 +21,6 @@ vi.mock('./week-draft-actions', () => ({ approveWeekDraftAction: vi.fn() }));
 vi.mock('./day-actions', () => ({ setWeeklySessionDayAction: vi.fn() }));
 
 const { WeekDraftReview } = await import('./week-draft-review');
-const { WeeklyDayField } = await import('./weekly-day-field');
 
 const DRAFT = {
   id: 'd1',
@@ -134,21 +133,5 @@ describe('WeekDraftReview', () => {
     expect(empty.match(/<li\b/g)).toBeNull();
     expect(empty.match(/data-action="add"/g)).toHaveLength(1);
     expect(empty.match(/data-action="approve"/g)).toHaveLength(1);
-  });
-});
-
-describe('WeeklyDayField — the coach’s control over the athlete’s day', () => {
-  it('offers the seven weekdays and nothing else, with the stored day pressed', () => {
-    const html = renderToStaticMarkup(<WeeklyDayField athleteId="a1" value="Wednesday" />);
-    expect(html.match(/<button\b/g)).toHaveLength(7);
-    expect(html).not.toMatch(/Flexible|optFlexible/);
-    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
-    expect(html).toContain('dayWednesday()');
-    expect(html).toContain('label()');
-  });
-
-  it('presses nothing when no day is stored', () => {
-    const html = renderToStaticMarkup(<WeeklyDayField athleteId="a1" value={null} />);
-    expect(html).not.toContain('aria-pressed="true"');
   });
 });
