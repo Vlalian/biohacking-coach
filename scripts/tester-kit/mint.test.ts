@@ -89,7 +89,7 @@ describe('planMint', () => {
       planMint({ name: 'C', email: 'c@x.dk', coach: true, personas: false, athletes: ['a@x.dk', 'b@x.dk'] }).map(
         (s) => s.kind,
       ),
-    ).toEqual(['signUp', 'ensureCoach', 'link', 'link']);
+    ).toEqual(['signUp', 'ensureCoach', 'linkAthlete', 'linkAthlete']);
   });
 
   // code-health/18
@@ -99,18 +99,18 @@ describe('planMint', () => {
       'signUp',
       'ensureCoach',
       'seedPersonas',
-      'link',
-      'link',
-      'link',
-      'link',
+      'linkPersona',
+      'linkPersona',
+      'linkPersona',
+      'linkAthlete',
     ]);
     expect(steps[2]).toEqual({ kind: 'seedPersonas', ownerKey: 'c@x.dk' });
     expect(steps.slice(3, 6)).toEqual([
-      { kind: 'link', persona: 'Alex Rivera' },
-      { kind: 'link', persona: 'Sam Chen' },
-      { kind: 'link', persona: 'Nadia Holm' },
+      { kind: 'linkPersona', persona: 'Alex Rivera' },
+      { kind: 'linkPersona', persona: 'Sam Chen' },
+      { kind: 'linkPersona', persona: 'Nadia Holm' },
     ]);
-    expect(steps[6]).toEqual({ kind: 'link', athleteEmail: 'a@x.dk' });
+    expect(steps[6]).toEqual({ kind: 'linkAthlete', athleteEmail: 'a@x.dk' });
   });
 });
 
@@ -122,6 +122,15 @@ describe('registerLine', () => {
       'SECRETpw12345678',
     );
     expect(line).toBe('| 2026-09-18 | Sarah | s@x.dk | athlete |');
+  });
+
+  it('does not call an athlete a persona coach, whatever else is set', () => {
+    const line = registerLine(
+      { name: 'Tom', email: 't@x.dk', coach: true, personas: false, athletes: ['a@x.dk'] },
+      new Date('2026-09-18T10:00Z'),
+      'pw',
+    );
+    expect(line).toBe('| 2026-09-18 | Tom | t@x.dk | coach — coaches a@x.dk |');
   });
 
   it('names a coach as such, with what they coach', () => {
@@ -179,6 +188,12 @@ describe('isDuplicateUser', () => {
   it('trusts the stable code better-auth puts on the error body', () => {
     expect(isDuplicateUser({ body: { code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' } })).toBe(true);
     expect(isDuplicateUser({ body: { code: 'INVALID_EMAIL' }, message: 'already exists' })).toBe(false);
+  });
+
+  it('survives an error that is not an object at all', () => {
+    expect(isDuplicateUser(undefined)).toBe(false);
+    expect(isDuplicateUser(null)).toBe(false);
+    expect(isDuplicateUser({})).toBe(false);
   });
 
   it('falls back to the message only when there is no code', () => {

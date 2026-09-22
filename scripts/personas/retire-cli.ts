@@ -51,6 +51,25 @@ async function findPersonas(): Promise<PersonaRow[]> {
   return found;
 }
 
+/**
+ * Deletes the planned rows, re-checking ownership as it goes: the plan was
+ * read a moment ago, and a row that gained a user since is a person now. A
+ * row that slips away that way is kept, and the run says so and fails.
+ */
+async function eraseRows(ids: string[]): Promise<void> {
+  const db = getDb();
+  const erased = await db
+    .delete(athlete)
+    .where(and(inArray(athlete.id, ids), isNull(athlete.userId)))
+    .returning({ id: athlete.id });
+  const [left] = await db.select({ n: count() }).from(athlete).where(inArray(athlete.id, ids));
+  console.log(`erased ${erased.length} athlete row(s); ${left.n} of them remain.`);
+  if (erased.length !== ids.length) {
+    console.error('some rows gained a user between the plan and the delete; they were kept.');
+    process.exit(1);
+  }
+}
+
 export async function main(argv: string[]): Promise<void> {
   guardDatabase(process.env.DATABASE_URL, argv);
   const args = parseRetireArgs(argv);
@@ -64,18 +83,5 @@ export async function main(argv: string[]): Promise<void> {
   if (plan.refused.length > 0) process.exit(1);
   if (!args.yes || plan.erase.length === 0) return;
 
-  const db = getDb();
-  const ids = plan.erase.map((r) => r.id);
-  // The plan was read a moment ago; a row that gained a user since is a
-  // person now, so the delete re-checks ownership instead of trusting the plan.
-  const erased = await db
-    .delete(athlete)
-    .where(and(inArray(athlete.id, ids), isNull(athlete.userId)))
-    .returning({ id: athlete.id });
-  const [left] = await db.select({ n: count() }).from(athlete).where(inArray(athlete.id, ids));
-  console.log(`erased ${erased.length} athlete row(s); ${left.n} of them remain.`);
-  if (erased.length !== ids.length) {
-    console.error('some rows gained a user between the plan and the delete; they were kept.');
-    process.exit(1);
-  }
+  await eraseRows(plan.erase.map((r) => r.id));
 }

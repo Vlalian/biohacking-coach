@@ -91,9 +91,10 @@ describe('describeRetirement', () => {
     expect(lines).not.toContainEqual(expect.stringMatching(/^Sam Chen/));
   });
 
-  it('counts a row without a label under a question mark rather than dropping it', () => {
-    const lines = describeRetirement(planRetirement([row({ id: 'id-9', syntheticLabel: null })]), false);
-    expect(lines).toContain('?: 1 copy');
+  it('counts rows without a label together, under a question mark, rather than dropping them', () => {
+    const rows = [row({ id: 'id-8', syntheticLabel: null }), row({ id: 'id-9', syntheticLabel: null })];
+    const lines = describeRetirement(planRetirement(rows), false);
+    expect(lines).toContain('?: 2 copies');
   });
 
   it('ends a dry run by saying how to make it real', () => {

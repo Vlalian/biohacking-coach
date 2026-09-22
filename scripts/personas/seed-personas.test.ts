@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { athlete, injuries, sessions, unavailableDates } from '../../src/db/schema';
+
+vi.mock('drizzle-orm', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('drizzle-orm')>();
+  return { ...actual, eq: vi.fn(actual.eq) };
+});
+const { eq } = await import('drizzle-orm');
 import { personasFor } from '../../src/features/athlete/synthetic-history';
 
 /**
@@ -14,6 +20,7 @@ const deleted: { table: unknown; where: unknown }[] = [];
 const batches: unknown[][] = [];
 const upsertTargetRace = vi.fn(() => Promise.resolve());
 
+const conflictTargets: unknown[] = [];
 function insertChain(table: unknown) {
   return {
     values: (row: unknown) => {
@@ -21,7 +28,11 @@ function insertChain(table: unknown) {
       const q = { kind: 'insert', table, row };
       return {
         ...q,
-        onConflictDoUpdate: () => Promise.resolve(q),
+        onConflictDoUpdate: (clause: { target: unknown; set: unknown }) => {
+          conflictTargets.push(clause.target);
+          expect(clause.set).toBe(row);
+          return Promise.resolve(q);
+        },
         onConflictDoNothing: () => ({ ...q, conflict: 'nothing' }),
       };
     },
@@ -51,6 +62,7 @@ describe('seedPersonas', () => {
   beforeEach(() => {
     inserted.length = 0;
     deleted.length = 0;
+    conflictTargets.length = 0;
     batches.length = 0;
     db.insert.mockClear();
     upsertTargetRace.mockClear();
@@ -93,6 +105,19 @@ describe('seedPersonas', () => {
     // Every delete is scoped to its own athlete: by table alone it would empty the coach's other personas.
     expect(deleted).toHaveLength(6);
     for (const d of deleted) expect(d.where).toBeDefined();
+  });
+
+  it("clears only the Coach's own sessions, leaving anything the athlete logged", async () => {
+    const profiles = personasFor('c@x.dk');
+    await seedPersonas(profiles, NOW, () => {});
+    expect(vi.mocked(eq)).toHaveBeenCalledWith(sessions.origin, 'coach');
+    expect(vi.mocked(eq)).toHaveBeenCalledWith(sessions.athleteId, profiles[0].id);
+    expect(vi.mocked(eq)).toHaveBeenCalledWith(unavailableDates.athleteId, profiles[0].id);
+  });
+
+  it('replaces rather than duplicates: every upsert keys on the row id it derived', async () => {
+    await seedPersonas(personasFor('c@x.dk'), NOW, () => {});
+    expect(conflictTargets).toEqual([athlete.id, athlete.id, athlete.id, injuries.id]);
   });
 
   it("writes Nadia's copy's own injury id, and no injury for the other two", async () => {

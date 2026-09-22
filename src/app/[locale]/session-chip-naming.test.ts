@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, sep } from 'node:path';
+import { filesMatchingRaw, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
 
 /**
  * `training-architecture/01`: the calendar chip is a **Session Chip**, and
@@ -24,36 +22,14 @@ import { join, sep } from 'node:path';
  * reason.
  */
 describe('nothing in src/ calls a Session Chip a block', () => {
-  // Resolved from this file, never from `process.cwd()`: the mutation gate runs
-  // the suite from a sandbox copy with a different working directory, where a
-  // cwd-relative path silently finds nothing and the assertion below passes
-  // while proving nothing.
-  const SRC = fileURLToPath(new URL('../..', import.meta.url));
-
   /**
-   * Every `.ts`/`.tsx` under `src/`, tests included — the acceptance criterion
-   * names test names and comments as well as identifiers, and the stale
-   * reference this rename started from lived in a test file's comment.
-   *
-   * This file is the one exclusion, because it necessarily contains the phrase
-   * it is looking for.
+   * Every `.ts`/`.tsx` under `src/`, tests included and comments with them —
+   * the acceptance criterion names test names and comments as well as
+   * identifiers, and the stale reference this rename started from lived in a
+   * test file's comment. This file is the one exclusion, because it
+   * necessarily contains the phrase it is looking for.
    */
-  function sourceFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(full);
-      if (!/\.tsx?$/.test(entry.name)) return [];
-      return entry.name === 'session-chip-naming.test.ts' ? [] : [full];
-    });
-  }
-
-  /** Repo-relative paths of files naming a *session* block, in any casing. */
-  function filesSayingSessionBlock(): string[] {
-    return sourceFiles(SRC)
-      .filter((file) => /session[ _-]?blocks?/i.test(readFileSync(file, 'utf8')))
-      .map((file) => file.slice(SRC.length).split(sep).join('/'))
-      .sort();
-  }
+  const filesSayingSessionBlock = () => filesMatchingRaw(/session[ _-]?blocks?/i, { self: import.meta.url });
 
   it('leaves nothing, now that the prompt-section sense went with the Weekly Session', () => {
     // `prompts.ts` used to say "── Weekly Session blocks ──" over the section
@@ -62,5 +38,5 @@ describe('nothing in src/ calls a Session Chip a block', () => {
     // The Weekly Session is retired (`training-architecture/21`), and the
     // heading went with it; nothing in `src/` says it now.
     expect(filesSayingSessionBlock()).toEqual([]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 });

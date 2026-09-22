@@ -46,21 +46,28 @@ function refuse(why: string): MintArgs {
   return { ok: false, usage: `${why}\n${USAGE}` };
 }
 
+/** What argv said: the flags that were present, and the value behind each `--key`. */
+interface ReadArgv {
+  flags: Set<string>;
+  values: Map<string, string>;
+}
+
 /** Splits argv into `--key value` pairs and bare flags; the first unknown token refuses. */
-function readArgv(argv: readonly string[]): Map<string, string> | string {
-  const seen = new Map<string, string>();
+function readArgv(argv: readonly string[]): ReadArgv | string {
+  const flags = new Set<string>();
+  const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (FLAGS.has(token)) {
-      seen.set(token, 'true');
+      flags.add(token);
     } else if (VALUES.has(token) && argv[i + 1] !== undefined) {
-      seen.set(token, argv[i + 1]);
+      values.set(token, argv[i + 1]);
       i += 1;
     } else {
       return `unknown or incomplete argument: ${token}`;
     }
   }
-  return seen;
+  return { flags, values };
 }
 
 /** The coach-only rules, kept apart so `parseMintArgs` stays small. */
@@ -75,33 +82,34 @@ function checkCoachRules(request: MintRequest): string | null {
 export function parseMintArgs(argv: readonly string[]): MintArgs {
   const seen = readArgv(argv);
   if (typeof seen === 'string') return refuse(seen);
-  const name = seen.get('--name');
-  const email = seen.get('--email');
+  const name = seen.values.get('--name');
+  const email = seen.values.get('--email');
   if (!name) return refuse('--name is required');
   if (!email) return refuse('--email is required');
 
   const request: MintRequest = {
     name,
     email,
-    coach: seen.has('--coach'),
-    personas: seen.has('--personas'),
-    athletes: (seen.get('--athletes') ?? '').split(',').filter((e) => e.length > 0),
+    coach: seen.flags.has('--coach'),
+    personas: seen.flags.has('--personas'),
+    athletes: (seen.values.get('--athletes') ?? '').split(',').filter((e) => e.length > 0),
   };
   const why = checkCoachRules(request);
   return why ? refuse(why) : { ok: true, request };
 }
 
 /**
- * One database step of a mint, in the order the CLI runs them. `link` carries
- * either a persona label (resolved to the id `seedPersonas` returns) or an
- * athlete's email (resolved to an existing athlete row before any write).
+ * One database step of a mint, in the order the CLI runs them. The two link
+ * steps are separate kinds because they resolve differently: a persona by the
+ * label `seedPersonas` just wrote, an athlete by an email that must already
+ * belong to an account.
  */
 export type MintStep =
   | { kind: 'signUp' }
   | { kind: 'ensureCoach' }
   | { kind: 'seedPersonas'; ownerKey: string }
-  | { kind: 'link'; persona: string }
-  | { kind: 'link'; athleteEmail: string };
+  | { kind: 'linkPersona'; persona: string }
+  | { kind: 'linkAthlete'; athleteEmail: string };
 
 /** The owner key a coach's persona copy derives its ids from: the email, lower-cased. */
 export function ownerKeyFor(email: string): string {
@@ -112,7 +120,7 @@ function personaSteps(request: MintRequest): MintStep[] {
   if (!request.personas) return [];
   return [
     { kind: 'seedPersonas', ownerKey: ownerKeyFor(request.email) },
-    ...PERSONA_LABELS.map((persona): MintStep => ({ kind: 'link', persona })),
+    ...PERSONA_LABELS.map((persona): MintStep => ({ kind: 'linkPersona', persona })),
   ];
 }
 
@@ -122,7 +130,7 @@ export function planMint(request: MintRequest): MintStep[] {
     { kind: 'signUp' },
     { kind: 'ensureCoach' },
     ...personaSteps(request),
-    ...request.athletes.map((athleteEmail): MintStep => ({ kind: 'link', athleteEmail })),
+    ...request.athletes.map((athleteEmail): MintStep => ({ kind: 'linkAthlete', athleteEmail })),
   ];
 }
 

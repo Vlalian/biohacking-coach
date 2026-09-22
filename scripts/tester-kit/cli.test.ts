@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { coach, coachingLink } from '../../src/db/schema';
+import { athlete, coach, coachingLink } from '../../src/db/schema';
 import { personasFor } from '../../src/features/athlete/synthetic-history';
 
 /**
@@ -26,7 +26,7 @@ vi.mock('node:fs', () => ({ writeFileSync, appendFileSync, mkdirSync, readFileSy
 
 /** Each select resolves to the next queued result; a chain accepts any of the builder's verbs. */
 const selectResults: unknown[][] = [];
-const selectQuery = vi.fn();
+const selectShapes: unknown[] = [];
 function queryChain(): Record<string, unknown> {
   const chain: Record<string, unknown> = {
     then: (resolve: (v: unknown) => void) => resolve(selectResults.shift() ?? []),
@@ -34,16 +34,32 @@ function queryChain(): Record<string, unknown> {
   for (const verb of ['from', 'innerJoin', 'where', 'limit']) chain[verb] = () => chain;
   return chain;
 }
-const select = vi.fn(() => {
-  selectQuery();
+const select = vi.fn((shape: unknown) => {
+  selectShapes.push(shape);
   return queryChain();
 });
 const inserted: { table: unknown; row: unknown }[] = [];
+const conflictTargets: unknown[] = [];
+const returningShapes: unknown[] = [];
+/** What the coach insert's `returning()` hands back; emptied to mean "the conflict clause won". */
+const returningRows: { id: string }[] = [{ id: 'coach-new' }];
 const insert = vi.fn((table: unknown) => ({
   values: (row: unknown) => {
     inserted.push({ table, row });
-    const done = { returning: () => Promise.resolve([{ id: 'coach-new' }]), then: (r: (v: unknown) => void) => r(undefined) };
-    return { onConflictDoNothing: () => done, ...done };
+    const done = {
+      returning: (shape: unknown) => {
+        returningShapes.push(shape);
+        return Promise.resolve([...returningRows]);
+      },
+      then: (r: (v: unknown) => void) => r(undefined),
+    };
+    return {
+      onConflictDoNothing: (clause?: { target: unknown }) => {
+        conflictTargets.push(clause?.target ?? null);
+        return done;
+      },
+      ...done,
+    };
   },
 }));
 vi.mock('../../src/db', () => ({ getDb: () => ({ select, insert }) }));
@@ -56,7 +72,24 @@ describe('mint-tester CLI', () => {
     vi.clearAllMocks();
     selectResults.length = 0;
     inserted.length = 0;
+    returningRows.splice(0, returningRows.length, { id: 'coach-new' });
+    selectShapes.length = 0;
+    conflictTargets.length = 0;
+    returningShapes.length = 0;
+    existsSync.mockReturnValue(true);
     log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  it('refuses argv it cannot read, before anything else', async () => {
+    await expect(main(['--email', 's@x.dk'])).rejects.toThrow(/^--name is required\nusage: mint-tester\.ts/);
+    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('lets an error that is not a duplicate through as it is', async () => {
+    signUpEmail.mockRejectedValueOnce(new Error('connection refused'));
+    await expect(main(['--name', 'S', '--email', 's@x.dk'])).rejects.toThrow('connection refused');
+    expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('guards the database before touching it', async () => {
@@ -88,7 +121,7 @@ describe('mint-tester CLI', () => {
     });
     expect(readFileSync).toHaveBeenCalledWith(expect.stringMatching(/tester-kit[\\/]welcome-email\.md$/), 'utf8');
     expect(writeFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^\.scratch[\\/]showable-version[\\/]testers[\\/]sarah\.md$/),
+      expect.stringMatching(/^\.scratch[\\/]showable-version[\\/]testers[\\/]sarah-oe\.md$/),
       expect.stringContaining('s@x.dk'),
       'utf8',
     );
@@ -108,14 +141,92 @@ describe('mint-tester CLI', () => {
     expect(mkdirSync).toHaveBeenCalledWith(expect.stringMatching(/testers$/), { recursive: true });
   });
 
+  it('prints one line naming the role and the login', async () => {
+    await main(['--name', 'S', '--email', 's@x.dk']);
+    const printed = log.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(printed).toContainEqual(expect.stringMatching(/^minted athlete s@x\.dk [A-HJ-NP-Za-km-z2-9]{20}$/));
+    selectResults.push([{ id: 'ath-a' }]);
+    await main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk']);
+    expect(log.mock.calls.map((c: unknown[]) => String(c[0]))).toContainEqual(
+      expect.stringMatching(/^minted coach c@x\.dk /),
+    );
+  });
+
+  it('folds an accent into plain ascii too', async () => {
+    await main(['--name', 'Renée Dupré', '--email', 'r@x.dk']);
+    expect(writeFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/renee-dupre\.md$/),
+      expect.any(String),
+      'utf8',
+    );
+  });
+
+  it('resolves one lookup per athlete email and none for a persona link', async () => {
+    selectResults.push([{ id: 'ath-a' }], [{ id: 'ath-b' }]);
+    await main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk,b@x.dk', '--personas']);
+    // Two lookups, not five: the three persona links carry a label, not an email.
+    expect(selectShapes).toEqual([{ id: athlete.id }, { id: athlete.id }]);
+    expect(inserted.slice(1).map((i) => (i.row as { athleteId: string }).athleteId)).toEqual([
+      'p1',
+      'p2',
+      'p3',
+      'ath-a',
+      'ath-b',
+    ]);
+  });
+
   it('a coach gets a coach row and one link per resolved athlete', async () => {
     selectResults.push([{ id: 'ath-a' }], [{ id: 'ath-b' }]);
     await main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk,b@x.dk']);
     expect(inserted[0]).toEqual({ table: coach, row: { userId: 'user-new' } });
+    // The row is claimed by the user it belongs to, and its id is what comes back.
+    expect(conflictTargets[0]).toBe(coach.userId);
+    expect(returningShapes[0]).toEqual({ id: coach.id });
+    expect(conflictTargets.slice(1)).toEqual([null, null]);
     expect(inserted.slice(1)).toEqual([
       { table: coachingLink, row: { coachId: 'coach-new', athleteId: 'ath-a' } },
       { table: coachingLink, row: { coachId: 'coach-new', athleteId: 'ath-b' } },
     ]);
+  });
+
+  it('leaves an existing folder alone', async () => {
+    await main(['--name', 'S', '--email', 's@x.dk']);
+    expect(mkdirSync).not.toHaveBeenCalled();
+  });
+
+  it('names the file after the tester, with the Danish letters spelled out', async () => {
+    await main(['--name', 'Søren Æ. Berg-Håansen!', '--email', 's@x.dk']);
+    expect(writeFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/soeren-ae-berg-haaansen\.md$/),
+      expect.any(String),
+      'utf8',
+    );
+  });
+
+  it('an athlete gets no coach row and no link', async () => {
+    await main(['--name', 'S', '--email', 's@x.dk']);
+    expect(inserted).toEqual([]);
+  });
+
+  it('links to the coach row that already exists when the insert is a no-op', async () => {
+    returningRows.length = 0; // the conflict clause inserted nothing
+    // The athlete is resolved first, before any write; the coach lookup follows.
+    selectResults.push([{ id: 'ath-a' }], [{ id: 'coach-existing' }]);
+    await main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk']);
+    expect(inserted.at(-1)).toEqual({
+      table: coachingLink,
+      row: { coachId: 'coach-existing', athleteId: 'ath-a' },
+    });
+    // The fallback asks for the coach row's id, keyed on the user it belongs to.
+    expect(selectShapes).toEqual([{ id: athlete.id }, { id: coach.id }]);
+  });
+
+  it('stops if the coach row is neither inserted nor found', async () => {
+    returningRows.length = 0;
+    selectResults.push([{ id: 'ath-a' }], []);
+    await expect(main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk'])).rejects.toThrow(
+      /coach row missing/,
+    );
   });
 
   // code-health/18
@@ -127,6 +238,6 @@ describe('mint-tester CLI', () => {
       { coachId: 'coach-new', athleteId: 'p2' },
       { coachId: 'coach-new', athleteId: 'p3' },
     ]);
-    expect(log).toHaveBeenCalledWith(expect.stringMatching(/3 personas/));
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/holds their own copy of 3 personas/));
   });
 });

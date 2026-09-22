@@ -56,15 +56,17 @@ export async function main(argv: string[]): Promise<void> {
   const password = generatePassword();
   const userId = await signUp(request, password);
 
-  const coachId = steps.some((s) => s.kind === 'ensureCoach') ? await ensureCoach(userId) : null;
-  for (const step of steps) {
-    if (step.kind === 'seedPersonas') {
+  // Only a coach has links; an athlete's mint ends at the signup hook.
+  if (steps.some((s) => s.kind === 'ensureCoach')) {
+    const coachId = await ensureCoach(userId);
+    for (const step of steps) {
+      if (step.kind !== 'seedPersonas') continue;
       const ids = await seedPersonas(personasFor(step.ownerKey), new Date(), console.log);
       await link(coachId, ids);
       console.log(`${request.name} holds their own copy of ${ids.length} personas.`);
     }
+    await link(coachId, athleteIds);
   }
-  await link(coachId, athleteIds);
 
   file(request, password);
   console.log(`minted ${request.coach ? 'coach' : 'athlete'} ${request.email} ${password}`);
@@ -73,7 +75,7 @@ export async function main(argv: string[]): Promise<void> {
 async function resolveAthletes(steps: MintStep[]): Promise<string[]> {
   const ids: string[] = [];
   for (const step of steps) {
-    if (step.kind !== 'link' || !('athleteEmail' in step)) continue;
+    if (step.kind !== 'linkAthlete') continue;
     const [row] = await getDb()
       .select({ id: athlete.id })
       .from(athlete)
@@ -113,8 +115,7 @@ async function ensureCoach(userId: string): Promise<string> {
 }
 
 /** One active Coaching Link per athlete; the partial unique index makes a rerun a no-op. */
-async function link(coachId: string | null, athleteIds: string[]): Promise<void> {
-  if (coachId === null) return;
+async function link(coachId: string, athleteIds: string[]): Promise<void> {
   for (const athleteId of athleteIds) {
     await getDb().insert(coachingLink).values({ coachId, athleteId }).onConflictDoNothing();
   }
@@ -129,11 +130,19 @@ function file(request: MintRequest, password: string): void {
   appendFileSync(join(TESTERS_DIR, 'REGISTER.md'), `${registerLine(request, new Date(), password)}\n`, 'utf8');
 }
 
+/**
+ * A filename from a tester's name. The Danish letters are folded the way Danes
+ * write them without a keyboard: `\u00f8` has no decomposed form, so NFKD alone
+ * would drop it and file S\u00f8ren under `s-ren`.
+ */
 function slug(name: string): string {
   return name
+    .toLowerCase()
+    .replace(/\u00e6/g, 'ae')
+    .replace(/\u00f8/g, 'oe')
+    .replace(/\u00e5/g, 'aa')
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
