@@ -133,4 +133,12 @@ describe('repinBlockSetAction and restartBlockSetAction', () => {
     expect(await repinBlockSetAction('a1', 'r1', 1)).toEqual({ ok: false, reason: 'too-few-blocks', dropped: ['Taper'] });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
+
+  it('a refused start-over passes through and revalidates nothing either', async () => {
+    resolveHeadCoachId.mockResolvedValue('coach_1');
+    restartBlockSetFromDraftAsHeadCoach.mockResolvedValue({ ok: false, reason: 'not-stale' });
+
+    expect(await restartBlockSetAction('a1', 'r1', 1)).toEqual({ ok: false, reason: 'not-stale' });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
 });
