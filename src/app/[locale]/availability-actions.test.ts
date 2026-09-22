@@ -49,6 +49,9 @@ describe.each(cases)('%s', (_name, action, service) => {
       date: '2026-07-16',
       today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
+    // Parked and restored sessions show on the calendar and in every view
+    // that reads it, so the whole shell is refreshed.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('rejects a malformed date before resolving anyone', async () => {
@@ -68,6 +71,7 @@ describe.each(cases)('%s', (_name, action, service) => {
       reason: 'not-authenticated',
     });
     expect(service).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('revalidates nothing when the feature refuses', async () => {
