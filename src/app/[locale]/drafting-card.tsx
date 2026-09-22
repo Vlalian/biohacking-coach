@@ -58,7 +58,7 @@ export function DraftingCard({ weekStart, waiter }: { weekStart: string; waiter:
       { intervalMs: GENERATION_POLL_MS, limitMs: GENERATION_POLL_LIMIT_MS },
     );
     // `waiter` is an object literal at both call sites; its parts are what matter.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [router, weekStart, waiter.side, waiter.side === 'coach' ? waiter.athleteId : null]);
 
   const line = draftingCopy(phase, COACH_EXPECTED_SECONDS);

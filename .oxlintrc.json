@@ -4,8 +4,12 @@
   // (`eslint.config.mjs`) keeps only the rules Oxlint cannot express and turns
   // off everything listed here, so a file is never judged twice.
   "plugins": ["typescript", "react", "nextjs", "import", "oxc"],
+  // `error`, not `warn`: oxlint exits 0 on warnings, so a warn-level category
+  // would leave `npm run lint` green on a real fault and quietly retire one of
+  // the four Definition-of-Done checks. Severities below match what
+  // eslint-config-next gave these rules on main.
   "categories": {
-    "correctness": "warn"
+    "correctness": "error"
   },
   "ignorePatterns": [
     ".next/**",
@@ -22,14 +26,21 @@
     "test-results/**",
     "playwright-report/**"
   ],
-  // What eslint-config-next used to bring in.
+  // What eslint-config-next used to bring in, at the severities it used.
   "rules": {
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
     "nextjs/no-img-element": "warn",
     "nextjs/no-html-link-for-pages": "error",
     "typescript/no-unused-vars": "warn",
-    "typescript/no-explicit-any": "warn"
+    "typescript/no-explicit-any": "error",
+    // Two findings oxlint reports that eslint-config-next never ran. Neither is
+    // a regression and neither is fixed here, so they stay visible at warn
+    // rather than failing the gate on pre-existing code:
+    // `garmin.ts` strips C0 control characters on purpose, and the `chunk.ts`
+    // escape is harmless. Raise these once someone owns the two sites.
+    "no-control-regex": "warn",
+    "no-useless-escape": "warn"
   },
   "overrides": [
     // Scoped to app code. Test files are the legitimate consumers and are

@@ -4,10 +4,13 @@ import nextTs from "eslint-config-next/typescript";
 import oxlint from "eslint-plugin-oxlint";
 
 // Lint runs in two layers (decided 2026-09-22, see docs/rules/definition-of-done.md):
-// Oxlint (`.oxlintrc.json`) is the fast pass and carries every rule it can —
-// the Next/React/TypeScript presets, the fixture-import ban, the console ban.
-// ESLint keeps only what Oxlint cannot express, and the last entry below turns
-// off every rule Oxlint already enforces so no file is judged twice.
+// Oxlint (`.oxlintrc.json`) is the fast pass and carries what it can — the
+// Next/React/TypeScript presets, the fixture-import ban, the console ban.
+// The last entry below turns off every rule Oxlint already enforces, so no file
+// is judged twice. What is left running here is the `it.only` selector rule,
+// which Oxlint has no selector engine for, **and the jsx-a11y set**, which
+// `.oxlintrc.json` deliberately does not enable: Oxlint's a11y rules report on
+// roughly ten existing components, and adopting them is its own piece of work.
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -61,8 +64,13 @@ const eslintConfig = defineConfig([
   ...oxlint.buildFromOxlintConfigFile("./.oxlintrc.json"),
   // `// eslint-disable-next-line @typescript-eslint/no-explicit-any` comments
   // in the test files now serve Oxlint (which honors the same directive) and
-  // look unused to ESLint, because ESLint no longer runs that rule.
-  { linterOptions: { reportUnusedDisableDirectives: "off" } },
+  // look unused to ESLint, because ESLint no longer runs that rule. Scoped to
+  // test files: a genuinely dead directive anywhere else should still be
+  // reported.
+  {
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+  },
 ]);
 
 export default eslintConfig;
