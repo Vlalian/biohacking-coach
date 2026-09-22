@@ -22,9 +22,10 @@ you fix while you are in there.
 ## 1. Test the exports, and only the exports
 
 A module's interface is what it `export`s. A test may call those and nothing
-else. Each export must have a caller in `src/` that is not a test — an export
-whose only consumer is a test file is not an interface, it is a backdoor with
-`export` written in front of it.
+else. Each export must have a caller somewhere in the repo that is not a test —
+`src/`, but `scripts/`, `e2e/` and `playwright/` count too, and the measurement
+behind code-health/19 counts them. An export whose only consumer is a test file
+is not an interface, it is a backdoor with `export` written in front of it.
 
 For a repository or server action the interface is the signature plus the rows
 it writes. For a component it is props in, rendered DOM out: assert on what the
@@ -42,7 +43,8 @@ vi.spyOn(console, "error").mockImplementation(...)
 
 // Banned: asserts the call graph, not the behaviour. This passes even when
 // normalizeHr returns garbage.
-vi.spyOn(mod, "normalizeHr");
+const spy = vi.spyOn(mod, "normalizeHr");
+sessionLoad({ hr: 250, minutes: 60 });
 expect(spy).toHaveBeenCalledWith(250);
 ```
 
