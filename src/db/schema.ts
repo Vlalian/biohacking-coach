@@ -206,7 +206,7 @@ export const sessions = pgTable(
     // the database, not silently downstream in an authority check.
     check(
       'sessions_origin_valid',
-      sql`${table.origin} IN ('coach', 'athlete', 'garmin', 'head_coach')`,
+      sql`${table.origin} IN ('coach', 'athlete', 'garmin', 'head_coach', 'arithmetic')`,
     ),
     check(
       'sessions_status_valid',

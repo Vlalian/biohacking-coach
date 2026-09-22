@@ -12,6 +12,23 @@ import type { MatchCandidate } from '@/features/garmin/match-activities';
 // dependency runs one way, toward the core). The cost is that the two can drift —
 // if a column is added to a projection here, add it to the briefing type too.
 
+/**
+ * A session the block arithmetic wrote, as this module needs it
+ * (`training-architecture/34`). Mirrors `ArithmeticSession` in
+ * `features/coach/block-sessions.ts` field-for-field and is declared here for
+ * the same reason the two briefing shapes above are: the dependency runs one
+ * way, toward the core, and the session feature does not import the coach's.
+ */
+export type ArithmeticSessionRow = {
+  date: string;
+  sport: string;
+  type: string;
+  durationMinutes: number | null;
+  zone: string | null;
+  title: string;
+  note: string | null;
+};
+
 /** The plan columns a Coach Briefing may always read — no Session Reflection. */
 export type BriefingPlanRow = {
   date: string;
@@ -254,6 +271,75 @@ export async function getBriefingReflections(
  * half-written. An empty plan clears the range's coach sessions and inserts
  * nothing.
  */
+/**
+ * The structure's own rows for one week, as the Coach's draft prompt reads them
+ * (`training-architecture/34`). The Coach is adjusting a week the athlete has
+ * already seen, so the draft is seeded with it rather than with a skeleton.
+ * Only `origin = 'arithmetic'` and only planned rows: a session the athlete has
+ * already done is history, not a baseline.
+ */
+export async function getArithmeticSessionsForWeek(
+  athleteId: string,
+  weekStartKey: string,
+): Promise<Omit<ArithmeticSessionRow, 'note'>[]> {
+  const rows = await getDb()
+    .select()
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.athleteId, athleteId),
+        eq(sessions.origin, 'arithmetic'),
+        eq(sessions.status, 'planned'),
+        gte(sessions.date, weekStartKey),
+        lte(sessions.date, addDays(weekStartKey, 6)),
+      ),
+    )
+    .orderBy(asc(sessions.date), asc(sessions.dayOrder));
+
+  return rows.map((row) => ({
+    date: row.date,
+    sport: row.sport ?? '',
+    type: row.type,
+    durationMinutes: row.duration,
+    zone: row.zone,
+    title: row.title ?? '',
+  }));
+}
+
+/**
+ * The structure's own rows (`training-architecture/34`).
+ *
+ * A plain insert, not a replace: the caller decides which weeks are owed
+ * (`weeksToFill`), and a week that already holds a planned session is not one
+ * of them. That week-granular gate is what makes filling idempotent — the same
+ * non-exclusivity caveat `recordWeekDraft` carries, and acceptable for the
+ * same reason: two fills racing the same week would each have seen it empty,
+ * and the Coach's draft replaces whatever is there when it lands.
+ */
+export async function insertArithmeticSessions(
+  athleteId: string,
+  rows: readonly ArithmeticSessionRow[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  await getDb()
+    .insert(sessions)
+    .values(
+      rows.map((row) => ({
+        athleteId,
+        date: row.date,
+        origin: 'arithmetic',
+        status: 'planned',
+        sport: row.sport,
+        type: row.type,
+        duration: row.durationMinutes,
+        zone: row.zone,
+        title: row.title,
+        note: row.note,
+        isTraining: true,
+      })),
+    );
+}
+
 export async function replaceCoachPlanForDateRange(
   athleteId: string,
   startKey: string,
@@ -267,7 +353,12 @@ export async function replaceCoachPlanForDateRange(
     .where(
       and(
         eq(sessions.athleteId, athleteId),
-        eq(sessions.origin, 'coach'),
+        // The Coach's own drafts and the structure's arithmetic rows: an
+        // accepted week replaces both (`training-architecture/34`). A Head
+        // Coach's prescription and the athlete's own sessions stay — they are
+        // not the Coach's to replace, and this clause is the only thing
+        // protecting them.
+        inArray(sessions.origin, ['coach', 'arithmetic']),
         // Only a still-planned session. A Coach session the athlete has already
         // completed or skipped is a record of what happened, and re-planning the
         // week must not erase it — the record mutation ADR 0002 forbids.

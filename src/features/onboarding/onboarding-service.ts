@@ -12,6 +12,7 @@ import {
 } from '@/features/coach/conversation-repository';
 import type { Message } from '@/features/coach/conversation';
 import { createRace, replacePastRaces } from '@/features/race/race-repository';
+import { ensureBlockFilled } from '@/features/coach/block-fill-service';
 import {
   applyAnswer,
   completeProfile,
@@ -130,6 +131,10 @@ export async function answerOnboardingStep(
     }
     // The finished races the athlete listed replace whatever was stored (35).
     await replacePastRaces(athlete.id, completed.pastRaces);
+    // And the calendar is full the first time they open it: the structure
+    // fills the current block now that there is a race and an hours answer
+    // (`training-architecture/34`). Never throws; reports its own outcome.
+    await ensureBlockFilled(athlete.id, today);
     await appendMessages(athlete.id, conversation.id, [
       { role: 'coach_ai', content: greeting },
     ]);

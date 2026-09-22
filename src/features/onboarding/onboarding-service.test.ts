@@ -4,6 +4,7 @@ import type { Athlete } from '@/features/athlete/athlete';
 const {
   createRace,
   replacePastRaces,
+  ensureBlockFilled,
   mergeAthleteProfile,
   completeAthleteOnboarding,
   appendMessages,
@@ -28,6 +29,7 @@ const {
   getMessages: vi.fn(async () => []),
   createRace: vi.fn(async () => undefined),
   replacePastRaces: vi.fn(async () => undefined),
+  ensureBlockFilled: vi.fn(async () => 'filled'),
 }));
 
 vi.mock('@/features/athlete/athlete-repository', () => ({
@@ -35,6 +37,7 @@ vi.mock('@/features/athlete/athlete-repository', () => ({
   completeAthleteOnboarding,
 }));
 vi.mock('@/features/race/race-repository', () => ({ createRace, replacePastRaces }));
+vi.mock('@/features/coach/block-fill-service', () => ({ ensureBlockFilled }));
 vi.mock('@/features/coach/conversation-repository', () => ({
   appendMessages,
   createConversation,
@@ -165,6 +168,10 @@ describe('answerOnboardingStep', () => {
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
     // The listed past races replace whatever was stored (training-architecture/35).
     expect(replacePastRaces).toHaveBeenCalledWith('athlete_1', [HALF]);
+    // The calendar is full the first time the athlete opens it: the block is
+    // filled once the Target Race exists (`training-architecture/34`).
+    expect(ensureBlockFilled).toHaveBeenCalledWith('athlete_1', TODAY);
+    expect(ensureBlockFilled.mock.invocationCallOrder[0]).toBeGreaterThan(createRace.mock.invocationCallOrder[0]);
     // The Coach's greeting closes the transcript and the conversation ends.
     expect(appendMessages).toHaveBeenLastCalledWith('athlete_1', 'conv_1', [
       { role: 'coach_ai', content: expect.stringContaining("I'm your Coach") },
@@ -213,6 +220,8 @@ describe('answerOnboardingStep', () => {
     );
     expect(createRace).not.toHaveBeenCalled();
     expect(replacePastRaces).toHaveBeenCalledWith('athlete_1', []);
+    // No race, no blocks — the fill is still asked and answers 'no-race'.
+    expect(ensureBlockFilled).toHaveBeenCalledWith('athlete_1', TODAY);
   });
 });
 

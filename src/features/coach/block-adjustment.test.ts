@@ -34,7 +34,7 @@ describe('renderBlockAdjustmentPrompt — the briefing carries every listed fact
   const prompt = renderBlockAdjustmentPrompt(FULL);
 
   it('carries the draft as dated spans, the horizon, distance and experience', () => {
-    expect(prompt).toContain('Block 1 of 6');
+    expect(prompt).toContain('Base: 2026-09-14');
     expect(prompt).toMatch(/2026-09-14 .* 2026-1\d-\d\d/);
     expect(prompt).toContain('47 weeks');
     expect(prompt).toContain('distance=Ironman');

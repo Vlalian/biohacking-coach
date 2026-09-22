@@ -20,6 +20,7 @@ import type { CoachChore } from '@/features/coach/coach-chores';
 import { logCoachChoresFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
 import { CoachChoresDialog } from './coach-chores-dialog';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
+import { ensureBlockFilled } from '@/features/coach/block-fill-service';
 import type { CheckInOfferInput } from '@/features/coach/weekly-offer';
 import { weekStartOf, today } from '@/lib/date';
 import { CoachThread } from '../coach-thread';
@@ -178,6 +179,13 @@ export default async function AppShellLayout({
     // never thrown.
     const athleteId = athlete.id;
     after(async () => {
+      // The structure first (`training-architecture/34`): the block's weeks
+      // are filled before the Coach drafts, so the draft adjusts what the
+      // athlete can already see rather than writing into an empty week. Its
+      // own failure costs the draft nothing.
+      await ensureBlockFilled(athleteId, todayKey).catch((error: unknown) => {
+        logWeekDraftFailure(athleteId, error);
+      });
       try {
         await ensureWeekDrafted(athleteId, todayKey);
       } catch (error) {

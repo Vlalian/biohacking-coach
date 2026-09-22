@@ -1,10 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, sep } from 'node:path';
 import { buildChatPrompt } from '@/features/coach/prompts';
 import { capacityStatement } from './capacity';
 import type { CheckIn } from '@/features/coach/check-in';
+
+/**
+ * These tests walk every file under `src/` and read it. That takes well under a
+ * second on an ordinary run and past the 5 s default when the suite runs with
+ * v8 coverage instrumentation — which is the hardening gate's first step, so the
+ * flake stopped the gate rather than a test run. The assertions are unchanged;
+ * only the time the walk is allowed to take is (`code-health/11`).
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 
 /**
  * [ADR 0011](../../../docs/adr/0011-an-injury-is-split-by-who-reads-it.md): an

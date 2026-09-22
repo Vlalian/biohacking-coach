@@ -561,9 +561,7 @@ describe('the Coach Chat system prompt carries no invented readiness', () => {
     // `phase=` used to come from a column written once at onboarding, so Chat
     // and the Weekly Session could disagree about where the athlete was in
     // their season. Both derive it from the Target Race now, so they cannot.
-    expect(currentPhase('2026-08-12', trainingBlocks('2026-08-12', '2027-06-01'))).toBe(
-      'Block 1 of 5',
-    );
+    expect(currentPhase('2026-08-12', trainingBlocks('2026-08-12', '2027-06-01'))).toBe('Base');
   });
 });
 
@@ -701,7 +699,7 @@ describe('the horizon in Coach Chat (training-architecture/07)', () => {
 
     const system = callCoach.mock.calls[0][0].system as string;
     expect(system).toContain('race=Ironman Kalmar on 2027-08-18');
-    expect(system).toContain('Block 1 of');
+    expect(system).toContain('phase=Base');
     getTargetRace.mockResolvedValue(null);
   });
 });

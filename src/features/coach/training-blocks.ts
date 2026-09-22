@@ -108,6 +108,47 @@ function blockCountFor(weeks: number): number {
   return 6;
 }
 
+/** What a block is *for*, by where it sits in the sequence. */
+export type BlockPurpose = 'base' | 'build' | 'peak' | 'race';
+
+/**
+ * The purpose ladder (`training-architecture/34`, D3): the last block is
+ * always race preparation, the one before it the peak once there is room, and
+ * the rest build from base. "Block 1 of 4" told the athlete nothing about what
+ * the weeks were for; this does.
+ */
+const PURPOSE_LADDER: Record<number, readonly BlockPurpose[]> = {
+  2: ['build', 'race'],
+  3: ['base', 'build', 'race'],
+  4: ['base', 'build', 'peak', 'race'],
+  5: ['base', 'base', 'build', 'peak', 'race'],
+  6: ['base', 'base', 'build', 'build', 'peak', 'race'],
+};
+
+export function blockPurpose(index: number, total: number): BlockPurpose {
+  return PURPOSE_LADDER[total]?.[index - 1] ?? 'base';
+}
+
+const PURPOSE_NAME: Record<BlockPurpose, string> = {
+  base: 'Base',
+  build: 'Build',
+  peak: 'Peak',
+  race: 'Race prep',
+};
+
+/**
+ * The block's name: its purpose, numbered when the ladder repeats one ("Base",
+ * "Base 2"). English, like every sport term the app shows (`showable-version/36`).
+ */
+export function purposeName(index: number, total: number): string {
+  const purpose = blockPurpose(index, total);
+  const ladder = PURPOSE_LADDER[total];
+  // A count the ladder does not describe has no repeats to number.
+  if (!ladder) return PURPOSE_NAME[purpose];
+  const repeat = ladder.slice(0, index).filter((p) => p === purpose).length;
+  return repeat > 1 ? `${PURPOSE_NAME[purpose]} ${repeat}` : PURPOSE_NAME[purpose];
+}
+
 /**
  * The blocks between `today` and the Target Race, or none.
  *
@@ -140,7 +181,7 @@ export function trainingBlocks(today: string, raceDate: string | null): Training
     return {
       index,
       total,
-      name: `Block ${index} of ${total}`,
+      name: purposeName(index, total),
       startDate,
       endDate,
       authoredBy: 'arithmetic',
@@ -199,7 +240,8 @@ export function blockPosition(today: string, block: TrainingBlock): BlockPositio
   const span = daysBetween(block.startDate, block.endDate) + 1;
   const weeks = Math.max(1, Math.ceil(span / 7));
   const elapsed = daysBetween(block.startDate, today);
-  const week = Math.floor(Math.min(Math.max(elapsed, 0), span - 1) / 7) + 1;
+  // The high end is clamped on the way out, so only the low end needs it here.
+  const week = Math.floor(Math.max(elapsed, 0) / 7) + 1;
   return { week: Math.min(week, weeks), weeks };
 }
 

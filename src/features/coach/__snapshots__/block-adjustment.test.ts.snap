@@ -6,12 +6,12 @@ exports[`renderBlockAdjustmentPrompt — the briefing carries every listed fact 
 HORIZON: distance=Ironman · race=Ironman Copenhagen on 2027-08-15 · 47 weeks from today (2026-09-14)
 
 ARITHMETIC DRAFT (the horizon divided evenly, with no purpose yet):
-- Block 1 of 6: 2026-09-14 to 2026-11-08 (8 weeks)
-- Block 2 of 6: 2026-11-09 to 2027-01-03 (8 weeks)
-- Block 3 of 6: 2027-01-04 to 2027-02-28 (8 weeks)
-- Block 4 of 6: 2027-03-01 to 2027-04-25 (8 weeks)
-- Block 5 of 6: 2027-04-26 to 2027-06-20 (8 weeks)
-- Block 6 of 6: 2027-06-21 to 2027-08-15 (8 weeks)
+- Base: 2026-09-14 to 2026-11-08 (8 weeks)
+- Base 2: 2026-11-09 to 2027-01-03 (8 weeks)
+- Build: 2027-01-04 to 2027-02-28 (8 weeks)
+- Build 2: 2027-03-01 to 2027-04-25 (8 weeks)
+- Peak: 2027-04-26 to 2027-06-20 (8 weeks)
+- Race prep: 2027-06-21 to 2027-08-15 (8 weeks)
 
 ATHLETE:
 - Experience: intermediate

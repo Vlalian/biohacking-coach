@@ -230,3 +230,43 @@ describe('the one conversation with a week brought in from the calendar (trainin
     expect(stagedSessionLine({ date: '2026-09-22', type: 'Tempo', durationMinutes: null, zone: null, note: 'steady' })).toBe('2026-09-22: Tempo — steady');
   });
 });
+
+describe('the baseline week — what the structure already wrote (training-architecture/34)', () => {
+  const baseline = [
+    { date: '2026-09-21', sport: 'swim' as const, type: 'Endurance' as const, durationMinutes: 66, zone: 'Z2', title: 'Easy swim', note: null },
+    { date: '2026-09-27', sport: 'bike' as const, type: 'Endurance' as const, durationMinutes: 144, zone: 'Z2', title: 'Long ride', note: null },
+  ];
+
+  it('replaces the role skeleton with the real sessions when there are some', () => {
+    const out = renderWeekDraftPrompt(ctx({ baseline }));
+    expect(out).toContain('BASELINE WEEK');
+    expect(out).toContain('2026-09-27: bike Endurance 144 min Z2 — Long ride');
+    expect(out).toContain('2026-09-21: swim Endurance 66 min Z2 — Easy swim');
+    // One or the other, never both: two defaults would be two instructions.
+    expect(out).not.toContain('WEEK SKELETON');
+    expect(out).not.toContain('Adjust this skeleton');
+  });
+
+  it('puts one session per line, and leaves out a duration or a zone the row does not carry', () => {
+    const out = renderWeekDraftPrompt(
+      ctx({
+        baseline: [
+          ...baseline,
+          { date: '2026-09-24', sport: 'run', type: 'Endurance', durationMinutes: null, zone: null, title: 'Easy run' },
+        ],
+      }),
+    );
+    // Each session on its own line: run together they read as one session.
+    const lines = out.split('\n');
+    expect(lines).toContain('2026-09-24: run Endurance — Easy run');
+    expect(lines).toContain('2026-09-21: swim Endurance 66 min Z2 — Easy swim');
+  });
+
+  it('falls back to the skeleton when the structure wrote nothing for this week', () => {
+    for (const value of [null, []]) {
+      const out = renderWeekDraftPrompt(ctx({ baseline: value }));
+      expect(out).toContain('WEEK SKELETON');
+      expect(out).not.toContain('BASELINE WEEK');
+    }
+  });
+});
