@@ -354,32 +354,27 @@ describe('Calendar — the drafted week the athlete has not decided on (training
     expect(markup).toMatchSnapshot();
   });
 
-  it('renders the card above the grid and one ghosted chip per proposed session in the draft’s week only', () => {
+  it('renders the card and nothing draft-derived in the grid (training-architecture/25)', () => {
+    // Ruling A (2026-09-17): the ghosts could not be opened and taught the
+    // athlete that the calendar shows things it does not mean. The card above
+    // the grid is the whole proposal; the grid carries only real sessions.
     const markup = render({ proposal: { kind: 'proposal', draft } });
     expect(markup).toContain('data-proposal-card="d1"');
-    // The draft's week (24–30 Aug) is not the current week (19 Aug is a
-    // Wednesday, week of the 17th), so it renders collapsed: one dashed dot per
-    // proposed session, labelled as proposed — never as a session.
-    // The accessible name carries what the eye sees: type and minutes (a
-    // session with no duration names just the type). CodeRabbit, PR #69.
-    expect(markup.match(/aria-label="Endurance · 60 min · proposedChip"/g)).toHaveLength(1);
-    expect(markup.match(/aria-label="Intensity · 45 min · proposedChip"/g)).toHaveLength(1);
-    expect(markup).not.toMatch(/<button[^>]*proposedChip/);
-    expect(markup).not.toMatch(/draggable="true"[^>]*proposedChip/);
+    expect(markup).not.toContain('data-proposed');
+    expect(markup).not.toContain('proposedChip');
+    expect(markup).not.toMatch(/aria-label="Endurance · 60 min/);
   });
 
   it('renders the re-draft offer in the card’s place for a declined week (training-architecture/24)', () => {
     const markup = render({ proposal: { kind: 'redraft-offer', weekStart: '2026-08-24' } });
     expect(markup).toContain('data-redraft-card="2026-08-24"');
     expect(markup).not.toContain('data-proposal-card');
-    expect(markup).not.toContain('proposedChip');
   });
 
   it('a drafting slot shows the drafting card in the proposal card’s place, and no proposal card (training-architecture/29)', () => {
     const markup = render({ proposal: { kind: 'drafting', weekStart: '2026-08-24' } });
     expect(markup).toContain('data-drafting-card="2026-08-24"');
     expect(markup).not.toContain('data-proposal-card');
-    expect(markup).not.toContain('proposedChip');
   });
 
   it('renders the pointer, and no card and no chips, while the draft is being discussed', () => {
@@ -387,7 +382,6 @@ describe('Calendar — the drafted week the athlete has not decided on (training
     expect(markup).toContain('data-discussing="c1"');
     expect(markup).toContain('>discussing<');
     expect(markup).not.toContain('data-proposal-card');
-    expect(markup).not.toContain('proposedChip');
   });
 });
 
@@ -416,13 +410,14 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     sessions: [{ date: '2026-08-20', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: null }],
   };
 
-  it('a recorded session during an open injury carries the injury icon, signal-coloured, with the name in its label; a proposed session carries none', () => {
+  it('a recorded session during an open injury carries the injury icon, signal-coloured, with the name in its label', () => {
+    // Until training-architecture/25 this also asserted that a proposed
+    // session carried no mark; nothing proposed is in the grid any more.
     const html = render({ sessions: [session({ date: '2026-08-19' })], health: [injury], proposal: { kind: 'proposal', draft } });
     expect(html).toMatch(/data-mark="injury"[^>]*data-open="true"/);
     expect(html).toContain('left knee');
     // Label and tooltip both (the ruling): the chip's title names the mark.
     expect(html).toContain('title="Long ride · markInjury: left knee"');
-    expect(html).toContain('data-proposed');
     expect(html.match(/data-mark=/g)).toHaveLength(1);
   });
 
