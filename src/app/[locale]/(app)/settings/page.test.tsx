@@ -47,6 +47,8 @@ vi.mock('./settings-actions', () => ({
   updateTargetRaceAction: vi.fn(),
   addRaceAction: vi.fn(),
   setTargetRaceAction: vi.fn(),
+  addPastRaceAction: vi.fn(),
+  removePastRaceAction: vi.fn(),
   removeRaceAction: vi.fn(),
   updateWeeklySessionDayAction: vi.fn(),
 }));
@@ -56,7 +58,8 @@ const { getRaces } = vi.hoisted(() => ({
   // render without inventing a horizon.
   getRaces: vi.fn<() => Promise<unknown[]>>(async () => []),
 }));
-vi.mock('@/features/race/race-repository', () => ({ getRaces }));
+const getPastRaces = vi.fn(() => Promise.resolve([]));
+vi.mock('@/features/race/race-repository', () => ({ getRaces, getPastRaces }));
 
 const { default: SettingsPage } = await import('./page');
 
@@ -132,6 +135,7 @@ describe('SettingsPage', () => {
       // No races and no distance: the state of an athlete who has not answered,
       // passed through as empty rather than defaulted to a distance nobody chose.
       races: [],
+      pastRaces: [],
       raceDistance: '',
       weeklySessionDay: null,
       fixedConstraints: [],

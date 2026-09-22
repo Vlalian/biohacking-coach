@@ -11,7 +11,7 @@ import {
   getMessages,
 } from '@/features/coach/conversation-repository';
 import type { Message } from '@/features/coach/conversation';
-import { createRace } from '@/features/race/race-repository';
+import { createRace, replacePastRaces } from '@/features/race/race-repository';
 import {
   applyAnswer,
   completeProfile,
@@ -73,21 +73,22 @@ export type AnswerResult =
  * Coach asked it, and the answer as canonical option values (not the localized
  * labels) — stable, parseable, and identical whichever language the athlete
  * answered in. `greeting` is appended only on completion and must be name-free:
- * `messages` is a training-side table (ADR 0006). There is no clock parameter:
- * the Training Phase used to be computed here and stored, and
- * `training-architecture/03` made it derived, so nothing this writes depends on
- * what day it is.
+ * `messages` is a training-side table (ADR 0006). `today` exists for one
+ * check only — a past race must be in the past; nothing else this writes
+ * depends on what day it is (the Training Phase is derived, `training-architecture/03`).
  */
 export async function answerOnboardingStep(
   athlete: Athlete,
   payload: StepAnswer,
   transcript: { question: string; answer: string },
   greeting: string,
+  /** `YYYY-MM-DD`: a listed past race may not be dated after today (35). */
+  today: string,
 ): Promise<AnswerResult> {
   const currentAnswers = athlete.profile?.onboardingAnswers ?? {};
   const currentSubmitted = athlete.profile?.onboardingSubmitted ?? {};
 
-  const applied = applyAnswer(currentAnswers, currentSubmitted, payload);
+  const applied = applyAnswer(currentAnswers, currentSubmitted, payload, today);
   if (!applied) return { ok: false, reason: 'invalid' };
 
   // One open onboarding conversation per athlete: reuse it or start it.
@@ -127,6 +128,8 @@ export async function answerOnboardingStep(
     if (completed.race) {
       await createRace(athlete.id, completed.race, { asTarget: true });
     }
+    // The finished races the athlete listed replace whatever was stored (35).
+    await replacePastRaces(athlete.id, completed.pastRaces);
     await appendMessages(athlete.id, conversation.id, [
       { role: 'coach_ai', content: greeting },
     ]);

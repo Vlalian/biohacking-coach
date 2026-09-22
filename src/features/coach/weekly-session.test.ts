@@ -33,6 +33,7 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     communicationStyle: 'direct',
     raceTarget: 'Ironman Copenhagen',
     raceDistance: 'Full',
+    hoursPerWeek: null,
     trainingSessionsPerWeek: 6,
     profile: {
       onboarding: { motivation: 'Completion' },

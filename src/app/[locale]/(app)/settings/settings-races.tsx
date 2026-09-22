@@ -198,22 +198,25 @@ function AddRaceForm({
   );
 }
 
-function ActionButton({
+export function ActionButton({
   onClick,
   disabled,
   label,
   pending,
   quiet,
+  'data-action': dataAction,
 }: {
   onClick: () => void;
   disabled?: boolean;
   label: string;
   pending?: boolean;
   quiet?: boolean;
+  'data-action'?: string;
 }) {
   return (
     <button
       type="button"
+      data-action={dataAction}
       onClick={onClick}
       disabled={disabled}
       className={[

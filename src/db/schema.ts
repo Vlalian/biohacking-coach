@@ -87,6 +87,14 @@ export const athlete = pgTable(
      * habit this slice removed. The prompt says the distance is unknown instead.
      */
     raceDistance: text('race_distance'),
+    /**
+     * Hours a week the athlete can realistically train, asked in onboarding
+     * and never suggested (`training-architecture/35`, Mads 2026-09-19: "A and
+     * only A"). Null for anyone who onboarded before the question existed —
+     * never asked, not zero — and 34's arithmetic treats null as "not
+     * fillable" rather than guessing. The ceiling every week is sized within.
+     */
+    hoursPerWeek: integer('hours_per_week'),
     trainingSessionsPerWeek: integer('training_sessions_per_week'),
     profile: jsonb('profile'),
     informationViewLayout: jsonb('information_view_layout'),
@@ -687,6 +695,39 @@ export const race = pgTable(
 
 export type RaceRow = typeof race.$inferSelect;
 export type NewRaceRow = typeof race.$inferInsert;
+
+/**
+ * A race the athlete has already finished (`training-architecture/35`) — the
+ * list that replaced "how many Ironmans have you done?". One row per race:
+ * distance from the closed set, the date, an optional finish time in seconds,
+ * an optional note. The experience level is derived from how many there are;
+ * nothing else reads them yet (finish-time pacing is ticket 11).
+ *
+ * The note is the athlete's own words about a race and reaches no prompt
+ * today; keyed by the opaque athlete id and nothing else (ADR 0006).
+ */
+export const pastRace = pgTable(
+  'past_race',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    distance: text('distance').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    finishSeconds: integer('finish_seconds'),
+    note: text('note'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check('past_race_distance_known', sql.raw(`distance IN (${quotedList(RACE_DISTANCES)})`)),
+    check('past_race_finish_positive', sql`${table.finishSeconds} IS NULL OR ${table.finishSeconds} > 0`),
+    index('past_race_athlete_date').on(table.athleteId, table.date),
+  ],
+);
+
+export type PastRaceRow = typeof pastRace.$inferSelect;
+export type NewPastRaceRow = typeof pastRace.$inferInsert;
 
 /**
  * The adjusted Training Blocks for one race (`training-architecture/07`).

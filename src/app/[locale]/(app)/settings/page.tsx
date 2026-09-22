@@ -3,7 +3,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
-import { getRaces } from '@/features/race/race-repository';
+import { getPastRaces, getRaces } from '@/features/race/race-repository';
 import { routing } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
@@ -18,6 +18,8 @@ import {
   addRaceAction,
   setTargetRaceAction,
   removeRaceAction,
+  addPastRaceAction,
+  removePastRaceAction,
   updateLanguageAction,
   updatePreferredNameAction,
   updateLinkVisibilityAction,
@@ -67,7 +69,7 @@ export default async function SettingsPage({
   // The races, read here rather than in the view: a Race is an entity, and the
   // page is where server reads belong. All of them — the Target Race is the one
   // flagged, and the view shows the rest beside it (`training-architecture/09`).
-  const races = await getRaces(athlete.id);
+  const [races, pastRaces] = await Promise.all([getRaces(athlete.id), getPastRaces(athlete.id)]);
 
   return (
     <SettingsView
@@ -81,6 +83,13 @@ export default async function SettingsPage({
           date: r.date,
           distance: r.distance,
           isTarget: r.isTarget,
+        })),
+        pastRaces: pastRaces.map((r) => ({
+          id: r.id,
+          distance: r.distance,
+          date: r.date,
+          finishSeconds: r.finishSeconds,
+          note: r.note,
         })),
         raceDistance: athlete.raceDistance ?? '',
         weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
@@ -101,6 +110,8 @@ export default async function SettingsPage({
       onAddRace={addRaceAction}
       onSetTargetRace={setTargetRaceAction}
       onRemoveRace={removeRaceAction}
+      onAddPastRace={addPastRaceAction}
+      onRemovePastRace={removePastRaceAction}
       onUpdateRaceDistance={updateRaceDistanceAction}
       onUpdateWeeklySessionDay={updateWeeklySessionDayAction}
       onAddFixedConstraint={addFixedConstraintAction}

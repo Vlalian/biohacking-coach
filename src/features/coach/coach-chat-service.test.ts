@@ -107,6 +107,7 @@ const ATHLETE = {
   experienceLevel: 'intermediate',
   communicationStyle: null,
   raceTarget: 'Ironman Kona',
+  hoursPerWeek: null,
   trainingSessionsPerWeek: null,
   profile: null,
 } as unknown as Parameters<typeof sendCoachChatMessage>[0];

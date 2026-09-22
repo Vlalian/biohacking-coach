@@ -209,7 +209,7 @@ describe('the Presence Arc in Coach Chat (training-architecture/21)', () => {
 
 const ONBOARDING: Onboarding = {
   sportBackground: ['Runner', 'Gym'],
-  availableHours: '3–6h',
+  hoursPerWeek: 5,
   motivation: 'Completion',
   bestTime: null,
   weakestDiscipline: null,
@@ -228,7 +228,7 @@ describe('onboarding answers reach every Coach prompt', () => {
     // rather than just the number: a bare "Training time available: 3–6h" read
     // as current volume when `coach:say` was run against it (2026-08-21).
     expect(prompt).toContain(
-      'Time available to train: 3–6h per week (a ceiling to plan within — not what they currently do)',
+      'Time available to train: hours/week=5 (a ceiling to plan within — not what they currently do)',
     );
     expect(prompt).toContain('Motivation: Completion');
   });

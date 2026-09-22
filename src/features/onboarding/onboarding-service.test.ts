@@ -3,6 +3,7 @@ import type { Athlete } from '@/features/athlete/athlete';
 
 const {
   createRace,
+  replacePastRaces,
   mergeAthleteProfile,
   completeAthleteOnboarding,
   appendMessages,
@@ -26,13 +27,14 @@ const {
   getLatestOpenConversation: vi.fn(async () => null),
   getMessages: vi.fn(async () => []),
   createRace: vi.fn(async () => undefined),
+  replacePastRaces: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/features/athlete/athlete-repository', () => ({
   mergeAthleteProfile,
   completeAthleteOnboarding,
 }));
-vi.mock('@/features/race/race-repository', () => ({ createRace }));
+vi.mock('@/features/race/race-repository', () => ({ createRace, replacePastRaces }));
 vi.mock('@/features/coach/conversation-repository', () => ({
   appendMessages,
   createConversation,
@@ -45,6 +47,9 @@ const { answerOnboardingStep, getOnboardingState } = await import(
   './onboarding-service'
 );
 
+const TODAY = '2026-09-21';
+const HALF = { distance: 'Half' as const, date: '2025-08-16', finishSeconds: 18720, note: null };
+
 function athlete(overrides: Partial<Athlete> = {}): Athlete {
   return {
     id: 'athlete_1',
@@ -53,6 +58,7 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     communicationStyle: null,
     raceTarget: null,
     raceDistance: null,
+    hoursPerWeek: null,
     trainingSessionsPerWeek: null,
     profile: null,
     ...overrides,
@@ -70,6 +76,7 @@ describe('answerOnboardingStep', () => {
       { step: 'language', language: 'fr' },
       { question: 'q', answer: 'a' },
       'greeting',
+      TODAY,
     );
     expect(result).toEqual({ ok: false, reason: 'invalid' });
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
@@ -82,6 +89,7 @@ describe('answerOnboardingStep', () => {
       { step: 'language', language: 'da' },
       { question: 'Which language?', answer: 'Dansk' },
       'greeting',
+      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -110,8 +118,10 @@ describe('answerOnboardingStep', () => {
       profile: {
         onboardingAnswers: {
           language: 'da',
+          pastRaces: [HALF],
           experienceLevel: 'intermediate',
           raceDistance: 'Full',
+          hoursPerWeek: 8,
           raceTarget: 'Ironman Copenhagen',
           raceDate: '2026-08-30',
           hasHumanCoach: 'Yes',
@@ -127,6 +137,7 @@ describe('answerOnboardingStep', () => {
       // Name-free by contract: messages is a training-side table (ADR 0006);
       // the action persists coachGreeting('', race), never the personalized one.
       "I'm your Coach. Ironman Copenhagen is your target. Let's get to work.",
+      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -138,6 +149,8 @@ describe('answerOnboardingStep', () => {
       'athlete_1',
       {
         experienceLevel: 'intermediate',
+        hoursPerWeek: 8,
+        pastRaces: [HALF],
         communicationStyle: expect.stringContaining('The athlete'),
         raceDistance: 'Full',
         raceTarget: 'Ironman Copenhagen',
@@ -150,6 +163,8 @@ describe('answerOnboardingStep', () => {
       }),
     );
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
+    // The listed past races replace whatever was stored (training-architecture/35).
+    expect(replacePastRaces).toHaveBeenCalledWith('athlete_1', [HALF]);
     // The Coach's greeting closes the transcript and the conversation ends.
     expect(appendMessages).toHaveBeenLastCalledWith('athlete_1', 'conv_1', [
       { role: 'coach_ai', content: expect.stringContaining("I'm your Coach") },
@@ -169,8 +184,10 @@ describe('answerOnboardingStep', () => {
       profile: {
         onboardingAnswers: {
           language: 'en',
+          pastRaces: [],
           experienceLevel: 'beginner',
           raceDistance: 'Olympic',
+          hoursPerWeek: 4,
           noRaceYet: true,
         },
         onboardingSubmitted: { name: true, adaptive: true },
@@ -182,6 +199,7 @@ describe('answerOnboardingStep', () => {
       { step: 'constraints' },
       { question: 'Any days you can never train?', answer: '—' },
       "I'm your Coach. Let's get to work.",
+      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -194,6 +212,7 @@ describe('answerOnboardingStep', () => {
       expect.anything(),
     );
     expect(createRace).not.toHaveBeenCalled();
+    expect(replacePastRaces).toHaveBeenCalledWith('athlete_1', []);
   });
 });
 
@@ -201,7 +220,7 @@ describe('getOnboardingState — resumption', () => {
   it('resumes at the first unanswered step with the stored answers', async () => {
     const midway = athlete({
       profile: {
-        onboardingAnswers: { language: 'en', experienceLevel: 'veteran' },
+        onboardingAnswers: { language: 'en', pastRaces: [HALF, HALF, HALF, HALF], experienceLevel: 'veteran' },
         onboardingSubmitted: { name: true },
       },
     });

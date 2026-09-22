@@ -19,9 +19,23 @@ describe('answerText renders a line for every step', () => {
     expect(answerText({ step: 'name' })).toBe('—');
   });
 
-  it('names the experience level and the Race Distance as given', () => {
-    expect(answerText({ step: 'experience', experienceLevel: 'veteran' })).toBe('veteran');
+  it('lists the past races as distance and date, says so when there are none, and names the Race Distance and the hours as given', () => {
+    expect(
+      answerText({
+        step: 'pastRaces',
+        pastRaces: [
+          { distance: 'Half', date: '2025-08-16', finishSeconds: 18720, note: 'hot day' },
+          { distance: 'Olympic', date: '2024-06-01' },
+        ],
+      }),
+    ).toBe('Half 2025-08-16 · Olympic 2024-06-01');
+    // Notes and finish times stay off the transcript: the line says what was finished, not how.
+    expect(answerText({ step: 'pastRaces', pastRaces: [{ distance: 'Half', date: '2025-08-16', note: 'hot day' }] })).not.toContain('hot day');
+    expect(answerText({ step: 'pastRaces', pastRaces: [] })).toBe('No races finished yet');
+    expect(answerText({ step: 'pastRaces', pastRaces: 'x' as never })).toBe('No races finished yet');
+    expect(answerText({ step: 'pastRaces', pastRaces: [{}] })).toBe('? ?');
     expect(answerText({ step: 'distance', raceDistance: 'Full' })).toBe('Full');
+    expect(answerText({ step: 'hours', hoursPerWeek: 8 })).toBe('8 h/week');
   });
 
   it('records "no race" as something the athlete said, not as a blank', () => {
@@ -35,8 +49,8 @@ describe('answerText renders a line for every step', () => {
 
   it('joins the adaptive answers, and says so when there were none', () => {
     expect(
-      answerText({ step: 'adaptive', availableHours: '6–10h', motivation: 'Performance' }),
-    ).toBe('6–10h · Performance');
+      answerText({ step: 'adaptive', sportBackground: ['Runner'], motivation: 'Performance' }),
+    ).toBe('Runner · Performance');
     expect(answerText({ step: 'adaptive' })).toBe('—');
   });
 

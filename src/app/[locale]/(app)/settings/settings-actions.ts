@@ -11,8 +11,12 @@ import {
   getTargetRace,
   setTargetRace,
   upsertTargetRace,
+  addPastRace,
+  deletePastRace,
+  getPastRaces,
   type NewRace,
 } from '@/features/race/race-repository';
+import { experienceFromCount, parsePastRace } from '@/features/onboarding/past-races';
 import {
   addFixedConstraint,
   mergeAthleteProfile,
@@ -20,6 +24,7 @@ import {
   updateCommunicationStyle,
   updateRaceTarget,
   updateRaceDistance,
+  updateExperienceLevel,
 } from '@/features/athlete/athlete-repository';
 import { resolveAthlete, resolveUserId } from '../../current-actor';
 import {
@@ -54,6 +59,49 @@ export type SettingsActionResult =
 export type AddRaceResult =
   | { ok: true; raceId: string }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
+
+export type AddPastRaceResult =
+  | { ok: true; pastRaceId: string }
+  | { ok: false; reason: 'not-authenticated' | 'invalid' };
+
+// ── Past races — what the athlete has finished (training-architecture/35) ────
+
+/**
+ * One more finished race. The entry is checked the way onboarding checks it
+ * (`parsePastRace`, against today's date), and the experience level is
+ * re-derived from the list after the write — it is a derived value, and the
+ * list is the source.
+ */
+export async function addPastRaceAction(input: unknown): Promise<AddPastRaceResult> {
+  const entry = parsePastRace(input, today());
+  if (!entry) return { ok: false, reason: 'invalid' };
+
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  const pastRaceId = await addPastRace(athlete.id, entry);
+  await rederiveExperience(athlete.id);
+  return { ok: true, pastRaceId };
+}
+
+/** Removes one of the athlete's own finished races; a foreign id is invalid, not a delete. */
+export async function removePastRaceAction(pastRaceId: string): Promise<SettingsActionResult> {
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  const owned = (await getPastRaces(athlete.id)).some((r) => r.id === pastRaceId);
+  if (!owned) return { ok: false, reason: 'invalid' };
+
+  await deletePastRace(athlete.id, pastRaceId);
+  await rederiveExperience(athlete.id);
+  return { ok: true };
+}
+
+async function rederiveExperience(athleteId: string): Promise<void> {
+  // Only the count matters to the derivation.
+  const rows = await getPastRaces(athleteId);
+  await updateExperienceLevel(athleteId, experienceFromCount(rows.length));
+}
 
 // One source for the weekday set, like the onboarding UI already keeps
 // (`onboarding.tsx`'s "One source for every option set" comment) — the
