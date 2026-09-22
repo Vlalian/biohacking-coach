@@ -19,5 +19,5 @@
   never sent to the Anthropic API (GDPR decision 1). Prompt builders assert this.
   The incident behind this line is in
   [verify-doc-claims.md](verify-doc-claims.md).
-- **Colocate tests** with the code they test (`calc-load.ts` next to
-  `calc-load.test.ts`).
+- **Tests have their own rules.** [testing.md](testing.md) — colocated, written
+  against a module's exports, spies on boundaries only.
