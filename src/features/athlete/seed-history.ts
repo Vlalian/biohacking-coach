@@ -1,6 +1,6 @@
 import type { NewSessionRow } from '@/db/schema';
-import { createHash } from 'node:crypto';
 import { dateKey } from '@/lib/date';
+import { uuidV5 } from './uuid-v5';
 
 /**
  * A week of *completed* training history for the real dev athlete, laid across
@@ -40,14 +40,7 @@ import { dateKey } from '@/lib/date';
 const SEED_SESSION_NAMESPACE = 'f2a6c5e1-7b3d-4c8e-9a1f-5d4e3c2b1a09';
 
 export function seedAthleteSessionId(athleteId: string): string {
-  const hash = createHash('sha1')
-    .update(Buffer.from(SEED_SESSION_NAMESPACE.replace(/-/g, ''), 'hex'))
-    .update(athleteId)
-    .digest();
-  hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
-  hash[8] = (hash[8] & 0x3f) | 0x80; // RFC 4122 variant
-  const hex = hash.subarray(0, 16).toString('hex');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return uuidV5(SEED_SESSION_NAMESPACE, athleteId);
 }
 
 /** Last week's Monday: this week's Monday minus seven days. */

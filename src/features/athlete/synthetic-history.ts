@@ -4,6 +4,7 @@ import { addDays, dateKey } from '@/lib/date';
 import type { SessionHistoryItem } from '@/features/coach/check-in';
 import type { PlanType } from '@/features/coach/weekly-session';
 import type { Capacity } from '@/features/health/capacity';
+import { uuidV5 } from './uuid-v5';
 
 /**
  * The training history behind the generated athletes a Head Coach tester
@@ -189,6 +190,37 @@ export const SYNTHETIC_PROFILES: readonly SyntheticProfile[] = [
     },
   },
 ] as const;
+
+/** The persona names, in profile order — what a Roster shows and what retirement looks for. */
+export const PERSONA_LABELS: readonly string[] = SYNTHETIC_PROFILES.map((p) => p.syntheticLabel);
+
+/**
+ * The namespace every owner's persona copy derives its ids from. Minted once
+ * (2026-09-22) and pinned by a snapshot: changing it re-keys every tester
+ * coach's copy on their next mint and orphans the rows they already have.
+ */
+const PERSONA_NAMESPACE = 'c084aebc-17a7-4c24-a5c2-053def42cf6a';
+
+/** The owner whose copy is the seed's own — today's fixed ids, untouched. */
+export const SEED_OWNER = 'seed';
+
+/**
+ * The three personas as one owner's copy (code-health/18). Two tester Head
+ * Coaches must never share a Nadia — one's drafts would land in the other's
+ * Briefing — so each coach gets rows of their own, keyed by the owner. Same
+ * content, own athlete and injury ids, stable per owner so a re-mint replaces
+ * rather than duplicates. `SEED_OWNER` returns `SYNTHETIC_PROFILES` itself.
+ */
+export function personasFor(ownerKey: string): readonly SyntheticProfile[] {
+  if (ownerKey === SEED_OWNER) return SYNTHETIC_PROFILES;
+  return SYNTHETIC_PROFILES.map((p) => ({
+    ...p,
+    id: uuidV5(PERSONA_NAMESPACE, `${ownerKey}:${p.syntheticLabel}`),
+    ...(p.injury
+      ? { injury: { ...p.injury, id: uuidV5(PERSONA_NAMESPACE, `${ownerKey}:${p.syntheticLabel}:injury`) } }
+      : {}),
+  }));
+}
 
 /**
  * The Target Race's date for this profile on this clock — the stored date, or
