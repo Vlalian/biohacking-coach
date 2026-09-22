@@ -12,6 +12,7 @@ import {
 } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
+import { startOfToday } from '../src/lib/date';
 import { seedAthleteSessionId, seedWeekRows } from '../src/features/athlete/seed-history';
 import { parseSeedArgs } from '../src/features/athlete/seed-personas';
 import {
@@ -130,7 +131,7 @@ async function madsAthleteId(email: string): Promise<string> {
  */
 async function seedMadsTrainingHistory(athleteId: string) {
   const db = getDb();
-  const rows = seedWeekRows(athleteId, new Date());
+  const rows = seedWeekRows(athleteId, startOfToday());
 
   // Atomic reseed: clear the seed's rows and insert last week's history in one
   // transaction, so a failure can never leave Mads half-seeded. neon-http has
@@ -179,7 +180,7 @@ async function seedPersonas(): Promise<string[]> {
   const db = getDb();
   const SEED = 20260902;
   const WEEKS = 10;
-  const now = new Date();
+  const now = startOfToday();
 
   for (const profile of SYNTHETIC_PROFILES) {
     const { sessions: generated, unavailableDates: blocked } =

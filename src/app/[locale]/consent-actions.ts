@@ -42,6 +42,7 @@ export async function grantConsentsAction(
 
   // De-duplicate so a repeated purpose in the payload is one grant.
   for (const purpose of new Set(purposes)) {
+    // Stryker disable next-line ConditionalExpression — equivalent: every purpose already passed the whole-set check above; this repeats it only to narrow `string` for the repository's type
     if (isConsentPurpose(purpose)) await grantConsent(athleteId, purpose);
   }
 

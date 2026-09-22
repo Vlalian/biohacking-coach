@@ -102,6 +102,14 @@ describe('saveCheckInAction', () => {
       reason: 'invalid',
     });
   });
+
+  it('rethrows an error that is not the athlete\u2019s fault, rather than calling it their report', async () => {
+    // A dead database is not an invalid Check-in; hiding it behind 'invalid'
+    // would have the athlete retyping scores that were never the problem.
+    saveCheckIn.mockRejectedValueOnce(new Error('connection refused'));
+
+    await expect(saveCheckInAction(REPORT)).rejects.toThrow('connection refused');
+  });
 });
 
 describe('the notable signal, on its way to a prompt', () => {

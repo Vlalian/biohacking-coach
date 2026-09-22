@@ -93,4 +93,13 @@ describe('deleteMyAccountAction', () => {
     expect(await deleteMyAccountAction('  Athlete@Example.com ')).toEqual({ ok: true });
     expect(eraseAccount).toHaveBeenCalled();
   });
+
+  it('accepts a clean retype of an address that was stored with stray whitespace', async () => {
+    // The stored side is normalised the same way as the typed side; an address
+    // that reached the database padded is still theirs to erase.
+    getSession.mockResolvedValue({ user: { id: 'u1', email: ' Athlete@example.com ' } });
+
+    expect(await deleteMyAccountAction('athlete@example.com')).toEqual({ ok: true });
+    expect(eraseAccount).toHaveBeenCalled();
+  });
 });

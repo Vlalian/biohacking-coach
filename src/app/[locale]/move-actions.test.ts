@@ -45,6 +45,9 @@ describe('moveSessionAction', () => {
       // failing test and not an unversioned write.
       expectedVersion: 1,
     });
+    // A moved session shows on the calendar and in every view that reads it,
+    // so the whole shell is refreshed, not one page.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('rejects a malformed target date before resolving anyone', async () => {
@@ -62,6 +65,7 @@ describe('moveSessionAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(moveSession).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('revalidates only when something actually moved', async () => {

@@ -1,5 +1,6 @@
 import { config as loadEnv } from 'dotenv';
 import { defineConfig, devices } from '@playwright/test';
+import { PINNED_TODAY } from './e2e/pinned-today';
 
 loadEnv({ path: ['.env.local', '.env'] });
 
@@ -71,9 +72,8 @@ export default defineConfig({
       COACH_DISABLED: '1',
       ANTHROPIC_API_KEY: 'sk-ant-e2e-disabled',
       OPENAI_API_KEY: 'sk-e2e-disabled',
-      // No pinned date, by Mads's ruling (2026-09-17): the baselines are taken
-      // on the real day, so the two calendar pages drift as the calendar does
-      // and are refreshed with `npm run test:e2e:update` when they do.
+      // The pinned day (see e2e/pinned-today.ts for why it left and came back).
+      COACH_TODAY: PINNED_TODAY,
     },
   },
   projects: [
