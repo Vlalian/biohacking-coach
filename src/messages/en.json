@@ -231,7 +231,15 @@
     "deleteError": "That didn’t work. Nothing was deleted.",
     "raceDistanceLabel": "Race distance",
     "raceDistanceNote": "The shape of your training week. Set it even if you have no race booked.",
-    "raceDateLabel": "Race date"
+    "raceDateLabel": "Race date",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password (at least 8 characters)",
+    "confirmPassword": "Repeat the new password",
+    "passwordChanged": "Password changed. Other devices are signed out.",
+    "passwordMismatch": "The two new passwords do not match.",
+    "passwordTooShort": "The new password needs at least 8 characters.",
+    "passwordError": "That did not work. Check the current password and try again."
   },
   "Roster": {
     "weekToReview": "Week to review",
