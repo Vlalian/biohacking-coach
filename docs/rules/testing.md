@@ -4,10 +4,17 @@ The standard here is Holub's: **you must be able to change how a module is
 implemented without changing its tests.** A test that breaks when the behaviour
 did not change was testing the shape of the code, not the promise it makes.
 
-This describes what the suite already does — as of 2026-09-22 every `vi.spyOn`
-in `src/` targets `console.error`, and no module exports anything only for a
-test. Nothing is grandfathered. A violation is new code, and the review treats
-it as new code.
+**Rule 2 describes what the suite already does**: as of 2026-09-22 every
+`vi.spyOn` in `src/` and `e2e/` targets `console.error` or `console.warn`, both
+boundaries. Rule 1 does not yet. The same day's measurement found 79 exports
+with no non-test caller that are used inside their own file — the
+export-for-test shape — and 12 more with no consumer outside tests at all.
+
+Those 91 are **grandfathered, and tracked** in
+`.scratch/code-health/issues/19-exports-with-no-caller-but-a-test.md`, to be
+swept in slices. They are not a licence: new code follows the rule from today,
+and a file you are already editing for another reason is a file whose violations
+you fix while you are in there.
 
 - **Colocate tests** with the code they test (`calc-load.ts` next to
   `calc-load.test.ts`).
