@@ -110,6 +110,14 @@ export async function answerOnboardingStep(
     // for the type system, not a reachable branch.
     if (!completed) return { ok: false, reason: 'invalid' };
 
+    // The finished races first, before anything marks the athlete onboarded.
+    // `experienceLevel` is derived from this list's length, so a failure the
+    // other way round would leave a stored level of `intermediate` beside an
+    // empty `past_race` table, past the onboarding gate, with the next Settings
+    // edit re-deriving the level from the wrong list. The write clears and
+    // re-inserts, so the athlete's retry of this step simply runs it again
+    // (CodeRabbit, PR #98).
+    await replacePastRaces(athlete.id, completed.pastRaces);
     // The JSONB answers and the profile columns land in one statement: a split
     // write could leave the answers marked complete while `experienceLevel` —
     // the page's "onboarded" gate — stayed null, trapping the athlete on a
@@ -129,8 +137,6 @@ export async function answerOnboardingStep(
     if (completed.race) {
       await createRace(athlete.id, completed.race, { asTarget: true });
     }
-    // The finished races the athlete listed replace whatever was stored (35).
-    await replacePastRaces(athlete.id, completed.pastRaces);
     // And the calendar is full the first time they open it: the structure
     // fills the current block now that there is a race and an hours answer
     // (`training-architecture/34`). Never throws; reports its own outcome.

@@ -22,7 +22,10 @@ function pastRacesLine(value: unknown): string {
   if (!Array.isArray(value) || value.length === 0) return 'No races finished yet';
   return value
     .map((r) => {
-      const rec = r as { distance?: unknown; date?: unknown };
+      // Raw client input: `answerOnboardingAction` renders this line before the
+      // payload is validated, so a forged `[null]` must read as "?" rather than
+      // throw past the action's own refusal (CodeRabbit, PR #98).
+      const rec = (r ?? {}) as { distance?: unknown; date?: unknown };
       return `${String(rec.distance ?? '?')} ${String(rec.date ?? '?')}`;
     })
     .join(' · ');

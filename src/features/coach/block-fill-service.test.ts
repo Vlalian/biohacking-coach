@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { weekStartOf } from '@/lib/date';
+import { addDays, weekStartOf } from '@/lib/date';
 
 /**
  * `training-architecture/34` — the trigger that keeps the calendar full.
@@ -175,6 +175,31 @@ describe('ensureBlockFilled', () => {
     await ensureBlockFilled('athlete_1', TODAY);
     const rows = (insertArithmeticSessions.mock.calls[0])[1];
     expect(rows.filter((r) => weekStartOf(r.date) === weekStartOf(TODAY)).length).toBeLessThanOrEqual(4);
+  });
+
+  it('writes a week straddling a block boundary once, not once per block', async () => {
+    // Within the lookahead, `weeksToFill` lists the next block's weeks too. A
+    // block ends mid-week and the next starts the day after, so one Mon–Sun
+    // week belongs to both — and without an owner each of its days would carry
+    // two sessions (CodeRabbit, PR #98).
+    const blocks = await blocksFrom(TODAY, RACE);
+    const near = addDays(blocks[0].endDate, -14);
+    getResolvedBlocks.mockResolvedValue({ race: { id: 'race_1', date: RACE }, set: null, blocks });
+
+    await ensureBlockFilled('athlete_1', near);
+    const rows = (insertArithmeticSessions.mock.calls[0])[1];
+    const dates = rows.map((r) => r.date);
+    expect(new Set(dates).size).toBe(dates.length);
+
+    // And the block the athlete is still in draws it, not the one they are
+    // about to enter. The shared week is block 1's last, so it is a deload;
+    // block 2 would have drawn it flat at full hours.
+    const shared = weekStartOf(blocks[1].startDate);
+    expect(weekStartOf(blocks[0].endDate), 'the fixture must straddle a week').toBe(shared);
+    const sharedMinutes = rows
+      .filter((r) => weekStartOf(r.date) === shared)
+      .reduce((m, r) => m + (r.durationMinutes ?? 0), 0);
+    expect(sharedMinutes).toBeLessThan(8 * 60 * 0.8);
   });
 
   it('reports no-race, no-hours and a missing athlete without writing anything', async () => {

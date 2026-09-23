@@ -75,7 +75,10 @@ describe('finish times as the athlete types them', () => {
     expect(parseFinishInput('   ')).toBeNull();
     expect(parseFinishInput('05:12')).toBe(18720);
     expect(parseFinishInput('0:01')).toBe(60);
-    for (const bad of ['5', '5:6', '5:60', '5:12:5', '5:12:60', '5h12', '0:00', 'abc', '123:00', '5:12:30:1', ':12']) {
+    // A day or longer is refused here as well as in `parsePastRace`: the two
+    // parsers disagreeing let the form enable Add on a value the server then
+    // refuses, and the athlete sees only the generic error (CodeRabbit, PR #98).
+    for (const bad of ['5', '5:6', '5:60', '5:12:5', '5:12:60', '5h12', '0:00', 'abc', '123:00', '5:12:30:1', ':12', '24:00', '24:00:00', '99:59:59']) {
       expect(parseFinishInput(bad), bad).toBeUndefined();
     }
   });

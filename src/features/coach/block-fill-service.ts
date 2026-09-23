@@ -115,9 +115,18 @@ async function planFor(facts: {
  * and a week somebody has already planned is not this function's to write.
  */
 function owedRows(due: DueWeek[], ctx: BlockContext): ArithmeticSession[] {
-  const owed = new Set(due.map((d) => d.weekStart));
-  const blocks = due.map((d) => d.block).filter((block, i, all) => all.indexOf(block) === i);
-  return blocks.flatMap((block) => blockSessions(block, ctx)).filter((row) => owed.has(weekStartOf(row.date)));
+  // One block owns each week. A block ends mid-week and the next starts the day
+  // after, so inside the lookahead one Mon–Sun week is owed by both — and
+  // `blockSessions` draws a whole week whichever block asked for it. Without an
+  // owner the shared days would each carry two sessions, two long rides on the
+  // same Sunday among them (CodeRabbit, PR #98). The earlier block draws it,
+  // because that is the block the athlete is still in.
+  const owner = new Map<string, TrainingBlock>();
+  for (const week of due) if (!owner.has(week.weekStart)) owner.set(week.weekStart, week.block);
+
+  return [...new Set(owner.values())].flatMap((block) =>
+    blockSessions(block, ctx).filter((row) => owner.get(weekStartOf(row.date)) === block),
+  );
 }
 
 /**

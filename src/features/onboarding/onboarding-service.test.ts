@@ -172,6 +172,13 @@ describe('answerOnboardingStep', () => {
     // filled once the Target Race exists (`training-architecture/34`).
     expect(ensureBlockFilled).toHaveBeenCalledWith('athlete_1', TODAY);
     expect(ensureBlockFilled.mock.invocationCallOrder[0]).toBeGreaterThan(createRace.mock.invocationCallOrder[0]);
+    // The past races land before the athlete is marked onboarded: the stored
+    // `experienceLevel` is derived from that list's length, so the other order
+    // could put an athlete past the gate with a level their empty race list
+    // does not support (CodeRabbit, PR #98).
+    expect(replacePastRaces.mock.invocationCallOrder[0]).toBeLessThan(
+      completeAthleteOnboarding.mock.invocationCallOrder[0],
+    );
     // The Coach's greeting closes the transcript and the conversation ends.
     expect(appendMessages).toHaveBeenLastCalledWith('athlete_1', 'conv_1', [
       { role: 'coach_ai', content: expect.stringContaining("I'm your Coach") },

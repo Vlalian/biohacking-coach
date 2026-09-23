@@ -94,7 +94,11 @@ export function parseFinishInput(text: string): number | null | undefined {
   const m = /^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?$/.exec(trimmed);
   if (!m) return undefined;
   const seconds = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3] ?? 0);
-  return seconds > 0 ? seconds : undefined;
+  // The same range `parsePastRace` enforces. The two disagreeing let the form
+  // enable Add on a finish the server then refuses, and during onboarding one
+  // such row refuses the whole answer with only the generic error to show for
+  // it (CodeRabbit, PR #98).
+  return seconds > 0 && seconds < DAY_SECONDS ? seconds : undefined;
 }
 
 /** The inverse: `h:mm`, or `h:mm:ss` when there are seconds. */

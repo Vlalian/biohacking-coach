@@ -34,6 +34,10 @@ describe('answerText renders a line for every step', () => {
     expect(answerText({ step: 'pastRaces', pastRaces: [] })).toBe('No races finished yet');
     expect(answerText({ step: 'pastRaces', pastRaces: 'x' as never })).toBe('No races finished yet');
     expect(answerText({ step: 'pastRaces', pastRaces: [{}] })).toBe('? ?');
+    // Rendered before the payload is validated, so a forged entry must read as
+    // unknown rather than throw past the action's refusal (CodeRabbit, PR #98).
+    expect(answerText({ step: 'pastRaces', pastRaces: [null] as never })).toBe('? ?');
+    expect(answerText({ step: 'pastRaces', pastRaces: [undefined] as never })).toBe('? ?');
     expect(answerText({ step: 'distance', raceDistance: 'Full' })).toBe('Full');
     expect(answerText({ step: 'hours', hoursPerWeek: 8 })).toBe('8 h/week');
   });
