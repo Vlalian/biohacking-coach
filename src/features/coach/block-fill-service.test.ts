@@ -148,6 +148,35 @@ describe('ensureBlockFilled', () => {
     expect(rows.length).toBeGreaterThan(0);
   });
 
+  it('hands the race distance to the arithmetic, so a long-distance week is spread over more days', async () => {
+    // `training-architecture/34` ruling 3: the session count is floored by the
+    // distance. Four hours buys three sessions on its own and six for a Full.
+    getAthleteById.mockResolvedValue(athlete({ hoursPerWeek: 4 }));
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'race_1', date: RACE, distance: 'Full' },
+      set: null,
+      blocks: await blocksFrom(TODAY, RACE),
+    });
+
+    await ensureBlockFilled('athlete_1', TODAY);
+    const rows = (insertArithmeticSessions.mock.calls[0])[1];
+    const firstWeek = rows.filter((r) => weekStartOf(r.date) === weekStartOf(TODAY));
+    expect(firstWeek.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('plans on the hours alone when the stored distance is not one the app knows', async () => {
+    getAthleteById.mockResolvedValue(athlete({ hoursPerWeek: 4 }));
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'race_1', date: RACE, distance: 'Duathlon' },
+      set: null,
+      blocks: await blocksFrom(TODAY, RACE),
+    });
+
+    await ensureBlockFilled('athlete_1', TODAY);
+    const rows = (insertArithmeticSessions.mock.calls[0])[1];
+    expect(rows.filter((r) => weekStartOf(r.date) === weekStartOf(TODAY)).length).toBeLessThanOrEqual(4);
+  });
+
   it('reports no-race, no-hours and a missing athlete without writing anything', async () => {
     getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
     expect(await ensureBlockFilled('athlete_1', TODAY)).toBe('no-race');

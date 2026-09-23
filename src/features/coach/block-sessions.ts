@@ -1,5 +1,6 @@
 import type { PlanningWindow } from './planning-window';
 import { weekSkeleton, wholeWeekWindow, type SkeletonDay } from './week-draft';
+import type { RaceDistance } from '@/lib/race-distances';
 import { addDays, weekStartOf } from '@/lib/date';
 import { blockPurpose, type BlockPurpose, type TrainingBlock } from './training-blocks';
 import type { PlanType, ProposedSession } from './weekly-session';
@@ -36,21 +37,87 @@ const MIN_SESSIONS = 3;
 const MAX_SESSIONS = 7;
 
 /**
- * How many sessions the athlete's hours buy (D2). Never fewer than three — a
- * week with less is not a training week — and never more than seven, because
- * a day holds one.
+ * The fewest sessions a week carries at each distance.
+ *
+ * Each number is the fewest any plan in *Distancens Arkitektur*'s corpus used
+ * at that distance (§03): Olympic and Half both bottom out at four — 220's
+ * 24-week Olympic plan and the Middle-Distance Half plan each hold a fixed four
+ * and grow the sessions instead — while both Ironman plans run six to seven,
+ * "really training every day but one". The document gives the reason for the
+ * long-distance floor in §04: an Ironman week's ten to twenty hours becomes
+ * single sessions nobody can fit in if it is squeezed into fewer than six days.
+ * Sprint has no plan in the corpus, so it keeps the bare floor rather than a
+ * number nothing supports.
+ *
+ * The document calls this "a tendency, not a law", which is why it is a floor
+ * and not a target: an athlete whose hours already buy more keeps them.
  */
-export function sessionsPerWeek(hours: number): number {
+const DISTANCE_FLOOR: Record<RaceDistance, number> = {
+  Sprint: MIN_SESSIONS,
+  Olympic: 4,
+  Half: 4,
+  Full: 6,
+};
+
+/**
+ * How many sessions the athlete's hours buy (D2), floored by what the race
+ * distance asks for (`training-architecture/34` ruling 3).
+ *
+ * Never fewer than three — a week with less is not a training week — and never
+ * more than seven, because a day holds one. Experience level is deliberately
+ * not read: in the corpus a beginner's week runs six to seven sessions like
+ * anyone else's, and what actually rises with level is double-session days,
+ * which a one-session-per-day model has no room for (review, 2026-09-23).
+ */
+export function sessionsPerWeek(hours: number, distance?: RaceDistance | null): number {
   const fromHours = Math.ceil((hours * 60) / MINUTES_PER_SESSION);
-  return Math.min(Math.max(fromHours, MIN_SESSIONS), MAX_SESSIONS);
+  return Math.min(Math.max(fromHours, distanceFloor(hours, distance)), MAX_SESSIONS);
+}
+
+/**
+ * The distance's floor, cut back to what the hours can actually fill.
+ *
+ * Six sessions out of two hours would each fall under the minimum length, and
+ * the week would then carry more minutes than the athlete said they had — the
+ * floor is there to spread the load, never to invent it.
+ */
+function distanceFloor(hours: number, distance?: RaceDistance | null): number {
+  const wanted = distance ? DISTANCE_FLOOR[distance] : MIN_SESSIONS;
+  const affordable = Math.floor((hours * 60) / MIN_MINUTES);
+  return Math.max(MIN_SESSIONS, Math.min(wanted, affordable));
 }
 
 /** The wave inside a block: ramp to full, then deload before the phase changes (D5). */
-const RAMP_FROM = 0.85;
+/**
+ * The first week of a ramping block, as a fraction of the athlete's hours.
+ *
+ * `training-architecture/34`'s criterion is "weekly minutes ≈ hoursPerWeek × 60
+ * (±10 %) in a normal week", and a ramp week is neither a deload nor a taper,
+ * so it is a normal week. *Distancens Arkitektur* fixes the deload dose (40–45 %
+ * down) and the taper dose (60–70 % down) but never names a fraction for the
+ * ramp itself, so the ±10 % band is what binds here (review escalation 2, ruled
+ * 2026-09-23 against the document).
+ */
+const RAMP_FROM = 0.9;
+
+/**
+ * A deload week sheds 40–45 % of the week's volume (*Distancens Arkitektur*
+ * §10/§15), which is the gentler of the document's two recovery doses: it
+ * absorbs a block of work before the next phase, and the athlete trains on
+ * through it.
+ */
 const DELOAD = 0.6;
-/** The two weeks before race day (D4). */
-const TAPER_NEAR = 0.35;
-const TAPER_FAR = 0.6;
+
+/**
+ * The two weeks before race day (D4), at the document's *other* dose: a taper
+ * sheds 60–70 %, not 40–45 %. The two weeks take the band's two ends —
+ * 60 % down, then 70 % — so the taper descends into race day rather than
+ * sitting flat, which is what "kraftigt volumenfald, bevaret race-pace-følelse"
+ * asks for (§14). Until the review of 2026-09-23 the far week carried 0.6, a
+ * deload's dose wearing a taper's name.
+ */
+const TAPER_NEAR = 0.3;
+const TAPER_FAR = 0.4;
 const TAPER_FAR_DAYS = 13;
 const TAPER_NEAR_DAYS = 6;
 /** A block needs three weeks before a deload week is worth spending (D5). */
@@ -80,7 +147,7 @@ export function weekFactor(facts: {
   return rampFactor(facts.weekIndex, facts.weeksInBlock);
 }
 
-/** 0.85 on the first week, 1.0 on the last before the deload, evenly spaced between. */
+/** 0.9 on the first week, 1.0 on the last before the deload, evenly spaced between. */
 function rampFactor(weekIndex: number, weeksInBlock: number): number {
   const rampWeeks = weeksInBlock - 1;
   // `weekFactor` has already returned for a block of fewer than three weeks,
@@ -124,10 +191,12 @@ export function weekSessions(input: {
   purpose: BlockPurpose;
   factor: number;
   hours: number;
+  /** The Target Race's distance, which floors the session count; absent when none is set. */
+  distance?: RaceDistance | null;
   isoWeekOdd: boolean;
   deload: boolean;
 }): ArithmeticSession[] {
-  const days = keptDays(weekSkeleton(input.window), sessionsPerWeek(input.hours));
+  const days = keptDays(weekSkeleton(input.window), sessionsPerWeek(input.hours, input.distance));
   // Stryker disable next-line ConditionalExpression — what this guards is the division in `minuteSplit`; with no days there are no rows to map over either way, so its absence is unobservable.
   if (days.length === 0) return [];
 
@@ -251,6 +320,8 @@ const LOOKAHEAD_DAYS = 14;
  */
 export interface BlockContext {
   raceDate: string;
+  /** The Target Race's distance — how few sessions a week may hold (§03/§04). */
+  distance?: RaceDistance | null;
   hours: number;
   /** The recurring no-train days; absent when the athlete has set none. */
   fixedConstraints?: string[];
@@ -277,9 +348,10 @@ export function blockSessions(block: TrainingBlock, ctx: BlockContext): Arithmet
       purpose,
       factor,
       hours: ctx.hours,
+      distance: ctx.distance,
       isoWeekOdd: isoWeekOdd(weekStart),
       // A deload week, or a taper week, which behaves like one (D9). A base
-      // block's ramp weeks carry 0.85 and 0.925 and are ordinary training
+      // block's ramp weeks carry 0.9 and 0.95 and are ordinary training
       // weeks — reading "less than full" as "deload" turned their easy days
       // into Recovery (Standards review, 2026-09-23).
       deload: factor <= DELOAD,

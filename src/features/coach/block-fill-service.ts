@@ -7,6 +7,7 @@ import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import { blockSessions, weeksToFill, type ArithmeticSession, type BlockContext, type DueWeek } from './block-sessions';
 import type { TrainingBlock } from './training-blocks';
+import { toRaceDistance, type RaceDistance } from '@/lib/race-distances';
 import { getResolvedBlocks } from './training-block-service';
 
 /**
@@ -70,6 +71,7 @@ async function readyToFill(athleteId: string, today: string): Promise<FillOutcom
     athleteId,
     today,
     raceDate: resolved.race.date,
+    distance: toRaceDistance(resolved.race.distance),
     hours: athlete.hoursPerWeek,
     fixedConstraints: athlete.profile?.fixedConstraints,
     blocks: resolved.blocks,
@@ -81,6 +83,7 @@ async function planFor(facts: {
   athleteId: string;
   today: string;
   raceDate: string;
+  distance: RaceDistance | null;
   hours: number;
   fixedConstraints: string[] | undefined;
   blocks: TrainingBlock[];
@@ -93,6 +96,7 @@ async function planFor(facts: {
     due,
     ctx: {
       raceDate: facts.raceDate,
+      distance: facts.distance,
       hours: facts.hours,
       fixedConstraints: facts.fixedConstraints,
       unavailableDates: await getUnavailableDates(athleteId),
