@@ -549,17 +549,22 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
  * unchanged in shape. The name is the **Preferred Name** the athlete chose
  * (`preferred-name/02`), or nothing; it is never derived from `user.name` any
  * more. Still DISPLAY ONLY: the action renders this on screen but persists the
- * name-free variant (`coachGreeting('', race)`) to the conversation log,
+ * name-free variant (`coachGreeting('', race, t)`) to the conversation log,
  * because `messages` is a training-side table keyed by athlete id and must
  * never carry a name (ADR 0006). The Coach's prompts resolve the Preferred
  * Name on their own path (`briefing.ts`, `prompt-blocks.ts`), not from here.
  */
+/** The four catalogue keys the greeting is built from; a translator over them. */
+export type GreetingKey = 'greetingIntroNamed' | 'greetingIntro' | 'greetingBodyRace' | 'greetingBody';
+export type GreetingTranslator = (key: GreetingKey, values?: Record<string, string>) => string;
+
 export function coachGreeting(
   name: string | null | undefined,
   race: string,
+  t: GreetingTranslator,
 ): { intro: string; body: string } {
-  const intro = name ? `Hello ${name}. I'm your Coach.` : `I'm your Coach.`;
-  const body = race ? `${race} is your target. Let's get to work.` : `Let's get to work.`;
+  const intro = name ? t('greetingIntroNamed', { name }) : t('greetingIntro');
+  const body = race ? t('greetingBodyRace', { race }) : t('greetingBody');
   return { intro, body };
 }
 
