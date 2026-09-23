@@ -34,6 +34,9 @@ describe('rateSessionAction', () => {
     expect(rateSession).toHaveBeenCalledWith(
       expect.objectContaining({ athleteId: 'athlete_1', sessionId: 'sess_1' }),
     );
+    // The whole shell, not one page: the rated state shows on the calendar
+    // and in every view that reads it.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('refuses a signed-out request without writing a rating', async () => {
@@ -43,6 +46,7 @@ describe('rateSessionAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(rateSession).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('does not revalidate when the rating was refused', async () => {

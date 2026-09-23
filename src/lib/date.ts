@@ -34,6 +34,18 @@ export function today(): string {
 }
 
 /**
+ * The same clock as a Date: local midnight of `today()`.
+ *
+ * For callers that build history in Date arithmetic rather than day keys —
+ * the seed's `seedWeekRows` and `generateSyntheticHistory`. Reading the pin
+ * here rather than `new Date()` is what lets one `COACH_TODAY` hold the
+ * calendar cell and the seeded sessions on the same day (frontend-quality/09).
+ */
+export function startOfToday(): Date {
+  return new Date(`${today()}T00:00:00`);
+}
+
+/**
  * True only for a canonical 'YYYY-MM-DD' that names a real calendar day.
  *
  * The Move rules compare date keys as strings, and the seam trusts that shape;

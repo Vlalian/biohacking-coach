@@ -96,9 +96,13 @@ describe('the three actions resolve the athlete from the session and take only a
     expect(redraftWeek).toHaveBeenCalledTimes(1);
   });
 
-  it('a refusal from the service passes through and revalidates nothing', async () => {
+  it('a refusal from the service passes through and revalidates nothing — for all three', async () => {
     acceptWeekDraft.mockResolvedValue({ ok: false, reason: 'not-found' });
+    declineWeekDraft.mockResolvedValue({ ok: false, reason: 'not-found' });
+    discussWeekDraft.mockResolvedValue({ ok: false, reason: 'not-found' });
     expect(await acceptWeekDraftAction('d1')).toEqual({ ok: false, reason: 'not-found' });
+    expect(await declineWeekDraftAction('d1')).toEqual({ ok: false, reason: 'not-found' });
+    expect(await discussWeekDraftAction('d1')).toEqual({ ok: false, reason: 'not-found' });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

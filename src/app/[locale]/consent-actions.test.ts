@@ -40,6 +40,9 @@ describe('grantConsentsAction', () => {
     expect(result).toEqual({ ok: true });
     expect(grantConsent).toHaveBeenCalledWith(ATHLETE, REAL);
     expect(grantConsent).toHaveBeenCalledWith(ATHLETE, 'health_data');
+    // The gate lives in the layout: granting the last required purpose has to
+    // lift it on the next render, so it is the layout that is refreshed.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('grants a repeated purpose once', async () => {
@@ -58,6 +61,7 @@ describe('grantConsentsAction', () => {
     expect(result).toEqual({ ok: false, reason: 'invalid-purpose' });
     expect(resolveAthleteId).not.toHaveBeenCalled();
     expect(grantConsent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('refuses a signed-out request', async () => {
@@ -67,6 +71,7 @@ describe('grantConsentsAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(grantConsent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 
@@ -78,6 +83,8 @@ describe('withdrawConsentAction', () => {
 
     expect(result).toEqual({ ok: true });
     expect(withdrawConsent).toHaveBeenCalledWith(ATHLETE, REAL);
+    // Withdrawing a required purpose drops the gate back into place.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('refuses an unrecognised purpose', async () => {
@@ -85,6 +92,7 @@ describe('withdrawConsentAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'invalid-purpose' });
     expect(withdrawConsent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('refuses a signed-out request', async () => {
@@ -94,5 +102,6 @@ describe('withdrawConsentAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(withdrawConsent).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

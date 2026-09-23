@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { resetBranchToParent } from '../scripts/neon-reset-branch';
+import { PINNED_TODAY } from './pinned-today';
 
 /** The suite's own database: a Neon branch cut from `seed-template`. */
 const E2E_BRANCH = 'test/e2e';
@@ -32,6 +33,7 @@ export default function globalSetup(): void {
   execFileSync('npx', ['tsx', 'scripts/seed.ts'], {
     stdio: 'inherit',
     shell: process.platform === 'win32',
-    env: { ...process.env, DATABASE_URL: url },
+    // The seed reads the app's clock (frontend-quality/09), so it gets the same pin as the server.
+    env: { ...process.env, DATABASE_URL: url, COACH_TODAY: PINNED_TODAY },
   });
 }
