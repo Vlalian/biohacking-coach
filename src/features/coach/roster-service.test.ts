@@ -15,7 +15,15 @@ const {
   getSharedTranscripts: vi.fn((): Promise<unknown> => Promise.resolve(null)),
   getInformationViewInputs: vi.fn(),
   getUnavailableDates: vi.fn(() => Promise.resolve([] as string[])),
-  getHealthHistory: vi.fn(() =>
+  getHealthHistory: vi.fn<
+    () => Promise<{
+      injuries: {
+        id: string; athleteId: string; swim: string; bike: string; run: string;
+        name: string | null; openedAt: Date; closedAt: Date | null; bother: number | null;
+      }[];
+      illnesses: { id: string; athleteId: string; openedAt: Date; closedAt: Date | null; bother: number | null }[];
+    }>
+  >(() =>
     Promise.resolve({
       injuries: [
         {
