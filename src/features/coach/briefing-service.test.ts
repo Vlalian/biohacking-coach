@@ -609,3 +609,21 @@ describe('startBriefing — the races reach the Head Coach (training-architectur
     expect(lastSystem()).not.toContain('No Target Race');
   });
 });
+
+describe('buildBriefingContextFor — the length script reads what the model reads (showable-version/19)', () => {
+  it('is exported, and its render is the prompt the briefing sends', async () => {
+    const { buildBriefingContextFor } = await import('./briefing-service');
+    const { renderBriefingPrompt } = await import('./briefing');
+    getBriefingPlan.mockResolvedValue([
+      { date: '2026-08-04', type: 'Endurance', status: 'completed', duration: 90, zone: 'Z2', note: 'steady' },
+    ]);
+    getPreferredNameForAthlete.mockResolvedValue('Mads');
+
+    const ctx = await buildBriefingContextFor(activeLink(false, false), TODAY);
+
+    expect(ctx.plan).toHaveLength(1);
+    expect(ctx.reports).toBeNull();
+    expect(ctx.preferredName).toBe('Mads');
+    expect(renderBriefingPrompt(ctx)).toContain('PLAN');
+  });
+});
