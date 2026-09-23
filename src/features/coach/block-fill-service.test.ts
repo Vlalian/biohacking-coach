@@ -12,7 +12,9 @@ const { getAthleteById, getResolvedBlocks, getSessionsForAthlete, getUnavailable
     getResolvedBlocks: vi.fn(),
     getSessionsForAthlete: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
     getUnavailableDates: vi.fn<() => Promise<string[]>>(() => Promise.resolve([])),
-    insertArithmeticSessions: vi.fn<(athleteId: string, rows: { date: string }[]) => Promise<void>>(() => Promise.resolve()),
+    insertArithmeticSessions: vi.fn<(athleteId: string, rows: { date: string; durationMinutes: number | null }[]) => Promise<void>>(
+      () => Promise.resolve(),
+    ),
     logCoachFailure: vi.fn(),
   }));
 
