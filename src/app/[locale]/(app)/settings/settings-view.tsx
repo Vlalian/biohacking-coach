@@ -193,7 +193,7 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
       <ReadOnlyField label={t('emailLabel')} value={email} />
       {/* A tester's first password arrives by email (showable-version/04);
        *  this is where it becomes their own. */}
-      <ChangePasswordForm />
+      <ChangePasswordForm email={email} name={name} />
       {/* Second home for sign-out. The Navigation Drawer carries the primary
        *  one; Settings is where a user instinctively looks for account
        *  actions, so it is reachable from both rather than only the drawer. */}

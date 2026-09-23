@@ -76,16 +76,19 @@ export async function main(argv: string[]): Promise<void> {
   // leave a half-minted coach behind.
   const athleteIds = await resolveAthletes(steps);
   const password = generatePassword();
-  const userId = await signUp(request, password);
+  const userId = await createAccount(request, password);
+  // Filed before anything else can fail: a mint that dies in `ensureCoach` or
+  // the seed would otherwise leave an account nobody holds the password for,
+  // and minting it again is refused (CodeRabbit, PR #99).
+  file(request, password);
 
-  // Only a coach has links; an athlete's mint ends at the signup hook.
+  // Only a coach has links; an athlete's mint ends at the create hook.
   if (steps.some((s) => s.kind === 'ensureCoach')) {
     const coachId = await ensureCoach(userId);
     const personaIds = await seedPlannedPersonas(steps, request.name);
     await link(coachId, [...personaIds, ...athleteIds]);
   }
 
-  file(request, password);
   console.log(`minted ${request.coach ? 'coach' : 'athlete'} ${request.email} ${password}`);
 }
 
@@ -159,9 +162,19 @@ async function resolveAthletes(steps: MintStep[]): Promise<string[]> {
   return ids;
 }
 
-async function signUp(request: MintRequest, password: string): Promise<string> {
+/**
+ * Creates the account through the admin plugin rather than `signUpEmail`.
+ *
+ * The deployment sets `DISABLE_SIGNUP=true`, and better-auth enforces that on
+ * its own server API as well as on the form — so the door this kit exists to
+ * use would be shut on the one database it matters for (CodeRabbit, PR #99).
+ * `createUser` goes through the same internal adapter, so the create hook still
+ * provisions the athlete row, and it reports a duplicate with the same code.
+ * Called with no request or headers, it skips the admin-session check.
+ */
+async function createAccount(request: MintRequest, password: string): Promise<string> {
   try {
-    const result = await auth.api.signUpEmail({
+    const result = await auth.api.createUser({
       body: { name: request.name, email: request.email, password },
     });
     return result.user.id;
@@ -197,7 +210,10 @@ function file(request: MintRequest, password: string): void {
   const template = readFileSync(TEMPLATE, 'utf8');
   const email = renderWelcome(template, { name: request.name, email: request.email, password });
   if (!existsSync(EMAIL_DIR)) mkdirSync(EMAIL_DIR, { recursive: true });
-  const emailPath = join(EMAIL_DIR, `${slug(request.name)}.md`);
+  // Named after the tester *and* their email: two testers called Sarah would
+  // otherwise share a filename, and the second mint would delete the first
+  // one's unsent email — which holds a live password (CodeRabbit, PR #99).
+  const emailPath = join(EMAIL_DIR, `${slug(`${request.name} ${request.email}`)}.md`);
   writeFileSync(emailPath, email, 'utf8');
   console.log(`filed ${resolve(emailPath)} — the password is in it; it is not in any repo`);
 

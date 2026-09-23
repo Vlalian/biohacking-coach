@@ -11,8 +11,13 @@ import { personasFor } from '../../src/features/athlete/synthetic-history';
 const guardDatabase = vi.fn();
 vi.mock('../db-guard/protected-database', () => ({ guardDatabase }));
 
-const signUpEmail = vi.fn(() => Promise.resolve({ user: { id: 'user-new' } }));
-vi.mock('../../src/lib/auth', () => ({ auth: { api: { signUpEmail } } }));
+// The admin plugin's door, not `signUpEmail`: the deployment sets
+// `DISABLE_SIGNUP=true`, which better-auth enforces on its own server API too,
+// and minting a tester is exactly the case that must still work (CodeRabbit on
+// PR #99). `createUser` runs the same database hooks, so the athlete row is
+// still provisioned by the hook rather than by this script.
+const createUser = vi.fn(() => Promise.resolve({ user: { id: 'user-new' } }));
+vi.mock('../../src/lib/auth', () => ({ auth: { api: { createUser } } }));
 
 const seedPersonas = vi.fn(() => Promise.resolve(['p1', 'p2', 'p3']));
 vi.mock('../personas/seed-personas', () => ({ seedPersonas }));
@@ -82,12 +87,12 @@ describe('mint-tester CLI', () => {
 
   it('refuses argv it cannot read, before anything else', async () => {
     await expect(main(['--email', 's@x.dk'])).rejects.toThrow(/^--name is required\nusage: mint-tester\.ts/);
-    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
   it('lets an error that is not a duplicate through as it is', async () => {
-    signUpEmail.mockRejectedValueOnce(new Error('connection refused'));
+    createUser.mockRejectedValueOnce(new Error('connection refused'));
     await expect(main(['--name', 'S', '--email', 's@x.dk'])).rejects.toThrow('connection refused');
     expect(writeFileSync).not.toHaveBeenCalled();
   });
@@ -95,11 +100,11 @@ describe('mint-tester CLI', () => {
   it('guards the database before touching it', async () => {
     await main(['--name', 'S', '--email', 's@x.dk']);
     expect(guardDatabase).toHaveBeenCalledWith(process.env.DATABASE_URL, ['--name', 'S', '--email', 's@x.dk']);
-    expect(guardDatabase.mock.invocationCallOrder[0]).toBeLessThan(signUpEmail.mock.invocationCallOrder[0]);
+    expect(guardDatabase.mock.invocationCallOrder[0]).toBeLessThan(createUser.mock.invocationCallOrder[0]);
   });
 
   it('stops on a duplicate email and files nothing', async () => {
-    signUpEmail.mockRejectedValueOnce({ body: { code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' } });
+    createUser.mockRejectedValueOnce({ body: { code: 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' } });
     await expect(main(['--name', 'S', '--email', 's@x.dk'])).rejects.toThrow(/already has a login/);
     expect(appendFileSync).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
@@ -110,13 +115,13 @@ describe('mint-tester CLI', () => {
     await expect(
       main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'ghost@x.dk']),
     ).rejects.toThrow(/ghost@x\.dk/);
-    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
   });
 
   it('files the email, appends the register, prints the login once', async () => {
     await main(['--name', 'Sarah Ø', '--email', 's@x.dk']);
-    expect(signUpEmail).toHaveBeenCalledWith({
+    expect(createUser).toHaveBeenCalledWith({
       body: { name: 'Sarah Ø', email: 's@x.dk', password: expect.stringMatching(/^[A-HJ-NP-Za-km-z2-9]{20}$/) },
     });
     expect(readFileSync).toHaveBeenCalledWith(expect.stringMatching(/tester-kit[\\/]welcome-email\.md$/), 'utf8');
@@ -124,7 +129,7 @@ describe('mint-tester CLI', () => {
     // tracker is a repo with a remote, and a temporary password stays live
     // until the tester changes it (ruling, 2026-09-23).
     expect(writeFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/tester-emails[\\/]sarah-oe\.md$/),
+      expect.stringMatching(/tester-emails[\\/]sarah-oe-s-x-dk\.md$/),
       expect.stringContaining('s@x.dk'),
       'utf8',
     );
@@ -141,6 +146,38 @@ describe('mint-tester CLI', () => {
     const printed = log.mock.calls.map((c: unknown[]) => String(c[0])).filter((l: string) => /[A-HJ-NP-Za-km-z2-9]{20}/.test(l));
     expect(printed).toHaveLength(1);
     expect(printed[0]).toContain('s@x.dk');
+  });
+
+  it('files the password the moment the account exists, before anything that could fail after it', async () => {
+    // A failure in `ensureCoach` or the seed would otherwise leave an account
+    // nobody has the password for, and re-minting it is refused (CodeRabbit).
+    selectResults.push([{ id: 'ath-a' }]);
+    insert.mockImplementationOnce(() => {
+      throw new Error('the coach row blew up');
+    });
+    await expect(
+      main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk']),
+    ).rejects.toThrow('the coach row blew up');
+    expect(writeFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/tester-emails[\\/]c-c-x-dk\.md$/),
+      expect.stringContaining('c@x.dk'),
+      'utf8',
+    );
+  });
+
+  it('trims the dashes a leading or trailing symbol would leave on the filename', async () => {
+    await main(['--name', '!!Sarah!!', '--email', 's@x.dk']);
+    const written = String(writeFileSync.mock.calls[0]?.[0] ?? '');
+    expect(written).toMatch(/[\\/]sarah-s-x-dk\.md$/);
+    expect(written).not.toMatch(/[\\/]-/);
+  });
+
+  it('names the file after the tester and their email, so two Sarahs cannot overwrite each other', async () => {
+    await main(['--name', 'Sarah', '--email', 'sarah@one.dk']);
+    await main(['--name', 'Sarah', '--email', 'sarah@two.dk']);
+    const written = writeFileSync.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(new Set(written).size).toBe(2);
+    expect(written[0]).toMatch(/sarah-sarah-one-dk\.md$/);
   });
 
   it('creates both folders the first time, and opens the register with a header', async () => {
@@ -167,7 +204,7 @@ describe('mint-tester CLI', () => {
   it('says where it filed the email, since it is not where the tracker is', async () => {
     await main(['--name', 'S', '--email', 's@x.dk']);
     expect(log.mock.calls.map((c: unknown[]) => String(c[0]))).toContainEqual(
-      expect.stringMatching(/filed .*tester-emails[\\/]s\.md/),
+      expect.stringMatching(/filed .*tester-emails[\\/]s-s-x-dk\.md/),
     );
   });
 
@@ -185,7 +222,7 @@ describe('mint-tester CLI', () => {
   it('folds an accent into plain ascii too', async () => {
     await main(['--name', 'Renée Dupré', '--email', 'r@x.dk']);
     expect(writeFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/renee-dupre\.md$/),
+      expect.stringMatching(/renee-dupre-r-x-dk\.md$/),
       expect.any(String),
       'utf8',
     );
@@ -227,7 +264,7 @@ describe('mint-tester CLI', () => {
   it('names the file after the tester, with the Danish letters spelled out', async () => {
     await main(['--name', 'Søren Æ. Berg-Håansen!', '--email', 's@x.dk']);
     expect(writeFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/soeren-ae-berg-haaansen\.md$/),
+      expect.stringMatching(/soeren-ae-berg-haaansen-s-x-dk\.md$/),
       expect.any(String),
       'utf8',
     );
@@ -302,7 +339,7 @@ describe('--personas-only — the way back after a retire (ruled 2026-09-23)', (
     selectResults.push([{ id: 'coach-existing' }]);
     await main(['--personas-only', '--email', 'C@X.dk']);
 
-    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
     expect(writeFileSync).not.toHaveBeenCalled();
     expect(appendFileSync).not.toHaveBeenCalled();
     // The copy is the one that coach already owns: same owner key, same ids.

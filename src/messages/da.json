@@ -234,12 +234,15 @@
     "raceDateLabel": "Løbsdato",
     "changePassword": "Skift adgangskode",
     "currentPassword": "Nuværende adgangskode",
-    "newPassword": "Ny adgangskode (mindst 8 tegn)",
+    "newPassword": "Ny adgangskode (mindst {min} tegn)",
     "confirmPassword": "Gentag den nye adgangskode",
     "passwordChanged": "Adgangskoden er skiftet. Andre enheder er logget ud.",
     "passwordMismatch": "De to nye adgangskoder er ikke ens.",
-    "passwordTooShort": "Den nye adgangskode skal være mindst 8 tegn.",
-    "passwordError": "Det virkede ikke. Tjek den nuværende adgangskode, og prøv igen."
+    "passwordTooShort": "En adgangskode skal være på mindst {min} tegn. Denne er på {actual}. Længden er det, der beskytter den — nogle få almindelige ord fungerer fint.",
+    "passwordError": "Det virkede ikke. Tjek den nuværende adgangskode, og prøv igen.",
+    "passwordTooLong": "Den er længere end {max} tegn. Gør den lidt kortere.",
+    "passwordTooCommon": "Det er en af de første adgangskoder, nogen ville prøve. Vælg en anden.",
+    "passwordPersonal": "Hold dit navn og din e-mail udenfor — alle, der har skrevet til dig, kender begge dele."
   },
   "Roster": {
     "weekToReview": "Uge til gennemsyn",

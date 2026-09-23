@@ -1,8 +1,10 @@
 # Welcome email for a tester
 
-`scripts/mint-tester.ts` fills `{{name}}`, `{{email}}` and `{{password}}` and files the result under
-`.scratch/showable-version/testers/`. Mads pastes the section in the tester's language into Gmail.
-Both sections must stay; the kit refuses a template missing one.
+`scripts/mint-tester.ts` fills `{{name}}`, `{{email}}` and `{{password}}` and files the result
+outside every git repo — `../tester-emails/` by default, `TESTER_EMAIL_DIR` to move it — because
+the filled copy holds the password. The register beside it, in
+`.scratch/showable-version/testers/REGISTER.md`, never does. Mads pastes the section in the
+tester's language into Gmail. Both sections must stay; the kit refuses a template missing one.
 
 ## en
 

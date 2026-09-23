@@ -114,7 +114,10 @@ function mintFor(email: string, seen: ReadArgv): MintArgs {
     coach: seen.flags.has('--coach'),
     personas: seen.flags.has('--personas'),
     personasOnly: false,
-    athletes: (seen.values.get('--athletes') ?? '').split(',').filter((e) => e.length > 0),
+    athletes: (seen.values.get('--athletes') ?? '')
+      .toLowerCase()
+      .split(',')
+      .filter((e) => e.length > 0),
   };
   const why = checkCoachRules(request);
   return why ? refuse(why) : { ok: true, request };
@@ -123,7 +126,9 @@ function mintFor(email: string, seen: ReadArgv): MintArgs {
 export function parseMintArgs(argv: readonly string[]): MintArgs {
   const seen = readArgv(argv);
   if (typeof seen === 'string') return refuse(seen);
-  const email = seen.values.get('--email');
+  // better-auth stores an email lower-cased, and the lookups behind
+  // `--athletes` and `--personas-only` compare on it exactly.
+  const email = seen.values.get('--email')?.toLowerCase();
   if (!email) return refuse('--email is required');
   return seen.flags.has('--personas-only') ? topUpFor(email, seen) : mintFor(email, seen);
 }

@@ -59,6 +59,19 @@ describe('parseMintArgs', () => {
     });
   });
 
+  it('lower-cases every email it reads, because better-auth stores them that way', () => {
+    // The lookups behind `--athletes` and `--personas-only` compare on
+    // `user.email` exactly, and better-auth wrote it lower-cased at signup, so
+    // `--email C@X.dk` would otherwise find nobody (CodeRabbit, PR #99).
+    expect(parseMintArgs(['--name', 'C', '--email', 'C@X.dk', '--coach', '--athletes', 'A@X.dk,B@X.dk'])).toMatchObject(
+      { ok: true, request: { email: 'c@x.dk', athletes: ['a@x.dk', 'b@x.dk'] } },
+    );
+    expect(parseMintArgs(['--personas-only', '--email', 'C@X.dk'])).toMatchObject({
+      ok: true,
+      request: { email: 'c@x.dk' },
+    });
+  });
+
   it('splits --athletes on commas', () => {
     expect(
       parseMintArgs(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk,b@x.dk']),
@@ -100,6 +113,8 @@ describe('parseMintArgs — --personas-only (the recovery path, ruled 2026-09-23
   it('is in the usage line, so a reader finds the way back without the ticket', () => {
     const { usage } = parseMintArgs(['--bogus']) as { usage: string };
     expect(usage).toContain('mint-tester.ts --personas-only --email <coach email>');
+    // Two usage lines, one per way in, each on its own line.
+    expect(usage.split('\n').filter((l: string) => l.includes('mint-tester.ts'))).toHaveLength(2);
   });
 
   it('needs only an email: the account already exists, so there is nobody to name', () => {
