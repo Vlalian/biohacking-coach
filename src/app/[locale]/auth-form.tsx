@@ -13,8 +13,19 @@ import { signIn, signUp } from '@/lib/auth-client';
  * Errors are shown as one generic localized message rather than better-auth's
  * raw text: it keeps the UI translatable and avoids telling a stranger whether
  * an email is already registered.
+ *
+ * `allowSignUp` is the deployment's `DISABLE_SIGNUP`, read on the server and
+ * passed in: while registration is closed the sign-in page offers no way to a
+ * form better-auth would refuse (showable-version/04). It defaults to open, so
+ * a local dev server behaves as it always has.
  */
-export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+export function AuthForm({
+  mode,
+  allowSignUp = true,
+}: {
+  mode: 'sign-in' | 'sign-up';
+  allowSignUp?: boolean;
+}) {
   const t = useTranslations('Auth');
   const router = useRouter();
   const [name, setName] = useState('');
@@ -112,17 +123,19 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           {isSignUp ? t('signUpButton') : t('signInButton')}
         </button>
 
-        <p className="text-center text-sm text-neutral-500">
-          {isSignUp ? (
-            <Link href="/sign-in" className="underline">
-              {t('toSignIn')}
-            </Link>
-          ) : (
-            <Link href="/sign-up" className="underline">
-              {t('toSignUp')}
-            </Link>
-          )}
-        </p>
+        {(isSignUp || allowSignUp) && (
+          <p className="text-center text-sm text-neutral-500">
+            {isSignUp ? (
+              <Link href="/sign-in" className="underline">
+                {t('toSignIn')}
+              </Link>
+            ) : (
+              <Link href="/sign-up" className="underline">
+                {t('toSignUp')}
+              </Link>
+            )}
+          </p>
+        )}
       </form>
     </main>
   );

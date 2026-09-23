@@ -1,8 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, sep } from 'node:path';
+import { filesMatchingRaw, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
 
 /**
  * These tests walk every file under `src/` and read it. That takes well under a
@@ -102,33 +100,18 @@ describe('BlockPanel', () => {
 });
 
 describe('the block edit has exactly one production caller', () => {
-  // Resolved from this file, never from `process.cwd()`: the mutation gate runs
-  // the suite from a sandbox copy with a different working directory.
-  const SRC = fileURLToPath(new URL('../../../../../../', import.meta.url));
-
-  function sourceFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(full);
-      return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [full] : [];
-    });
-  }
-
   it('is block-actions.ts, and only block-actions.ts, outside the service itself', () => {
     // The athlete has no block write path at all: the strip is control-free,
     // and no athlete action touches `training_block_set`. This pins that a
     // second caller — an athlete action, a background job — cannot appear
     // without this test naming the file.
-    const callers = sourceFiles(SRC)
-      .filter((file) => /\beditBlockAsHeadCoach\b/.test(readFileSync(file, 'utf8')))
-      .map((file) => file.slice(SRC.length).split(sep).join('/'))
-      .sort();
+    const callers = filesMatchingRaw(/\beditBlockAsHeadCoach\b/, { includeTests: false });
 
     expect(callers).toEqual([
       'app/[locale]/(app)/coach/athlete/[athleteId]/block-actions.ts',
       'features/coach/training-block-service.ts',
     ]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 });
 
 describe('afterSave — what the panel believes once a save has landed', () => {

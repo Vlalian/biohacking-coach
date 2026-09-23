@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, sep } from 'node:path';
+import { codeOf, filesMatching, srcPath, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
 import { buildChatPrompt } from '@/features/coach/prompts';
 import { capacityStatement } from './capacity';
 import type { CheckIn } from '@/features/coach/check-in';
@@ -58,38 +56,13 @@ describe('the detail thread does not reach the model', () => {
     }
   });
 
-  // Resolved from this file, never from `process.cwd()`: the mutation gate runs
-  // the suite from a sandbox copy with a different working directory, where a
-  // cwd-relative path silently finds nothing and the assertion below passes
-  // while proving nothing.
-  const SRC = fileURLToPath(new URL('../..', import.meta.url));
-
-  function sourceFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(full);
-      if (!/\.tsx?$/.test(entry.name)) return [];
-      // This file names the readers it is looking for.
-      return entry.name === 'detail-thread-never-prompts.test.ts' ? [] : [full];
-    });
-  }
-
-  function code(file: string): string {
-    return readFileSync(file, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/\/\/.*/g, ' ');
-  }
-
   it('is read by nothing outside its own feature', () => {
     // The structural half, and the stronger one. `healthNotes` and the two
     // functions that touch it are the whole surface; if a prompt builder, a
     // Coach service or a briefing ever imports one, this list grows and the test
     // says which file. Stripping comments first so the prose explaining the rule
     // is not itself a violation.
-    const readers = sourceFiles(SRC)
-      .filter((file) => /healthNotes|addHealthNote|getHealthNotes/.test(code(file)))
-      .map((file) => file.slice(SRC.length).split(sep).join('/'))
-      .sort();
+    const readers = filesMatching(/healthNotes|addHealthNote|getHealthNotes/, { self: import.meta.url });
 
     // Slice 06 added the readers that show the thread to humans — the drawer,
     // the actions behind it, and the Head Coach's link-gated service. None of
@@ -107,7 +80,7 @@ describe('the detail thread does not reach the model', () => {
       'features/health/health-service.test.ts',
       'features/health/health-service.ts',
     ]);
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   /**
    * The Bother Rating (slice 06) lives on the same side of the split as the
@@ -128,7 +101,7 @@ describe('the detail thread does not reach the model', () => {
       'features/health/capacity.ts',
     ];
     for (const rel of promptPath) {
-      const src = code(join(SRC, ...rel.split('/')));
+      const src = codeOf(srcPath(rel));
       expect(src, rel).not.toMatch(/\bbother\b/i);
     }
   });

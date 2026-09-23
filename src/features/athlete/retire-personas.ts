@@ -1,4 +1,4 @@
-import { SYNTHETIC_PROFILES } from './synthetic-history';
+import { PERSONA_LABELS } from './synthetic-history';
 
 /**
  * What `scripts/retire-personas.ts` decides, without the database it acts on
@@ -12,18 +12,20 @@ import { SYNTHETIC_PROFILES } from './synthetic-history';
  */
 
 /**
- * The shallow persona the seed carried before the generated two — a single
+ * The shallow persona the seed carried before the generated ones — a single
  * `synthetic_label` row with no history, once route 06's proof that the
- * identity constraint held. Retired with the other two: it names nobody real,
+ * identity constraint held. Retired with the others: it names nobody real,
  * but it is still a fabricated athlete in a database about to hold real ones.
  */
-export const TEST_ATHLETE_ID = 'eff4e0bc-d603-4d5e-8ae5-369ff5bb1213';
+export const TEST_ATHLETE_LABEL = 'Test Athlete';
 
-/** Every athlete id the seed ever fabricated. Fixed ids, so this list is closed. */
-export const RETIRED_PERSONA_IDS: readonly string[] = [
-  ...SYNTHETIC_PROFILES.map((p) => p.id),
-  TEST_ATHLETE_ID,
-];
+/**
+ * Every label the seed ever fabricated. Labels, not ids: since code-health/18
+ * each tester Head Coach holds their own copy of the personas at ids derived
+ * from the coach, so the ids are open and the names are the closed list.
+ * `athlete_identity_source` makes a labelled row userless by rule.
+ */
+export const RETIRED_PERSONA_LABELS: readonly string[] = [...PERSONA_LABELS, TEST_ATHLETE_LABEL];
 
 /** A persona row as the script finds it, with what would cascade from it. */
 export interface PersonaRow {
@@ -36,9 +38,7 @@ export interface PersonaRow {
 
 export interface RetirementPlan {
   erase: PersonaRow[];
-  /** Ids with no row behind them — retired already, or never seeded here. */
-  absent: string[];
-  /** Rows at a persona id that belong to a real person. Never erased. */
+  /** Rows under a persona label that belong to a real person. Never erased. */
   refused: PersonaRow[];
 }
 
@@ -46,28 +46,34 @@ export type RetireArgs = { yes: boolean } | { error: string };
 
 /** `--yes` makes it real; anything else is a mistake, not a flag to ignore. */
 export function parseRetireArgs(argv: readonly string[]): RetireArgs {
-  const unknown = argv.find((a) => a !== '--yes');
+  // `--production` is the guard's flag, read by `guardDatabase`, not here.
+  const unknown = argv.find((a) => a !== '--yes' && a !== '--production');
   if (unknown !== undefined) return { error: `unknown argument: ${unknown}` };
   return { yes: argv.includes('--yes') };
 }
 
 /**
  * A persona has no user — `athlete_identity_source` makes that a database
- * rule. A row at one of these ids that *does* carry a user is therefore a real
- * athlete, and one such row refuses the whole run: this script deletes nobody
- * real, and a partial erasure would hide that it nearly did.
+ * rule. A row under one of these labels that *does* carry a user is therefore
+ * a real athlete, and one such row refuses the whole run: this script deletes
+ * nobody real, and a partial erasure would hide that it nearly did.
  */
 export function planRetirement(found: readonly PersonaRow[]): RetirementPlan {
   const refused = found.filter((r) => r.userId !== null);
-  const absent = RETIRED_PERSONA_IDS.filter((id) => !found.some((r) => r.id === id));
   return {
     erase: refused.length === 0 ? [...found] : [],
-    absent,
     refused,
   };
 }
 
-/** The run, one line per row, ending with what happens next. */
+/** One line per label found, so "how many coaches hold a copy" is readable at a glance. */
+function copiesPerLabel(rows: readonly PersonaRow[]): string[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.syntheticLabel ?? '?', (counts.get(r.syntheticLabel ?? '?') ?? 0) + 1);
+  return [...counts].map(([label, n]) => `${label}: ${n} ${n === 1 ? 'copy' : 'copies'}`);
+}
+
+/** The run, one line per row, then per label, ending with what happens next. */
 export function describeRetirement(plan: RetirementPlan, yes: boolean): string[] {
   const lines = [
     ...plan.refused.map((r) => `REFUSE ${r.id} — has a user (${r.userId}); not a persona`),
@@ -75,7 +81,7 @@ export function describeRetirement(plan: RetirementPlan, yes: boolean): string[]
       (r) =>
         `erase  ${r.syntheticLabel} (${r.id}): ${r.sessions} session(s), ${r.links} Coaching Link(s)`,
     ),
-    ...plan.absent.map((id) => `absent ${id} — already gone`),
+    ...copiesPerLabel(plan.erase),
   ];
   if (plan.refused.length > 0) {
     lines.push('refused at least one row; nothing erased.');

@@ -10,6 +10,7 @@ import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { PreferredNameField } from '@/components/preferred-name-field';
+import { ChangePasswordForm } from '@/components/change-password-form';
 import type { AddPastRaceResult, AddRaceResult, SettingsActionResult } from './settings-actions';
 import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './settings-past-races';
 import { RacesSection, type SettingsRace } from './settings-races';
@@ -200,6 +201,9 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
     <Section label={t('sectionProfile')}>
       <ReadOnlyField label={t('nameLabel')} value={name} />
       <ReadOnlyField label={t('emailLabel')} value={email} />
+      {/* A tester's first password arrives by email (showable-version/04);
+       *  this is where it becomes their own. */}
+      <ChangePasswordForm email={email} name={name} />
       {/* Second home for sign-out. The Navigation Drawer carries the primary
        *  one; Settings is where a user instinctively looks for account
        *  actions, so it is reachable from both rather than only the drawer. */}
