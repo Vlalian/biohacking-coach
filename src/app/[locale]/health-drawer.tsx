@@ -434,7 +434,7 @@ function Thread({
     };
     // The subject is identified by its id; a new object with the same id is the
     // same thread.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [key, coachAthleteId]);
 
   return (

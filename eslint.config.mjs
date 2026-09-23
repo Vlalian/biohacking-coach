@@ -1,7 +1,16 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import oxlint from "eslint-plugin-oxlint";
 
+// Lint runs in two layers (decided 2026-09-22, see docs/rules/definition-of-done.md):
+// Oxlint (`.oxlintrc.json`) is the fast pass and carries what it can — the
+// Next/React/TypeScript presets, the fixture-import ban, the console ban.
+// The last entry below turns off every rule Oxlint already enforces, so no file
+// is judged twice. What is left running here is the `it.only` selector rule,
+// which Oxlint has no selector engine for, **and the jsx-a11y set**, which
+// `.oxlintrc.json` deliberately does not enable: Oxlint's a11y rules report on
+// roughly ten existing components, and adopting them is its own piece of work.
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -23,55 +32,6 @@ const eslintConfig = defineConfig([
     "test-results/**",
     "playwright-report/**",
   ]),
-  // Fixture modules build invented data byte by byte so the decode and render
-  // paths can be tested without a real export. Both carry a "TEST FIXTURES
-  // ONLY" comment at the top — and a comment does not stop an import
-  // (CodeRabbit, PR #35), so the rule is enforced here instead: a wrong import
-  // fails `npm run lint` rather than shipping a synthetic-data path into the
-  // bundle, where it could reach a real athlete's record.
-  //
-  // Scoped to app code. Test files are the legitimate consumers and are
-  // exempted below.
-  {
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: [
-                "**/fit-fixture",
-                "./fit-fixture",
-                "**/synthetic-fixtures",
-                "./synthetic-fixtures",
-              ],
-              message:
-                "Test fixtures only. This module builds invented data; importing it from app code risks synthetic data reaching a real athlete's record.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  // What must not reach a commit (added 2026-09-15, from the ECC comparison in
-  // .scratch/research/ecc-workflow-comparison.md §3, where it was a pre-commit
-  // hook; here it is a lint rule, because lint is already one of the four
-  // Definition-of-Done checks and a rule is cheaper than a hook).
-  //
-  // `console.error` and `console.warn` stay allowed: `lib/coach-log.ts` is the
-  // Coach path's only logging and it writes structured lines to console.error.
-  // A stray `console.log` is a debugging leftover, and on the Coach path it is
-  // the one way an athlete's words could reach a log line unredacted.
-  {
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
-    rules: {
-      "no-console": ["error", { allow: ["warn", "error"] }],
-      "no-debugger": "error",
-    },
-  },
   // A focused test (`it.only`, `describe.only`, `test.only`) turns the whole
   // suite green by running one file's worth of it. `npm test` would pass and
   // the hardening gate would grade a suite that mostly did not run.
@@ -99,6 +59,17 @@ const eslintConfig = defineConfig([
         },
       ],
     },
+  },
+  // Must stay last: disables in ESLint every rule `.oxlintrc.json` enables.
+  ...oxlint.buildFromOxlintConfigFile("./.oxlintrc.json"),
+  // `// eslint-disable-next-line @typescript-eslint/no-explicit-any` comments
+  // in the test files now serve Oxlint (which honors the same directive) and
+  // look unused to ESLint, because ESLint no longer runs that rule. Scoped to
+  // test files: a genuinely dead directive anywhere else should still be
+  // reported.
+  {
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    linterOptions: { reportUnusedDisableDirectives: "off" },
   },
 ]);
 

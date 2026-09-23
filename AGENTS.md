@@ -32,7 +32,12 @@ earned it. **Open the file when the trigger matches what you are about to do**
 - **Before writing or changing code in `src/` or `scripts/`**, read
   [coding-conventions.md](docs/rules/coding-conventions.md) — domain language
   exactly, pure core with I/O at the edges, server owns the truth, no
-  identifier reaches the LLM, tests colocated.
+  identifier reaches the LLM.
+- **Before writing or changing a test**, read
+  [testing.md](docs/rules/testing.md) — test the exports and only the exports;
+  spies are for boundaries, never for internals; extract a hard-to-reach helper
+  rather than exporting it for a test; when a refactor breaks an interface test,
+  stop rather than edit the test to match.
 - **Before touching `src/components/ui` or `globals.css`**, read
   [visual-snapshots.md](docs/rules/visual-snapshots.md) — every primitive has a
   `*.visual.tsx`; run `npm run test:visual` before commit.
