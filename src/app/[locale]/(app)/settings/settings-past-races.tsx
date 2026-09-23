@@ -165,7 +165,7 @@ function AddPastRaceForm({
           onChange={(e) => setFinish(e.target.value)}
           placeholder={t('pastRacesFinishPlaceholder')}
           aria-label={t('pastRacesFinishLabel')}
-          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
       </div>
       <input
@@ -175,7 +175,7 @@ function AddPastRaceForm({
         placeholder={t('pastRacesNotePlaceholder')}
         aria-label={t('pastRacesNoteLabel')}
         maxLength={200}
-        className="mt-2 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+        className="mt-2 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
       />
       <div className="mt-2">
         <ActionButton
