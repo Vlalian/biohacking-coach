@@ -120,10 +120,18 @@ describe('mint-tester CLI', () => {
       body: { name: 'Sarah Ø', email: 's@x.dk', password: expect.stringMatching(/^[A-HJ-NP-Za-km-z2-9]{20}$/) },
     });
     expect(readFileSync).toHaveBeenCalledWith(expect.stringMatching(/tester-kit[\\/]welcome-email\.md$/), 'utf8');
+    // The password is in this file, so it lives outside every git repo: the
+    // tracker is a repo with a remote, and a temporary password stays live
+    // until the tester changes it (ruling, 2026-09-23).
     expect(writeFileSync).toHaveBeenCalledWith(
-      expect.stringMatching(/^\.scratch[\\/]showable-version[\\/]testers[\\/]sarah-oe\.md$/),
+      expect.stringMatching(/tester-emails[\\/]sarah-oe\.md$/),
       expect.stringContaining('s@x.dk'),
       'utf8',
+    );
+    expect(writeFileSync).not.toHaveBeenCalledWith(
+      expect.stringContaining('.scratch'),
+      expect.anything(),
+      expect.anything(),
     );
     expect(appendFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/^\.scratch[\\/]showable-version[\\/]testers[\\/]REGISTER\.md$/),
@@ -135,9 +143,10 @@ describe('mint-tester CLI', () => {
     expect(printed[0]).toContain('s@x.dk');
   });
 
-  it('creates the testers folder the first time, and opens the register with a header', async () => {
+  it('creates both folders the first time, and opens the register with a header', async () => {
     existsSync.mockReturnValue(false);
     await main(['--name', 'S', '--email', 's@x.dk']);
+    expect(mkdirSync).toHaveBeenCalledWith(expect.stringMatching(/tester-emails$/), { recursive: true });
     expect(mkdirSync).toHaveBeenCalledWith(expect.stringMatching(/testers$/), { recursive: true });
     expect(appendFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/REGISTER\.md$/),
@@ -152,6 +161,13 @@ describe('mint-tester CLI', () => {
       expect.stringMatching(/REGISTER\.md$/),
       expect.stringMatching(/^\| \d{4}-\d{2}-\d{2} \| S \| s@x\.dk \| athlete \|\n$/),
       'utf8',
+    );
+  });
+
+  it('says where it filed the email, since it is not where the tracker is', async () => {
+    await main(['--name', 'S', '--email', 's@x.dk']);
+    expect(log.mock.calls.map((c: unknown[]) => String(c[0]))).toContainEqual(
+      expect.stringMatching(/filed .*tester-emails[\\/]s\.md/),
     );
   });
 
@@ -268,5 +284,52 @@ describe('mint-tester CLI', () => {
       { coachId: 'coach-new', athleteId: 'p3' },
     ]);
     expect(log).toHaveBeenCalledWith(expect.stringMatching(/holds their own copy of 3 personas/));
+  });
+});
+
+describe('--personas-only — the way back after a retire (ruled 2026-09-23)', () => {
+  let log: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    selectResults.length = 0;
+    inserted.length = 0;
+    selectShapes.length = 0;
+    existsSync.mockReturnValue(true);
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  it('seeds and links an existing coach, without signing anybody up or filing anything', async () => {
+    selectResults.push([{ id: 'coach-existing' }]);
+    await main(['--personas-only', '--email', 'C@X.dk']);
+
+    expect(signUpEmail).not.toHaveBeenCalled();
+    expect(writeFileSync).not.toHaveBeenCalled();
+    expect(appendFileSync).not.toHaveBeenCalled();
+    // The copy is the one that coach already owns: same owner key, same ids.
+    expect(seedPersonas).toHaveBeenCalledWith(personasFor('c@x.dk'), expect.any(Date), expect.any(Function));
+    expect(inserted.map((i) => i.row)).toEqual([
+      { coachId: 'coach-existing', athleteId: 'p1' },
+      { coachId: 'coach-existing', athleteId: 'p2' },
+      { coachId: 'coach-existing', athleteId: 'p3' },
+    ]);
+    // Found through the account's email, and it is the coach row that comes back.
+    expect(selectShapes).toEqual([{ id: coach.id }]);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^topped up c@x\.dk with 3 personas$/));
+  });
+
+  it('refuses an email with no coach row behind it, before writing anything', async () => {
+    selectResults.push([]);
+    await expect(main(['--personas-only', '--email', 'ghost@x.dk'])).rejects.toThrow(
+      /no coach account for ghost@x\.dk/,
+    );
+    expect(seedPersonas).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('guards the database first, like every other path', async () => {
+    selectResults.push([{ id: 'coach-existing' }]);
+    await main(['--personas-only', '--email', 'c@x.dk']);
+    expect(guardDatabase).toHaveBeenCalledWith(process.env.DATABASE_URL, ['--personas-only', '--email', 'c@x.dk']);
+    expect(guardDatabase.mock.invocationCallOrder[0]).toBeLessThan(select.mock.invocationCallOrder[0]);
   });
 });

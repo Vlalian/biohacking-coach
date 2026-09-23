@@ -1,10 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { generatePassword, isDuplicateUser, parseMintArgs, planMint, registerLine, renderWelcome } from './mint';
+import {
+  generatePassword,
+  isDuplicateUser,
+  parseMintArgs,
+  planMint,
+  registerLine,
+  renderWelcome,
+  type MintRequest,
+} from './mint';
 
 /**
  * The tester-kit's pure core (showable-version/04): what a login for one
  * tester is, before anything touches a database.
  */
+/** One request, with only what a case actually varies spelled out. */
+const request = (over: Partial<MintRequest> = {}): MintRequest => ({
+  name: 'S',
+  email: 's@x.dk',
+  coach: false,
+  personas: false,
+  personasOnly: false,
+  athletes: [],
+  ...over,
+});
+
 describe('generatePassword', () => {
   it('makes a long password from the unambiguous alphabet, different every time', () => {
     const pw = generatePassword();
@@ -49,7 +68,7 @@ describe('parseMintArgs', () => {
   it('an athlete is the default: no coach, no athletes, no personas', () => {
     expect(parseMintArgs(['--name', 'Sarah', '--email', 's@x.dk'])).toEqual({
       ok: true,
-      request: { name: 'Sarah', email: 's@x.dk', coach: false, personas: false, athletes: [] },
+      request: request({ name: 'Sarah' }),
     });
   });
 
@@ -77,16 +96,60 @@ describe('parseMintArgs', () => {
   });
 });
 
+describe('parseMintArgs — --personas-only (the recovery path, ruled 2026-09-23)', () => {
+  it('is in the usage line, so a reader finds the way back without the ticket', () => {
+    const { usage } = parseMintArgs(['--bogus']) as { usage: string };
+    expect(usage).toContain('mint-tester.ts --personas-only --email <coach email>');
+  });
+
+  it('needs only an email: the account already exists, so there is nobody to name', () => {
+    expect(parseMintArgs(['--personas-only', '--email', 'c@x.dk'])).toEqual({
+      ok: true,
+      request: { name: '', email: 'c@x.dk', coach: true, personas: true, personasOnly: true, athletes: [] },
+    });
+  });
+
+  it('refuses it without an email, and refuses it alongside flags it would ignore', () => {
+    expect(parseMintArgs(['--personas-only'])).toMatchObject({
+      ok: false,
+      usage: expect.stringMatching(/^--email is required/),
+    });
+    expect(parseMintArgs(['--personas-only', '--email', 'c@x.dk', '--athletes', 'a@x.dk'])).toMatchObject({
+      ok: false,
+      usage: expect.stringMatching(/^--personas-only tops up an existing coach: it takes --email alone/),
+    });
+    for (const extra of [
+      ['--name', 'C'],
+      ['--athletes', 'a@x.dk'],
+      ['--coach'],
+      ['--personas'],
+    ]) {
+      expect(parseMintArgs(['--personas-only', '--email', 'c@x.dk', ...extra])).toMatchObject({
+        ok: false,
+        usage: expect.stringMatching(/^--personas-only tops up an existing coach: it takes --email alone/),
+      });
+    }
+  });
+
+  it('still lets the guard flag through', () => {
+    expect(parseMintArgs(['--personas-only', '--email', 'c@x.dk', '--production'])).toMatchObject({ ok: true });
+  });
+});
+
 describe('planMint', () => {
   it('plans an athlete as one signUp', () => {
-    expect(planMint({ name: 'S', email: 's@x.dk', coach: false, personas: false, athletes: [] })).toEqual([
-      { kind: 'signUp' },
-    ]);
+    expect(planMint(request())).toEqual([{ kind: 'signUp' }]);
+  });
+
+  it('plans a top-up as the seed and three links — no signup, no coach row, no file', () => {
+    const steps = planMint(request({ name: '', email: 'C@X.dk', coach: true, personas: true, personasOnly: true }));
+    expect(steps.map((s) => s.kind)).toEqual(['seedPersonas', 'linkPersona', 'linkPersona', 'linkPersona']);
+    expect(steps[0]).toEqual({ kind: 'seedPersonas', ownerKey: 'c@x.dk' });
   });
 
   it('plans the coach as signUp, ensureCoach, then one link per athlete', () => {
     expect(
-      planMint({ name: 'C', email: 'c@x.dk', coach: true, personas: false, athletes: ['a@x.dk', 'b@x.dk'] }).map(
+      planMint(request({ name: 'C', email: 'c@x.dk', coach: true, athletes: ['a@x.dk', 'b@x.dk'] })).map(
         (s) => s.kind,
       ),
     ).toEqual(['signUp', 'ensureCoach', 'linkAthlete', 'linkAthlete']);
@@ -94,7 +157,7 @@ describe('planMint', () => {
 
   // code-health/18
   it('plans a coach with personas as signUp, ensureCoach, seedPersonas, three links, then the athlete links', () => {
-    const steps = planMint({ name: 'C', email: 'C@X.dk', coach: true, personas: true, athletes: ['a@x.dk'] });
+    const steps = planMint(request({ name: 'C', email: 'C@X.dk', coach: true, personas: true, athletes: ['a@x.dk'] }));
     expect(steps.map((s) => s.kind)).toEqual([
       'signUp',
       'ensureCoach',
@@ -117,7 +180,7 @@ describe('planMint', () => {
 describe('registerLine', () => {
   it('registers who and when — and has no way to write the secret, because it is never given it', () => {
     const line = registerLine(
-      { name: 'Sarah', email: 's@x.dk', coach: false, personas: false, athletes: [] },
+      request({ name: 'Sarah' }),
       new Date('2026-09-18T10:00Z'),
     );
     expect(line).toBe('| 2026-09-18 | Sarah | s@x.dk | athlete |');
@@ -125,7 +188,7 @@ describe('registerLine', () => {
 
   it('does not call an athlete a persona coach, whatever else is set', () => {
     const line = registerLine(
-      { name: 'Tom', email: 't@x.dk', coach: true, personas: false, athletes: ['a@x.dk'] },
+      request({ name: 'Tom', email: 't@x.dk', coach: true, athletes: ['a@x.dk'] }),
       new Date('2026-09-18T10:00Z'),
     );
     expect(line).toBe('| 2026-09-18 | Tom | t@x.dk | coach — coaches a@x.dk |');
@@ -133,7 +196,7 @@ describe('registerLine', () => {
 
   it('names a coach as such, with what they coach', () => {
     const line = registerLine(
-      { name: 'Tom', email: 't@x.dk', coach: true, personas: true, athletes: ['a@x.dk'] },
+      request({ name: 'Tom', email: 't@x.dk', coach: true, personas: true, athletes: ['a@x.dk'] }),
       new Date('2026-09-18T10:00Z'),
     );
     expect(line).toBe('| 2026-09-18 | Tom | t@x.dk | coach — coaches personas, a@x.dk |');

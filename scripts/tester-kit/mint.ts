@@ -30,16 +30,25 @@ export interface MintRequest {
   coach: boolean;
   /** Seed this coach their own copy of the three personas (code-health/18). */
   personas: boolean;
+  /**
+   * Top up an existing coach rather than mint a new one: no signup, no welcome
+   * email, no register line — just their three personas again. `retire-personas`
+   * erases every coach's copies at once, so this is the way back from one
+   * command mid-round (ruled 2026-09-23).
+   */
+  personasOnly: boolean;
   /** Emails of existing athlete accounts to link to this coach. */
   athletes: string[];
 }
 
 export type MintArgs = { ok: true; request: MintRequest } | { ok: false; usage: string };
 
-export const USAGE =
-  'usage: mint-tester.ts --name <name> --email <email> [--coach (--athletes a@x,b@y | --personas)] [--production]';
+export const USAGE = [
+  'usage: mint-tester.ts --name <name> --email <email> [--coach (--athletes a@x,b@y | --personas)] [--production]',
+  '       mint-tester.ts --personas-only --email <coach email> [--production]',
+].join('\n');
 
-const FLAGS = new Set(['--coach', '--personas', '--production']);
+const FLAGS = new Set(['--coach', '--personas', '--personas-only', '--production']);
 const VALUES = new Set(['--name', '--email', '--athletes']);
 
 function refuse(why: string): MintArgs {
@@ -79,23 +88,44 @@ function checkCoachRules(request: MintRequest): string | null {
   return null;
 }
 
-export function parseMintArgs(argv: readonly string[]): MintArgs {
-  const seen = readArgv(argv);
-  if (typeof seen === 'string') return refuse(seen);
+/**
+ * A top-up names an account that already exists, so a name or an athlete list
+ * would be read as a request this path does not honour. Refuse rather than
+ * ignore them.
+ */
+function topUpFor(email: string, seen: ReadArgv): MintArgs {
+  if (seen.values.has('--name') || seen.values.has('--athletes') || seen.flags.has('--coach') || seen.flags.has('--personas')) {
+    return refuse('--personas-only tops up an existing coach: it takes --email alone');
+  }
+  return {
+    ok: true,
+    request: { name: '', email, coach: true, personas: true, personasOnly: true, athletes: [] },
+  };
+}
+
+/** A first mint: someone who does not have a login yet. */
+function mintFor(email: string, seen: ReadArgv): MintArgs {
   const name = seen.values.get('--name');
-  const email = seen.values.get('--email');
   if (!name) return refuse('--name is required');
-  if (!email) return refuse('--email is required');
 
   const request: MintRequest = {
     name,
     email,
     coach: seen.flags.has('--coach'),
     personas: seen.flags.has('--personas'),
+    personasOnly: false,
     athletes: (seen.values.get('--athletes') ?? '').split(',').filter((e) => e.length > 0),
   };
   const why = checkCoachRules(request);
   return why ? refuse(why) : { ok: true, request };
+}
+
+export function parseMintArgs(argv: readonly string[]): MintArgs {
+  const seen = readArgv(argv);
+  if (typeof seen === 'string') return refuse(seen);
+  const email = seen.values.get('--email');
+  if (!email) return refuse('--email is required');
+  return seen.flags.has('--personas-only') ? topUpFor(email, seen) : mintFor(email, seen);
 }
 
 /**
@@ -125,6 +155,9 @@ function personaSteps(request: MintRequest): MintStep[] {
 }
 
 export function planMint(request: MintRequest): MintStep[] {
+  // A top-up plans no account step at all: the coach exists, and the run looks
+  // them up by the email it was given rather than by a step repeating it.
+  if (request.personasOnly) return personaSteps(request);
   if (!request.coach) return [{ kind: 'signUp' }];
   return [
     { kind: 'signUp' },

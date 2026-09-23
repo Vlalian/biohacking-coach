@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { guardDatabase } from '../db-guard/protected-database';
 import { getDb } from '../../src/db';
@@ -27,12 +27,13 @@ import {
  * better-auth (the signup hook provisions the athlete row and the consent
  * gate still runs on first sign-in), a coach row and Coaching Links for a
  * Head Coach tester, their own copy of the three personas on `--personas`
- * (code-health/18), the filled welcome email under `.scratch/…/testers/`,
- * one line in the register, and the login printed once.
+ * (code-health/18), the filled welcome email outside every repo, one line in
+ * the register, and the login printed once.
  *
  *   npx tsx scripts/mint-tester.ts --name "Sarah" --email s@x.dk
  *   npx tsx scripts/mint-tester.ts --name "Tom" --email t@x.dk --coach --personas
  *   npx tsx scripts/mint-tester.ts --name "Tom" --email t@x.dk --coach --athletes s@x.dk
+ *   npx tsx scripts/mint-tester.ts --personas-only --email t@x.dk   # after a retire
  *
  * Refuses production without `--production` (db-guard). A duplicate email
  * stops the run before anything is filed. `scripts/mint-tester.ts` is the
@@ -42,7 +43,21 @@ import {
 // Beside this file, not under `docs/`: `docs/` is local-only by .gitignore,
 // and the template is source the kit cannot run without.
 const TEMPLATE = fileURLToPath(new URL('./welcome-email.md', import.meta.url));
-const TESTERS_DIR = join('.scratch', 'showable-version', 'testers');
+/**
+ * Where the register lives: with the rest of the tracker, because it carries no
+ * secret — a date, a name, an email, a role.
+ */
+const REGISTER_DIR = join('.scratch', 'showable-version', 'testers');
+
+/**
+ * Where the filled email lives: outside every git repo (ruling, 2026-09-23).
+ * The tracker is a git repo with a remote of its own, and this file holds the
+ * tester's password. It is temporary by intent, but it stays live until that
+ * tester changes it and nothing reports when they do — so it never enters a
+ * history that cannot be cleaned. `TESTER_EMAIL_DIR` overrides the default,
+ * which sits beside the checkout rather than inside it.
+ */
+const EMAIL_DIR = process.env.TESTER_EMAIL_DIR ?? join('..', 'tester-emails');
 
 export async function main(argv: string[]): Promise<void> {
   guardDatabase(process.env.DATABASE_URL, argv);
@@ -50,6 +65,11 @@ export async function main(argv: string[]): Promise<void> {
   if (!args.ok) throw new Error(args.usage);
   const { request } = args;
   const steps = planMint(request);
+
+  if (request.personasOnly) {
+    await topUp(steps, request.email);
+    return;
+  }
 
   // Every athlete resolved before any write: a typo in one email must not
   // leave a half-minted coach behind.
@@ -66,6 +86,32 @@ export async function main(argv: string[]): Promise<void> {
 
   file(request, password);
   console.log(`minted ${request.coach ? 'coach' : 'athlete'} ${request.email} ${password}`);
+}
+
+/**
+ * Gives a coach who already has a login their three personas back
+ * (`--personas-only`, ruled 2026-09-23). `retire-personas` erases every
+ * coach's copies at once, so without this the only way back from one command
+ * mid-round is hand SQL. Nothing is signed up, nothing is filed, and no
+ * register line is written: the account and its welcome email already exist.
+ */
+async function topUp(steps: MintStep[], email: string): Promise<void> {
+  const coachId = await findCoach(email);
+  const personaIds = await seedPlannedPersonas(steps, email);
+  await link(coachId, personaIds);
+  console.log(`topped up ${email.toLowerCase()} with ${personaIds.length} personas`);
+}
+
+/** The coach row behind an email that must already have one. */
+async function findCoach(email: string): Promise<string> {
+  const [row] = await getDb()
+    .select({ id: coach.id })
+    .from(coach)
+    .innerJoin(user, eq(coach.userId, user.id))
+    .where(eq(user.email, email))
+    .limit(1);
+  if (!row) throw new Error(`no coach account for ${email}; mint them first`);
+  return row.id;
 }
 
 /**
@@ -145,15 +191,18 @@ async function link(coachId: string, athleteIds: string[]): Promise<void> {
   }
 }
 
-/** The filled email beside the register; the password is in the email only. */
+/** The filled email, and the register line that never carries the password. */
 function file(request: MintRequest, password: string): void {
   const template = readFileSync(TEMPLATE, 'utf8');
   const email = renderWelcome(template, { name: request.name, email: request.email, password });
-  if (!existsSync(TESTERS_DIR)) mkdirSync(TESTERS_DIR, { recursive: true });
-  writeFileSync(join(TESTERS_DIR, `${slug(request.name)}.md`), email, 'utf8');
+  if (!existsSync(EMAIL_DIR)) mkdirSync(EMAIL_DIR, { recursive: true });
+  const emailPath = join(EMAIL_DIR, `${slug(request.name)}.md`);
+  writeFileSync(emailPath, email, 'utf8');
+  console.log(`filed ${resolve(emailPath)} — the password is in it; it is not in any repo`);
 
+  if (!existsSync(REGISTER_DIR)) mkdirSync(REGISTER_DIR, { recursive: true });
   // The first mint opens the register with its own header; later ones append.
-  const register = join(TESTERS_DIR, 'REGISTER.md');
+  const register = join(REGISTER_DIR, 'REGISTER.md');
   const opening = existsSync(register) ? '' : `${REGISTER_HEADER}\n`;
   appendFileSync(register, `${opening}${registerLine(request, new Date())}\n`, 'utf8');
 }
