@@ -68,11 +68,12 @@ describe('seedPersonas', () => {
     upsertTargetRace.mockClear();
   });
 
-  it('writes one athlete row per profile with the given id and returns the ids in order', async () => {
+  it('writes one athlete row per profile and returns the ids in the order it was given them', async () => {
     const profiles = personasFor('c@x.dk');
     const log = vi.fn();
     const ids = await seedPersonas(profiles, NOW, log);
 
+    // The order is the contract the mint kit pairs labels back with.
     expect(ids).toEqual(profiles.map((p) => p.id));
     const athleteRows = inserted.filter((i) => i.table === athlete).map((i) => i.row);
     expect(athleteRows).toEqual(

@@ -31,13 +31,20 @@ import {
  * `scripts/retire-personas.ts` is the entry point.
  */
 
-/** The persona rows this database holds, each with what would cascade from it. */
+/**
+ * The persona rows this database holds, each with what would cascade from it.
+ *
+ * By label alone, ownerless or not: a labelled row that carries a `user_id` is
+ * what `planRetirement` refuses, and filtering it out here would leave the
+ * refusal unreachable — the run would erase the rest and never say that one of
+ * these names belongs to somebody. The delete re-checks ownership itself.
+ */
 async function findPersonas(): Promise<PersonaRow[]> {
   const db = getDb();
   const rows = await db
     .select({ id: athlete.id, syntheticLabel: athlete.syntheticLabel, userId: athlete.userId })
     .from(athlete)
-    .where(and(isNull(athlete.userId), inArray(athlete.syntheticLabel, [...RETIRED_PERSONA_LABELS])));
+    .where(inArray(athlete.syntheticLabel, [...RETIRED_PERSONA_LABELS]));
 
   const found: PersonaRow[] = [];
   for (const r of rows) {

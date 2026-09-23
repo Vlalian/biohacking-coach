@@ -18,7 +18,9 @@ import { upsertTargetRace } from '../../src/features/race/race-repository';
  * a Head Coach tester their own copy (code-health/18). Idempotent per profile
  * id: a rerun replaces the athlete row and its coach-origin sessions.
  *
- * Returns the ids to link, in profile order.
+ * Returns the ids it wrote, in the order of the profiles it was given — the
+ * one ordering promise a caller may rely on, and the reason a caller can pair
+ * each id back to the persona it belongs to.
  */
 export async function seedPersonas(
   profiles: readonly SyntheticProfile[],

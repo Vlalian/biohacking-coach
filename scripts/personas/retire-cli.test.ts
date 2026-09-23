@@ -65,13 +65,25 @@ describe('retire-personas CLI', () => {
     exit.mockClear();
   });
 
-  it('guards the database before reading it, and selects unowned rows by label', async () => {
+  it('guards the database before reading it, and selects by label', async () => {
     await main([]);
     expect(guardDatabase).toHaveBeenCalledWith(process.env.DATABASE_URL, []);
     expect(guardDatabase.mock.invocationCallOrder[0]).toBeLessThan(select.mock.invocationCallOrder[0]);
-    expect(isNull).toHaveBeenCalledWith(athlete.userId);
-    expect(inArray).toHaveBeenCalledWith(athlete.syntheticLabel, ['Alex Rivera', 'Sam Chen', 'Nadia Holm', 'Test Athlete']);
+    expect(vi.mocked(inArray)).toHaveBeenCalledWith(athlete.syntheticLabel, [
+      'Alex Rivera',
+      'Sam Chen',
+      'Nadia Holm',
+      'Test Athlete',
+    ]);
     expect(del).not.toHaveBeenCalled();
+  });
+
+  it('reads owned rows too, so the refusal has something to refuse', async () => {
+    // Filtering `user_id IS NULL` in the query would make `planRetirement`'s
+    // refusal unreachable: the run would erase the rest and never say that a
+    // labelled row belongs to somebody (review, 2026-09-22).
+    await main([]);
+    expect(vi.mocked(isNull)).not.toHaveBeenCalledWith(athlete.userId);
   });
 
   it('asks for what it prints: the row, then a count of each cascade', async () => {

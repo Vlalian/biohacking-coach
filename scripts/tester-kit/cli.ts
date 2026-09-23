@@ -16,6 +16,7 @@ import {
   parseMintArgs,
   planMint,
   registerLine,
+  REGISTER_HEADER,
   renderWelcome,
   type MintRequest,
   type MintStep,
@@ -59,17 +60,40 @@ export async function main(argv: string[]): Promise<void> {
   // Only a coach has links; an athlete's mint ends at the signup hook.
   if (steps.some((s) => s.kind === 'ensureCoach')) {
     const coachId = await ensureCoach(userId);
-    for (const step of steps) {
-      if (step.kind !== 'seedPersonas') continue;
-      const ids = await seedPersonas(personasFor(step.ownerKey), new Date(), console.log);
-      await link(coachId, ids);
-      console.log(`${request.name} holds their own copy of ${ids.length} personas.`);
-    }
-    await link(coachId, athleteIds);
+    const personaIds = await seedPlannedPersonas(steps, request.name);
+    await link(coachId, [...personaIds, ...athleteIds]);
   }
 
   file(request, password);
   console.log(`minted ${request.coach ? 'coach' : 'athlete'} ${request.email} ${password}`);
+}
+
+/**
+ * Runs the plan's `seedPersonas` step, then resolves each `linkPersona` step
+ * to the row the seed says carries that label. By label, not by position: the
+ * plan names personas and the seed reports names, so neither has to trust the
+ * other's ordering.
+ */
+async function seedPlannedPersonas(steps: MintStep[], testerName: string): Promise<string[]> {
+  const written = new Map<string, string>();
+  for (const step of steps) {
+    if (step.kind !== 'seedPersonas') continue;
+    const profiles = personasFor(step.ownerKey);
+    // `seedPersonas` returns the ids in the order of the profiles it was
+    // given, which is how each id finds the name it belongs to.
+    const ids = await seedPersonas(profiles, new Date(), console.log);
+    profiles.forEach((profile, i) => written.set(profile.syntheticLabel, ids[i]));
+    console.log(`${testerName} holds their own copy of ${ids.length} personas.`);
+  }
+
+  const ids: string[] = [];
+  for (const step of steps) {
+    if (step.kind !== 'linkPersona') continue;
+    const id = written.get(step.persona);
+    if (id === undefined) throw new Error(`the seed wrote no persona called ${step.persona}`);
+    ids.push(id);
+  }
+  return ids;
 }
 
 async function resolveAthletes(steps: MintStep[]): Promise<string[]> {
@@ -127,7 +151,11 @@ function file(request: MintRequest, password: string): void {
   const email = renderWelcome(template, { name: request.name, email: request.email, password });
   if (!existsSync(TESTERS_DIR)) mkdirSync(TESTERS_DIR, { recursive: true });
   writeFileSync(join(TESTERS_DIR, `${slug(request.name)}.md`), email, 'utf8');
-  appendFileSync(join(TESTERS_DIR, 'REGISTER.md'), `${registerLine(request, new Date(), password)}\n`, 'utf8');
+
+  // The first mint opens the register with its own header; later ones append.
+  const register = join(TESTERS_DIR, 'REGISTER.md');
+  const opening = existsSync(register) ? '' : `${REGISTER_HEADER}\n`;
+  appendFileSync(register, `${opening}${registerLine(request, new Date())}\n`, 'utf8');
 }
 
 /**

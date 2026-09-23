@@ -115,11 +115,10 @@ describe('planMint', () => {
 });
 
 describe('registerLine', () => {
-  it('registers who and when, never the secret', () => {
+  it('registers who and when — and has no way to write the secret, because it is never given it', () => {
     const line = registerLine(
       { name: 'Sarah', email: 's@x.dk', coach: false, personas: false, athletes: [] },
       new Date('2026-09-18T10:00Z'),
-      'SECRETpw12345678',
     );
     expect(line).toBe('| 2026-09-18 | Sarah | s@x.dk | athlete |');
   });
@@ -128,7 +127,6 @@ describe('registerLine', () => {
     const line = registerLine(
       { name: 'Tom', email: 't@x.dk', coach: true, personas: false, athletes: ['a@x.dk'] },
       new Date('2026-09-18T10:00Z'),
-      'pw',
     );
     expect(line).toBe('| 2026-09-18 | Tom | t@x.dk | coach — coaches a@x.dk |');
   });
@@ -137,7 +135,6 @@ describe('registerLine', () => {
     const line = registerLine(
       { name: 'Tom', email: 't@x.dk', coach: true, personas: true, athletes: ['a@x.dk'] },
       new Date('2026-09-18T10:00Z'),
-      'pw',
     );
     expect(line).toBe('| 2026-09-18 | Tom | t@x.dk | coach — coaches personas, a@x.dk |');
   });

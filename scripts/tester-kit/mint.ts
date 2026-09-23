@@ -135,12 +135,11 @@ export function planMint(request: MintRequest): MintStep[] {
 }
 
 /**
- * What the register records: who, which role, what they coach, when — never
- * the password. The signature takes it anyway so the test can prove it stays
- * out; the register is the one file that outlives the round.
+ * What the register records: who, which role, what they coach, when. The
+ * password is not a parameter, which is the strongest form of "never written
+ * here" available — the register is the one file that outlives the round.
  */
-export function registerLine(request: MintRequest, mintedAt: Date, password: string): string {
-  void password;
+export function registerLine(request: MintRequest, mintedAt: Date): string {
   const role = request.coach ? 'coach' : 'athlete';
   const coaches = [
     ...(request.personas ? ['personas'] : []),
@@ -187,3 +186,6 @@ export function isDuplicateUser(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return /exist|already/i.test(message);
 }
+
+/** The header a new register opens with, so the rows beneath it read as a table. */
+export const REGISTER_HEADER = ['| Minted | Name | Email | Role |', '| --- | --- | --- | --- |'].join('\n');

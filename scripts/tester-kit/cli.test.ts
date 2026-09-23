@@ -135,10 +135,24 @@ describe('mint-tester CLI', () => {
     expect(printed[0]).toContain('s@x.dk');
   });
 
-  it('creates the testers folder the first time', async () => {
-    existsSync.mockReturnValueOnce(false);
+  it('creates the testers folder the first time, and opens the register with a header', async () => {
+    existsSync.mockReturnValue(false);
     await main(['--name', 'S', '--email', 's@x.dk']);
     expect(mkdirSync).toHaveBeenCalledWith(expect.stringMatching(/testers$/), { recursive: true });
+    expect(appendFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/REGISTER\.md$/),
+      expect.stringMatching(/^\| Minted \| Name \| Email \| Role \|\n\| --- \| --- \| --- \| --- \|\n\| \d{4}-/),
+      'utf8',
+    );
+  });
+
+  it('appends one row to a register that exists, with nothing in front of it', async () => {
+    await main(['--name', 'S', '--email', 's@x.dk']);
+    expect(appendFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/REGISTER\.md$/),
+      expect.stringMatching(/^\| \d{4}-\d{2}-\d{2} \| S \| s@x\.dk \| athlete \|\n$/),
+      'utf8',
+    );
   });
 
   it('prints one line naming the role and the login', async () => {
@@ -226,6 +240,21 @@ describe('mint-tester CLI', () => {
     selectResults.push([{ id: 'ath-a' }], []);
     await expect(main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk'])).rejects.toThrow(
       /coach row missing/,
+    );
+  });
+
+  it('links the persona each plan step names, through the ids the seed wrote', async () => {
+    // The plan lists labels and the seed returns ids in profile order; the run
+    // pairs them, so a plan step that names nobody stops it (review, 2026-09-22).
+    await main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--personas']);
+    expect(seedPersonas).toHaveBeenCalledWith(personasFor('c@x.dk'), expect.any(Date), expect.any(Function));
+    expect(inserted.slice(1).map((i) => (i.row as { athleteId: string }).athleteId)).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('stops if the seed wrote fewer personas than the plan asked to link', async () => {
+    seedPersonas.mockResolvedValueOnce(['alex-id']);
+    await expect(main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--personas'])).rejects.toThrow(
+      /the seed wrote no persona called Sam Chen/,
     );
   });
 
