@@ -77,7 +77,13 @@ vi.mock('@/features/information-view/information-view-repository', () => ({
 vi.mock('@/features/availability/availability-repository', () => ({
   getUnavailableDates,
 }));
-vi.mock('@/features/health/health-repository', () => ({ getHealthHistory }));
+const getOpenInjuries = vi.fn(async (): Promise<unknown[]> => []);
+const getOpenIllnesses = vi.fn(async (): Promise<unknown[]> => []);
+vi.mock('@/features/health/health-repository', () => ({
+  getHealthHistory,
+  getOpenInjuries,
+  getOpenIllnesses,
+}));
 
 const { getCoachAthleteView } = await import('./roster-service');
 
@@ -164,6 +170,68 @@ describe('getCoachAthleteView — the health layer (training-architecture/06)', 
         name: null, openedAt: new Date('2026-08-01T08:00:00Z'),
       },
     ]);
+  });
+
+  it('derives what is open for the header badge: open records only, and null when withheld', async () => {
+    // The badge says what is open *now* — a healed injury is history and belongs
+    // in the drawer, not beside the athlete's name (showable-version/28b).
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: [] });
+    getHealthHistory.mockResolvedValue({
+      injuries: [
+        {
+          id: 'inj_open', athleteId: 'a1', swim: 'full', bike: 'easy', run: 'none', name: 'left knee',
+          openedAt: new Date('2026-08-01T08:00:00Z'), closedAt: null, bother: 3,
+        },
+        {
+          id: 'inj_healed', athleteId: 'a1', swim: 'full', bike: 'full', run: 'full', name: 'shin',
+          openedAt: new Date('2026-07-01T08:00:00Z'), closedAt: new Date('2026-07-20T08:00:00Z'), bother: 1,
+        },
+      ],
+      illnesses: [
+        { id: 'ill_open', athleteId: 'a1', openedAt: new Date('2026-08-05T08:00:00Z'), closedAt: null, bother: null },
+      ],
+    });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(view!.openHealth).toEqual({ injuries: ['left knee'], ill: true });
+
+    // An open injury is not an illness: with no open illness the athlete is
+    // injured and well, and the badge must not say otherwise.
+    getHealthHistory.mockResolvedValue({
+      injuries: [
+        {
+          id: 'inj_open', athleteId: 'a1', swim: 'full', bike: 'easy', run: 'none', name: 'left knee',
+          openedAt: new Date('2026-08-01T08:00:00Z'), closedAt: null, bother: 3,
+        },
+      ],
+      illnesses: [],
+    });
+    const injuredOnly = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(injuredOnly!.openHealth).toEqual({ injuries: ['left knee'], ill: false });
+
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    const withheld = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(withheld!.openHealth).toBeNull();
+  });
+
+  it('says nothing is open when every record is healed', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, false));
+    getInformationViewInputs.mockResolvedValue({ rows: [], streams: [] });
+    getHealthHistory.mockResolvedValue({
+      injuries: [
+        {
+          id: 'inj_healed', athleteId: 'a1', swim: 'full', bike: 'full', run: 'full', name: 'shin',
+          openedAt: new Date('2026-07-01T08:00:00Z'), closedAt: new Date('2026-07-20T08:00:00Z'), bother: 1,
+        },
+      ],
+      illnesses: [
+        { id: 'ill_over', athleteId: 'a1', openedAt: new Date('2026-07-02T08:00:00Z'), closedAt: new Date('2026-07-06T08:00:00Z'), bother: null },
+      ],
+    });
+
+    const view = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(view!.openHealth).toEqual({ injuries: [], ill: false });
   });
 });
 
@@ -483,6 +551,41 @@ describe('getCoachAthleteView.draftInFlight — the preview area says a draft is
     expect((await getCoachAthleteView('coach_1', 'a1', '2026-09-15'))!.draftInFlight).toBeNull();
     draftInFlight.mockResolvedValue({ weekStart: THIS_WEEK, visibleFrom: '2026-09-15', expectedSeconds: 30 });
     expect((await getCoachAthleteView('coach_1', 'a1', '2026-09-15'))!.draftInFlight).toBeNull();
+  });
+});
+
+describe('getRosterWithReviews — the open records behind the Link Visibility gate', () => {
+  it('lists an athlete’s open injuries and illness for the roster, and null when reports are withheld', async () => {
+    const { getRosterWithReviews } = await import('./roster-service');
+    getRoster.mockResolvedValue([{ athleteId: 'a1', name: 'Anna', link: activeLink(true, false) }]);
+    getOpenInjuries.mockResolvedValue([{ id: 'i1', name: 'left knee' }]);
+    getOpenIllnesses.mockResolvedValue([{ id: 'l1' }]);
+
+    const [entry] = await getRosterWithReviews('coach_1', '2026-09-15');
+    expect(entry.openHealth).toEqual({ injuries: ['left knee'], ill: true });
+
+    // Withheld: null, and the records are never read — the same discipline
+    // `getCoachAthleteView` applies, so absence cannot be told from health.
+    vi.clearAllMocks();
+    getRoster.mockResolvedValue([{ athleteId: 'a1', name: 'Anna', link: activeLink(false, false) }]);
+    const [withheld] = await getRosterWithReviews('coach_1', '2026-09-15');
+    expect(withheld.openHealth).toBeNull();
+    expect(getOpenInjuries).not.toHaveBeenCalled();
+    expect(getOpenIllnesses).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the generic label for an injury with no name', async () => {
+    const { getRosterWithReviews } = await import('./roster-service');
+    getRoster.mockResolvedValue([{ athleteId: 'a1', name: 'Anna', link: activeLink(true, false) }]);
+    // `injury.name` is nullable — migration 0028 made it optional, and an
+    // athlete who never named one still has an open injury worth a badge.
+    getOpenInjuries.mockResolvedValue([{ id: 'i1', name: null }]);
+    getOpenIllnesses.mockResolvedValue([]);
+
+    const [entry] = await getRosterWithReviews('coach_1', '2026-09-15');
+    // The null travels as null — naming it is the badge's job, because the word
+    // is a translation and this module renders none.
+    expect(entry.openHealth).toEqual({ injuries: [null], ill: false });
   });
 });
 

@@ -217,11 +217,17 @@ export function Calendar({
   unavailableDates: string[];
   /**
    * The athlete's Injuries and Illnesses, open and closed, drawn as a layer
-   * beside the plan (`training-architecture/06`). Empty by default so a caller
-   * with nothing to show — or a Head Coach the athlete has not shared their
-   * reports with — renders exactly the calendar it always did.
+   * beside the plan (`training-architecture/06`).
+   *
+   * `[]` is *nothing recorded* and reads as a clean week. **`null` is
+   * *withheld*** — a Head Coach the athlete has not shared their reports with —
+   * and draws no layer at all: no marks, no status area, no drawer. The two
+   * cannot collapse into one, or a coach could tell "no injuries" from "not
+   * shared" and infer health from absence, which is the inference
+   * `roster-service.ts` refuses to allow by not even fetching the records
+   * (`showable-version/28b`).
    */
-  health?: HealthSpan[];
+  health?: HealthSpan[] | null;
   /** Passed through to the Session Drawer, which offers undo on these. Empty
    *  by default so the Head Coach's read-only calendar needs no extra read. */
   importedSessionIds?: string[];
@@ -524,7 +530,7 @@ export function Calendar({
         <RatingModal session={ratingSession} onClose={() => setRatingSession(null)} />
       )}
 
-      {healthDrawer.open && (
+      {healthDrawer.open && health && (
         <HealthDrawer
           state={healthDrawer}
           spans={health}
@@ -566,7 +572,8 @@ function WeekRow({
   expanded: boolean;
   readOnly: boolean;
   /** Every span, open and closed: the marks on a session outlive the record (28a). */
-  health: HealthSpan[];
+  /** Null when the athlete withholds their reports — the row then draws no health at all. */
+  health: HealthSpan[] | null;
   /** Opens the Health Drawer on the newest open record of that kind. */
   onOpenHealth: (kind: 'injury' | 'illness') => void;
   /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
@@ -602,40 +609,41 @@ function WeekRow({
     timeZone: 'UTC',
   }).format(new Date(`${week.isoWeekStart}T00:00:00Z`));
 
-  const status = weekStatus(
-    week.days.map((d) => d.date),
-    health,
-    todayKey,
-  );
+  const status = health && weekStatus(week.days.map((d) => d.date), health, todayKey);
 
   return (
     <div>
       {/* The health status area, above the seven day cells and beside the plan
           (training-architecture/06 → showable-version/28a, Mads 2026-09-18).
-          Always shown, so a clean week reads "healthy · uninjured" rather than
-          showing nothing: two statuses, each a door into the Health Drawer.
+          Shown on every week the athlete can see, so a clean one reads
+          "healthy · uninjured" rather than showing nothing: two statuses, each
+          a door into the Health Drawer. Absent entirely when the layer is
+          withheld (`health` null), because "uninjured" is a claim and a coach
+          who was not shown the records has not been told it (28b).
           The illness band and the injury chip it replaces are gone; what a
           record covered now shows on the sessions themselves (`Marks`).
           Muted, never red — the point is "no alarm, no demand for an
           explanation"; the open status carries the signal colour and nothing
           more. */}
-      <div
-        data-health-status={week.isoWeekStart}
-        className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1 md:pl-[64px]"
-      >
-        <StatusButton
-          kind="injury"
-          active={status.injured}
-          label={status.injured ? t('statusInjured') : t('statusUninjured')}
-          onClick={() => onOpenHealth('injury')}
-        />
-        <StatusButton
-          kind="illness"
-          active={status.ill}
-          label={status.ill ? t('statusIll') : t('statusHealthy')}
-          onClick={() => onOpenHealth('illness')}
-        />
-      </div>
+      {status && (
+        <div
+          data-health-status={week.isoWeekStart}
+          className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1 md:pl-[64px]"
+        >
+          <StatusButton
+            kind="injury"
+            active={status.injured}
+            label={status.injured ? t('statusInjured') : t('statusUninjured')}
+            onClick={() => onOpenHealth('injury')}
+          />
+          <StatusButton
+            kind="illness"
+            active={status.ill}
+            label={status.ill ? t('statusIll') : t('statusHealthy')}
+            onClick={() => onOpenHealth('illness')}
+          />
+        </div>
+      )}
       {/* `CONTEXT.md`, Expanded Week: "Tapping a week row toggles it." Only the
           date label was a button, so the row and the glossary disagreed.
 
@@ -682,7 +690,7 @@ function WeekRow({
           // The icons every recorded session on this day carries (28a): an
           // injury or illness whose span covers the day. Proposed sessions
           // are the future and carry none.
-          const marks = marksFor(day.date, health, todayKey);
+          const marks = health ? marksFor(day.date, health, todayKey) : [];
           const isHover = hoverDate === day.date && Boolean(dragging);
           const isBounce = bounce?.date === day.date;
 

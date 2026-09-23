@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import { loadCoachAthlete } from './coach-athlete-guard';
 import { AthleteTabs } from './athlete-tabs';
+import { HealthBadge } from '../../health-badge';
 
 // Per-request: depends on the signed-in coach and the requested athlete, and
 // must never be prerendered or cached across coaches.
@@ -28,11 +29,17 @@ export default async function CoachAthleteLayout({
   if (!context.ok) return <>{children}</>;
 
   const t = await getTranslations('Roster');
+  const tHealth = await getTranslations('HealthDrawer');
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 p-6 sm:p-8">
       <header className="flex w-full flex-col items-center gap-1">
         <h1 className="text-2xl font-semibold">{context.view.athleteName}</h1>
+        <HealthBadge
+          openHealth={context.view.openHealth}
+          injuryLabel={tHealth('injuryLabel')}
+          illLabel={tHealth('illnessLabel')}
+        />
         <Link href="/coach" className="text-sm text-blue-500 underline">
           {t('backToRoster')}
         </Link>

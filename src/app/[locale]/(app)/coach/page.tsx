@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { getCoachByUserId } from '@/features/coach/coach-repository';
 import { getRosterWithReviews } from '@/features/coach/roster-service';
 import { today } from '@/lib/date';
+import { HealthBadge } from './health-badge';
 
 // Per-request: the page depends on who is signed in, so it is never prerendered.
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,9 @@ export default async function CoachRosterPage({
   }
 
   const t = await getTranslations('Roster');
+  // The words for an open record are the Health Drawer's — one vocabulary for
+  // an injury and an illness, wherever they are named (`showable-version/28b`).
+  const tHealth = await getTranslations('HealthDrawer');
   const coach = await getCoachByUserId(session!.user.id);
 
   // A user with no coach row is not a coach — the Roster is not their page.
@@ -63,6 +67,11 @@ export default async function CoachRosterPage({
               >
                 <span className="font-medium">{entry.name}</span>
                 <span className="flex gap-2 text-xs text-neutral-500">
+                  <HealthBadge
+                    openHealth={entry.openHealth}
+                    injuryLabel={tHealth('injuryLabel')}
+                    illLabel={tHealth('illnessLabel')}
+                  />
                   {entry.awaitingReview && (
                     <span className="rounded-full border border-signal px-2 py-0.5 text-signal">
                       {t('weekToReview')}
