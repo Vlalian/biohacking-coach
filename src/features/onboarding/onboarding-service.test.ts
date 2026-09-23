@@ -3,6 +3,8 @@ import type { Athlete } from '@/features/athlete/athlete';
 
 const {
   createRace,
+  replacePastRaces,
+  ensureBlockFilled,
   mergeAthleteProfile,
   completeAthleteOnboarding,
   appendMessages,
@@ -26,13 +28,16 @@ const {
   getLatestOpenConversation: vi.fn(async () => null),
   getMessages: vi.fn(async () => []),
   createRace: vi.fn(async () => undefined),
+  replacePastRaces: vi.fn(async () => undefined),
+  ensureBlockFilled: vi.fn(async () => 'filled'),
 }));
 
 vi.mock('@/features/athlete/athlete-repository', () => ({
   mergeAthleteProfile,
   completeAthleteOnboarding,
 }));
-vi.mock('@/features/race/race-repository', () => ({ createRace }));
+vi.mock('@/features/race/race-repository', () => ({ createRace, replacePastRaces }));
+vi.mock('@/features/coach/block-fill-service', () => ({ ensureBlockFilled }));
 vi.mock('@/features/coach/conversation-repository', () => ({
   appendMessages,
   createConversation,
@@ -45,6 +50,9 @@ const { answerOnboardingStep, getOnboardingState } = await import(
   './onboarding-service'
 );
 
+const TODAY = '2026-09-21';
+const HALF = { distance: 'Half' as const, date: '2025-08-16', finishSeconds: 18720, note: null };
+
 function athlete(overrides: Partial<Athlete> = {}): Athlete {
   return {
     id: 'athlete_1',
@@ -53,6 +61,7 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     communicationStyle: null,
     raceTarget: null,
     raceDistance: null,
+    hoursPerWeek: null,
     trainingSessionsPerWeek: null,
     profile: null,
     ...overrides,
@@ -70,6 +79,7 @@ describe('answerOnboardingStep', () => {
       { step: 'language', language: 'fr' },
       { question: 'q', answer: 'a' },
       'greeting',
+      TODAY,
     );
     expect(result).toEqual({ ok: false, reason: 'invalid' });
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
@@ -82,6 +92,7 @@ describe('answerOnboardingStep', () => {
       { step: 'language', language: 'da' },
       { question: 'Which language?', answer: 'Dansk' },
       'greeting',
+      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -110,8 +121,10 @@ describe('answerOnboardingStep', () => {
       profile: {
         onboardingAnswers: {
           language: 'da',
+          pastRaces: [HALF],
           experienceLevel: 'intermediate',
           raceDistance: 'Full',
+          hoursPerWeek: 8,
           raceTarget: 'Ironman Copenhagen',
           raceDate: '2026-08-30',
           hasHumanCoach: 'Yes',
@@ -127,6 +140,7 @@ describe('answerOnboardingStep', () => {
       // Name-free by contract: messages is a training-side table (ADR 0006);
       // the action persists coachGreeting('', race), never the personalized one.
       "I'm your Coach. Ironman Copenhagen is your target. Let's get to work.",
+      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -138,6 +152,8 @@ describe('answerOnboardingStep', () => {
       'athlete_1',
       {
         experienceLevel: 'intermediate',
+        hoursPerWeek: 8,
+        pastRaces: [HALF],
         communicationStyle: expect.stringContaining('The athlete'),
         raceDistance: 'Full',
         raceTarget: 'Ironman Copenhagen',
@@ -150,6 +166,19 @@ describe('answerOnboardingStep', () => {
       }),
     );
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
+    // The listed past races replace whatever was stored (training-architecture/35).
+    expect(replacePastRaces).toHaveBeenCalledWith('athlete_1', [HALF]);
+    // The calendar is full the first time the athlete opens it: the block is
+    // filled once the Target Race exists (`training-architecture/34`).
+    expect(ensureBlockFilled).toHaveBeenCalledWith('athlete_1', TODAY);
+    expect(ensureBlockFilled.mock.invocationCallOrder[0]).toBeGreaterThan(createRace.mock.invocationCallOrder[0]);
+    // The past races land before the athlete is marked onboarded: the stored
+    // `experienceLevel` is derived from that list's length, so the other order
+    // could put an athlete past the gate with a level their empty race list
+    // does not support (CodeRabbit, PR #98).
+    expect(replacePastRaces.mock.invocationCallOrder[0]).toBeLessThan(
+      completeAthleteOnboarding.mock.invocationCallOrder[0],
+    );
     // The Coach's greeting closes the transcript and the conversation ends.
     expect(appendMessages).toHaveBeenLastCalledWith('athlete_1', 'conv_1', [
       { role: 'coach_ai', content: expect.stringContaining("I'm your Coach") },
@@ -169,8 +198,10 @@ describe('answerOnboardingStep', () => {
       profile: {
         onboardingAnswers: {
           language: 'en',
+          pastRaces: [],
           experienceLevel: 'beginner',
           raceDistance: 'Olympic',
+          hoursPerWeek: 4,
           noRaceYet: true,
         },
         onboardingSubmitted: { name: true, adaptive: true },
@@ -182,6 +213,7 @@ describe('answerOnboardingStep', () => {
       { step: 'constraints' },
       { question: 'Any days you can never train?', answer: '—' },
       "I'm your Coach. Let's get to work.",
+      TODAY,
     );
 
     expect(result.ok).toBe(true);
@@ -194,6 +226,9 @@ describe('answerOnboardingStep', () => {
       expect.anything(),
     );
     expect(createRace).not.toHaveBeenCalled();
+    expect(replacePastRaces).toHaveBeenCalledWith('athlete_1', []);
+    // No race, no blocks — the fill is still asked and answers 'no-race'.
+    expect(ensureBlockFilled).toHaveBeenCalledWith('athlete_1', TODAY);
   });
 });
 
@@ -201,7 +236,7 @@ describe('getOnboardingState — resumption', () => {
   it('resumes at the first unanswered step with the stored answers', async () => {
     const midway = athlete({
       profile: {
-        onboardingAnswers: { language: 'en', experienceLevel: 'veteran' },
+        onboardingAnswers: { language: 'en', pastRaces: [HALF, HALF, HALF, HALF], experienceLevel: 'veteran' },
         onboardingSubmitted: { name: true },
       },
     });

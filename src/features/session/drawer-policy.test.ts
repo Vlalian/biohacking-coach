@@ -148,3 +148,18 @@ describe('headCoachDrawerPolicy', () => {
     }
   });
 });
+
+describe('an arithmetic session in the drawer (training-architecture/34)', () => {
+  const arithmetic = { origin: 'arithmetic', status: 'planned', date: '2026-10-07' };
+
+  it('is not the athlete’s to rewrite — the same answer the Coach’s own draft gets', () => {
+    expect(athleteDrawerPolicy(arithmetic).content).toBe(false);
+    expect(athleteDrawerPolicy({ ...arithmetic, origin: 'coach' }).content).toBe(
+      athleteDrawerPolicy(arithmetic).content,
+    );
+  });
+
+  it('is the Head Coach’s to rewrite', () => {
+    expect(headCoachDrawerPolicy(arithmetic, '2026-10-07').content).toBe(true);
+  });
+});

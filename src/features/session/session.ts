@@ -5,8 +5,13 @@ import type { SessionRow } from '@/db/schema';
  * `sessions_origin_valid` check constraint — mirrored here so the authority
  * checks that branch on it (only `'athlete'` content is athlete-editable) are
  * exhaustively typed rather than comparing against open strings.
+ *
+ * `arithmetic` is the structure's own (`training-architecture/34`): rows the
+ * block arithmetic wrote so the calendar is full beyond this week. They are
+ * the plan, not the athlete's — the Head Coach edits and moves them, the
+ * athlete does not — and the Coach's weekly draft replaces them as it lands.
  */
-export const SESSION_ORIGINS = ['coach', 'athlete', 'garmin', 'head_coach'] as const;
+export const SESSION_ORIGINS = ['coach', 'athlete', 'garmin', 'head_coach', 'arithmetic'] as const;
 export type SessionOrigin = (typeof SESSION_ORIGINS)[number];
 
 /** Narrows a stored `origin` column to the closed set, so authority checks

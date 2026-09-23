@@ -17,6 +17,7 @@ import {
 } from '@/features/onboarding/onboarding-service';
 import { coachGreeting, type StepAnswer } from '@/features/onboarding/onboarding-flow';
 import { answerText } from '@/features/onboarding/onboarding-transcript';
+import { today } from '@/lib/date';
 
 /**
  * Server action for MCQ onboarding.
@@ -41,8 +42,9 @@ type AuthFailure = { ok: false; reason: 'not-authenticated' };
 const STEP_QUESTION_KEY: Record<StepAnswer['step'], string> = {
   language: 'qLanguage',
   name: 'qName',
-  experience: 'qExperience',
+  pastRaces: 'qPastRaces',
   distance: 'qDistance',
+  hours: 'qHours',
   race: 'qRace',
   adaptive: 'qAdaptive',
   constraints: 'qConstraints',
@@ -117,6 +119,7 @@ export async function answerOnboardingAction(
     payload,
     { question: t(STEP_QUESTION_KEY[payload.step]), answer: answerText(payload) },
     `${stored.intro} ${stored.body}`,
+    today(),
   );
 
   if (!result.ok) return result;

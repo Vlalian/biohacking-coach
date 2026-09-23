@@ -82,7 +82,9 @@ export type ModelSurface =
   /** The background Training Block adjustment (`training-architecture/07`); no conversation. */
   | 'block_adjustment'
   /** The silent week draft (`training-architecture/16`); no conversation. */
-  | 'week_draft';
+  | 'week_draft'
+  /** The structure filling the block with sessions (`training-architecture/34`); no model call at all. */
+  | 'block_fill';
 
 export interface CoachFailure {
   surface: ModelSurface;

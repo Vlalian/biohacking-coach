@@ -3,7 +3,7 @@ import { weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
-import { getSessionsForWeek } from '@/features/session/session-repository';
+import { getArithmeticSessionsForWeek, getSessionsForWeek } from '@/features/session/session-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { openAiEmbedder } from '@/features/knowledge-oracle/embedder';
@@ -475,12 +475,17 @@ async function gatherContext(
   );
 
   const skeleton = weekSkeleton(window);
+  // The week the structure already wrote, if it wrote one
+  // (`training-architecture/34`): the Coach adjusts what the athlete has seen
+  // rather than inventing a week from a skeleton of roles.
+  const baseline = await getArithmeticSessionsForWeek(athleteId, weekStartOf(window.start));
   const grounding = await ground(athleteId, groundingFacts(athlete, horizon.blocks, today));
 
   const ctx = {
     ...buildWeeklyContext(checkIn, weekFeedbackFrom(weekSessions), unavailableDates, today),
     window,
     skeleton,
+    baseline,
     passages: grounding.passages,
     citations: grounding.citations,
   };

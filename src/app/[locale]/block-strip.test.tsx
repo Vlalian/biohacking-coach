@@ -41,7 +41,9 @@ describe('BlockStrip', () => {
     const html = renderToStaticMarkup(
       <BlockStrip todayKey={TODAY} race={RACE} blocks={trainingBlocks(TODAY, RACE.date)} />,
     );
-    expect(html).toContain('Block 1 of 4');
+    // The arithmetic names a block by what it is for now
+    // (`training-architecture/34`); the strip still renders the week inside it.
+    expect(html).toContain('Base');
   });
 
   it('renders nothing with no race, no blocks, or a day outside every block', () => {

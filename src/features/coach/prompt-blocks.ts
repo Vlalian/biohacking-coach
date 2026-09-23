@@ -38,9 +38,9 @@ export function buildOnboardingLines(onboarding?: Onboarding | null): string[] {
   // exact confusion the rename from `weeklyHours` existed to end. The intent
   // was documented in this comment and nowhere the model could see it. Now the
   // string says what it means.
-  if (onboarding.availableHours)
+  if (onboarding.hoursPerWeek != null)
     lines.push(
-      `Time available to train: ${onboarding.availableHours} per week ` +
+      `Time available to train: hours/week=${onboarding.hoursPerWeek} ` +
         `(a ceiling to plan within — not what they currently do)`,
     );
   if (onboarding.motivation) lines.push(`Motivation: ${onboarding.motivation}`);

@@ -49,6 +49,7 @@ const ATHLETE = {
   experienceLevel: 'intermediate',
   communicationStyle: null,
   raceTarget: 'Ironman Copenhagen',
+  hoursPerWeek: null,
   trainingSessionsPerWeek: null,
   profile: null,
 } as unknown as Parameters<typeof commitWeeklyPlan>[0];

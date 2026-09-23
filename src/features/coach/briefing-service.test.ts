@@ -140,6 +140,7 @@ describe('startBriefing — reports gated on shareAthleteReports (prompt materia
     getAthleteById.mockResolvedValue({
       experienceLevel: 'intermediate',
       raceTarget: 'IM Copenhagen',
+      hoursPerWeek: null,
       trainingSessionsPerWeek: 6,
       profile: { onboarding: null },
     });

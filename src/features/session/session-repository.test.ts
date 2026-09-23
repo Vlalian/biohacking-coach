@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, inArray } from 'drizzle-orm';
 import { sessions } from '@/db/schema';
 import type { SessionRow } from '@/db/schema';
 
@@ -7,7 +7,7 @@ import type { SessionRow } from '@/db/schema';
 // the filter must key on sessions.athlete_id with the id the caller passed.
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
-  return { ...actual, eq: vi.fn(actual.eq), asc: vi.fn(actual.asc) };
+  return { ...actual, eq: vi.fn(actual.eq), asc: vi.fn(actual.asc), inArray: vi.fn(actual.inArray) };
 });
 
 const orderBy = vi.fn();
@@ -25,7 +25,7 @@ vi.mock('@/db', () => ({
   }),
 }));
 
-const { getSessionsForAthlete, replaceCoachPlanForDateRange } = await import(
+const { getArithmeticSessionsForWeek, getSessionsForAthlete, replaceCoachPlanForDateRange, insertArithmeticSessions } = await import(
   './session-repository'
 );
 
@@ -156,13 +156,16 @@ describe('replaceCoachPlanForDateRange', () => {
     expect(eq).toHaveBeenCalledWith(sessions.status, 'planned');
   });
 
-  it('deletes only this athlete’s own Coach-authored sessions', async () => {
+  it('deletes only this athlete’s own Coach-authored and arithmetic sessions', async () => {
     await replaceCoachPlanForDateRange('athlete_1', '2026-08-17', '2026-08-23', []);
 
     expect(eq).toHaveBeenCalledWith(sessions.athleteId, 'athlete_1');
     // A Head Coach prescription is not the Coach's to replace, and this clause
-    // is the only thing protecting it.
-    expect(eq).toHaveBeenCalledWith(sessions.origin, 'coach');
+    // is the only thing protecting it. The structure's own rows are the
+    // Coach's to replace, though — that is what an accepted week does to them
+    // (`training-architecture/34`).
+    expect(inArray).toHaveBeenCalledWith(sessions.origin, ['coach', 'arithmetic']);
+    expect(eq).not.toHaveBeenCalledWith(sessions.origin, 'coach');
   });
 
   it('clears the range without a batch when the new plan is empty', async () => {
@@ -182,5 +185,92 @@ describe('replaceCoachPlanForDateRange', () => {
 
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch.mock.calls[0][0]).toHaveLength(2);
+  });
+});
+
+describe('insertArithmeticSessions — the structure writes its own rows (training-architecture/34)', () => {
+  const arith = {
+    date: '2026-10-11',
+    sport: 'bike' as const,
+    type: 'Endurance' as const,
+    durationMinutes: 144,
+    zone: 'Z2',
+    title: 'Long ride',
+    note: null,
+  };
+
+  it('inserts every row as a planned session of origin arithmetic, carrying its sport and title', async () => {
+    await insertArithmeticSessions('athlete_1', [arith]);
+
+    expect(insertValues).toHaveBeenCalledWith([
+      {
+        athleteId: 'athlete_1',
+        date: '2026-10-11',
+        origin: 'arithmetic',
+        status: 'planned',
+        sport: 'bike',
+        type: 'Endurance',
+        duration: 144,
+        zone: 'Z2',
+        title: 'Long ride',
+        note: null,
+        isTraining: true,
+      },
+    ]);
+  });
+
+  it('writes nothing at all when there are no rows', async () => {
+    insertValues.mockClear();
+    await insertArithmeticSessions('athlete_1', []);
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+});
+
+describe('getArithmeticSessionsForWeek — the baseline the Coach adjusts (training-architecture/34)', () => {
+  beforeEach(() => {
+    orderBy.mockReset();
+    where.mockClear();
+    vi.mocked(eq).mockClear();
+    vi.mocked(asc).mockClear();
+  });
+
+  it('asks only for this athlete’s planned arithmetic rows, in the week’s order', async () => {
+    orderBy.mockResolvedValue([]);
+
+    await getArithmeticSessionsForWeek('athlete_7', '2026-10-05');
+
+    expect(eq).toHaveBeenCalledWith(sessions.athleteId, 'athlete_7');
+    // A session the athlete already did is history, not a baseline; a session
+    // the Coach wrote is not the structure's to hand back as its own.
+    expect(eq).toHaveBeenCalledWith(sessions.origin, 'arithmetic');
+    expect(eq).toHaveBeenCalledWith(sessions.status, 'planned');
+    expect(asc).toHaveBeenCalledWith(sessions.date);
+    expect(asc).toHaveBeenCalledWith(sessions.dayOrder);
+  });
+
+  it('projects the prompt’s fields and nothing else, with a missing sport or title as an empty string', async () => {
+    orderBy.mockResolvedValue([
+      row({ date: '2026-10-06', sport: 'bike', type: 'Endurance', duration: 90, zone: 'Z2', title: 'Easy ride' }),
+      row({ date: '2026-10-07', sport: null, type: 'Tempo', duration: null, zone: null, title: null }),
+    ]);
+
+    const result = await getArithmeticSessionsForWeek('athlete_1', '2026-10-05');
+
+    expect(result[0]).toEqual({
+      date: '2026-10-06',
+      sport: 'bike',
+      type: 'Endurance',
+      durationMinutes: 90,
+      zone: 'Z2',
+      title: 'Easy ride',
+    });
+    expect(result[1]).toEqual({
+      date: '2026-10-07',
+      sport: '',
+      type: 'Tempo',
+      durationMinutes: null,
+      zone: null,
+      title: '',
+    });
   });
 });
