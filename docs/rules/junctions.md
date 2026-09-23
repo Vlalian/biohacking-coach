@@ -1,8 +1,14 @@
 # Junction the tracker. Never copy it.
 
-`.scratch/` and `docs/agents/` live in **one** place — the private docs repo at
-`C:\Users\madsk\bc-docs` — and every clone and worktree reaches them through a
-**junction**. They are the same directory, not a copy.
+`.scratch/`, `docs/agents/` and `.agents/` live in **one** place — the private
+docs repo at `C:\Users\madsk\bc-docs` — and every clone and worktree reaches
+them through a **junction**. They are the same directory, not a copy.
+
+`.agents/` joined them on 2026-09-22. It holds the agent skills, which are
+gitignored in this repo and were therefore tracked by nothing at all: a machine
+loss would have taken every skill with it. The main folder's `.agents` is now
+itself a junction into `bc-docs`, so the worktree junctions that point at the
+main folder (`New-Session.ps1`) resolve through to the one real directory.
 
 **Never restore them by copying.** A copy is a fork the moment either side is
 written to, and the fork is silent: both sides look right, and the one that dies
