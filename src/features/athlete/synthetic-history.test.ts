@@ -424,10 +424,15 @@ describe('Nadia Holm — the third persona (code-health/16)', () => {
       currentPhase(today, trainingBlocks(today, raceDateFor(p, TODAY))),
     );
     expect(phases.every((x) => x !== null)).toBe(true);
-    expect(new Set(phases).size).toBe(3);
+    // Since `training-architecture/34` a block is named for its purpose, so two
+    // long-horizon athletes are both in "Base" — the third is the one this test
+    // is about, and she is somewhere else entirely.
+    expect(phases[2]).not.toBe(phases[0]);
+    expect(phases[2]).not.toBe(phases[1]);
     // Six weeks out is the shortest horizon the arithmetic divides: two blocks,
-    // and today falls in the first of them.
-    expect(phases[2]).toBe('Block 1 of 2');
+    // and today falls in the first of them — the build block, since a horizon
+    // that short has no room for a base (`training-architecture/34`).
+    expect(phases[2]).toBe('Build');
   });
 
   it('leaves Alex and Sam exactly as they were', () => {

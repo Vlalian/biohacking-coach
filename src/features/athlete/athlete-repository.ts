@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { athlete } from '@/db/schema';
-import type { CompletedProfile } from '@/features/onboarding/onboarding-flow';
+import type { CompletedProfile, ExperienceLevel } from '@/features/onboarding/onboarding-flow';
 import { toAthlete, type Athlete, type AthleteProfile } from './athlete';
 
 /**
@@ -121,6 +121,18 @@ export async function updateRaceTarget(
   await getDb()
     .update(athlete)
     .set({ raceTarget, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
+ * The derived experience level, rewritten when the past-race list changes in
+ * Settings (`training-architecture/35`). Onboarding writes it through
+ * `completeAthleteOnboarding`; this is the only other writer.
+ */
+export async function updateExperienceLevel(athleteId: string, experienceLevel: ExperienceLevel): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ experienceLevel, updatedAt: new Date() })
     .where(eq(athlete.id, athleteId));
 }
 
@@ -256,6 +268,7 @@ export async function completeAthleteOnboarding(
       communicationStyle: completed.communicationStyle,
       raceTarget: completed.raceTarget,
       raceDistance: completed.raceDistance,
+      hoursPerWeek: completed.hoursPerWeek,
       profile: profileMergedWith(profileChanges),
       updatedAt: new Date(),
     })

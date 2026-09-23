@@ -131,7 +131,7 @@ describe('golden — the Coach Chat prompt', () => {
           equipment: [
             { id: 'e1', category: 'shoes', name: 'Vaporfly 3', details: null, addedDate: '2026-03-02' },
           ],
-          onboarding: { availableHours: '13–16h', motivation: 'first Ironman' },
+          onboarding: { hoursPerWeek: 14, motivation: 'first Ironman' },
         },
         TODAY,
         reference,
@@ -275,11 +275,10 @@ describe('golden — no Check-in has ever been given', () => {
     ],
     onboarding: {
       sportBackground: ['running'],
-      // `10–13h` is a real bucket from `ONBOARDING_OPTIONS.availableHours`. The
-      // field was `weeklyHours: '10-12'` when this branch was written; main
-      // renamed it and split the buckets, and a fixture that invents a value the
-      // onboarding cannot produce pins a prompt no athlete will ever see.
-      availableHours: '10–13h',
+      // An integer since training-architecture/35 (the buckets are gone): a
+      // fixture that invents a value the onboarding cannot produce pins a
+      // prompt no athlete will ever see.
+      hoursPerWeek: 12,
       motivation: 'finish under 11 hours',
     },
   };

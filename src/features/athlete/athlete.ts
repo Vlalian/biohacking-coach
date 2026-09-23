@@ -53,6 +53,8 @@ export type Athlete = {
    * asked", and the prompt says so rather than assuming one.
    */
   raceDistance: string | null;
+  /** Hours a week the athlete can train, or null for anyone onboarded before it was asked (35). */
+  hoursPerWeek: number | null;
   trainingSessionsPerWeek: number | null;
   profile: AthleteProfile | null;
 };
@@ -66,6 +68,7 @@ export function toAthlete(row: AthleteRow): Athlete {
     communicationStyle: row.communicationStyle,
     raceTarget: row.raceTarget,
     raceDistance: row.raceDistance,
+    hoursPerWeek: row.hoursPerWeek,
     trainingSessionsPerWeek: row.trainingSessionsPerWeek,
     profile: (row.profile as AthleteProfile | null) ?? null,
   };

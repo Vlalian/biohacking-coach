@@ -6,6 +6,8 @@ const getAthleteById = vi.fn();
 const getEquipmentItems = vi.fn();
 const getUnavailableDates = vi.fn();
 const getSessionsForWeek = vi.fn();
+type ArithmeticRow = { date: string; sport: string; type: string; durationMinutes: number | null; zone: string | null; title: string };
+const getArithmeticSessionsForWeek = vi.fn<() => Promise<ArithmeticRow[]>>(async () => []);
 const capacityFor = vi.fn();
 const assertAiCoachingConsent = vi.fn();
 const openAiEmbedder = vi.fn();
@@ -29,7 +31,7 @@ const getRoster = vi.fn();
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
-vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek }));
+vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek, getArithmeticSessionsForWeek }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('@/features/consent/consent-gate', () => ({ assertAiCoachingConsent }));
 vi.mock('@/features/knowledge-oracle/embedder', () => ({ openAiEmbedder }));
@@ -80,6 +82,7 @@ beforeEach(() => {
   });
   getEquipmentItems.mockResolvedValue([]);
   getUnavailableDates.mockResolvedValue([]);
+  getArithmeticSessionsForWeek.mockResolvedValue([]);
   // One coach-planned session in the current week by default: the cycle rule
   // (next week) is what most of these tests are about. The this-week rule
   // (training-architecture/24) has its own block below and clears this.
@@ -598,5 +601,37 @@ describe('draftLanded — the poll’s read (29, review)', () => {
     getWeekDraftHistory.mockRejectedValueOnce(new Error('driver down'));
     expect(await draftLanded(ATHLETE, NEXT_MON)).toBe(false);
     expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ surface: 'week_draft', athleteId: ATHLETE }));
+  });
+});
+
+describe('the draft is seeded with the week the structure already wrote (training-architecture/34)', () => {
+  const ROW = {
+    date: '2026-09-22',
+    sport: 'bike',
+    type: 'Endurance',
+    durationMinutes: 90,
+    zone: 'Z2',
+    title: 'Easy ride',
+  };
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+  });
+
+  it('reads the due week’s arithmetic sessions and hands them over as the baseline, not a skeleton', async () => {
+    getArithmeticSessionsForWeek.mockResolvedValue([ROW]);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(getArithmeticSessionsForWeek).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    const system = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('BASELINE WEEK');
+    expect(system).toContain('2026-09-22: bike Endurance 90 min Z2 — Easy ride');
+    expect(system).not.toContain('WEEK SKELETON');
+  });
+
+  it('falls back to the skeleton when the structure wrote nothing for that week', async () => {
+    getArithmeticSessionsForWeek.mockResolvedValue([]);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).toContain('WEEK SKELETON');
   });
 });

@@ -1,6 +1,7 @@
 import type { Onboarding } from '@/features/coach/check-in';
 import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
 import { isCalendarDate } from '@/lib/calendar-date';
+import { deriveExperienceLevel, parsePastRace, type PastRace } from './past-races';
 import { parsePreferredName } from '@/features/user-prefs/preferred-name';
 
 /**
@@ -34,8 +35,9 @@ import { parsePreferredName } from '@/features/user-prefs/preferred-name';
 export type OnboardingStepId =
   | 'language'
   | 'name'
-  | 'experience'
+  | 'pastRaces'
   | 'distance'
+  | 'hours'
   | 'race'
   | 'adaptive'
   | 'constraints';
@@ -43,8 +45,9 @@ export type OnboardingStepId =
 export const ONBOARDING_STEPS: OnboardingStepId[] = [
   'language',
   'name',
-  'experience',
+  'pastRaces',
   'distance',
+  'hours',
   'race',
   'adaptive',
   'constraints',
@@ -67,7 +70,19 @@ export type { RaceDistance };
 export interface OnboardingAnswers {
   /** UI locale code — 'en' or 'da'. Chosen first, applied immediately. */
   language?: string;
+  /**
+   * Derived from {@link pastRaces} (`training-architecture/35`), never asked:
+   * 0 finished races → beginner, 1–3 → intermediate, 4+ → veteran.
+   */
   experienceLevel?: ExperienceLevel;
+  /** The races the athlete has finished — zero or more; `[]` is an answer. */
+  pastRaces?: PastRace[];
+  /**
+   * Hours a week the athlete can realistically train, 1–30, asked and never
+   * suggested (Mads, 2026-09-19: "A and only A"). The ceiling 34's arithmetic
+   * sizes every week from.
+   */
+  hoursPerWeek?: number;
   /**
    * Asked of **every** athlete, always, and deliberately not a property of the
    * race: an athlete building toward an Ironman with nothing yet booked still
@@ -88,20 +103,6 @@ export interface OnboardingAnswers {
    * without inventing one.
    */
   noRaceYet?: boolean;
-  /**
-   * Adaptive — asked of every level: how many hours a week the athlete *can*
-   * train. A ceiling the plan plans within, not a description of what they do
-   * today — which is why it is not in a branch. Target Athlete is defined by
-   * this number ("8–15 hours/week alongside a full life", CONTEXT.md), and
-   * Fixed Constraint only covers which *days* are blocked, never the volume.
-   *
-   * The buckets get finer at the top on purpose (Mads, 2026-08-21). A single
-   * `10h+` was fine while this field was a *fitness proxy*, but as a planning
-   * ceiling it was blind across the top half of the Target Athlete's own band —
-   * the difference between 10 and 15 hours is roughly a whole session a week,
-   * which is exactly the thing the Week Plan has to budget.
-   */
-  availableHours?: string;
   // Adaptive — beginner
   sportBackground?: string[];
   motivation?: string;
@@ -123,7 +124,6 @@ export const ONBOARDING_OPTIONS = {
   experienceLevel: ['beginner', 'intermediate', 'veteran'],
   raceDistance: RACE_DISTANCES,
   sportBackground: ['Runner', 'Cyclist', 'Swimmer', 'Gym', 'None'],
-  availableHours: ['Under 3h', '3–6h', '6–10h', '10–13h', '13–16h', '16h+'],
   motivation: ['Completion', 'Personal challenge', 'Community', 'Performance'],
   weakestDiscipline: ['Swim', 'Bike', 'Run', 'Equal'],
   hasHumanCoach: ['Yes', 'No'],
@@ -153,7 +153,6 @@ export const ONBOARDING_OPTIONS = {
 type LabelledGroup =
   | 'raceDistance'
   | 'sportBackground'
-  | 'availableHours'
   | 'motivation'
   | 'weakestDiscipline'
   | 'hasHumanCoach'
@@ -174,12 +173,6 @@ export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
   Swimmer: 'optSwimmer',
   Gym: 'optGym',
   None: 'optNone',
-  'Under 3h': 'optUnder3',
-  '3–6h': 'opt36',
-  '6–10h': 'opt610',
-  '10–13h': 'opt1013',
-  '13–16h': 'opt1316',
-  '16h+': 'opt16plus',
   Completion: 'optCompletion',
   'Personal challenge': 'optChallenge',
   Community: 'optCommunity',
@@ -223,8 +216,10 @@ export function nextStep(
 ): OnboardingStepId | 'done' {
   if (!answers.language) return 'language';
   if (!submitted.name) return 'name';
-  if (!answers.experienceLevel) return 'experience';
+  // An empty list is an answer; the derived level is set in the same write.
+  if (!answers.pastRaces) return 'pastRaces';
   if (!answers.raceDistance) return 'distance';
+  if (answers.hoursPerWeek === undefined) return 'hours';
   // Answered either way: a named race *with its date*, or an explicit "not
   // yet". A bare `!answers.raceTarget` would send the athlete who has no race
   // back to this step forever, which is the defect the `noRaceYet` decision
@@ -284,13 +279,15 @@ export type StepAnswer =
   | { step: 'language'; language: string }
   /** The Preferred Name, or absent/blank for none. Validated here, stored by the action. */
   | { step: 'name'; preferredName?: string }
-  | { step: 'experience'; experienceLevel: string }
+  /** Zero or more finished races; each entry is checked by `parsePastRace`. */
+  | { step: 'pastRaces'; pastRaces: unknown[] }
   | { step: 'distance'; raceDistance: string }
+  /** Hours a week, an integer 1–30. */
+  | { step: 'hours'; hoursPerWeek: number }
   | { step: 'race'; raceTarget: string; raceDate: string }
   | { step: 'race'; noRaceYet: true }
   | {
       step: 'adaptive';
-      availableHours?: string;
       sportBackground?: string[];
       motivation?: string;
       bestTime?: string;
@@ -305,16 +302,16 @@ export type StepAnswer =
 export type AdaptiveField = Exclude<keyof Extract<StepAnswer, { step: 'adaptive' }>, 'step'>;
 
 /**
- * Which adaptive questions each level is asked (`availableHours` is asked of
- * every level). The panel submits only these: `applyAnswer('adaptive')` stores
+ * Which adaptive questions each level is asked (hours a week is its own
+ * required step since `training-architecture/35`). The panel submits only these: `applyAnswer('adaptive')` stores
  * every field it is sent, so after Back and a level change the other level's
  * seeded answers would otherwise be re-submitted from a panel that never
  * showed them (review, 2026-09-18).
  */
 export const ADAPTIVE_FIELDS_BY_LEVEL: Record<ExperienceLevel, readonly AdaptiveField[]> = {
-  beginner: ['availableHours', 'sportBackground', 'motivation'],
-  intermediate: ['availableHours', 'bestTime', 'weakestDiscipline', 'hasHumanCoach'],
-  veteran: ['availableHours', 'targetTime', 'trackedMetrics'],
+  beginner: ['sportBackground', 'motivation'],
+  intermediate: ['bestTime', 'weakestDiscipline', 'hasHumanCoach'],
+  veteran: ['targetTime', 'trackedMetrics'],
 };
 
 const FREE_TEXT_MAX = 200;
@@ -350,6 +347,8 @@ export function applyAnswer(
   answers: OnboardingAnswers,
   submitted: OnboardingSubmitted,
   payload: StepAnswer,
+  /** `YYYY-MM-DD`: a past race may not be dated after today. */
+  today: string,
 ): {
   answers: OnboardingAnswers;
   submitted: OnboardingSubmitted;
@@ -367,16 +366,19 @@ export function applyAnswer(
       if (!parsePreferredName(payload.preferredName).ok) return null;
       return { answers, submitted: { ...submitted, name: true } };
     }
-    case 'experience': {
-      if (!inSet(payload.experienceLevel, ONBOARDING_OPTIONS.experienceLevel))
-        return null;
+    case 'pastRaces': {
+      // Every entry or none: one bad row refuses the answer rather than
+      // storing the rest, so the athlete sees which row the form rejects.
+      const pastRaces = parsePastRaces(payload.pastRaces, today);
+      if (!pastRaces) return null;
       return {
-        answers: {
-          ...answers,
-          experienceLevel: payload.experienceLevel as ExperienceLevel,
-        },
+        answers: { ...answers, pastRaces, experienceLevel: deriveExperienceLevel(pastRaces) },
         submitted,
       };
+    }
+    case 'hours': {
+      if (!isHoursPerWeek(payload.hoursPerWeek)) return null;
+      return { answers: { ...answers, hoursPerWeek: payload.hoursPerWeek }, submitted };
     }
     case 'distance': {
       if (!inSet(payload.raceDistance, ONBOARDING_OPTIONS.raceDistance)) return null;
@@ -421,11 +423,6 @@ export function applyAnswer(
       // above says this file must not do. `allInSet` and `optionalText` already
       // draw the line here; these three were the outliers.
       if (
-        payload.availableHours !== undefined &&
-        !inSet(payload.availableHours, ONBOARDING_OPTIONS.availableHours)
-      )
-        return null;
-      if (
         payload.motivation !== undefined &&
         !inSet(payload.motivation, ONBOARDING_OPTIONS.motivation)
       )
@@ -445,7 +442,6 @@ export function applyAnswer(
       return {
         answers: {
           ...answers,
-          availableHours: payload.availableHours,
           sportBackground: payload.sportBackground,
           motivation: payload.motivation,
           bestTime: bestTime || undefined,
@@ -478,6 +474,27 @@ export function applyAnswer(
   }
 }
 
+/** Every entry parsed, or null when any is refused or the value is not a list. */
+function parsePastRaces(value: unknown, today: string): PastRace[] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed = value.map((entry) => parsePastRace(entry, today));
+  return parsed.every((r): r is PastRace => r !== null) ? parsed : null;
+}
+
+export const HOURS_PER_WEEK_MIN = 1;
+export const HOURS_PER_WEEK_MAX = 30;
+
+/** A whole number of hours inside the band; anything else is refused. */
+function isHoursPerWeek(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= HOURS_PER_WEEK_MIN && (value as number) <= HOURS_PER_WEEK_MAX;
+}
+
+/** "1 past race" / "N past races" — the count the Coach is told, never the level's old guess. */
+function countRaces(pastRaces: readonly PastRace[] | undefined): string {
+  const n = pastRaces?.length ?? 0;
+  return `${n} past race${n === 1 ? '' : 's'}`;
+}
+
 /**
  * The Communication Style directive the Coach reads on every prompt. The POC's
  * text with one deliberate change: never the athlete's name — this string lands
@@ -496,7 +513,7 @@ export function buildCommStyle(answers: OnboardingAnswers): string {
   }
   if (experienceLevel === 'intermediate') {
     const coached = hasHumanCoach === 'Yes' ? ' and works with a human coach' : '';
-    return `${n} has 2–4 Ironman finishes${coached}. Respect their experience. Be direct and evidence-led. Focus on tactical adjustments rather than fundamentals.`;
+    return `${n} has ${countRaces(answers.pastRaces)} finished${coached}. Respect their experience. Be direct and evidence-led. Focus on tactical adjustments rather than fundamentals.`;
   }
   if (experienceLevel === 'veteran') {
     const tracks =
@@ -517,7 +534,7 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
   const arr = (v: string[] | undefined) => (v && v.length > 0 ? v : null);
   return {
     sportBackground: arr(answers.sportBackground),
-    availableHours: answers.availableHours || null,
+    hoursPerWeek: answers.hoursPerWeek ?? null,
     motivation: answers.motivation || null,
     bestTime: answers.bestTime || null,
     weakestDiscipline: arr(answers.weakestDiscipline),
@@ -549,6 +566,10 @@ export function coachGreeting(
 /** What completing onboarding writes to the athlete's profile columns. */
 export interface CompletedProfile {
   experienceLevel: ExperienceLevel;
+  /** Hours a week, the ceiling every week is sized within (35). */
+  hoursPerWeek: number;
+  /** The finished races the athlete listed, replacing whatever was stored. */
+  pastRaces: PastRace[];
   communicationStyle: string;
   raceDistance: RaceDistance;
   /** The Target Race's name, or `''` for an athlete with no race booked. */
@@ -571,11 +592,13 @@ export interface CompletedProfile {
  * depends on what day it is.
  */
 export function completeProfile(answers: OnboardingAnswers): CompletedProfile | null {
-  if (!answers.experienceLevel || !answers.raceDistance) return null;
+  if (!answers.experienceLevel || !answers.raceDistance || answers.hoursPerWeek === undefined) return null;
   const hasRace = hasNamedRace(answers);
   if (!hasRace && !answers.noRaceYet) return null;
   return {
     experienceLevel: answers.experienceLevel,
+    hoursPerWeek: answers.hoursPerWeek,
+    pastRaces: answers.pastRaces ?? [],
     communicationStyle: buildCommStyle(answers),
     raceDistance: answers.raceDistance,
     raceTarget: answers.raceTarget ?? '',

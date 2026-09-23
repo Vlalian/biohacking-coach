@@ -1,7 +1,8 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { race, type RaceRow } from '@/db/schema';
+import { pastRace, race, type PastRaceRow, type RaceRow } from '@/db/schema';
 import type { RaceDistance } from '@/lib/race-distances';
+import type { PastRace } from '@/features/onboarding/past-races';
 
 /**
  * Races, read and written (`training-architecture/02`).
@@ -140,4 +141,43 @@ export async function deleteRace(athleteId: string, raceId: string): Promise<voi
   await getDb()
     .delete(race)
     .where(and(eq(race.athleteId, athleteId), eq(race.id, raceId)));
+}
+
+// ── Past races — what the athlete has finished (training-architecture/35) ────
+
+/**
+ * Onboarding's write: the listed races replace whatever was stored, in one
+ * batch — clear, then insert — so a re-run of the last step cannot double the
+ * list. With nothing to insert only the clear runs; drizzle refuses an empty
+ * `values([])`.
+ */
+export async function replacePastRaces(athleteId: string, rows: readonly PastRace[]): Promise<void> {
+  const db = getDb();
+  const clear = db.delete(pastRace).where(eq(pastRace.athleteId, athleteId));
+  if (rows.length === 0) {
+    await clear;
+    return;
+  }
+  await db.batch([clear, db.insert(pastRace).values(rows.map((r) => ({ athleteId, ...r })))]);
+}
+
+/** Every finished race this athlete listed, earliest first. Empty is an ordinary answer. */
+export async function getPastRaces(athleteId: string): Promise<PastRaceRow[]> {
+  return getDb().select().from(pastRace).where(eq(pastRace.athleteId, athleteId)).orderBy(asc(pastRace.date));
+}
+
+/** Settings' add: one more finished race; the id comes back for the list to act on. */
+export async function addPastRace(athleteId: string, entry: PastRace): Promise<string> {
+  const [row] = await getDb()
+    .insert(pastRace)
+    .values({ athleteId, ...entry })
+    .returning({ id: pastRace.id });
+  return row.id;
+}
+
+/** Settings' remove, athlete-scoped: an id alone deletes nothing that is not theirs (ADR 0006). */
+export async function deletePastRace(athleteId: string, pastRaceId: string): Promise<void> {
+  await getDb()
+    .delete(pastRace)
+    .where(and(eq(pastRace.athleteId, athleteId), eq(pastRace.id, pastRaceId)));
 }

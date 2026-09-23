@@ -14,6 +14,24 @@ function listed(value: unknown): string | undefined {
 }
 
 /**
+ * One line per race, distance and date: what the athlete said they finished,
+ * in the order given. Notes and finish times stay off the transcript; they
+ * are on the row. Runs on the raw payload, so every field is read defensively.
+ */
+function pastRacesLine(value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) return 'No races finished yet';
+  return value
+    .map((r) => {
+      // Raw client input: `answerOnboardingAction` renders this line before the
+      // payload is validated, so a forged `[null]` must read as "?" rather than
+      // throw past the action's own refusal (CodeRabbit, PR #98).
+      const rec = (r ?? {}) as { distance?: unknown; date?: unknown };
+      return `${String(rec.distance ?? '?')} ${String(rec.date ?? '?')}`;
+    })
+    .join(' · ');
+}
+
+/**
  * The athlete's answer as one human-readable transcript line.
  *
  * Exported for its own test. It is a pure switch over every step, and reaching
@@ -32,10 +50,12 @@ export function answerText(payload: StepAnswer): string {
       return typeof payload.preferredName === 'string' && payload.preferredName.trim() !== ''
         ? 'Chosen'
         : '—';
-    case 'experience':
-      return payload.experienceLevel;
+    case 'pastRaces':
+      return pastRacesLine(payload.pastRaces);
     case 'distance':
       return payload.raceDistance;
+    case 'hours':
+      return `${payload.hoursPerWeek} h/week`;
     case 'race':
       // "No race yet" is an answer, so it gets a transcript line of its own
       // rather than an empty one — the Coach's log should show the athlete
@@ -48,7 +68,6 @@ export function answerText(payload: StepAnswer): string {
         : (payload as { raceTarget: string }).raceTarget;
     case 'adaptive': {
       const parts = [
-        payload.availableHours,
         listed(payload.sportBackground),
         payload.motivation,
         payload.bestTime,

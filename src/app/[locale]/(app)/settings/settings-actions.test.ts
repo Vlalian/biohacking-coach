@@ -20,6 +20,10 @@ const {
   getRaces,
   getTargetRace,
   setTargetRace,
+  addPastRace,
+  deletePastRace,
+  getPastRaces,
+  updateExperienceLevel,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   getAthleteByUserId: vi.fn(),
@@ -40,6 +44,10 @@ const {
   getRaces: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
   getTargetRace: vi.fn<() => Promise<unknown>>(() => Promise.resolve(null)),
   setTargetRace: vi.fn(() => Promise.resolve()),
+  addPastRace: vi.fn(() => Promise.resolve('pr_new')),
+  deletePastRace: vi.fn(() => Promise.resolve()),
+  getPastRaces: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
+  updateExperienceLevel: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
@@ -52,6 +60,7 @@ vi.mock('@/features/athlete/athlete-repository', () => ({
   updateCommunicationStyle,
   updateRaceTarget,
   updateRaceDistance,
+  updateExperienceLevel,
 }));
 const getLinkForAthlete = vi.fn(() => Promise.resolve(undefined as unknown));
 const withdrawPreviewDrafts = vi.fn(() => Promise.resolve(0));
@@ -70,9 +79,14 @@ vi.mock('@/features/race/race-repository', () => ({
   getRaces,
   getTargetRace,
   setTargetRace,
+  addPastRace,
+  deletePastRace,
+  getPastRaces,
 }));
 
 const {
+  addPastRaceAction,
+  removePastRaceAction,
   updateCommunicationStyleAction,
   updateWeeklySessionDayAction,
   addFixedConstraintAction,
@@ -510,5 +524,49 @@ describe('races beyond the first (training-architecture/09)', () => {
     await expect(addRaceAction('X', '2027-03-01', 'Full')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
     await expect(setTargetRaceAction('race_2')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
     await expect(removeRaceAction('race_2')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
+  });
+});
+
+describe('past races in Settings (training-architecture/35)', () => {
+  const HALF = { id: 'pr_1', athleteId: 'athlete_1', distance: 'Half', date: '2025-08-16', finishSeconds: null, note: null, createdAt: new Date() };
+
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1' });
+  });
+
+  it('addPastRaceAction validates, inserts for the signed-in athlete, and re-derives the experience level from the list', async () => {
+    getPastRaces.mockResolvedValue([HALF]);
+    await expect(addPastRaceAction({ distance: 'Olympic', date: '2024-06-01', finishSeconds: 9000, note: ' first ' })).resolves.toEqual({ ok: true, pastRaceId: 'pr_new' });
+    expect(addPastRace).toHaveBeenCalledWith('athlete_1', { distance: 'Olympic', date: '2024-06-01', finishSeconds: 9000, note: 'first' });
+    // Re-read after the insert: one race in the mock list → intermediate.
+    expect(updateExperienceLevel).toHaveBeenCalledWith('athlete_1', 'intermediate');
+  });
+
+  it('refuses a future date, an unknown distance and a bad finish without touching storage', async () => {
+    await expect(addPastRaceAction({ distance: 'Half', date: '2099-01-01' })).resolves.toEqual({ ok: false, reason: 'invalid' });
+    await expect(addPastRaceAction({ distance: 'Marathon', date: '2025-01-01' })).resolves.toEqual({ ok: false, reason: 'invalid' });
+    await expect(addPastRaceAction({ distance: 'Half', date: '2025-01-01', finishSeconds: -1 })).resolves.toEqual({ ok: false, reason: 'invalid' });
+    expect(addPastRace).not.toHaveBeenCalled();
+    expect(updateExperienceLevel).not.toHaveBeenCalled();
+  });
+
+  it('removePastRaceAction refuses an id that is not theirs as invalid, and re-derives after a real remove', async () => {
+    // The athlete has a race, and the id asked for is a different one: not theirs.
+    getPastRaces.mockResolvedValue([HALF]);
+    await expect(removePastRaceAction('other')).resolves.toEqual({ ok: false, reason: 'invalid' });
+    expect(deletePastRace).not.toHaveBeenCalled();
+    expect(updateExperienceLevel).not.toHaveBeenCalled();
+
+    getPastRaces.mockResolvedValueOnce([HALF]).mockResolvedValueOnce([]);
+    await expect(removePastRaceAction('pr_1')).resolves.toEqual({ ok: true });
+    expect(deletePastRace).toHaveBeenCalledWith('athlete_1', 'pr_1');
+    expect(updateExperienceLevel).toHaveBeenCalledWith('athlete_1', 'beginner');
+  });
+
+  it('both refuse a caller that cannot be identified', async () => {
+    getSession.mockResolvedValue(null);
+    await expect(addPastRaceAction({ distance: 'Half', date: '2025-01-01' })).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
+    await expect(removePastRaceAction('pr_1')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
   });
 });

@@ -15,6 +15,8 @@ import {
   validateBlockSet,
   type StoredBlockSet,
   holdsHeadCoachBlock,
+  purposeName,
+  blockPurpose,
   type TrainingBlockSpec,
 } from './training-blocks';
 
@@ -81,12 +83,12 @@ describe('trainingBlocks — dividing a horizon', () => {
     expect(trainingBlocks(TODAY, '2026-08-01')).toEqual([]);
   });
 
-  it('names blocks generically, because a formula cannot say what one is for', () => {
-    // Stage 2 (the Coach) and stage 3 (the Head Coach) are what name a block by
-    // purpose. Inventing a purpose here would be the arithmetic pretending to
-    // coaching judgment it does not have.
+  it('names blocks by what they are for, and still carries its place in the sequence', () => {
+    // The name says the purpose (`training-architecture/34`, the athlete
+    // friend could not read "Block 1 of 5"); the position is `index`/`total`,
+    // which the block strip renders itself.
     const blocks = trainingBlocks(TODAY, '2027-06-01');
-    expect(blocks[0].name).toBe(`Block 1 of ${blocks.length}`);
+    expect(blocks[0].name).toBe(purposeName(1, blocks.length));
     expect(blocks[0].index).toBe(1);
     expect(blocks[0].total).toBe(blocks.length);
   });
@@ -142,6 +144,17 @@ describe('blockPosition — where in the block the athlete is standing', () => {
     expect(blockPosition(block.endDate, block).week).toBe(
       blockPosition(block.startDate, block).weeks,
     );
+  });
+
+  it('counts a 28-day block as four weeks, and a day past a multiple as one more', () => {
+    // Both ends inclusive: 2026-09-14 to 2026-10-11 is 28 days, four whole
+    // weeks. One day longer is a fifth week with a single day in it.
+    const four = { index: 1, total: 4, name: 'Base', startDate: '2026-09-14', endDate: '2026-10-11', authoredBy: 'arithmetic' as const };
+    expect(blockPosition('2026-09-14', four)).toEqual({ week: 1, weeks: 4 });
+    expect(blockPosition('2026-09-20', four).week).toBe(1);
+    expect(blockPosition('2026-09-21', four).week).toBe(2);
+    expect(blockPosition('2026-10-11', four).week).toBe(4);
+    expect(blockPosition('2026-10-12', { ...four, endDate: '2026-10-12' }).weeks).toBe(5);
   });
 
   it('never reports a week outside the block it was given', () => {
@@ -607,5 +620,39 @@ describe('repinBlockSet — the Head Coach re-pins a stale set to a moved race (
       ],
     };
     expect(repinBlockSet(poisoned, '2027-04-04')).toEqual({ ok: false, reason: 'identifier', dropped: [] });
+  });
+});
+
+describe('blocks are named by purpose, not by position (training-architecture/34)', () => {
+  // The athlete friend read "Block 1 of 4" and learned nothing from it. The
+  // ladder is D3 of the 34 plan: what each block is *for*, by where it sits.
+  it.each([
+    [6, ['Build', 'Race prep']],
+    [10, ['Base', 'Build', 'Race prep']],
+    [20, ['Base', 'Build', 'Peak', 'Race prep']],
+    [30, ['Base', 'Base 2', 'Build', 'Peak', 'Race prep']],
+    [50, ['Base', 'Base 2', 'Build', 'Build 2', 'Peak', 'Race prep']],
+  ])('a %i-week horizon is named %j', (weeks, names) => {
+    const today = '2026-10-05';
+    expect(trainingBlocks(today, addDays(today, weeks * 7)).map((b) => b.name)).toEqual(names);
+  });
+
+  it('purposeName and blockPurpose agree, and the last block is always the race prep', () => {
+    expect(blockPurpose(1, 4)).toBe('base');
+    expect(blockPurpose(2, 4)).toBe('build');
+    expect(blockPurpose(3, 4)).toBe('peak');
+    expect(blockPurpose(4, 4)).toBe('race');
+    for (const total of [2, 3, 4, 5, 6]) {
+      expect(blockPurpose(total, total), `last of ${total}`).toBe('race');
+      expect(purposeName(total, total)).toBe('Race prep');
+    }
+  });
+
+  it('falls back to base for a count the ladder does not describe, rather than throwing', () => {
+    // `trainingBlocks` only ever asks for two to six, but the ladder is a lookup
+    // and a lookup that can miss must say what it does then.
+    expect(blockPurpose(1, 7)).toBe('base');
+    expect(blockPurpose(9, 4)).toBe('base');
+    expect(purposeName(1, 7)).toBe('Base');
   });
 });

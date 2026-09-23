@@ -29,7 +29,7 @@ export const EVAL_ATHLETE: CheckIn = {
   ],
   onboarding: {
     sportBackground: 'running',
-    availableHours: '13–16h',
+    hoursPerWeek: 14,
     motivation: 'finish under 11 hours',
     weakestDiscipline: 'swim',
     hasHumanCoach: 'no',

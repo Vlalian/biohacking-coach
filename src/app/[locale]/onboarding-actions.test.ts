@@ -138,19 +138,20 @@ describe('answerOnboardingAction', () => {
 
   it('adds no display greeting, and reads no prefs, before the last step', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     const result = await answerOnboardingAction({ step: 'name', preferredName: 'Mads' });
 
-    expect(result).toEqual({ ok: true, step: 'experience' });
+    expect(result).toEqual({ ok: true, step: 'pastRaces' });
     expect(getUiPrefs).not.toHaveBeenCalled();
   });
 
   it.each([
     ['language', { step: 'language', language: 'da' }, 'qLanguage', 'Dansk'],
     ['name', { step: 'name', preferredName: 'Mads' }, 'qName', 'Chosen'],
-    ['experience', { step: 'experience', experienceLevel: 'veteran' }, 'qExperience', 'veteran'],
+    ['pastRaces', { step: 'pastRaces', pastRaces: [{ distance: 'Half', date: '2025-08-16' }] }, 'qPastRaces', 'Half 2025-08-16'],
     ['distance', { step: 'distance', raceDistance: 'Full' }, 'qDistance', 'Full'],
+    ['hours', { step: 'hours', hoursPerWeek: 8 }, 'qHours', '8 h/week'],
     ['race', { step: 'race', noRaceYet: true }, 'qRace', 'No race booked yet'],
     ['adaptive', { step: 'adaptive' }, 'qAdaptive', '—'],
     ['constraints', { step: 'constraints' }, 'qConstraints', '— · Sunday'],
@@ -158,7 +159,7 @@ describe('answerOnboardingAction', () => {
     'records the %s step in the transcript as the Coach asked it and the athlete answered it',
     async (_step, payload, questionKey, answer) => {
       signedIn();
-      answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+      answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
       await answerOnboardingAction(payload as Parameters<typeof answerOnboardingAction>[0]);
 
@@ -201,7 +202,7 @@ describe('answerOnboardingAction', () => {
 
   it('stores the Preferred Name on the user, identity-side, only after the step is accepted', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     await answerOnboardingAction({ step: 'name', preferredName: '  Mads ' });
 
@@ -214,7 +215,7 @@ describe('answerOnboardingAction', () => {
 
   it('clears the Preferred Name when the step is skipped', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     await answerOnboardingAction({ step: 'name' });
 
@@ -232,7 +233,7 @@ describe('answerOnboardingAction', () => {
 
   it('writes the language preference only after the step is accepted', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     await answerOnboardingAction({ step: 'language', language: 'da' });
 

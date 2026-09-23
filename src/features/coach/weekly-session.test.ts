@@ -33,6 +33,7 @@ function athlete(overrides: Partial<Athlete> = {}): Athlete {
     communicationStyle: 'direct',
     raceTarget: 'Ironman Copenhagen',
     raceDistance: 'Full',
+    hoursPerWeek: null,
     trainingSessionsPerWeek: 6,
     profile: {
       onboarding: { motivation: 'Completion' },
@@ -87,7 +88,7 @@ describe('buildWeeklyCheckIn', () => {
       readiness: READINESS,
       // Derived from the horizon, not read from a column: the Training Phase is
       // the name of the Training Block today falls inside.
-      phase: 'Block 1 of 5',
+      phase: 'Base',
       experienceLevel: 'intermediate',
       commStyle: 'direct',
       raceTarget: 'Ironman Copenhagen',
@@ -567,7 +568,7 @@ describe('buildWeeklyCheckIn — readiness the athlete never gave', () => {
       trainingBlocks(TODAY_KEY, TARGET_RACE.date),
     );
 
-    expect(checkIn.phase).toBe('Block 1 of 5');
+    expect(checkIn.phase).toBe('Base');
     expect(checkIn.experienceLevel).toBe('intermediate');
     expect(checkIn.presenceStage).toBe('building');
   });

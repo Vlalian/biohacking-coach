@@ -5,6 +5,16 @@ import { athleteFeedback } from '@/db/schema';
 import type { Conversation } from '@/features/coach/conversation';
 import { selectOpenConversations } from '@/features/coach/conversation';
 
+/**
+ * These tests walk every file under `src/` and read it. That takes well under a
+ * second on an ordinary run and past the 5 s default when the suite runs with
+ * v8 coverage instrumentation — which is the hardening gate's first step, so the
+ * flake stopped the gate rather than a test run. The assertions are unchanged;
+ * only the time the walk is allowed to take is (`code-health/11`).
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
+
 const { getLatestOpenConversation, getOwnedConversation, getMessages, callCoach } = vi.hoisted(
   () => ({
     getLatestOpenConversation: vi.fn(() => Promise.resolve(null)),

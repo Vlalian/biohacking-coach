@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { filesMatchingRaw, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
+
+/**
+ * These tests walk every file under `src/` and read it. That takes well under a
+ * second on an ordinary run and past the 5 s default when the suite runs with
+ * v8 coverage instrumentation — which is the hardening gate's first step, so the
+ * flake stopped the gate rather than a test run. The assertions are unchanged;
+ * only the time the walk is allowed to take is (`code-health/11`).
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 
 /**
  * `training-architecture/01`: the calendar chip is a **Session Chip**, and
