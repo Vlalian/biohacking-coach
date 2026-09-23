@@ -75,7 +75,9 @@ describe('declaring', () => {
     expect(declareInjury).toHaveBeenCalledWith('athlete_1', CANNOT_RUN, 3, null);
     expect(await declareInjuryAction(CANNOT_RUN)).toEqual({ ok: true });
     expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null, null);
-    expect(revalidatePath).toHaveBeenCalled();
+    // The whole shell: an open Injury shows on the calendar, the Information
+    // View and in what the Coach is told, not on one page.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('refuses a capacity outside the closed set, or one missing a discipline', async () => {
@@ -98,6 +100,14 @@ describe('declaring', () => {
     }
     expect(declareInjury).not.toHaveBeenCalled();
     expect(declareIllness).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('accepts a Bother Rating at both ends of the scale', async () => {
+    expect(await declareIllnessAction(1)).toEqual({ ok: true });
+    expect(declareIllness).toHaveBeenLastCalledWith('athlete_1', 1);
+    expect(await declareIllnessAction(5)).toEqual({ ok: true });
+    expect(declareIllness).toHaveBeenLastCalledWith('athlete_1', 5);
   });
 
   it('declares an Illness — one button, nothing per discipline — with an optional rating', async () => {
@@ -105,6 +115,7 @@ describe('declaring', () => {
     expect(declareIllness).toHaveBeenCalledWith('athlete_1', 4);
     expect(await declareIllnessAction()).toEqual({ ok: true });
     expect(declareIllness).toHaveBeenLastCalledWith('athlete_1', null);
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 });
 
@@ -114,6 +125,9 @@ describe('closing, rating, noting', () => {
     expect(closeInjury).toHaveBeenCalledWith('athlete_1', 'inj_1');
     expect(await closeIllnessAction('ill_1')).toEqual({ ok: true });
     expect(closeIllness).toHaveBeenCalledWith('athlete_1', 'ill_1');
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
+    expect(revalidatePath).toHaveBeenNthCalledWith(1, '/', 'layout');
+    expect(revalidatePath).toHaveBeenNthCalledWith(2, '/', 'layout');
   });
 
   it('sets the Bother Rating on an owned record, and clears it with null', async () => {
@@ -121,14 +135,19 @@ describe('closing, rating, noting', () => {
     expect(setBother).toHaveBeenCalledWith('athlete_1', { injuryId: 'inj_1' }, 2);
     expect(await setBotherAction({ illnessId: 'ill_1' }, null)).toEqual({ ok: true });
     expect(setBother).toHaveBeenLastCalledWith('athlete_1', { illnessId: 'ill_1' }, null);
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
+    expect(revalidatePath).toHaveBeenNthCalledWith(2, '/', 'layout');
     expect(await setBotherAction({ injuryId: 'inj_1' }, 7)).toEqual({ ok: false, reason: 'invalid' });
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
   });
 
   it('adds a trimmed note as the athlete, and refuses an empty one', async () => {
     expect(await addHealthNoteAction({ injuryId: 'inj_1' }, '  physio says two weeks  ')).toEqual({ ok: true });
     expect(addHealthNote).toHaveBeenCalledWith('athlete_1', { injuryId: 'inj_1' }, 'athlete', 'physio says two weeks');
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
     expect(await addHealthNoteAction({ injuryId: 'inj_1' }, '   ')).toEqual({ ok: false, reason: 'invalid' });
     expect(addHealthNote).toHaveBeenCalledTimes(1);
+    expect(revalidatePath).toHaveBeenCalledTimes(1);
   });
 
   it('reads the thread on an owned record, and refuses a nameless subject', async () => {
@@ -149,6 +168,10 @@ describe('closing, rating, noting', () => {
   it('refuses a subject that names no record', async () => {
     expect(await addHealthNoteAction({} as never, 'x')).toEqual({ ok: false, reason: 'invalid' });
     expect(await setBotherAction({ injuryId: '' } as never, 3)).toEqual({ ok: false, reason: 'invalid' });
+    // Not an object at all: the guard must answer, not throw on a property read.
+    expect(await setBotherAction(null as never, 3)).toEqual({ ok: false, reason: 'invalid' });
+    expect(await addHealthNoteAction('inj_1' as never, 'x')).toEqual({ ok: false, reason: 'invalid' });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 
@@ -205,6 +228,7 @@ describe('every action refuses a caller it cannot identify', () => {
     for (const fn of [declareInjury, declareIllness, closeInjury, closeIllness, deleteInjury, deleteIllness, addHealthNote, setBother]) {
       expect(fn).not.toHaveBeenCalled();
     }
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 

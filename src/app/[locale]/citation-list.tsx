@@ -86,7 +86,7 @@ export function CitationEntries({ citations }: { citations: Citation[] }) {
             <span>{c.title}</span>
           )}{' '}
           {/* CC BY requires the attribution to travel with the material. */}
-          <span className="text-muted-foreground/70">· {c.attribution}</span>
+          <span className="text-muted-foreground">· {c.attribution}</span>
         </li>
       ))}
     </ul>

@@ -86,18 +86,23 @@
   --secondary: oklch(0.94 0.008 80);
   --secondary-foreground: oklch(0.16 0.01 60);
   --muted: oklch(0.94 0.008 80);
-  --muted-foreground: oklch(0.48 0.015 70);
+  --muted-foreground: oklch(0.45 0.015 70);
   --accent: oklch(0.94 0.008 80);
   --accent-foreground: oklch(0.16 0.01 60);
-  --accent-signal: oklch(0.62 0.19 35);
+  --accent-signal: oklch(0.55 0.18 35);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.16 0.01 60 / 10%);
+  /* Control edges are opaque, never an alpha wash: the 10 % wash measured
+     1.1 : 1 against the page, and a button whose edge cannot be seen is a
+     button nobody presses (showable-version/38, 2026-09-19). 3.2 : 1 here;
+     `src/app/globals.test.ts` holds every edge at 3.0 and every text token at
+     4.5 (muted at 7.0) in both themes. `--rule` stays a hairline divider. */
+  --border: oklch(0.64 0.012 70);
   --rule: oklch(0.16 0.01 60 / 8%);
-  --input: oklch(0.16 0.01 60 / 12%);
-  --ring: oklch(0.62 0.19 35);
+  --input: oklch(0.64 0.012 70);
+  --ring: oklch(0.55 0.18 35);
   --chart-1: oklch(0.16 0.01 60);
-  --chart-2: oklch(0.62 0.19 35);
+  --chart-2: oklch(0.55 0.18 35);
   --chart-3: oklch(0.5 0.02 70);
   --chart-4: oklch(0.7 0.02 70);
   --chart-5: oklch(0.85 0.01 80);
@@ -107,13 +112,13 @@
   --sidebar-primary-foreground: oklch(0.985 0.005 85);
   --sidebar-accent: oklch(0.94 0.008 80);
   --sidebar-accent-foreground: oklch(0.16 0.01 60);
-  --sidebar-border: oklch(0.16 0.01 60 / 10%);
-  --sidebar-ring: oklch(0.62 0.19 35);
+  --sidebar-border: oklch(0.64 0.012 70);
+  --sidebar-ring: oklch(0.55 0.18 35);
   --signal: oklch(0.55 0.22 25);
   /* Warnings must not read as the signal red: a caution is not an error and not
      an informational accent. Amber, distinct from both, and from the session
      colours it sits near. */
-  --warning: oklch(0.62 0.16 65);
+  --warning: oklch(0.55 0.15 65);
   --signal-foreground: oklch(0.99 0.005 85);
   --session-endurance: oklch(0.55 0.14 245);
   --session-intensity: oklch(0.55 0.22 25);
@@ -135,15 +140,15 @@
   --secondary: oklch(0.24 0.008 60);
   --secondary-foreground: oklch(0.94 0.005 80);
   --muted: oklch(0.24 0.008 60);
-  --muted-foreground: oklch(0.65 0.01 70);
+  --muted-foreground: oklch(0.72 0.01 70);
   --accent: oklch(0.24 0.008 60);
   --accent-foreground: oklch(0.94 0.005 80);
   --accent-signal: oklch(0.72 0.17 40);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 9%);
+  --border: oklch(0.5 0.01 60);
   --rule: oklch(1 0 0 / 7%);
-  --input: oklch(1 0 0 / 14%);
+  --input: oklch(0.5 0.01 60);
   --ring: oklch(0.72 0.17 40);
   --chart-1: oklch(0.94 0.005 80);
   --chart-2: oklch(0.72 0.17 40);
@@ -156,7 +161,7 @@
   --sidebar-primary-foreground: oklch(0.14 0.008 60);
   --sidebar-accent: oklch(0.24 0.008 60);
   --sidebar-accent-foreground: oklch(0.94 0.005 80);
-  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-border: oklch(0.5 0.01 60);
   --sidebar-ring: oklch(0.72 0.17 40);
   --signal: oklch(0.68 0.24 25);
   --warning: oklch(0.78 0.15 75);

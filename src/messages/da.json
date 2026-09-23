@@ -308,7 +308,6 @@
     "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
   },
   "Calendar": {
-    "proposedChip": "foreslået",
     "discussing": "Næste uge er ved at blive drøftet med Coachen — åbn Coachen for at afslutte.",
     "empty": "Ingen sessioner planlagt endnu.",
     "rate": "Bedøm {type}-session",
@@ -811,9 +810,27 @@
     "error": "Det virkede ikke ({reason})."
   },
   "CoachDay": {
-    "label": "Atletens ugentlige planlægningsdag",
-    "note": "Når næste uge når frem til dem. Du ser udkastet dagen før.",
+    "headline": "<b>{name}</b>s ugentlige planlægningsdag: <b>{day}</b>",
+    "intro": "{name}s træningsuge begynder <b>{day}</b>. Hver uge udarbejder Coachen de næste syv dage, <b>du</b> ser dem først, og <b>{name}</b> bestemmer.",
+    "nextDraft": "Næste udkast: <b>dig</b> {coachDate} · <b>{name}</b> {athleteDate}",
+    "pickerLabel": "Ugentlig planlægningsdag",
+    "confirmQuestion": "Skift dagen til {day}? Det gælder fra næste udkast.",
+    "confirm": "Skift dag",
+    "cancel": "Behold",
+    "howTitle": "Sådan fungerer ugecyklussen",
+    "step1": "<b>Coachen udarbejder.</b> {coachDay}, dagen før planlægningsdagen, skriver Coachen et forslag for {weekStart} – {weekEnd} ud fra løbet ({race}, {weeks, plural, =1 {1 uge} other {# uger}} til), den aktuelle Training Block ({block}), hvordan sidste uge gik, og alt der er meldt i Check-in: en skade, en sygdom eller dage markeret som optaget.",
+    "step1NoRace": "<b>Coachen udarbejder.</b> {coachDay}, dagen før planlægningsdagen, skriver Coachen et forslag for {weekStart} – {weekEnd} ud fra hvordan sidste uge gik, og alt der er meldt i Check-in: en skade, en sygdom eller dage markeret som optaget.",
+    "step2": "<b>Du ser først.</b> Fra {coachDay} står udkastet her, over kalenderen. Du kan flytte, tilføje eller fjerne sessioner, før {name} ser det. Alt du ændrer, vises for {name} som noget fra dig, med navn.",
+    "step3": "<b>{name} bestemmer.</b> {day} vises udkastet på {name}s Training Plan: godkend det, drøft det med Coachen (Coachen kan så lave et nyt udkast), eller lad det ligge. Kun en godkendt uge kommer i kalenderen; Coachen skriver aldrig i den af sig selv.",
+    "step4": "<b>Hvis ingen gør noget.</b> Udkastet forbliver et forslag. Intet planlægges, før det er godkendt, og det kan stadig godkendes senere på ugen.",
+    "changing": "Skift kun dagen, hvis den rigtige træningsuge begynder en anden dag. Det gælder fra næste udkast; det aktuelle forslag laves ikke om.",
+    "noBlock": "ingen block endnu",
+    "theAthlete": "atleten",
     "error": "Det virkede ikke ({reason})."
+  },
+  "WeeklySessionDayLine": {
+    "text": "Din uge udarbejdes hver {coachDay} aften og vises for dig {day}: godkend den, drøft den, eller lad den ligge.",
+    "change": "Skift dagen under Indstillinger"
   },
   "WeekDraftReview": {
     "title": "Næste uge, udkast",

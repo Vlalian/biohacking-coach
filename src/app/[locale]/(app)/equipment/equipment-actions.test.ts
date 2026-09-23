@@ -54,7 +54,7 @@ describe('createEquipmentItemAction', () => {
 
     expect(result).toEqual({ ok: true, itemId: 'item_1' });
     expect(createEquipmentItem).toHaveBeenCalledWith({ athleteId: ATHLETE, ...ITEM });
-    expect(revalidatePath).toHaveBeenCalled();
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it('refuses a signed-out request', async () => {
@@ -64,6 +64,17 @@ describe('createEquipmentItemAction', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(createEquipmentItem).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('refreshes nothing when the repository refuses the item', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    createEquipmentItem.mockResolvedValue({ ok: false, reason: 'invalid' });
+
+    const result = await createEquipmentItemAction(ITEM);
+
+    expect(result).toEqual({ ok: false, reason: 'invalid' });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 
@@ -85,6 +96,10 @@ describe('updateEquipmentItemAction and deleteEquipmentItemAction', () => {
       athleteId: ATHLETE,
       itemId: 'item_1',
     });
+    // Both writes refresh the whole shell, once each.
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
+    expect(revalidatePath).toHaveBeenNthCalledWith(1, '/', 'layout');
+    expect(revalidatePath).toHaveBeenNthCalledWith(2, '/', 'layout');
   });
 
   it('both refuse a signed-out request', async () => {
@@ -105,8 +120,10 @@ describe('updateEquipmentItemAction and deleteEquipmentItemAction', () => {
   it('refreshes nothing when the write is refused', async () => {
     resolveAthleteId.mockResolvedValue(ATHLETE);
     updateEquipmentItem.mockResolvedValue({ ok: false, reason: 'not-found' });
+    deleteEquipmentItem.mockResolvedValue({ ok: false, reason: 'not-found' });
 
     await updateEquipmentItemAction('item_1', ITEM);
+    await deleteEquipmentItemAction('item_1');
 
     expect(revalidatePath).not.toHaveBeenCalled();
   });

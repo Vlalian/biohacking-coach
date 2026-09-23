@@ -5,6 +5,7 @@ import { getDb } from '../src/db';
 import { athlete, coach, coachingLink, sessions } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
+import { startOfToday } from '../src/lib/date';
 import { seedAthleteSessionId, seedWeekRows } from '../src/features/athlete/seed-history';
 import { parseSeedArgs } from '../src/features/athlete/seed-personas';
 import { SEED_OWNER, personasFor } from '../src/features/athlete/synthetic-history';
@@ -117,7 +118,7 @@ async function madsAthleteId(email: string): Promise<string> {
  */
 async function seedMadsTrainingHistory(athleteId: string) {
   const db = getDb();
-  const rows = seedWeekRows(athleteId, new Date());
+  const rows = seedWeekRows(athleteId, startOfToday());
 
   // Atomic reseed: clear the seed's rows and insert last week's history in one
   // transaction, so a failure can never leave Mads half-seeded. neon-http has
@@ -255,7 +256,7 @@ async function seed(argv: string[]) {
   const madsEmail = requireEnv('SEED_MADS_EMAIL');
   const madsId = await seedMads();
   await seedMadsTrainingHistory(madsId);
-  const personaIds = args.withPersonas ? await seedPersonas(personasFor(SEED_OWNER), new Date()) : [];
+  const personaIds = args.withPersonas ? await seedPersonas(personasFor(SEED_OWNER), startOfToday()) : [];
   await seedCoach([madsId, ...personaIds]);
   await seedMadsAsCoach(await madsUserId(madsEmail), personaIds);
 }

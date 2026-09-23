@@ -94,6 +94,9 @@ describe('the status actions — complete, skip, unavailable', () => {
       sessionId: 'sess_1',
       today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
+    // A status change shows on the calendar and in every view that reads it,
+    // so the whole shell is refreshed, not one page.
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
   it.each(cases)('%s refuses a signed-out request', async (_name, action, service) => {
@@ -104,6 +107,7 @@ describe('the status actions — complete, skip, unavailable', () => {
       reason: 'not-authenticated',
     });
     expect(service).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each(cases)('%s revalidates nothing when refused', async (_name, action, service) => {
@@ -134,6 +138,18 @@ describe('createAthleteSessionAction', () => {
         today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       }),
     );
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+  });
+
+  it('revalidates nothing when the service refuses', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    createAthleteSession.mockResolvedValue({ ok: false, reason: 'invalid' });
+
+    await expect(createAthleteSessionAction(NEW_SESSION)).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed date before resolving anyone', async () => {
@@ -142,6 +158,7 @@ describe('createAthleteSessionAction', () => {
     expect(result).toEqual({ ok: false, reason: 'invalid' });
     expect(resolveAthleteId).not.toHaveBeenCalled();
     expect(createAthleteSession).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('refuses a signed-out request', async () => {
@@ -175,6 +192,26 @@ describe('updateAthleteSessionAction and deleteAthleteSessionAction', () => {
       sessionId: 'sess_1',
       expectedVersion: 1,
     });
+    // Both writes refresh the whole shell, once each.
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
+    expect(revalidatePath).toHaveBeenNthCalledWith(1, '/', 'layout');
+    expect(revalidatePath).toHaveBeenNthCalledWith(2, '/', 'layout');
+  });
+
+  it('both revalidate nothing when the service refuses', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    updateAthleteSession.mockResolvedValue({ ok: false, reason: 'not-found' });
+    deleteAthleteSession.mockResolvedValue({ ok: false, reason: 'not-found' });
+
+    await expect(updateAthleteSessionAction('sess_1', edit, 1)).resolves.toEqual({
+      ok: false,
+      reason: 'not-found',
+    });
+    await expect(deleteAthleteSessionAction('sess_1', 1)).resolves.toEqual({
+      ok: false,
+      reason: 'not-found',
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('both refuse a signed-out request', async () => {
@@ -190,5 +227,6 @@ describe('updateAthleteSessionAction and deleteAthleteSessionAction', () => {
     });
     expect(updateAthleteSession).not.toHaveBeenCalled();
     expect(deleteAthleteSession).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

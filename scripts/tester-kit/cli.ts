@@ -7,6 +7,7 @@ import { getDb } from '../../src/db';
 import { athlete, coach, coachingLink } from '../../src/db/schema';
 import { user } from '../../src/db/auth-schema';
 import { auth } from '../../src/lib/auth';
+import { startOfToday } from '../../src/lib/date';
 import { personasFor } from '../../src/features/athlete/synthetic-history';
 import { seedPersonas } from '../personas/seed-personas';
 import {
@@ -127,7 +128,7 @@ async function seedPlannedPersonas(steps: MintStep[], testerName: string): Promi
     const profiles = personasFor(step.ownerKey);
     // `seedPersonas` returns the ids in the order of the profiles it was
     // given, which is how each id finds the name it belongs to.
-    const ids = await seedPersonas(profiles, new Date(), console.log);
+    const ids = await seedPersonas(profiles, startOfToday(), console.log);
     profiles.forEach((profile, i) => written.set(profile.syntheticLabel, ids[i]));
     console.log(`${testerName} holds their own copy of ${ids.length} personas.`);
   }
