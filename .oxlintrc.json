@@ -1,8 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   // Fast lint pass (2026-09-22). Runs in ~3 s where ESLint took ~90 s. ESLint
-  // (`eslint.config.mjs`) keeps only the rules Oxlint cannot express and turns
-  // off everything listed here, so a file is never judged twice.
+  // (`eslint.config.mjs`) turns off everything listed here, so a file is never
+  // judged twice; what still runs there is the `it.only` selector rule, which
+  // Oxlint has no selector engine for, and the jsx-a11y set, which this file
+  // deliberately does not enable.
   "plugins": ["typescript", "react", "nextjs", "import", "oxc"],
   // `error`, not `warn`: oxlint exits 0 on warnings, so a warn-level category
   // would leave `npm run lint` green on a real fault and quietly retire one of
