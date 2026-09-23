@@ -125,13 +125,6 @@ export async function updateRaceTarget(
 }
 
 /**
- * The Race Distance, changed after onboarding.
- *
- * A closed set, checked by the caller against `RACE_DISTANCES` before it gets
- * here — the same gate onboarding applies, because Settings is a second door
- * onto the same column and a door with a weaker lock is not a door.
- */
-/**
  * The derived experience level, rewritten when the past-race list changes in
  * Settings (`training-architecture/35`). Onboarding writes it through
  * `completeAthleteOnboarding`; this is the only other writer.
@@ -143,6 +136,13 @@ export async function updateExperienceLevel(athleteId: string, experienceLevel: 
     .where(eq(athlete.id, athleteId));
 }
 
+/**
+ * The Race Distance, changed after onboarding.
+ *
+ * A closed set, checked by the caller against `RACE_DISTANCES` before it gets
+ * here — the same gate onboarding applies, because Settings is a second door
+ * onto the same column and a door with a weaker lock is not a door.
+ */
 export async function updateRaceDistance(
   athleteId: string,
   raceDistance: string,

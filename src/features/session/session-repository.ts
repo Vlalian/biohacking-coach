@@ -259,19 +259,6 @@ export async function getBriefingReflections(
 }
 
 /**
- * Replaces the coach-planned sessions in a date range with a freshly agreed Week
- * Plan, atomically.
- *
- * Only `origin = 'coach'` rows within `[startKey, endKey]` are cleared — a
- * completed session the athlete already rated, a Garmin import, or a Head Coach's
- * prescription is never touched, so re-planning cannot erase what actually
- * happened. The range is the plan's own span, so a plan running from today into
- * next week replaces exactly that stretch and leaves days outside it alone.
- * Delete and insert land in one `db.batch` so a failure can never leave the range
- * half-written. An empty plan clears the range's coach sessions and inserts
- * nothing.
- */
-/**
  * The structure's own rows for one week, as the Coach's draft prompt reads them
  * (`training-architecture/34`). The Coach is adjusting a week the athlete has
  * already seen, so the draft is seeded with it rather than with a skeleton.
@@ -340,6 +327,21 @@ export async function insertArithmeticSessions(
     );
 }
 
+/**
+ * Replaces the planned sessions in a date range with a freshly agreed Week
+ * Plan, atomically.
+ *
+ * Only `origin = 'coach'` and `origin = 'arithmetic'` rows within
+ * `[startKey, endKey]` are cleared — a completed session the athlete already
+ * rated, a Garmin import, or a Head Coach's prescription is never touched, so
+ * re-planning cannot erase what actually happened. The structure's own rows go
+ * because the agreed plan replaces the default it drew
+ * (`training-architecture/34`). The range is the plan's own span, so a plan
+ * running from today into next week replaces exactly that stretch and leaves
+ * days outside it alone. Delete and insert land in one `db.batch` so a failure
+ * can never leave the range half-written. An empty plan clears the range and
+ * inserts nothing.
+ */
 export async function replaceCoachPlanForDateRange(
   athleteId: string,
   startKey: string,

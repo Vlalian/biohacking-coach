@@ -63,7 +63,6 @@ describe('weekFactor — how much of the athlete’s hours a week carries (D4–
 
 const MON = '2026-10-05'; // a Monday, ISO week 41 (odd)
 const ARGS = {
-  weekStart: MON,
   window: wholeWeekWindow(MON),
   purpose: 'base' as const,
   factor: 1,
@@ -236,6 +235,15 @@ describe('blockSessions — a whole block as rows (D11)', () => {
     // A base block ramps 0.85 → 1.0 across its first three weeks, then deloads.
     expect(week('2026-10-12')).toBe(Math.round(8 * 60 * 0.925));
     expect(week('2026-10-19')).toBe(8 * 60);
+  });
+
+  it('leaves a ramping base week Endurance — a week that carries less than full is not yet a deload', () => {
+    // D9: easy days go Recovery only in a deload or taper week. Weeks 1 and 2 of
+    // a base block carry 0.85 and 0.925 and are ordinary training weeks.
+    const rows = blockSessions({ ...BLOCK, index: 1, total: 4 }, { ...CTX, raceDate: '2027-03-01' });
+    const types = (start: string) => rows.filter((r) => weekStartOf(r.date) === start).map((r) => r.type);
+    expect(types('2026-10-05')).not.toContain('Recovery');
+    expect(types('2026-10-12')).not.toContain('Recovery');
   });
 
   it('marks the deload week by dropping its easy days to Recovery, and leaves the full weeks alone', () => {

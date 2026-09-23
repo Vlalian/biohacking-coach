@@ -17,7 +17,7 @@ import { getCheckInForWeek } from '@/features/coach/check-in-repository';
 import { narratePendingEvents } from '@/features/coach/narration-service';
 import { getCoachChores } from '@/features/coach/coach-chores-service';
 import type { CoachChore } from '@/features/coach/coach-chores';
-import { logCoachChoresFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
+import { logCoachChoresFailure, logCoachFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
 import { CoachChoresDialog } from './coach-chores-dialog';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
 import { ensureBlockFilled } from '@/features/coach/block-fill-service';
@@ -183,8 +183,14 @@ export default async function AppShellLayout({
       // are filled before the Coach drafts, so the draft adjusts what the
       // athlete can already see rather than writing into an empty week. Its
       // own failure costs the draft nothing.
+      // `ensureBlockFilled` files its own failures and returns an outcome
+      // rather than throwing, so this catch should never fire. It stays
+      // because the two triggers are isolated from each other here: a dead
+      // driver in the fill must not cost the athlete the week's draft. Under
+      // its own surface — a block fill filed as a week draft would send
+      // whoever reads the logs to the wrong module.
       await ensureBlockFilled(athleteId, todayKey).catch((error: unknown) => {
-        logWeekDraftFailure(athleteId, error);
+        logCoachFailure({ surface: 'block_fill', athleteId, conversationId: null, error });
       });
       try {
         await ensureWeekDrafted(athleteId, todayKey);

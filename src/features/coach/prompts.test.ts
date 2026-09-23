@@ -664,6 +664,9 @@ describe('formatWeekSessions — authorship labels and the parameter tail', () =
     expect(labelFor('coach')).toContain('you planned this');
     expect(labelFor('head_coach')).toContain("the athlete's Head Coach set this");
     expect(labelFor('athlete')).toContain('the athlete added this themselves');
+    // The structure's own row (`training-architecture/34`): the Coach is
+    // adjusting a default, not holding on someone else's prescription.
+    expect(labelFor('arithmetic')).toContain('the plan structure put this here');
     // A Detected Activity in CONTEXT.md's terms, said plainly to the model.
     expect(labelFor('garmin')).toContain("logged from the athlete's watch");
   });

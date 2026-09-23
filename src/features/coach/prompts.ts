@@ -915,11 +915,6 @@ function draftWindowBlock(today: string, window: PlanningWindow, fixedConstraint
   return lines.join('\n');
 }
 
-/**
- * The skeleton as one dated line per day, with the instruction that makes it a
- * default rather than a diktat (Mads, 2026-09-09: the structure is the
- * default, the Coach makes the adjustments).
- */
 /** A session the structure wrote, as this prompt needs it. */
 export interface BaselineSession {
   date: string;
@@ -946,6 +941,11 @@ ${lines.join('\n')}
 Adjust it for this athlete and this week. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.`;
 }
 
+/**
+ * The skeleton as one dated line per day, with the instruction that makes it a
+ * default rather than a diktat (Mads, 2026-09-09: the structure is the
+ * default, the Coach makes the adjustments).
+ */
 function skeletonBlock(skeleton: SkeletonDay[]): string {
   const lines = skeleton.map((d) => `${d.date}: ${d.role}`);
   return `WEEK SKELETON (the default — one role per day):

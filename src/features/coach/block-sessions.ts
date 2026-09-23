@@ -120,7 +120,6 @@ const HARD_TITLE = {
  * week's shape and are never the ones dropped.
  */
 export function weekSessions(input: {
-  weekStart: string;
   window: PlanningWindow;
   purpose: BlockPurpose;
   factor: number;
@@ -183,11 +182,7 @@ function keptDays(skeleton: SkeletonDay[], sessions: number): SkeletonDay[] {
   });
 }
 
-function longSession(
-  date: string,
-  minutes: number,
-  input: { purpose: BlockPurpose; deload: boolean },
-): ArithmeticSession {
+function longSession(date: string, minutes: number, input: { purpose: BlockPurpose }): ArithmeticSession {
   // A brick in the sharp end of the plan: riding then running off the bike is
   // what the race actually asks for, and it is worth the cost only once the
   // base is there (§09).
@@ -269,8 +264,8 @@ export function blockSessions(block: TrainingBlock, ctx: BlockContext): Arithmet
   const purpose = blockPurpose(block.index, block.total);
 
   return weeks.flatMap((weekStart, i) => {
-    // One factor per week, read twice: it sets the week's minutes, and a week
-    // carrying less than a full load is the same week that drops its intensity.
+    // One factor per week, read twice: it sets the week's minutes, and the
+    // weeks cut to a deload or a taper are the ones that drop their intensity.
     const factor = weekFactor({
       weekIndex: i + 1,
       weeksInBlock: weeks.length,
@@ -278,13 +273,16 @@ export function blockSessions(block: TrainingBlock, ctx: BlockContext): Arithmet
       daysToRace: daysBetween(weekStart, ctx.raceDate),
     });
     return weekSessions({
-      weekStart,
       window: wholeWeekWindow(weekStart, ctx.fixedConstraints, ctx.unavailableDates),
       purpose,
       factor,
       hours: ctx.hours,
       isoWeekOdd: isoWeekOdd(weekStart),
-      deload: factor < 1,
+      // A deload week, or a taper week, which behaves like one (D9). A base
+      // block's ramp weeks carry 0.85 and 0.925 and are ordinary training
+      // weeks — reading "less than full" as "deload" turned their easy days
+      // into Recovery (Standards review, 2026-09-23).
+      deload: factor <= DELOAD,
     }).filter((row) => row.date >= from && row.date < ctx.raceDate);
   });
 }

@@ -333,6 +333,10 @@ describe('the silent week draft runs after the response, never in it (training-a
     await render();
     await expect(afterCallbacks[0]()).resolves.toBeUndefined();
     expect(ensureWeekDrafted).toHaveBeenCalled();
+    // Under its own surface: a block fill filed as a week draft sends anyone
+    // reading the logs to the wrong module (Standards review, 2026-09-23).
+    expect(spy.mock.calls.flat().join(' ')).toContain('"surface":"block_fill"');
+    expect(spy.mock.calls.flat().join(' ')).not.toContain('week_draft_failed');
     spy.mockRestore();
   });
 
