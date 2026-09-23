@@ -460,7 +460,7 @@ export function Calendar({
         {HEADER_DAYS.map((day, i) => (
           <span
             key={i}
-            className="px-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
+            className="px-2 font-mono text-[15px] uppercase tracking-[0.2em] text-muted-foreground"
           >
             {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
           </span>
@@ -669,7 +669,7 @@ function WeekRow({
           // The chevron's rotation is the only cue that a week is expanded, and
           // rotation is invisible to a screen reader.
           aria-expanded={expanded}
-          className="flex items-center gap-1 px-2 py-3 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground outline-none transition-colors hover:text-signal focus-visible:text-signal focus-visible:ring-1 focus-visible:ring-signal"
+          className="flex items-center gap-1 px-2 py-3 text-left font-mono text-[15px] uppercase tracking-[0.16em] text-muted-foreground outline-none transition-colors hover:text-signal focus-visible:text-signal focus-visible:ring-1 focus-visible:ring-signal"
         >
           <ChevronDown
             className={['h-3 w-3 transition-transform', expanded ? '' : '-rotate-90'].join(' ')}
@@ -718,7 +718,7 @@ function WeekRow({
               <div className="flex items-center justify-between">
                 <span
                   className={[
-                    'font-mono text-[11px]',
+                    'font-mono text-base',
                     day.isToday ? 'text-signal' : 'text-muted-foreground',
                     day.isUnavailableDate ? 'line-through' : '',
                   ].join(' ')}
@@ -738,7 +738,7 @@ function WeekRow({
                       }
                       title={day.isUnavailableDate ? t('unavailableDay') : undefined}
                       className={[
-                        'font-mono text-[11px] leading-none transition-opacity',
+                        'font-mono text-base leading-none transition-opacity',
                         day.isUnavailableDate
                           ? 'text-signal opacity-100'
                           : 'text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100',
@@ -783,7 +783,7 @@ function WeekRow({
                     />
                   ))}
                   {day.sessions.length > 1 && (
-                    <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <span className="font-mono text-[14px] uppercase tracking-[0.16em] text-muted-foreground">
                       {t('double')}
                     </span>
                   )}
@@ -873,7 +873,7 @@ function StatusButton({
       data-active={active ? 'true' : 'false'}
       onClick={onClick}
       className={[
-        'inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors hover:text-foreground',
+        'inline-flex items-center gap-1 font-mono text-[14px] uppercase tracking-[0.14em] transition-colors hover:text-foreground',
         active ? 'text-signal' : 'text-muted-foreground',
       ].join(' ')}
     >
@@ -975,12 +975,12 @@ function SessionChip({
   const content = (
     <>
       <span className="flex items-center gap-1">
-        <span className="block min-w-0 flex-1 truncate font-body text-[11px] font-medium leading-tight text-foreground">
+        <span className="block min-w-0 flex-1 truncate font-body text-base font-medium leading-tight text-foreground">
           {session.title ?? session.type}
         </span>
         <Marks marks={marks} size={10} />
       </span>
-      <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="block font-mono text-[14px] uppercase tracking-[0.12em] text-muted-foreground">
         {session.duration ? `${session.duration}${t('minutes')}` : session.type}
       </span>
     </>
@@ -1041,13 +1041,13 @@ function Legend({ t }: { t: ReturnType<typeof useTranslations<'Calendar'>> }) {
   const types = ['Endurance', 'Intensity', 'Tempo', 'Recovery', 'Rest'];
   return (
     <div className="mt-3 flex flex-wrap items-center gap-4">
-      <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+      <span className="font-mono text-[15px] uppercase tracking-[0.24em] text-muted-foreground">
         {t('legend')}
       </span>
       {types.map((ty) => (
         <span key={ty} className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: typeColor(ty) }} />
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="font-mono text-[15px] uppercase tracking-[0.14em] text-muted-foreground">
             {ty}
           </span>
         </span>
@@ -1069,7 +1069,7 @@ function GhostButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 border border-border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+      className="flex items-center gap-1.5 border border-border px-3 py-2 font-mono text-[15px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
     >
       {Icon && <Icon className="h-3.5 w-3.5" />}
       {children}
