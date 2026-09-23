@@ -120,7 +120,7 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
                   <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
                     {t(`category_${cat}`)}
                   </h2>
-                  <span className="font-mono text-[10px] text-muted-foreground/60">{catItems.length}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{catItems.length}</span>
                 </div>
                 <ul className="mt-3 divide-y divide-border border border-border bg-panel">
                   {catItems.map((item) => (
@@ -133,7 +133,7 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
                         {item.details && (
                           <p className="mt-1 text-sm text-muted-foreground">{item.details}</p>
                         )}
-                        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70">
+                        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                           {t('added')} {item.addedDate}
                         </p>
                       </div>
@@ -286,7 +286,7 @@ function EquipmentForm({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('namePlaceholder')}
-              className="mt-2 w-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+              className="mt-2 w-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
             />
           </label>
 
@@ -299,7 +299,7 @@ function EquipmentForm({
               onChange={(e) => setDetails(e.target.value)}
               placeholder={t('detailsPlaceholder')}
               rows={3}
-              className="mt-2 w-full resize-none border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-signal"
+              className="mt-2 w-full resize-none border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
             />
           </label>
 

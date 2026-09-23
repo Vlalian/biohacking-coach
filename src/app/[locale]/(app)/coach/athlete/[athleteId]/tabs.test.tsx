@@ -7,6 +7,7 @@ const {
   getCoachByUserId,
   getCoachAthleteView,
   getLatestBriefingWithMessages,
+  getPreferredNameForAthlete,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -18,6 +19,7 @@ const {
   getCoachByUserId: vi.fn(),
   getCoachAthleteView: vi.fn(),
   getLatestBriefingWithMessages: vi.fn(() => Promise.resolve(null)),
+  getPreferredNameForAthlete: vi.fn(() => Promise.resolve<string | null>(null)),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -30,6 +32,7 @@ vi.mock('@/i18n/navigation', () => ({
   redirect,
   Link: () => null,
   usePathname: () => '/coach/athlete/a1/plan',
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/coach/coach-repository', () => ({ getCoachByUserId }));
@@ -37,6 +40,9 @@ vi.mock('@/features/coach/roster-service', () => ({ getCoachAthleteView }));
 vi.mock('@/features/coach/conversation-repository', () => ({
   getLatestBriefingWithMessages,
 }));
+// The plan tab's one extra read: the athlete's Preferred Name for the
+// planning-day card (training-architecture/28), through the user seam.
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getPreferredNameForAthlete }));
 // Client components pulling in browser deps, and a server-action module whose
 // import chain reaches auth. The pages' own wiring is what is under test.
 vi.mock('@/app/[locale]/calendar', () => ({ Calendar: () => null }));
@@ -148,5 +154,38 @@ describe('the athlete surface index', () => {
       href: '/coach/athlete/a1/plan',
       locale: 'en',
     });
+  });
+});
+
+describe('the Plan tab — the planning-day card (training-architecture/28)', () => {
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'coach_user' } });
+    getCoachByUserId.mockResolvedValue({ id: 'coach_1', informationViewLayout: null });
+    getCoachAthleteView.mockResolvedValue(A_LINKED_VIEW);
+  });
+
+  /** The element of a named component anywhere in a rendered tree, or null. */
+  function find(node: unknown, name: string): { props: Record<string, unknown> } | null {
+    if (!node || typeof node !== 'object') return null;
+    if (Array.isArray(node)) return node.map((n) => find(n, name)).find(Boolean) ?? null;
+    const el = node as { type?: { name?: string }; props?: { children?: unknown } };
+    if (el.type?.name === name) return el as { props: Record<string, unknown> };
+    return find(el.props?.children, name);
+  }
+
+  it('reads the Preferred Name for this athlete and hands the card the name, today and the race facts', async () => {
+    getPreferredNameForAthlete.mockResolvedValue('Sarah');
+    const tree = await render(PlanPage as Page);
+    expect(getPreferredNameForAthlete).toHaveBeenCalledWith('a1');
+    const card = find(tree, 'WeeklySessionDayCard');
+    expect(card).not.toBeNull();
+    expect(card!.props).toMatchObject({ athleteId: 'a1', athleteName: 'Sarah', locale: 'en', race: null });
+    expect(typeof card!.props.todayKey).toBe('string');
+  });
+
+  it('hands the card no name when no Preferred Name is set — the card says "the athlete", never the account name', async () => {
+    getPreferredNameForAthlete.mockResolvedValue(null);
+    const card = find(await render(PlanPage as Page), 'WeeklySessionDayCard');
+    expect(card!.props.athleteName).toBeNull();
   });
 });
