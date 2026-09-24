@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import en from '@/messages/en.json';
+import da from '@/messages/da.json';
 
 const {
   getSession,
@@ -15,8 +17,20 @@ const {
   setUiLanguage: vi.fn(),
   setPreferredName: vi.fn(),
   getUiPrefs: vi.fn(async () => ({})),
-  getTranslations: vi.fn(async () => (key: string) => key),
+  getTranslations: vi.fn(async () => translatorFor(en)),
 }));
+
+/**
+ * A translator over one catalogue's Onboarding block: the greeting keys resolve
+ * to their sentence with `{x}` substituted; anything else echoes its key, so
+ * the transcript-question assertions keep reading keys.
+ */
+function translatorFor(cat: { Onboarding: Record<string, string> }) {
+  return (key: string, values: Record<string, string> = {}) =>
+    key.startsWith('greeting')
+      ? cat.Onboarding[key].replace(/\{(\w+)\}/g, (_, k: string) => values[k] ?? '')
+      : key;
+}
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('next-intl/server', () => ({ getTranslations }));
@@ -185,6 +199,27 @@ describe('answerOnboardingAction', () => {
     expect(result.displayGreetingIntro).toContain('Captain');
     expect(result.displayGreetingIntro).not.toContain('Mads');
     expect(result.displayGreetingIntro).not.toContain('Kilstrup');
+  });
+
+  it('stores and shows the greeting in the request’s language — Danish when the catalogue is Danish', async () => {
+    signedIn();
+    getUiPrefs.mockResolvedValueOnce({ preferredName: 'Captain' });
+    getTranslations.mockResolvedValueOnce(translatorFor(da));
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
+
+    const result = await answerOnboardingAction({
+      step: 'race',
+      raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
+    });
+
+    expect(answerOnboardingStep.mock.calls[0][3]).toBe(
+      'Jeg er din Coach. Ironman Copenhagen er dit mål. Lad os komme i gang.',
+    );
+    expect(result).toMatchObject({
+      displayGreetingIntro: 'Hej Captain. Jeg er din Coach.',
+      displayGreetingBody: 'Ironman Copenhagen er dit mål. Lad os komme i gang.',
+    });
   });
 
   it('greets without any name when the athlete chose none — user.name is not a fallback', async () => {

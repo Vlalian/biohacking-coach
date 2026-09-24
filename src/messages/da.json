@@ -459,6 +459,10 @@
     "error": "Det blev ikke gemt. Prøv igen."
   },
   "Onboarding": {
+    "greetingIntroNamed": "Hej {name}. Jeg er din Coach.",
+    "greetingIntro": "Jeg er din Coach.",
+    "greetingBodyRace": "{race} er dit mål. Lad os komme i gang.",
+    "greetingBody": "Lad os komme i gang.",
     "coachLabel": "Din Coach",
     "stepOf": "Trin {step} af {total}",
     "stepPastRaces": "Tidligere løb",

@@ -17,6 +17,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "coach:say": "tsx --conditions=react-server scripts/coach-say.ts",
+    "briefing:length": "tsx --conditions=react-server scripts/briefing-length.ts",
     "corpus:ingest": "tsx --conditions=react-server scripts/ingest-corpus.ts",
     "oracle:ask": "tsx --conditions=react-server scripts/oracle-ask.ts",
     "oracle:eval": "tsx --conditions=react-server scripts/oracle-eval.ts",

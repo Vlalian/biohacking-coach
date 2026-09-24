@@ -14,6 +14,9 @@ import { signIn, signUp } from '@/lib/auth-client';
  * raw text: it keeps the UI translatable and avoids telling a stranger whether
  * an email is already registered.
  *
+ * On success it pushes to '/', the gate page, which sends a returning athlete
+ * on in the language they stored (showable-version/34).
+ *
  * `allowSignUp` is the deployment's `DISABLE_SIGNUP`, read on the server and
  * passed in: while registration is closed the sign-in page offers no way to a
  * form better-auth would refuse (showable-version/04). It defaults to open, so

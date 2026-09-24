@@ -15,7 +15,11 @@ import {
   answerOnboardingStep,
   type AnswerResult,
 } from '@/features/onboarding/onboarding-service';
-import { coachGreeting, type StepAnswer } from '@/features/onboarding/onboarding-flow';
+import {
+  coachGreeting,
+  type GreetingTranslator,
+  type StepAnswer,
+} from '@/features/onboarding/onboarding-flow';
 import { answerText } from '@/features/onboarding/onboarding-transcript';
 import { today } from '@/lib/date';
 
@@ -86,15 +90,18 @@ function raceForGreeting(payload: StepAnswer, athlete: Athlete): string {
  * name from `user.name` (`trim().split(/\s+/)[0]`), which guessed wrong for
  * anyone whose family name is written first; `preferred-name/02` removed the
  * derivation entirely. No name chosen means no name in the greeting. Display
- * only: what is persisted is the name-free line (ADR 0006).
+ * only: what is persisted is the name-free line (ADR 0006). Both lines are
+ * built from the request's catalogue, so the athlete who chose Danish two
+ * steps earlier is greeted in Danish (showable-version/39).
  */
 async function withDisplayGreeting(
   result: AnswerResult & { ok: true },
   userId: string,
   race: string,
+  t: GreetingTranslator,
 ): Promise<OnboardingActionResult> {
   const { preferredName } = await getUiPrefs(userId);
-  const personal = coachGreeting(preferredName, race);
+  const personal = coachGreeting(preferredName, race, t);
   return { ...result, displayGreetingIntro: personal.intro, displayGreetingBody: personal.body };
 }
 
@@ -112,7 +119,7 @@ export async function answerOnboardingAction(
   // The persisted greeting is name-free, because messages is a training-side
   // table keyed by athlete id and must never carry a name (ADR 0006). The
   // personalized one is built at completion, below, from the Preferred Name.
-  const stored = coachGreeting('', race);
+  const stored = coachGreeting('', race, t);
 
   const result = await answerOnboardingStep(
     athlete,
@@ -133,5 +140,5 @@ export async function answerOnboardingAction(
   // on — which makes Next.js replace this transition's result with the
   // already-onboarded redirect to /training-plan before the client ever
   // renders the hand-off screen, skipping the Coach's first message entirely.
-  return result.step === 'done' ? withDisplayGreeting(result, session.user.id, race) : result;
+  return result.step === 'done' ? withDisplayGreeting(result, session.user.id, race, t) : result;
 }

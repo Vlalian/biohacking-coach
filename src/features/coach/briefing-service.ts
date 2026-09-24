@@ -29,6 +29,7 @@ import {
   renderBriefingPrompt,
   toBriefingApiMessages,
   toBriefingReflection,
+  type BriefingContext,
   type BriefingReports,
   type BriefingTranscript,
   briefingRaces,
@@ -59,7 +60,13 @@ import {
  * ever assembled into the prompt.
  */
 
-const BRIEFING_MAX_TOKENS = 1400;
+/**
+ * The output cap. Raised from 1400 on 2026-09-24 (Mads, showable-version/19):
+ * the API counted 1318 output tokens for a 335-word briefing, 82 under the old
+ * cap, and `callCoach` does not surface `stop_reason`, so a cut would show
+ * only as a briefing ending mid-sentence.
+ */
+export const BRIEFING_MAX_TOKENS = 2000;
 
 /**
  * Renders the briefing system prompt from exactly the material the link permits.
@@ -76,6 +83,19 @@ async function buildBriefingSystem(
   today: string,
   language?: string,
 ): Promise<string> {
+  return renderBriefingPrompt(await buildBriefingContextFor(link, today, language));
+}
+
+/**
+ * The gated, assembled context behind {@link buildBriefingSystem} — exported
+ * for `scripts/briefing-length.ts` (showable-version/19), which counts what
+ * reaches the prompt for the personas. Reads only; nothing here writes.
+ */
+export async function buildBriefingContextFor(
+  link: CoachingLink,
+  today: string,
+  language?: string,
+): Promise<BriefingContext> {
   const athleteId = link.athleteId;
 
   // The plan and its structure are always read (the calendar has no flag, ADR
@@ -120,8 +140,7 @@ async function buildBriefingSystem(
       }))
     : null;
 
-  const ctx = buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName });
-  return renderBriefingPrompt(ctx);
+  return buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName });
 }
 
 /**

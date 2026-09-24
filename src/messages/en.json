@@ -459,6 +459,10 @@
     "error": "That didn't save. Try again."
   },
   "Onboarding": {
+    "greetingIntroNamed": "Hello {name}. I'm your Coach.",
+    "greetingIntro": "I'm your Coach.",
+    "greetingBodyRace": "{race} is your target. Let's get to work.",
+    "greetingBody": "Let's get to work.",
     "coachLabel": "Your Coach",
     "stepOf": "Step {step} of {total}",
     "stepPastRaces": "Past races",
