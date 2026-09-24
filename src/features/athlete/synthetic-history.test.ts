@@ -3,6 +3,9 @@ import {
   generateSyntheticHistory,
   toSessionHistory,
   SYNTHETIC_PROFILES,
+  type SyntheticProfile,
+  PERSONA_LABELS,
+  personasFor,
   toAthleteRow,
   toSessionRows,
   openInjuryFor,
@@ -436,5 +439,38 @@ describe('Nadia Holm — the third persona (code-health/16)', () => {
     // The fixed-date personas resolve to their stored date whatever the clock says.
     expect(raceDateFor(SYNTHETIC_PROFILES[0], TODAY)).toBe('2027-06-19');
     expect(raceDateFor(SYNTHETIC_PROFILES[1], new Date(2030, 0, 1))).toBe('2027-08-21');
+  });
+});
+
+describe('personasFor — one copy of the personas per owner (code-health/18)', () => {
+  it("personasFor('seed') is SYNTHETIC_PROFILES itself", () => {
+    expect(personasFor('seed')).toBe(SYNTHETIC_PROFILES);
+    expect(personasFor('seed').map((p) => p.id)).toEqual([
+      'b1e7c0d2-3f4a-4b5c-8d6e-7f8a9b0c1d2e',
+      'c2f8d1e3-4a5b-4c6d-9e7f-8a9b0c1d2e3f',
+      'd3a9e2f4-5b6c-4d7e-8f90-2b3c4d5e6f7a',
+    ]);
+    expect(PERSONA_LABELS).toEqual(['Alex Rivera', 'Sam Chen', 'Nadia Holm']);
+  });
+
+  it('an owner key derives its own athlete and injury ids, stable across calls, content unchanged', () => {
+    const a = personasFor('sarah@example.com');
+    const b = personasFor('sarah@example.com');
+    const seed = personasFor('seed');
+    expect(a.map((p) => p.id)).toEqual(b.map((p) => p.id));
+    expect(new Set([...a.map((p) => p.id), ...seed.map((p) => p.id)]).size).toBe(6);
+    const content = ({ id, injury, ...rest }: SyntheticProfile) => ({ ...rest, hasInjury: injury !== undefined, idLength: id.length });
+    expect(a.map(content)).toEqual(seed.map(content));
+    const nadia = a[2];
+    expect(nadia.injury?.id).not.toBe(seed[2].injury?.id);
+    expect(nadia.injury?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(nadia.injury?.capacity).toEqual(seed[2].injury?.capacity);
+    expect(personasFor('tom@example.com').map((p) => p.id)).not.toEqual(a.map((p) => p.id));
+  });
+
+  it('a snapshot pins the derived ids for one owner — the namespace must never move', () => {
+    expect(
+      personasFor('sarah@example.com').map((p) => [p.syntheticLabel, p.id, p.injury?.id ?? null]),
+    ).toMatchSnapshot();
   });
 });

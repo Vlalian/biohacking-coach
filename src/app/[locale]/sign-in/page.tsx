@@ -24,7 +24,9 @@ export default async function SignInPage({
       <div className="fixed top-4 right-4 z-10">
         <ThemeToggle />
       </div>
-      <AuthForm mode="sign-in" />
+      {/* The flag better-auth itself reads (`src/lib/auth.ts`): while it is set,
+          there is no link to a sign-up form the server would refuse. */}
+      <AuthForm mode="sign-in" allowSignUp={process.env.DISABLE_SIGNUP !== 'true'} />
     </>
   );
 }

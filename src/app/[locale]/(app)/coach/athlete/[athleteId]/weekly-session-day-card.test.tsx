@@ -38,14 +38,16 @@ const base = {
   athleteName: 'Sarah',
   race: { name: 'Aarhus 70.3', weeksOut: 13, blockName: 'Block 1 of 4' },
   locale: 'en',
+  instructed: true,
 };
 
 describe('WeeklySessionDayCard — the day as a fact, with the dates it drives', () => {
   it('renders the headline with the name and day, both next-draft dates, the tiles and the fold', () => {
-    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} />);
+    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} initialChanging />);
     expect(html).toContain('headline(name=Sarah,day=dayWednesday())');
-    // The ruled card bolds the day, "you" and the name: the strings carry <b> tags that t.rich renders.
-    expect(html).toContain('<b>b</b>');
+    // No markup in the copy: the card is read cold by someone learning the
+    // cycle, and bold words do not help them (Mads on the PR #102 preview).
+    expect(html).not.toContain('<b>');
     // The coach sees it Tue 22 Sep, the athlete Wed 23 Sep — from `nextDraftDates`,
     // not copy; the locale decides the order of day and month.
     expect(html).toMatch(/coachDate=[^,]*, Sep 22|coachDate=[^,]*22 Sep/);
@@ -80,17 +82,72 @@ describe('WeeklySessionDayCard — the day as a fact, with the dates it drives',
   });
 
   it('presses nothing when no day is stored, and names Sunday as the effective day', () => {
-    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} value={null} />);
+    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} value={null} initialChanging />);
     expect(html).not.toContain('aria-pressed="true"');
     expect(html).toContain('day=daySunday()');
   });
 
   it('renders the confirm line only while a day is proposed, and never writes on render', () => {
     expect(renderToStaticMarkup(<WeeklySessionDayCard {...base} />)).not.toContain('data-action="confirm-day"');
-    const proposing = renderToStaticMarkup(<WeeklySessionDayCard {...base} initialProposed="Thursday" />);
+    const proposing = renderToStaticMarkup(
+      <WeeklySessionDayCard {...base} initialChanging initialProposed="Thursday" />,
+    );
     expect(proposing).toContain('data-action="confirm-day"');
     expect(proposing).toContain('data-action="cancel-day"');
     expect(proposing).toContain('confirmQuestion(day=dayThursday())');
     expect(setWeeklySessionDayAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('the cycle is taught once per coach (training-architecture/41)', () => {
+  it('opens the fold and offers one way to dismiss it, for a coach never instructed', () => {
+    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} instructed={false} />);
+    expect(html).toMatch(/<details[^>]*\sopen\b/);
+    expect(html).toContain('gotIt()');
+    expect(html).toContain('step2(');
+  });
+
+  it('leaves the fold closed and shows no dismiss once instructed, keeping the reference one click away', () => {
+    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} instructed />);
+    expect(html).not.toMatch(/<details[^>]*\sopen\b/);
+    expect(html).not.toContain('gotIt()');
+    expect(html).toContain('howTitle()');
+    expect(html).toContain('step2(');
+  });
+});
+
+describe('the day picker is a deliberate step, not the loudest thing on the card', () => {
+  it('offers a Change day control instead of seven tiles at rest', () => {
+    const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} instructed />);
+    expect(html).toContain('changeDay()');
+    expect(html).not.toContain('aria-pressed=');
+  });
+
+  it('shows the seven days once asked, and still confirms before writing', () => {
+    const html = renderToStaticMarkup(
+      <WeeklySessionDayCard {...base} instructed initialChanging initialProposed="Friday" />,
+    );
+    expect(html.match(/<button\b[^>]*aria-pressed=/g)).toHaveLength(7);
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(html).toContain('data-day-confirm');
+    expect(setWeeklySessionDayAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('the next-draft line says what each date is', () => {
+  it('names both roles and both dates in one sentence, in both locales', async () => {
+    const [en, da] = await Promise.all([
+      import('@/messages/en.json').then((m) => m.default.CoachDay),
+      import('@/messages/da.json').then((m) => m.default.CoachDay),
+    ]);
+    for (const copy of [en.nextDraft, da.nextDraft]) {
+      // A sentence, not two dates behind a bullet: the old line read
+      // "Next draft: you {coachDate} · {name} {athleteDate}" and explained neither.
+      expect(copy).not.toContain('·');
+      expect(copy).toContain('{coachDate}');
+      expect(copy).toContain('{athleteDate}');
+      expect(copy).toContain('{name}');
+      expect(copy.trim().endsWith('.')).toBe(true);
+    }
   });
 });

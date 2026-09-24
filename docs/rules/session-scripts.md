@@ -10,9 +10,11 @@ link it into each session:
   worktree off `origin/main`, junctions the doc folders back to the canonical
   copies (admin-free on Windows), and writes a gitignored `CLAUDE.md` that
   `@`-imports the worktree's own `AGENTS.md` (so a branch that changes the rules
-  is read with its version) and the main folder's `CONTEXT-BRIEF.md` by absolute
-  path (it is gitignored, so only main has it). Doc edits land on the one real
-  copy.
+  is read with its version) and the docs repo's `CONTEXT-BRIEF.md` by absolute
+  path (it is generated and tracked there, not here). The project skills reach
+  the worktree the same way: `.claude/skills` is a junction to
+  `bc-docs/.claude/skills`, linked child by child with the rest of `.claude`.
+  Doc edits land on the one real copy.
 - **`Remove-Session.ps1 -Name <slug>`** — tears the session down. It **unlinks
   the junctions first**, then removes the worktree. This matters: a plain
   `git worktree remove` can follow the junctions and delete the canonical docs —

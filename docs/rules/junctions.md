@@ -1,8 +1,16 @@
 # Junction the tracker. Never copy it.
 
-`.scratch/` and `docs/agents/` live in **one** place — the private docs repo at
-`C:\Users\madsk\bc-docs` — and every clone and worktree reaches them through a
-**junction**. They are the same directory, not a copy.
+`.scratch/`, `docs/agents/` and `.claude/skills/` live in **one** place — the
+private docs repo at `C:\Users\madsk\bc-docs` — and every clone and worktree
+reaches them through a **junction**. They are the same directory, not a copy.
+
+The skills joined them on 2026-09-22 (as `.agents/`, tracked in bc-docs so a
+machine loss could not take all 24) and moved to `bc-docs/.claude/skills` on
+2026-09-24, the one location Claude Code reads natively and a cloud Project
+loads from every attached clone. The main folder's `.claude/skills` is a
+junction straight into bc-docs, and `New-Session.ps1` links it into each
+worktree child by child with the rest of `.claude`. There is no `.agents/` and
+no generated `.claude/commands` mirror any more.
 
 **Never restore them by copying.** A copy is a fork the moment either side is
 written to, and the fork is silent: both sides look right, and the one that dies

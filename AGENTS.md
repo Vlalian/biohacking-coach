@@ -8,9 +8,11 @@ earned it. **Open the file when the trigger matches what you are about to do**
 ## Every session
 
 - **At session start**, read [local-context.md](docs/rules/local-context.md) —
-  `CONTEXT.md`/`OVERVIEW.md` are gitignored; start from the generated
-  `CONTEXT-BRIEF.md`, use its terms exactly, open `CONTEXT.md` before naming
-  anything new. Claude Code has the brief auto-imported; other agents open it.
+  `CONTEXT.md`/`OVERVIEW.md` live in the private docs repo, not here; start
+  from the generated `CONTEXT-BRIEF.md`, use its terms exactly, open
+  `CONTEXT.md` before naming anything new. Claude Code has the brief
+  auto-imported (locally and in a cloud Project that attaches the docs repo);
+  other agents open it.
 
 ## Before you touch git or the tracker
 
