@@ -157,6 +157,12 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
     expect(interviewReaders).toEqual([
       'app/[locale]/feedback-actions.ts',
       'db/schema.ts',
+      // The builders' terminal readout (`npm run feedback`). It reads across
+      // athletes by design and is called by `scripts/feedback.ts` and nothing
+      // under src/ — a page or action importing it would be a Head Coach
+      // surface in the making, and the export-with-no-caller measurement
+      // (testing.md rule 1) counts `scripts/` as its one legitimate caller.
+      'features/feedback/feedback-report-repository.ts',
       'features/feedback/feedback-repository.ts',
       'features/feedback/feedback-service.ts',
     ]);
