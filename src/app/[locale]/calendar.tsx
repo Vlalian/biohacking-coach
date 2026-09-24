@@ -372,15 +372,18 @@ export function Calendar({
   }
 
   return (
-    <div className="w-full max-w-[1100px]" aria-busy={pending}>
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-foreground pb-3">
-        <div className="flex items-baseline gap-4">
-          <h1 className="font-display text-4xl leading-none tracking-[0.05em] text-foreground">
+    <div className="w-full max-w-[1500px]" aria-busy={pending}>
+      {/* The export's header (iron-insight-grid, 2026-09-23): the View name as a
+          kicker, the month as the display headline with the year in signal. */}
+      <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-foreground pb-5">
+        <div>
+          <span className="font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
             {t('viewTitle')}
-          </h1>
-          <span className="font-mono text-xs uppercase tracking-[0.24em] text-signal">
-            {format.dateTime(viewedMonth, { month: 'long', year: 'numeric' })}
           </span>
+          <h1 className="mt-1 font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
+            {format.dateTime(viewedMonth, { month: 'long' })}{' '}
+            <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <GhostButton
@@ -445,29 +448,29 @@ export function Calendar({
         // add their own first Athlete Session via "+" — Progressive
         // Disclosure grows the plan, it never blocks the one action that
         // would grow it.
-        <div className="mt-5 border border-dashed border-border bg-panel px-8 py-10 text-center">
-          <h2 className="font-display text-2xl tracking-[0.04em] text-foreground">
+        <div className="mt-6 border border-dashed border-border bg-panel px-8 py-10 text-center">
+          <h2 className="font-display text-3xl font-bold uppercase italic tracking-[0.02em] text-foreground">
             {t('emptyTitle')}
           </h2>
-          <p className="mx-auto mt-2 max-w-sm font-body text-sm text-muted-foreground">
+          <p className="mx-auto mt-2 max-w-sm font-body text-base text-muted-foreground">
             {t('emptyBody')}
           </p>
         </div>
       )}
 
-      <div className="mt-5 hidden grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b border-border pb-1 md:grid">
+      <div className="mt-6 hidden grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-border pb-2 md:grid">
         <span />
         {HEADER_DAYS.map((day, i) => (
           <span
             key={i}
-            className="px-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground"
+            className="px-2.5 font-body text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground"
           >
             {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
           </span>
         ))}
       </div>
 
-      <div className="mt-5 divide-y divide-border border-b border-border md:mt-0">
+      <div className="mt-6 divide-y divide-border border-b border-border md:mt-0">
         {weeks.map((week) => (
           <WeekRow
             key={week.isoWeekStart}
@@ -621,7 +624,7 @@ function WeekRow({
           more. */}
       <div
         data-health-status={week.isoWeekStart}
-        className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1 md:pl-[64px]"
+        className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1.5 md:pl-[72px]"
       >
         <StatusButton
           kind="injury"
@@ -648,7 +651,7 @@ function WeekRow({
           onClick is not reachable by keyboard, so widening the hit area for a
           mouse must not narrow who can reach it. */}
       <div
-        className="grid grid-cols-1 md:grid-cols-[56px_repeat(7,minmax(0,1fr))]"
+        className="grid grid-cols-1 md:grid-cols-[64px_repeat(7,minmax(0,1fr))]"
         onClick={(e) => {
           // Two things must not reach this handler. A day cell has controls of
           // its own, and the date label below is a real button that already
@@ -669,12 +672,13 @@ function WeekRow({
           // The chevron's rotation is the only cue that a week is expanded, and
           // rotation is invisible to a screen reader.
           aria-expanded={expanded}
-          className="flex items-center gap-1 px-2 py-3 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground outline-none transition-colors hover:text-signal focus-visible:text-signal focus-visible:ring-1 focus-visible:ring-signal"
+          className="relative flex items-start gap-1 overflow-hidden bg-foreground px-2.5 py-3 text-left font-display text-base font-bold uppercase italic tracking-[0.04em] text-primary-foreground outline-none transition-colors hover:text-signal focus-visible:text-signal focus-visible:ring-1 focus-visible:ring-signal md:flex-col"
         >
+          <span className="absolute left-0 top-0 h-full w-[3px] bg-signal" aria-hidden="true" />
           <ChevronDown
-            className={['h-3 w-3 transition-transform', expanded ? '' : '-rotate-90'].join(' ')}
+            className={['mt-1 h-3.5 w-3.5 shrink-0 transition-transform', expanded ? '' : '-rotate-90'].join(' ')}
           />
-          {weekLabel}
+          <span>{weekLabel}</span>
         </button>
 
         {week.days.map((day) => {
@@ -705,7 +709,8 @@ function WeekRow({
                 onDropDay(day);
               }}
               className={[
-                'group relative min-h-[56px] border-l border-border px-2 py-2 transition-colors',
+                'group relative min-h-[56px] border-l border-border bg-panel px-2.5 py-2.5 transition-colors',
+                expanded ? 'md:min-h-[132px]' : '',
                 day.inMonth ? '' : 'opacity-40',
                 day.isPast ? 'opacity-70' : '',
                 day.isToday ? 'bg-signal/[0.06]' : '',
@@ -718,7 +723,7 @@ function WeekRow({
               <div className="flex items-center justify-between">
                 <span
                   className={[
-                    'font-mono text-[11px]',
+                    'font-display text-2xl font-bold leading-none',
                     day.isToday ? 'text-signal' : 'text-muted-foreground',
                     day.isUnavailableDate ? 'line-through' : '',
                   ].join(' ')}
@@ -738,7 +743,7 @@ function WeekRow({
                       }
                       title={day.isUnavailableDate ? t('unavailableDay') : undefined}
                       className={[
-                        'font-mono text-[11px] leading-none transition-opacity',
+                        'font-body text-base leading-none transition-opacity',
                         day.isUnavailableDate
                           ? 'text-signal opacity-100'
                           : 'text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100',
@@ -757,14 +762,14 @@ function WeekRow({
                       // control they cannot see. The ✕ above already does this.
                       className="text-muted-foreground opacity-0 transition-opacity hover:text-signal focus:opacity-100 focus-visible:text-signal group-hover:opacity-100"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-5 w-5" />
                     </button>
                   )}
                 </div>
               </div>
 
               {expanded ? (
-                <div className="mt-1.5 space-y-1">
+                <div className="mt-2 space-y-2">
                   {day.sessions.map((s) => (
                     <SessionChip
                       key={s.id}
@@ -783,7 +788,7 @@ function WeekRow({
                     />
                   ))}
                   {day.sessions.length > 1 && (
-                    <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <span className="font-body text-[13px] uppercase tracking-[0.16em] text-muted-foreground">
                       {t('double')}
                     </span>
                   )}
@@ -842,7 +847,7 @@ function WeekRow({
       </div>
 
       {bounce && week.days.some((d) => d.date === bounce.date) && (
-        <p className="flex items-center gap-2 border-t border-destructive/40 bg-destructive/5 px-3 py-1.5 font-body text-xs text-destructive">
+        <p className="flex items-center gap-2 border-t border-destructive/40 bg-destructive/5 px-3 py-2 font-body text-sm text-destructive">
           {t(bounce.messageKey)}
         </p>
       )}
@@ -873,11 +878,11 @@ function StatusButton({
       data-active={active ? 'true' : 'false'}
       onClick={onClick}
       className={[
-        'inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors hover:text-foreground',
+        'inline-flex items-center gap-1.5 font-body text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors hover:text-foreground',
         active ? 'text-signal' : 'text-muted-foreground',
       ].join(' ')}
     >
-      <Icon className="h-3 w-3" aria-hidden="true" />
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
       {label}
     </button>
   );
@@ -963,10 +968,11 @@ function SessionChip({
   // Drag is deliberately independent of opening: the Head Coach may re-place a
   // session (ADR 0003, 2026-08-21 amendment) on a calendar they cannot open.
   const className = [
-    'block w-full border-l-2 px-1.5 py-1 text-left transition-colors',
-    draggable ? 'cursor-grab active:cursor-grabbing' : '',
-    onOpen ? 'cursor-pointer hover:bg-foreground/[0.06]' : '',
-    session.status === 'completed' ? 'bg-foreground/[0.05]' : '',
+    'block w-full border border-border border-l-4 bg-card px-2.5 py-2 text-left shadow-sm transition-all',
+    draggable ? 'cursor-grab active:cursor-grabbing hover:-translate-y-0.5 hover:shadow-md' : '',
+    onOpen ? 'cursor-pointer' : '',
+    session.status === 'completed' ? 'bg-muted/60' : '',
+    session.parked ? 'border-dashed opacity-70' : '',
     muted ? 'opacity-50 line-through' : '',
   ]
     .filter(Boolean)
@@ -974,14 +980,14 @@ function SessionChip({
 
   const content = (
     <>
-      <span className="flex items-center gap-1">
-        <span className="block min-w-0 flex-1 truncate font-body text-[11px] font-medium leading-tight text-foreground">
+      <span className="flex items-center gap-1.5">
+        <span className="block min-w-0 flex-1 truncate font-display text-[15px] font-bold uppercase italic leading-tight text-foreground">
           {session.title ?? session.type}
         </span>
-        <Marks marks={marks} size={10} />
+        <Marks marks={marks} size={14} />
       </span>
-      <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-        {session.duration ? `${session.duration}${t('minutes')}` : session.type}
+      <span className="mt-1 block font-body text-sm text-muted-foreground">
+        {session.duration ? `${session.type} · ${session.duration}${t('minutes')}` : session.type}
       </span>
     </>
   );
@@ -1008,7 +1014,7 @@ function SessionChip({
         title={title}
         aria-label={markLabel}
         className={className}
-        style={{ borderColor: color }}
+        style={{ borderLeftColor: color }}
       >
         {content}
         {refusalText && <span className="sr-only">{refusalText}</span>}
@@ -1026,7 +1032,7 @@ function SessionChip({
       title={title}
       aria-label={markLabel}
       className={className}
-      style={{ borderColor: color }}
+      style={{ borderLeftColor: color }}
     >
       {content}
       {/* `title` alone is a hover affordance and reaches neither a screen reader
@@ -1040,14 +1046,14 @@ function SessionChip({
 function Legend({ t }: { t: ReturnType<typeof useTranslations<'Calendar'>> }) {
   const types = ['Endurance', 'Intensity', 'Tempo', 'Recovery', 'Rest'];
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-4">
-      <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+    <div className="mt-4 flex flex-wrap items-center gap-4">
+      <span className="font-body text-sm uppercase tracking-[0.2em] text-muted-foreground">
         {t('legend')}
       </span>
       {types.map((ty) => (
         <span key={ty} className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: typeColor(ty) }} />
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: typeColor(ty) }} />
+          <span className="font-body text-sm text-muted-foreground">
             {ty}
           </span>
         </span>
@@ -1069,9 +1075,9 @@ function GhostButton({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 border border-border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+      className="inline-flex h-10 items-center gap-2 border border-border bg-transparent px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal"
     >
-      {Icon && <Icon className="h-3.5 w-3.5" />}
+      {Icon && <Icon className="h-4 w-4" />}
       {children}
     </button>
   );

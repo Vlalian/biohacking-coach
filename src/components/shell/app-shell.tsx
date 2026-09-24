@@ -21,7 +21,9 @@ import {
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
-/*  Ported from the Lovable design (iron-insight-grid, shell brief).   */
+/*  Ported from the Lovable export (iron-insight-grid, 2026-09-23):     */
+/*  graphite top bar and drawer in both themes, the TRACKSIDE wordmark, */
+/*  the red Coach control, display-face nav entries.                    */
 /*  Presentational only — data in via props, writes out via callbacks. */
 /*  Every visible string arrives via the required `t` prop; no baked-  */
 /*  in English default (handoff-contract rule 2).                      */
@@ -162,22 +164,20 @@ export function AppShell({
     // (showable-version/30, Mads on the S5, 2026-09-17). The dynamic unit follows.
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* Top bar — always holds the drawer trigger and the theme cycle */}
-      <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-3 sm:px-5">
+      <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground sm:px-5">
         <button
           type="button"
           onClick={onToggleNavDrawer}
           aria-label={navDrawerOpen ? t.closeNav : t.openNav}
           aria-expanded={navDrawerOpen}
-          className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-colors hover:border-signal hover:text-signal"
+          className="inline-flex h-10 w-10 items-center justify-center border border-sidebar-border text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           <PanelLeft className="h-4 w-4" />
         </button>
 
         <div className="flex min-w-0 items-baseline gap-3">
-          <span className="font-display text-xl leading-none tracking-[0.08em] text-foreground">
-            {t.appName}
-          </span>
-          <span className="hidden truncate font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:inline">
+          <Wordmark name={t.appName} className="text-2xl" />
+          <span className="hidden truncate font-body text-sm font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/70 sm:inline">
             {t.views[currentView]}
           </span>
         </div>
@@ -191,22 +191,22 @@ export function AppShell({
             aria-label={coachOpen ? t.closeCoach : t.openCoach}
             title={coachOpen ? t.closeCoach : t.openCoach}
             className={[
-              'inline-flex h-9 items-center gap-2 border px-2.5 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
+              'inline-flex h-10 items-center gap-2 border px-3 font-display text-base font-semibold uppercase tracking-wide transition-colors',
               coachOpen
                 ? 'border-signal bg-signal text-signal-foreground'
-                : 'border-border text-muted-foreground hover:border-signal hover:text-signal',
+                : 'border-signal bg-signal/90 text-signal-foreground hover:bg-signal',
             ].join(' ')}
           >
             <MessageSquare className="h-4 w-4" />
             <span className="hidden sm:inline">{t.coachOverlayTitle}</span>
           </button>
           {isCoachedMode && (
-            <span className="hidden border border-signal px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-signal sm:inline">
+            <span className="hidden border border-signal px-2 py-1 font-body text-sm font-semibold uppercase tracking-[0.18em] text-signal sm:inline">
               {t.coachedModeBadge}
             </span>
           )}
           {athleteName && (
-            <span className="hidden font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground md:inline">
+            <span className="hidden font-body text-sm font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/70 md:inline">
               {athleteName}
             </span>
           )}
@@ -215,7 +215,7 @@ export function AppShell({
             onClick={onCycleTheme}
             aria-label={themeLabel}
             title={themeLabel}
-            className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-colors hover:border-signal hover:text-signal"
+            className="inline-flex h-10 w-10 items-center justify-center border border-sidebar-border text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
             <ThemeIcon className="h-4 w-4" />
           </button>
@@ -243,25 +243,28 @@ export function AppShell({
           aria-label={t.navLandmark}
           inert={!navDrawerOpen}
           className={[
-            'absolute inset-y-0 left-0 z-40 flex w-[86%] max-w-[300px] flex-col border-r border-border bg-sidebar transition-transform duration-200 ease-out sm:w-[20%] sm:min-w-[220px]',
+            'absolute inset-y-0 left-0 z-40 flex w-[86%] max-w-[300px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 ease-out sm:w-[20%] sm:min-w-[240px]',
             navDrawerOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
-          <div className="flex items-center justify-between border-b border-rule px-4 py-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              {t.navLandmark}
-            </span>
+          <div className="flex items-center justify-between border-b border-sidebar-border px-5 py-5">
+            <Wordmark name={t.appName} className="text-3xl" />
             <button
               type="button"
               onClick={onToggleNavDrawer}
               aria-label={t.closeNav}
-              className="text-muted-foreground transition-colors hover:text-signal"
+              className="inline-flex h-10 w-10 items-center justify-center text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
+          <div className="px-5 pb-1 pt-4">
+            <span className="font-body text-xs font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/70">
+              {t.navLandmark}
+            </span>
+          </div>
 
-          <ul className="min-h-0 flex-1 overflow-y-auto py-2">
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
             {availableViews.map((view) => {
               const Icon = VIEW_ICONS[view];
               const active = view === currentView;
@@ -272,14 +275,14 @@ export function AppShell({
                     onClick={() => go(view)}
                     aria-current={active ? 'page' : undefined}
                     className={[
-                      'flex w-full items-center gap-3 border-l-2 px-4 py-2.5 text-left transition-colors',
+                      'flex w-full items-center gap-3 border-l-4 px-4 py-3 text-left transition-colors',
                       active
-                        ? 'border-signal bg-accent text-foreground'
-                        : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                        ? 'border-signal bg-signal text-signal-foreground'
+                        : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
                     ].join(' ')}
                   >
-                    <Icon className={active ? 'h-4 w-4 text-signal' : 'h-4 w-4'} />
-                    <span className="font-body text-sm tracking-wide">{t.views[view]}</span>
+                    <Icon className="h-4 w-4" />
+                    <span className="font-display text-base font-semibold uppercase tracking-wide">{t.views[view]}</span>
                   </button>
                 </li>
               );
@@ -287,7 +290,7 @@ export function AppShell({
           </ul>
 
           {navFooter && (
-            <div className="shrink-0 border-t border-rule px-4 py-3">{navFooter}</div>
+            <div className="shrink-0 border-t border-sidebar-border px-2 py-3">{navFooter}</div>
           )}
         </nav>
 
@@ -308,6 +311,24 @@ export function AppShell({
         )}
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Wordmark — the product name as the export sets it: TRACK in the     */
+/*  chrome's foreground, SIDE in the signal red. Any other name renders */
+/*  whole, so the mark never splits a word it does not know.            */
+/* ------------------------------------------------------------------ */
+
+function Wordmark({ name, className }: { name: string; className: string }) {
+  const split = /^trackside$/i.test(name) ? 5 : name.length;
+  return (
+    <span
+      className={`font-display font-bold uppercase leading-none tracking-wide text-sidebar-foreground ${className}`}
+    >
+      {name.slice(0, split)}
+      {split < name.length && <span className="text-signal">{name.slice(split)}</span>}
+    </span>
   );
 }
 
@@ -359,17 +380,17 @@ function CoachOverlay({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         aria-label={t.moveCoachOverlay}
-        className="flex cursor-grab touch-none items-center justify-between border-b border-rule bg-background px-4 py-3 active:cursor-grabbing"
+        className="flex cursor-grab touch-none items-center justify-between border-b border-sidebar-border bg-sidebar px-4 py-3 text-sidebar-foreground active:cursor-grabbing"
       >
-        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-signal">
-          <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="flex items-center gap-2 font-display text-base font-semibold uppercase tracking-wide text-signal">
+          <GripHorizontal className="h-4 w-4 text-sidebar-foreground/70" />
           {title}
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label={t.closeCoach}
-          className="text-muted-foreground transition-colors hover:text-signal"
+          className="inline-flex h-10 w-10 items-center justify-center text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           <X className="h-4 w-4" />
         </button>

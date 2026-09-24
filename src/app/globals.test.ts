@@ -16,8 +16,8 @@ const css = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
 describe('parseThemes — the tokens as globals.css declares them', () => {
   it('parses --background and --border for light and dark, alpha included', () => {
     const t = parseThemes(css);
-    expect(t.light['--background']).toEqual({ L: 0.985, C: 0.005, h: 85, alpha: 1 });
-    expect(t.dark['--background']).toEqual({ L: 0.14, C: 0.008, h: 60, alpha: 1 });
+    expect(t.light['--background']).toEqual({ L: 0.975, C: 0.002, h: 260, alpha: 1 });
+    expect(t.dark['--background']).toEqual({ L: 0.12, C: 0.006, h: 260, alpha: 1 });
     expect(Object.keys(t.light)).toContain('--muted-foreground');
   });
 });
