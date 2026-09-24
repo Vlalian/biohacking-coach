@@ -1,12 +1,11 @@
 'use client';
 
-import { useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { LogOut, MessageSquareWarning } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useTheme } from 'next-themes';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
-import { AppShell, type AppShellStrings, type ThemePreference, type ViewId } from './app-shell';
+import { AppShell, type AppShellStrings, type ViewId } from './app-shell';
 import { CoachOverlayContext, type ChatSeed, type CoachReference } from './coach-overlay-context';
 
 /** The escape hatch reads as an equal of Sign out — same weight, same footer. */
@@ -15,16 +14,6 @@ const ESCAPE_HATCH_CLASS =
 
 const SIGN_OUT_BUTTON_CLASS =
   'flex w-full items-center gap-3 border-l-4 border-transparent px-4 py-3 text-left font-display text-base font-semibold uppercase tracking-wide text-sidebar-foreground/70 no-underline transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50';
-
-/**
- * "Has this component hydrated yet?", asked without a state update inside an
- * effect — which would schedule a second render pass on every mount. The store
- * never emits, so the only transition is the one React itself performs when it
- * stops using the server snapshot and starts using the client one.
- */
-const NEVER_CHANGES = () => () => {};
-const ON_CLIENT = () => true;
-const ON_SERVER = () => false;
 
 const VIEW_PATH: Record<ViewId, string> = {
   'training-plan': '/training-plan',
@@ -61,25 +50,6 @@ export function ShellChrome({
   const t = useTranslations('Shell');
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
-
-  /**
-   * The stored theme preference exists only in the browser, so the server has
-   * no way to know it. Rendering it straight away made the server say
-   * "Automatisk" and the client say "Lyst" for the same button, which React
-   * resolves by throwing the whole shell away and re-rendering it — a hydration
-   * error on every page load.
-   *
-   * So the first client render deliberately agrees with the server (`system`,
-   * the same default the provider is configured with) and the real preference
-   * arrives one effect later. The cost is that the theme icon can change once,
-   * just after mount; the alternative was discarding and rebuilding the entire
-   * tree on every navigation.
-   */
-  const themeReady = useSyncExternalStore(NEVER_CHANGES, ON_CLIENT, ON_SERVER);
-  const themePreference: ThemePreference = themeReady
-    ? ((theme as ThemePreference) ?? 'system')
-    : 'system';
 
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
@@ -100,9 +70,6 @@ export function ShellChrome({
       openNav: t('openNav'),
       closeNav: t('closeNav'),
       navLandmark: t('navLandmark'),
-      themeLight: t('themeLight'),
-      themeDark: t('themeDark'),
-      themeSystem: t('themeSystem'),
       coachedModeBadge: t('coachedModeBadge'),
       openCoach: t('openCoach'),
       closeCoach: t('closeCoach'),
@@ -151,7 +118,6 @@ export function ShellChrome({
         availableViews={availableViews}
         isCoachedMode={isCoachedMode}
         athleteName={athleteName}
-        theme={themePreference}
         navDrawerOpen={navDrawerOpen}
         coachOverlay={{ open: coachOpen }}
         coachContent={coachContent}
@@ -187,9 +153,6 @@ export function ShellChrome({
         onNavigate={(view) => router.push(VIEW_PATH[view])}
         onToggleNavDrawer={() => setNavDrawerOpen((v) => !v)}
         onToggleCoachOverlay={() => setCoachOpen((v) => !v)}
-        onCycleTheme={() =>
-          setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')
-        }
         t={strings}
       >
         {children}

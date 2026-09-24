@@ -9,6 +9,7 @@ const {
   getUnavailableDates,
   getLatestOpenConversation,
   getMessages,
+  getUiPrefs,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -22,6 +23,7 @@ const {
   getUnavailableDates: vi.fn(() => Promise.resolve([])),
   getLatestOpenConversation: vi.fn(() => Promise.resolve(null)),
   getMessages: vi.fn(() => Promise.resolve([])),
+  getUiPrefs: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -34,6 +36,7 @@ vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/athlete/athlete-provisioning', () => ({ provisionAthlete }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getUiPrefs }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/features/coach/conversation-repository', () => ({
@@ -67,6 +70,7 @@ describe('AthletePage', () => {
     redirect.mockClear();
     getAthleteByUserId.mockReset();
     provisionAthlete.mockReset();
+    getUiPrefs.mockReset().mockResolvedValue({});
   });
 
   it('redirects a signed-out visitor to sign-in instead of rendering', async () => {
@@ -104,5 +108,46 @@ describe('AthletePage', () => {
     expect(provisionAthlete).toHaveBeenCalledWith('user_orphan');
     expect(getAthleteByUserId).toHaveBeenCalledTimes(2);
     expect(redirect).toHaveBeenCalledWith({ href: '/training-plan', locale: 'en' });
+  });
+
+  it('sends a returning athlete to the language they stored, whatever locale the URL had (showable-version/34)', async () => {
+    // Locale detection is off, so a bookmark or a live session opens /en; the
+    // stored preference is the truth and this redirect is where it is applied.
+    getSession.mockResolvedValue({ user: { id: 'user_1', name: 'Mads Kilstrup' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', experienceLevel: 'intermediate', profile: null });
+    getUiPrefs.mockResolvedValue({ language: 'da' });
+
+    await expect(render('en')).rejects.toThrow('REDIRECT');
+
+    // Back to this page in their language first; the /da render then sends
+    // them on to the Training Plan like anyone else.
+    expect(getUiPrefs).toHaveBeenCalledWith('user_1');
+    expect(redirect).toHaveBeenCalledWith({ href: '/', locale: 'da' });
+
+    redirect.mockClear();
+    await expect(render('da')).rejects.toThrow('REDIRECT');
+    expect(redirect).toHaveBeenCalledWith({ href: '/training-plan', locale: 'da' });
+  });
+
+  it('moves an unfinished athlete to their stored language before any gate renders (CodeRabbit, PR #101)', async () => {
+    // The language step stores `da` before onboarding is done; a later visit
+    // to /en must not render the consent or onboarding gate in English.
+    getSession.mockResolvedValue({ user: { id: 'user_1', name: 'Mads Kilstrup' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', experienceLevel: null, profile: null });
+    getUiPrefs.mockResolvedValue({ language: 'da' });
+
+    await expect(render('en')).rejects.toThrow('REDIRECT');
+
+    expect(redirect).toHaveBeenCalledWith({ href: '/', locale: 'da' });
+  });
+
+  it('keeps the URL locale when nothing is stored, or the stored value is not a language the app has', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_1', name: 'Mads Kilstrup' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', experienceLevel: 'intermediate', profile: null });
+    getUiPrefs.mockResolvedValue({ language: 'xx' });
+
+    await expect(render('da')).rejects.toThrow('REDIRECT');
+
+    expect(redirect).toHaveBeenCalledWith({ href: '/training-plan', locale: 'da' });
   });
 });

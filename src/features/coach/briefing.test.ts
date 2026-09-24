@@ -262,7 +262,7 @@ describe('renderBriefingPrompt — golden', () => {
           profile: {
             ...reports.profile,
             capacity: 'Currently: no run, bike easy only.',
-            onboarding: { sportBackground: 'cycling', availableHours: '10–12h', motivation: 'finish' },
+            onboarding: { sportBackground: 'cycling', hoursPerWeek: 11, motivation: 'finish' },
           },
           reflections: [
             ...reports.reflections,

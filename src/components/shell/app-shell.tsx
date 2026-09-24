@@ -10,12 +10,9 @@ import {
   GripHorizontal,
   MessageSquare,
   MessagesSquare,
-  Moon,
   PanelLeft,
   ShieldCheck,
   Settings as SettingsIcon,
-  Sun,
-  SunMoon,
   Users,
   X,
 } from 'lucide-react';
@@ -48,16 +45,11 @@ export type ViewId =
   | 'roster'
   | 'feedback';
 
-export type ThemePreference = 'light' | 'dark' | 'system';
-
 export interface AppShellStrings {
   appName: string;
   openNav: string;
   closeNav: string;
   navLandmark: string;
-  themeLight: string;
-  themeDark: string;
-  themeSystem: string;
   coachedModeBadge: string;
   openCoach: string;
   closeCoach: string;
@@ -71,7 +63,6 @@ export interface AppShellProps {
   availableViews: ViewId[];
   isCoachedMode: boolean;
   athleteName?: string;
-  theme: ThemePreference;
   navDrawerOpen: boolean;
   /** The always-available Coach surface — not a View. */
   coachOverlay?: { open: boolean };
@@ -87,7 +78,6 @@ export interface AppShellProps {
   onNavigate: (view: ViewId) => void;
   onToggleNavDrawer: () => void;
   onToggleCoachOverlay?: () => void;
-  onCycleTheme: () => void;
   t: AppShellStrings;
 }
 
@@ -109,12 +99,6 @@ const VIEW_ICONS: Record<ViewId, typeof MessageSquare> = {
 /** The reference pages, listed at the foot of the drawer rather than among the daily Views. */
 const FOOTER_VIEWS: ViewId[] = ['glossary', 'settings', 'privacy'];
 
-const THEME_ICONS: Record<ThemePreference, typeof Sun> = {
-  light: Sun,
-  dark: Moon,
-  system: SunMoon,
-};
-
 /* ------------------------------------------------------------------ */
 /*  Shell                                                              */
 /* ------------------------------------------------------------------ */
@@ -124,7 +108,6 @@ export function AppShell({
   availableViews,
   isCoachedMode,
   athleteName,
-  theme,
   navDrawerOpen,
   coachOverlay,
   navFooter,
@@ -133,14 +116,9 @@ export function AppShell({
   onNavigate,
   onToggleNavDrawer,
   onToggleCoachOverlay,
-  onCycleTheme,
   t,
 }: AppShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const ThemeIcon = THEME_ICONS[theme];
-  const themeLabel =
-    theme === 'light' ? t.themeLight : theme === 'dark' ? t.themeDark : t.themeSystem;
-
   // Navigation Drawer dismisses on Escape as well as outside-tap.
   useEffect(() => {
     if (!navDrawerOpen) return;
@@ -166,7 +144,7 @@ export function AppShell({
     // half the page white, the header pushed out of reach until a reload
     // (showable-version/30, Mads on the S5, 2026-09-17). The dynamic unit follows.
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      {/* Top bar — always holds the drawer trigger and the theme cycle */}
+      {/* Top bar — always holds the drawer trigger */}
       <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground sm:px-5">
         <button
           type="button"
@@ -210,15 +188,6 @@ export function AppShell({
               {athleteName}
             </span>
           )}
-          <button
-            type="button"
-            onClick={onCycleTheme}
-            aria-label={themeLabel}
-            title={themeLabel}
-            className="inline-flex h-10 w-10 items-center justify-center border border-sidebar-border text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-          >
-            <ThemeIcon className="h-4 w-4" />
-          </button>
         </div>
       </header>
 

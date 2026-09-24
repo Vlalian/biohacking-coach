@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { user } from '@/db/auth-schema';
 import { athlete } from '@/db/schema';
@@ -24,6 +24,13 @@ export interface UiPrefs {
    * Absent when they left the field blank — the Coach is then nameless.
    */
   preferredName?: string;
+  /**
+   * Set once a Head Coach has been shown the week cycle in full and dismissed
+   * it (`training-architecture/41`). Per user, not per athlete: the cycle is the
+   * same for everyone they coach, so it is taught once. Absent means never
+   * instructed — there is no `false`.
+   */
+  weekCycleInstructed?: true;
 }
 
 export async function getUiPrefs(userId: string): Promise<UiPrefs> {
@@ -35,16 +42,41 @@ export async function getUiPrefs(userId: string): Promise<UiPrefs> {
   return (rows[0]?.uiPrefs as UiPrefs | null) ?? {};
 }
 
+/**
+ * The one write in this module: a single statement that changes the prefs
+ * Postgres holds right now.
+ *
+ * Read-modify-write in JavaScript lost whichever of two concurrent writes
+ * finished second — two settings pages open, or a coach dismissing the week
+ * cycle while a language change was in flight, and one of them vanished
+ * (CodeRabbit, PR #102). `neon-http` has no transactions, so the merge belongs
+ * in the statement rather than around it.
+ */
+async function writeUiPrefs(userId: string, change: SQL): Promise<void> {
+  await getDb().update(user).set({ uiPrefs: change }).where(eq(user.id, userId));
+}
+
+/** One preference, merged over whatever else is stored, inside the database. */
+async function patchUiPrefs(userId: string, patch: UiPrefs): Promise<void> {
+  await writeUiPrefs(
+    userId,
+    sql`coalesce(${user.uiPrefs}, '{}'::jsonb) || ${sql.param(JSON.stringify(patch))}::jsonb`,
+  );
+}
+
+/** One preference removed, leaving the rest as they are. */
+async function removeUiPref(userId: string, key: keyof UiPrefs): Promise<void> {
+  await writeUiPrefs(userId, sql`coalesce(${user.uiPrefs}, '{}'::jsonb) - ${sql.param(key)}`);
+}
+
 /** Sets the chosen language, merging over any other stored prefs. */
-export async function setUiLanguage(
-  userId: string,
-  language: string,
-): Promise<void> {
-  const current = await getUiPrefs(userId);
-  await getDb()
-    .update(user)
-    .set({ uiPrefs: { ...current, language } })
-    .where(eq(user.id, userId));
+export async function setUiLanguage(userId: string, language: string): Promise<void> {
+  await patchUiPrefs(userId, { language });
+}
+
+/** Records that this user has seen the week cycle, merging over any other stored prefs. */
+export async function setWeekCycleInstructed(userId: string): Promise<void> {
+  await patchUiPrefs(userId, { weekCycleInstructed: true });
 }
 
 /**
@@ -56,10 +88,9 @@ export async function setPreferredName(
   userId: string,
   preferredName: string | null,
 ): Promise<void> {
-  const next: UiPrefs = { ...(await getUiPrefs(userId)) };
-  if (preferredName === null) delete next.preferredName;
-  else next.preferredName = preferredName;
-  await getDb().update(user).set({ uiPrefs: next }).where(eq(user.id, userId));
+  // Clearing removes the key, which a merge cannot express — hence the two paths.
+  if (preferredName === null) await removeUiPref(userId, 'preferredName');
+  else await patchUiPrefs(userId, { preferredName });
 }
 
 /**

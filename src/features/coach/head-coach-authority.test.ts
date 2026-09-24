@@ -11,6 +11,11 @@ describe('canHeadCoachEditContent — the content tier as a guard on origin', ()
     expect(canHeadCoachEditContent(HEAD_COACH_ORIGIN)).toBe(true);
   });
 
+  it('may edit and move what the structure wrote — it is the plan, not the athlete’s own (training-architecture/34)', () => {
+    expect(canHeadCoachEditContent('arithmetic')).toBe(true);
+    expect(canHeadCoachMove('arithmetic')).toBe(true);
+  });
+
   it('an Athlete Session is view-only even to the Head Coach', () => {
     // ADR 0003: "may only view Athlete Sessions: the athlete's own entries are
     // their territory."

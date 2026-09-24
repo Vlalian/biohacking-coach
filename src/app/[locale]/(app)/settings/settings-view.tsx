@@ -10,7 +10,9 @@ import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { PreferredNameField } from '@/components/preferred-name-field';
-import type { AddRaceResult, SettingsActionResult } from './settings-actions';
+import { ChangePasswordForm } from '@/components/change-password-form';
+import type { AddPastRaceResult, AddRaceResult, SettingsActionResult } from './settings-actions';
+import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './settings-past-races';
 import { RacesSection, type SettingsRace } from './settings-races';
 import type { DeleteAccountResult } from './erasure-actions';
 
@@ -23,6 +25,8 @@ export interface SettingsProfile {
   communicationStyle: string;
   /** Every Race the athlete has, target flagged (`training-architecture/09`). */
   races: SettingsRace[];
+  /** The races the athlete has finished (`training-architecture/35`). */
+  pastRaces: SettingsPastRace[];
   raceDistance: string;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
@@ -47,6 +51,8 @@ export interface SettingsViewProps {
   onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
   onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
   onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
+  onAddPastRace: (entry: PastRaceInput) => Promise<AddPastRaceResult>;
+  onRemovePastRace: (pastRaceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -95,6 +101,8 @@ export function SettingsView({
   onAddRace,
   onSetTargetRace,
   onRemoveRace,
+  onAddPastRace,
+  onRemovePastRace,
   onUpdateRaceDistance,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
@@ -140,6 +148,9 @@ export function SettingsView({
           onAddRace={onAddRace}
           onSetTargetRace={onSetTargetRace}
           onRemoveRace={onRemoveRace}
+          pastRaces={profile.pastRaces}
+          onAddPastRace={onAddPastRace}
+          onRemovePastRace={onRemovePastRace}
           onUpdateRaceDistance={onUpdateRaceDistance}
           onUpdateWeeklySessionDay={onUpdateWeeklySessionDay}
           onAddFixedConstraint={onAddFixedConstraint}
@@ -187,6 +198,9 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
     <Section label={t('sectionProfile')}>
       <ReadOnlyField label={t('nameLabel')} value={name} />
       <ReadOnlyField label={t('emailLabel')} value={email} />
+      {/* A tester's first password arrives by email (showable-version/04);
+       *  this is where it becomes their own. */}
+      <ChangePasswordForm email={email} name={name} />
       {/* Second home for sign-out. The Navigation Drawer carries the primary
        *  one; Settings is where a user instinctively looks for account
        *  actions, so it is reachable from both rather than only the drawer. */}
@@ -398,6 +412,7 @@ function ThemeTile({
 function TrainingSection({
   communicationStyle,
   races,
+  pastRaces,
   raceDistance,
   weeklySessionDay,
   weeklySessionDayLinked,
@@ -406,6 +421,8 @@ function TrainingSection({
   onAddRace,
   onSetTargetRace,
   onRemoveRace,
+  onAddPastRace,
+  onRemovePastRace,
   onUpdateRaceDistance,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
@@ -413,6 +430,7 @@ function TrainingSection({
 }: {
   communicationStyle: string;
   races: SettingsRace[];
+  pastRaces: SettingsPastRace[];
   raceDistance: string;
   weeklySessionDay: string | null;
   /** While a Head Coach is linked the day is theirs; the tiles show it and refuse the tap. */
@@ -422,6 +440,8 @@ function TrainingSection({
   onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
   onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
   onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
+  onAddPastRace: (entry: PastRaceInput) => Promise<AddPastRaceResult>;
+  onRemovePastRace: (pastRaceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -433,6 +453,7 @@ function TrainingSection({
     <Section label={t('sectionTraining')}>
       <RaceDistanceField value={raceDistance} onSave={onUpdateRaceDistance} />
       <RacesSection races={races} onAdd={onAddRace} onSetTarget={onSetTargetRace} onRemove={onRemoveRace} />
+      <PastRacesSection pastRaces={pastRaces} onAdd={onAddPastRace} onRemove={onRemovePastRace} />
       {/* Communication Style is hidden until it is discussed after the test
           round (Mads, 2026-09-24). The stored value, the action and the field
           below all stay, so bringing it back is one line. */}

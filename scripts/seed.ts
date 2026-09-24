@@ -2,28 +2,16 @@ import '../src/db/load-env';
 import { guardDatabase } from './db-guard/protected-database';
 import { and, eq, or } from 'drizzle-orm';
 import { getDb } from '../src/db';
-import {
-  athlete,
-  coach,
-  coachingLink,
-  injuries,
-  sessions,
-  unavailableDates,
-} from '../src/db/schema';
+import { athlete, sessions } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
 import { startOfToday } from '../src/lib/date';
 import { seedAthleteSessionId, seedWeekRows } from '../src/features/athlete/seed-history';
 import { parseSeedArgs } from '../src/features/athlete/seed-personas';
-import {
-  SYNTHETIC_PROFILES,
-  generateSyntheticHistory,
-  openInjuryFor,
-  raceDateFor,
-  toAthleteRow,
-  toSessionRows,
-} from '../src/features/athlete/synthetic-history';
-import { upsertTargetRace } from '../src/features/race/race-repository';
+import { SEED_OWNER, personasFor } from '../src/features/athlete/synthetic-history';
+import { seedPersonas } from './personas/seed-personas';
+import { ensureCoachRow, linkAthletes } from './personas/seed-coach-rows';
+import { isDuplicateUser } from './tester-kit/mint';
 
 /**
  * Seeds the database for local development and the eval.
@@ -63,9 +51,6 @@ import { upsertTargetRace } from '../src/features/race/race-repository';
  *   npm run seed                       # Mads, Coach Riley, nothing fabricated
  *   npm run seed -- --with-personas    # ...plus the three personas on both Rosters
  */
-
-/** A fixed id for Mads's dev coach row, so the dual-role seed is idempotent. */
-const MADS_COACH_ID = 'd3a9e2f4-5b6c-4d7e-8f90-1a2b3c4d5e6f';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -154,91 +139,7 @@ async function seedMadsTrainingHistory(athleteId: string) {
   );
 }
 
-/**
- * The three personas, on `--with-personas` only (code-health/16).
- *
- * Fixed ids and a fixed random seed, so a reseed converges on the same three
- * athletes rather than reshaping the Roster every run. Each gets:
- *
- *   - the athlete row, upserted (a row from an earlier seed may carry stale
- *     profile columns, and `onConflictDoNothing` would leave them so forever);
- *   - the generated history, atomically — coach-origin sessions and Unavailable
- *     Dates cleared and re-inserted in one batch, because both are generated
- *     relative to today and a top-up would keep every history ever generated;
- *   - a Target Race through the race repository, so the Training Phase is
- *     *derived* from it (training-architecture/03) rather than stored — Nadia's
- *     race is six weeks from today on every run, which is what keeps her in the
- *     last block;
- *   - for Nadia, one open Injury at a fixed id: the athlete-facing record only
- *     (ADR 0011) — capacity per discipline and a Bother Rating, never a detail
- *     thread. Written by id rather than through `declareInjury` because that
- *     opens a new record on every call, and a reseed must replace, not pile up.
- *
- * Returns the ids to link, in profile order.
- */
-async function seedPersonas(): Promise<string[]> {
-  const db = getDb();
-  const SEED = 20260902;
-  const WEEKS = 10;
-  const now = startOfToday();
 
-  for (const profile of SYNTHETIC_PROFILES) {
-    const { sessions: generated, unavailableDates: blocked } =
-      generateSyntheticHistory(profile, WEEKS, now, SEED);
-    const row = toAthleteRow(profile);
-    await db.insert(athlete).values(row).onConflictDoUpdate({ target: athlete.id, set: row });
-
-    await db.batch([
-      db
-        .delete(sessions)
-        .where(and(eq(sessions.athleteId, profile.id), eq(sessions.origin, 'coach'))),
-      db.delete(unavailableDates).where(eq(unavailableDates.athleteId, profile.id)),
-      db.insert(sessions).values(toSessionRows(profile, generated, now)),
-      ...blocked.map((date) =>
-        db.insert(unavailableDates).values({ athleteId: profile.id, date }).onConflictDoNothing(),
-      ),
-    ]);
-
-    const raceDate = raceDateFor(profile, now);
-    await upsertTargetRace(profile.id, {
-      name: profile.raceTarget,
-      date: raceDate,
-      distance: profile.raceDistance,
-    });
-
-    const injury = openInjuryFor(profile, now);
-    if (injury) {
-      await db
-        .insert(injuries)
-        .values(injury)
-        .onConflictDoUpdate({ target: injuries.id, set: injury });
-    }
-
-    console.log(
-      `Seeded persona ${profile.syntheticLabel}: ${generated.length} sessions over ${WEEKS} weeks ` +
-        `(${generated.filter((s) => s.status === 'skipped').length} skipped), ` +
-        `${blocked.length} unavailable date(s), ${profile.experienceLevel}, ` +
-        `${profile.raceDistance} on ${raceDate}${injury ? ', one open Injury' : ''}.`,
-    );
-  }
-
-  return SYNTHETIC_PROFILES.map((p) => p.id);
-}
-
-/**
- * better-auth surfaces an existing email as a known, non-fatal condition.
- *
- * Prefer the stable error code it carries on the APIError body over the human
- * message: the message is prose and can be reworded, but the code is the
- * library's contract. Fall back to the message only when no code is present.
- */
-function isDuplicateUser(err: unknown): boolean {
-  const code = (err as { body?: { code?: string } })?.body?.code;
-  if (code) return code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL';
-
-  const message = err instanceof Error ? err.message : String(err);
-  return /exist|already/i.test(message);
-}
 
 /**
  * The recruited coach: a real login with a coach row, and one active Coaching
@@ -264,49 +165,15 @@ async function seedCoach(rosterAthleteIds: string[]) {
     }
   }
 
-  const db = getDb();
-  const [coachUser] = await db
+  const [coachUser] = await getDb()
     .select({ id: user.id })
     .from(user)
     .where(eq(user.email, email))
     .limit(1);
   if (!coachUser) throw new Error('Coach user missing after signup.');
 
-  const [coachRow] = await db
-    .insert(coach)
-    .values({ userId: coachUser.id })
-    .onConflictDoNothing({ target: coach.userId })
-    .returning({ id: coach.id });
-  const coachId = coachRow?.id ?? (await coachIdForUser(coachUser.id));
-
-  await linkAthletes(coachId, rosterAthleteIds);
+  await linkAthletes(await ensureCoachRow(coachUser.id), rosterAthleteIds);
   console.log(`Coach Riley linked to ${rosterAthleteIds.length} athletes.`);
-}
-
-/** Resolves an existing coach row's id when the insert was a no-op. */
-async function coachIdForUser(userId: string): Promise<string> {
-  const [row] = await getDb()
-    .select({ id: coach.id })
-    .from(coach)
-    .where(eq(coach.userId, userId))
-    .limit(1);
-  if (!row) throw new Error('Coach row missing for user.');
-  return row.id;
-}
-
-/**
- * Creates one active Coaching Link per athlete, idempotently. The partial
- * unique index guards the active pair, so `onConflictDoNothing` makes a re-seed
- * a no-op rather than a duplicate.
- */
-async function linkAthletes(coachId: string, athleteIds: string[]) {
-  const db = getDb();
-  for (const athleteId of athleteIds) {
-    await db
-      .insert(coachingLink)
-      .values({ coachId, athleteId })
-      .onConflictDoNothing();
-  }
 }
 
 /**
@@ -318,16 +185,10 @@ async function linkAthletes(coachId: string, athleteIds: string[]) {
  * active Coaching Links. With them, he sees the same three Coach Riley does.
  */
 async function seedMadsAsCoach(madsUserId: string, rosterAthleteIds: string[]) {
-  // A reseed finds his coach row already there, possibly under another id
-  // (a preview seeded with a different SEED_MADS_EMAIL); link the row that
-  // exists, never the fixed id, or the Coaching Link fails its foreign key.
-  const [coachRow] = await getDb()
-    .insert(coach)
-    .values({ id: MADS_COACH_ID, userId: madsUserId })
-    .onConflictDoNothing({ target: coach.userId })
-    .returning({ id: coach.id });
-  const coachId = coachRow?.id ?? (await coachIdForUser(madsUserId));
-  await linkAthletes(coachId, rosterAthleteIds);
+  // Claimed by his user, never at a fixed id: a branch cut from `seed-template`
+  // already holds one, under the template's Mads, and an id the clause does not
+  // guard is how the seed used to die on its last statement (code-health/24).
+  await linkAthletes(await ensureCoachRow(madsUserId), rosterAthleteIds);
   console.log(
     `Mads also holds a coach row (dual-role dev), linked to ${rosterAthleteIds.length} athlete(s).`,
   );
@@ -353,7 +214,7 @@ async function seed(argv: string[]) {
   const madsEmail = requireEnv('SEED_MADS_EMAIL');
   const madsId = await seedMads();
   await seedMadsTrainingHistory(madsId);
-  const personaIds = args.withPersonas ? await seedPersonas() : [];
+  const personaIds = args.withPersonas ? await seedPersonas(personasFor(SEED_OWNER), startOfToday()) : [];
   await seedCoach([madsId, ...personaIds]);
   await seedMadsAsCoach(await madsUserId(madsEmail), personaIds);
 }

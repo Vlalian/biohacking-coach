@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import en from '@/messages/en.json';
+import da from '@/messages/da.json';
 
 const {
   getSession,
@@ -15,8 +17,20 @@ const {
   setUiLanguage: vi.fn(),
   setPreferredName: vi.fn(),
   getUiPrefs: vi.fn(async () => ({})),
-  getTranslations: vi.fn(async () => (key: string) => key),
+  getTranslations: vi.fn(async () => translatorFor(en)),
 }));
+
+/**
+ * A translator over one catalogue's Onboarding block: the greeting keys resolve
+ * to their sentence with `{x}` substituted; anything else echoes its key, so
+ * the transcript-question assertions keep reading keys.
+ */
+function translatorFor(cat: { Onboarding: Record<string, string> }) {
+  return (key: string, values: Record<string, string> = {}) =>
+    key.startsWith('greeting')
+      ? cat.Onboarding[key].replace(/\{(\w+)\}/g, (_, k: string) => values[k] ?? '')
+      : key;
+}
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('next-intl/server', () => ({ getTranslations }));
@@ -75,7 +89,7 @@ describe('answerOnboardingAction', () => {
     // the duplication by passing the personalised greeting through.
     const storedGreeting = answerOnboardingStep.mock.calls[0][3] as string;
     expect(storedGreeting).not.toContain('Mads');
-    expect(storedGreeting).toBe("I'm your Coach. Ironman Copenhagen is your target. Let's get to work.");
+    expect(storedGreeting).toBe("I'm Momentum. Ironman Copenhagen is your target. Let's get to work.");
     // The seam reads the request's own session, in the Onboarding namespace.
     expect(getSession).toHaveBeenCalledWith({ headers: expect.any(Headers) });
     expect(getTranslations).toHaveBeenCalledWith('Onboarding');
@@ -97,7 +111,7 @@ describe('answerOnboardingAction', () => {
     };
 
     expect(answerOnboardingStep.mock.calls[0][3]).toBe(
-      "I'm your Coach. Ironman Kalmar is your target. Let's get to work.",
+      "I'm Momentum. Ironman Kalmar is your target. Let's get to work.",
     );
     expect(result.displayGreetingBody).toBe("Ironman Kalmar is your target. Let's get to work.");
   });
@@ -138,19 +152,20 @@ describe('answerOnboardingAction', () => {
 
   it('adds no display greeting, and reads no prefs, before the last step', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     const result = await answerOnboardingAction({ step: 'name', preferredName: 'Mads' });
 
-    expect(result).toEqual({ ok: true, step: 'experience' });
+    expect(result).toEqual({ ok: true, step: 'pastRaces' });
     expect(getUiPrefs).not.toHaveBeenCalled();
   });
 
   it.each([
     ['language', { step: 'language', language: 'da' }, 'qLanguage', 'Dansk'],
     ['name', { step: 'name', preferredName: 'Mads' }, 'qName', 'Chosen'],
-    ['experience', { step: 'experience', experienceLevel: 'veteran' }, 'qExperience', 'veteran'],
+    ['pastRaces', { step: 'pastRaces', pastRaces: [{ distance: 'Half', date: '2025-08-16' }] }, 'qPastRaces', 'Half 2025-08-16'],
     ['distance', { step: 'distance', raceDistance: 'Full' }, 'qDistance', 'Full'],
+    ['hours', { step: 'hours', hoursPerWeek: 8 }, 'qHours', '8 h/week'],
     ['race', { step: 'race', noRaceYet: true }, 'qRace', 'No race booked yet'],
     ['adaptive', { step: 'adaptive' }, 'qAdaptive', '—'],
     ['constraints', { step: 'constraints' }, 'qConstraints', '— · Sunday'],
@@ -158,7 +173,7 @@ describe('answerOnboardingAction', () => {
     'records the %s step in the transcript as the Coach asked it and the athlete answered it',
     async (_step, payload, questionKey, answer) => {
       signedIn();
-      answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+      answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
       await answerOnboardingAction(payload as Parameters<typeof answerOnboardingAction>[0]);
 
@@ -186,6 +201,27 @@ describe('answerOnboardingAction', () => {
     expect(result.displayGreetingIntro).not.toContain('Kilstrup');
   });
 
+  it('stores and shows the greeting in the request’s language — Danish when the catalogue is Danish', async () => {
+    signedIn();
+    getUiPrefs.mockResolvedValueOnce({ preferredName: 'Captain' });
+    getTranslations.mockResolvedValueOnce(translatorFor(da));
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
+
+    const result = await answerOnboardingAction({
+      step: 'race',
+      raceTarget: 'Ironman Copenhagen',
+      raceDate: '2027-08-15',
+    });
+
+    expect(answerOnboardingStep.mock.calls[0][3]).toBe(
+      'Jeg er Momentum. Ironman Copenhagen er dit mål. Lad os komme i gang.',
+    );
+    expect(result).toMatchObject({
+      displayGreetingIntro: 'Hej Captain. Jeg er Momentum.',
+      displayGreetingBody: 'Ironman Copenhagen er dit mål. Lad os komme i gang.',
+    });
+  });
+
   it('greets without any name when the athlete chose none — user.name is not a fallback', async () => {
     signedIn();
     answerOnboardingStep.mockResolvedValue({ ok: true, step: 'done' });
@@ -196,12 +232,12 @@ describe('answerOnboardingAction', () => {
       raceDate: '2027-08-15',
     }) as { displayGreetingIntro?: string };
 
-    expect(result.displayGreetingIntro).toBe("I'm your Coach.");
+    expect(result.displayGreetingIntro).toBe("I'm Momentum.");
   });
 
   it('stores the Preferred Name on the user, identity-side, only after the step is accepted', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     await answerOnboardingAction({ step: 'name', preferredName: '  Mads ' });
 
@@ -214,7 +250,7 @@ describe('answerOnboardingAction', () => {
 
   it('clears the Preferred Name when the step is skipped', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     await answerOnboardingAction({ step: 'name' });
 
@@ -232,7 +268,7 @@ describe('answerOnboardingAction', () => {
 
   it('writes the language preference only after the step is accepted', async () => {
     signedIn();
-    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'experience' });
+    answerOnboardingStep.mockResolvedValue({ ok: true, step: 'pastRaces' });
 
     await answerOnboardingAction({ step: 'language', language: 'da' });
 

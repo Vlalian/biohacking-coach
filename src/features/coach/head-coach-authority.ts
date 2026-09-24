@@ -38,11 +38,18 @@
 export const HEAD_COACH_ORIGIN = 'head_coach';
 
 /**
- * The origins whose *content* the Head Coach may edit or delete: the Coach's
- * drafts and the Head Coach's own prescriptions — the plan they are
- * editor-in-chief of.
+ * What the block arithmetic wrote (`training-architecture/34`). It sits on the
+ * Coach's side of the line: the Head Coach is editor-in-chief of the plan, and
+ * a session the structure drew is as much the plan as one the Coach drafted.
  */
-export const HEAD_COACH_EDITABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN] as const;
+export const ARITHMETIC_ORIGIN = 'arithmetic';
+
+/**
+ * The origins whose *content* the Head Coach may edit or delete: the Coach's
+ * drafts, the Head Coach's own prescriptions, and the structure's arithmetic —
+ * the plan they are editor-in-chief of.
+ */
+export const HEAD_COACH_EDITABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN, ARITHMETIC_ORIGIN] as const;
 
 /**
  * The origins the Head Coach may *re-place* (ADR 0003, 2026-08-21 amendment).
@@ -54,7 +61,7 @@ export const HEAD_COACH_EDITABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN] as const
  * module — may a coach move an Athlete Session they may not edit? — is answered
  * by editing this line and nothing else.
  */
-export const HEAD_COACH_MOVABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN] as const;
+export const HEAD_COACH_MOVABLE_ORIGINS = ['coach', HEAD_COACH_ORIGIN, ARITHMETIC_ORIGIN] as const;
 
 /**
  * True when a session of this origin is within the Head Coach's content

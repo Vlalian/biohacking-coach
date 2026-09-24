@@ -11,7 +11,8 @@ import {
   getMessages,
 } from '@/features/coach/conversation-repository';
 import type { Message } from '@/features/coach/conversation';
-import { createRace } from '@/features/race/race-repository';
+import { createRace, replacePastRaces } from '@/features/race/race-repository';
+import { ensureBlockFilled } from '@/features/coach/block-fill-service';
 import {
   applyAnswer,
   completeProfile,
@@ -73,21 +74,22 @@ export type AnswerResult =
  * Coach asked it, and the answer as canonical option values (not the localized
  * labels) — stable, parseable, and identical whichever language the athlete
  * answered in. `greeting` is appended only on completion and must be name-free:
- * `messages` is a training-side table (ADR 0006). There is no clock parameter:
- * the Training Phase used to be computed here and stored, and
- * `training-architecture/03` made it derived, so nothing this writes depends on
- * what day it is.
+ * `messages` is a training-side table (ADR 0006). `today` exists for one
+ * check only — a past race must be in the past; nothing else this writes
+ * depends on what day it is (the Training Phase is derived, `training-architecture/03`).
  */
 export async function answerOnboardingStep(
   athlete: Athlete,
   payload: StepAnswer,
   transcript: { question: string; answer: string },
   greeting: string,
+  /** `YYYY-MM-DD`: a listed past race may not be dated after today (35). */
+  today: string,
 ): Promise<AnswerResult> {
   const currentAnswers = athlete.profile?.onboardingAnswers ?? {};
   const currentSubmitted = athlete.profile?.onboardingSubmitted ?? {};
 
-  const applied = applyAnswer(currentAnswers, currentSubmitted, payload);
+  const applied = applyAnswer(currentAnswers, currentSubmitted, payload, today);
   if (!applied) return { ok: false, reason: 'invalid' };
 
   // One open onboarding conversation per athlete: reuse it or start it.
@@ -108,6 +110,14 @@ export async function answerOnboardingStep(
     // for the type system, not a reachable branch.
     if (!completed) return { ok: false, reason: 'invalid' };
 
+    // The finished races first, before anything marks the athlete onboarded.
+    // `experienceLevel` is derived from this list's length, so a failure the
+    // other way round would leave a stored level of `intermediate` beside an
+    // empty `past_race` table, past the onboarding gate, with the next Settings
+    // edit re-deriving the level from the wrong list. The write clears and
+    // re-inserts, so the athlete's retry of this step simply runs it again
+    // (CodeRabbit, PR #98).
+    await replacePastRaces(athlete.id, completed.pastRaces);
     // The JSONB answers and the profile columns land in one statement: a split
     // write could leave the answers marked complete while `experienceLevel` —
     // the page's "onboarded" gate — stayed null, trapping the athlete on a
@@ -127,6 +137,10 @@ export async function answerOnboardingStep(
     if (completed.race) {
       await createRace(athlete.id, completed.race, { asTarget: true });
     }
+    // And the calendar is full the first time they open it: the structure
+    // fills the current block now that there is a race and an hours answer
+    // (`training-architecture/34`). Never throws; reports its own outcome.
+    await ensureBlockFilled(athlete.id, today);
     await appendMessages(athlete.id, conversation.id, [
       { role: 'coach_ai', content: greeting },
     ]);

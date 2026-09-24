@@ -45,8 +45,10 @@ vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 const afterCallbacks: Array<() => Promise<void>> = [];
 vi.mock('next/server', () => ({ after: (cb: () => Promise<void>) => afterCallbacks.push(cb) }));
 const ensureWeekDrafted = vi.fn(() => Promise.resolve('drafted'));
+const ensureBlockFilled = vi.fn(() => Promise.resolve('filled'));
 const ensureRosterDrafted = vi.fn(() => Promise.resolve({}));
 vi.mock('@/features/coach/week-draft-service', () => ({ ensureWeekDrafted, ensureRosterDrafted }));
+vi.mock('@/features/coach/block-fill-service', () => ({ ensureBlockFilled }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
@@ -297,6 +299,7 @@ describe('the silent week draft runs after the response, never in it (training-a
   beforeEach(() => {
     afterCallbacks.length = 0;
     ensureWeekDrafted.mockClear();
+    ensureBlockFilled.mockClear();
     ensureRosterDrafted.mockClear();
     holdsActiveCoachingLinks.mockResolvedValue(false);
   });
@@ -309,6 +312,32 @@ describe('the silent week draft runs after the response, never in it (training-a
     expect(afterCallbacks).toHaveLength(1);
     await afterCallbacks[0]();
     expect(ensureWeekDrafted).toHaveBeenCalledWith('athlete_1', expect.any(String));
+  });
+
+  it('fills the block before drafting the week, so the draft sees the structure it is adjusting (training-architecture/34)', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    await render();
+    await afterCallbacks[0]();
+    expect(ensureBlockFilled).toHaveBeenCalledWith('athlete_1', expect.any(String));
+    expect(ensureBlockFilled.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureWeekDrafted.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('a block fill that fails costs the draft nothing', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    ensureBlockFilled.mockRejectedValueOnce(new Error('driver down'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await render();
+    await expect(afterCallbacks[0]()).resolves.toBeUndefined();
+    expect(ensureWeekDrafted).toHaveBeenCalled();
+    // Under its own surface: a block fill filed as a week draft sends anyone
+    // reading the logs to the wrong module (Standards review, 2026-09-23).
+    expect(spy.mock.calls.flat().join(' ')).toContain('"surface":"block_fill"');
+    expect(spy.mock.calls.flat().join(' ')).not.toContain('week_draft_failed');
+    spy.mockRestore();
   });
 
   it('a throw inside the deferred call is logged, not rethrown', async () => {

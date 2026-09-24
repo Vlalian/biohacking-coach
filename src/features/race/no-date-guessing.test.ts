@@ -1,7 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, sep } from 'node:path';
+import { describe, it, expect, vi } from 'vitest';
+import { filesMatching, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
+
+/**
+ * These tests walk every file under `src/` and read it. That takes well under a
+ * second on an ordinary run and past the 5 s default when the suite runs with
+ * v8 coverage instrumentation — which is the hardening gate's first step, so the
+ * flake stopped the gate rather than a test run. The assertions are unchanged;
+ * only the time the walk is allowed to take is (`code-health/11`).
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 
 /**
  * Two guarantees that outlived the code they were written about, kept together
@@ -25,59 +33,19 @@ import { join, sep } from 'node:path';
  * needs a twenty-file allowlist proves nothing about the twenty-first.
  */
 describe('the horizon is a field, and the phase is derived from it', () => {
-  // Resolved from this file, never from `process.cwd()`: the mutation gate runs
-  // the suite from a sandbox copy with a different working directory, where a
-  // cwd-relative path silently finds nothing and the assertions below pass
-  // while proving nothing.
-  const SRC = fileURLToPath(new URL('../..', import.meta.url));
-
-  function sourceFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(full);
-      if (!/\.tsx?$/.test(entry.name)) return [];
-      // This file is the one exclusion: it necessarily names the things it is
-      // looking for.
-      return entry.name === 'no-date-guessing.test.ts' ? [] : [full];
-    });
-  }
-
-  /**
-   * The file's source with comments removed.
-   *
-   * Without this the guard flags the prose that *explains* the removal — the
-   * schema comment saying there is no stored phase, this file's own header, the
-   * doc on `trainingBlocks` describing what it replaced. Those are the record of
-   * why the code looks the way it does, and a guard that forces them to be
-   * deleted is a guard that makes the codebase worse.
-   */
-  function code(file: string): string {
-    return readFileSync(file, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/\/\/.*/g, ' ');
-  }
-
-  /** Repo-relative paths of every file whose *code* matches. */
-  function filesMatching(pattern: RegExp): string[] {
-    return sourceFiles(SRC)
-      .filter((file) => pattern.test(code(file)))
-      .map((file) => file.slice(SRC.length).split(sep).join('/'))
-      .sort();
-  }
-
   it('keeps no month-name lookup table anywhere in src/', () => {
     // The distinctive artifact of parsing a date out of prose, and the one piece
     // of the old heuristic that cannot be written any other way: to turn
     // "August 2026" into a date you need a table mapping month names to numbers.
     // Three spelled-out consecutive months in one file is that table and very
     // little else.
-    expect(filesMatching(/january[\s\S]*february[\s\S]*march/i)).toEqual([]);
-  });
+    expect(filesMatching(/january[\s\S]*february[\s\S]*march/i, { self: import.meta.url })).toEqual([]);
+  }, SWEEP_TIMEOUT_MS);
 
   it('has no computePhase, and no training_phase column, left to read', () => {
     // `training-architecture/03`'s acceptance criterion, as a search rather than
     // an inspection. Both names are distinctive enough that a survivor is a real
     // survivor rather than a coincidence.
-    expect(filesMatching(/computePhase|trainingPhase|training_phase/)).toEqual([]);
-  });
+    expect(filesMatching(/computePhase|trainingPhase|training_phase/, { self: import.meta.url })).toEqual([]);
+  }, SWEEP_TIMEOUT_MS);
 });

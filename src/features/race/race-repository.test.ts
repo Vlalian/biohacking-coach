@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { race as raceTable, type RaceRow } from '@/db/schema';
+import { pastRace as pastRaceTable, race as raceTable, type RaceRow } from '@/db/schema';
 
 const rows: RaceRow[] = [];
 
@@ -8,9 +8,10 @@ const orderBy = vi.fn(() => Promise.resolve(rows));
 const selectWhere = vi.fn(() => ({ orderBy }));
 
 const inserted: unknown[] = [];
+const returning = vi.fn(() => Promise.resolve([{ id: 'race_new' }]));
 const insertValues = vi.fn((v: unknown) => {
   inserted.push(v);
-  return { returning: () => Promise.resolve([{ id: 'race_new' }]) };
+  return { returning };
 });
 
 const updates: { set: unknown; where: unknown }[] = [];
@@ -49,6 +50,10 @@ const {
   setTargetRace,
   upsertTargetRace,
   clearTargetRace,
+  replacePastRaces,
+  getPastRaces,
+  addPastRace,
+  deletePastRace,
 } = await import('./race-repository');
 
 function race(overrides: Partial<RaceRow> = {}): RaceRow {
@@ -209,5 +214,42 @@ describe('removing a Race (slice 09)', () => {
 
     expect(deletes).toHaveLength(1);
     expect(deletes[0]).toEqual(and(eq(raceTable.athleteId, 'athlete_1'), eq(raceTable.id, 'race_2')));
+  });
+});
+
+describe('past races — the races the athlete has finished (training-architecture/35)', () => {
+  const HALF = { distance: 'Half' as const, date: '2025-08-16', finishSeconds: null, note: null };
+
+  it('replacePastRaces deletes the athlete’s rows and inserts the new ones in one batch', async () => {
+    await replacePastRaces('athlete_1', [HALF, { ...HALF, distance: 'Olympic', date: '2024-06-01' }]);
+    expect(deletes).toEqual([eq(pastRaceTable.athleteId, 'athlete_1')]);
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(inserted).toEqual([
+      [
+        expect.objectContaining({ athleteId: 'athlete_1', distance: 'Half', date: '2025-08-16' }),
+        expect.objectContaining({ athleteId: 'athlete_1', distance: 'Olympic', date: '2024-06-01' }),
+      ],
+    ]);
+  });
+
+  it('replacePastRaces with no rows only clears — an empty insert is not a statement', async () => {
+    await replacePastRaces('athlete_1', []);
+    expect(deletes).toEqual([eq(pastRaceTable.athleteId, 'athlete_1')]);
+    expect(batch).not.toHaveBeenCalled();
+    expect(inserted).toEqual([]);
+  });
+
+  it('getPastRaces reads the athlete’s rows, earliest first', async () => {
+    await getPastRaces('athlete_1');
+    expect(selectWhere).toHaveBeenCalledWith(eq(pastRaceTable.athleteId, 'athlete_1'));
+    expect(orderBy).toHaveBeenCalled();
+  });
+
+  it('addPastRace inserts for the athlete and returns the id; deletePastRace is athlete-scoped', async () => {
+    expect(await addPastRace('athlete_1', HALF)).toBe('race_new');
+    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', ...HALF });
+    expect(returning).toHaveBeenCalledWith({ id: pastRaceTable.id });
+    await deletePastRace('athlete_1', 'pr_2');
+    expect(deletes).toEqual([and(eq(pastRaceTable.athleteId, 'athlete_1'), eq(pastRaceTable.id, 'pr_2'))]);
   });
 });

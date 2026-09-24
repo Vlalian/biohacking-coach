@@ -18,7 +18,7 @@ vi.mock('@/db', () => ({
   }),
 }));
 
-const { getAthleteByUserId, updateCommunicationStyle } = await import('./athlete-repository');
+const { getAthleteByUserId, updateCommunicationStyle, updateExperienceLevel } = await import('./athlete-repository');
 
 function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
   return {
@@ -29,6 +29,7 @@ function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
     communicationStyle: null,
     raceTarget: null,
     raceDistance: null,
+    hoursPerWeek: null,
     trainingSessionsPerWeek: null,
     profile: null,
     informationViewLayout: null,
@@ -56,7 +57,8 @@ describe('getAthleteByUserId', () => {
       communicationStyle: null,
       raceTarget: null,
       raceDistance: null,
-      trainingSessionsPerWeek: null,
+      hoursPerWeek: null,
+    trainingSessionsPerWeek: null,
       profile: null,
     });
   });
@@ -84,6 +86,7 @@ describe('getAthleteByUserId', () => {
       [
         'communicationStyle',
         'experienceLevel',
+        'hoursPerWeek',
         'id',
         'profile',
         'raceDistance',
@@ -111,5 +114,21 @@ describe('updateCommunicationStyle', () => {
     const written = updateCalls[0] as { communicationStyle: string; updatedAt: Date };
     expect(written.communicationStyle).toBe('Terse, technical, no hand-holding.');
     expect(written.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('updateExperienceLevel (training-architecture/35)', () => {
+  beforeEach(() => {
+    updateCalls = [];
+    set.mockClear();
+    updateWhere.mockClear();
+  });
+
+  it('writes the derived level to the athlete row, scoped by id', async () => {
+    await updateExperienceLevel('athlete_1', 'veteran');
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(updateCalls[0]).toMatchObject({ experienceLevel: 'veteran' });
+    expect((updateCalls[0] as { updatedAt: Date }).updatedAt).toBeInstanceOf(Date);
+    expect(updateWhere).toHaveBeenCalledTimes(1);
   });
 });

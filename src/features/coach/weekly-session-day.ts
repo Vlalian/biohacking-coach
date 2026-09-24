@@ -135,13 +135,40 @@ export type DayWriteResult = { ok: true } | { ok: false; reason: string };
  * written. Pure apart from the `write` it is given, so the "writes once" rule
  * is a test with a mock rather than a click.
  */
+/**
+ * A write whose rejection is a refusal like any other. Both callers run inside
+ * a `startTransition`, where a thrown error escapes to an error boundary and
+ * replaces the page — so the one thing the card is for, saying what happened,
+ * is the thing that cannot happen (CodeRabbit, PR #102).
+ */
+async function refusalOnThrow(write: () => Promise<DayWriteResult>): Promise<DayWriteResult> {
+  try {
+    return await write();
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+}
+
 export async function commitDayChoice(
   state: DayChoice,
   write: (day: string) => Promise<DayWriteResult>,
 ): Promise<{ state: DayChoice; error: string | null }> {
   const confirmed = dayChoice(state, { type: 'confirm' });
   if (!confirmed.write) return { state: confirmed, error: null };
-  const result = await write(confirmed.write);
+  const result = await refusalOnThrow(() => write(confirmed.write as string));
   if (result.ok) return { state: dayChoice(confirmed, { type: 'written' }), error: null };
   return { state: dayChoice(confirmed, { type: 'cancel' }), error: result.reason };
+}
+
+/**
+ * Got it, as the card runs it (`training-architecture/41`, review). The fold
+ * closes only if the flag was actually stored: a refused write leaves the
+ * instruction where it is and hands back the reason, the way a refused day
+ * change does. Pure apart from the `write` it is given.
+ */
+export async function commitDismissal(
+  write: () => Promise<DayWriteResult>,
+): Promise<{ dismissed: boolean; error: string | null }> {
+  const result = await refusalOnThrow(write);
+  return result.ok ? { dismissed: true, error: null } : { dismissed: false, error: result.reason };
 }

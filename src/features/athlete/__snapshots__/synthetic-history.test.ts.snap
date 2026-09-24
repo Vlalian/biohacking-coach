@@ -1995,3 +1995,23 @@ exports[`generateSyntheticHistory > renders Sam Chen identically 1`] = `
   ],
 }
 `;
+
+exports[`personasFor — one copy of the personas per owner (code-health/18) > a snapshot pins the derived ids for one owner — the namespace must never move 1`] = `
+[
+  [
+    "Alex Rivera",
+    "30b69aff-bfa1-595f-983a-81f290f800bf",
+    null,
+  ],
+  [
+    "Sam Chen",
+    "99432843-040d-5797-873b-918cd2d8568f",
+    null,
+  ],
+  [
+    "Nadia Holm",
+    "e93fb0af-745e-5cb9-b783-ae8f3a2777f5",
+    "081a4306-e9c4-52db-acf3-8b0d82c4bdc7",
+  ],
+]
+`;

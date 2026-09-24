@@ -3,7 +3,7 @@
 import { useState, useTransition, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/navigation';
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, X } from 'lucide-react';
 import {
   ADAPTIVE_FIELDS_BY_LEVEL,
   ONBOARDING_OPTIONS,
@@ -13,8 +13,11 @@ import {
   type OnboardingStepId,
   type StepAnswer,
   cursorAfter,
+  HOURS_PER_WEEK_MAX,
+  HOURS_PER_WEEK_MIN,
   previousStep,
 } from '@/features/onboarding/onboarding-flow';
+import { formatFinish, parseFinishInput, type PastRace } from '@/features/onboarding/past-races';
 import { PreferredNameField } from '@/components/preferred-name-field';
 import { answerOnboardingAction } from './onboarding-actions';
 
@@ -72,8 +75,9 @@ type UiState = {
 const STEPS: OnboardingStepId[] = [
   'language',
   'name',
-  'experience',
+  'pastRaces',
   'distance',
+  'hours',
   'race',
   'adaptive',
   'constraints',
@@ -82,8 +86,9 @@ const STEPS: OnboardingStepId[] = [
 const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   language: 'stepLanguage',
   name: 'stepName',
-  experience: 'stepExperience',
+  pastRaces: 'stepPastRaces',
   distance: 'stepDistance',
+  hours: 'stepHours',
   race: 'stepRace',
   adaptive: 'stepAdaptive',
   constraints: 'stepConstraints',
@@ -274,26 +279,8 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 )}
               />
             </div>
-          ) : state.step === 'experience' ? (
-            <div className="space-y-4">
-              <StepHeading title={t('qExperience')} help={t('qExperienceSub')} />
-              <div className="grid gap-2">
-                {(
-                  [
-                    ['beginner', 'expBeginner'],
-                    ['intermediate', 'expIntermediate'],
-                    ['veteran', 'expVeteran'],
-                  ] as const
-                ).map(([value, key]) => (
-                  <OptionTile
-                    key={value}
-                    label={t(key)}
-                    selected={state.answers.experienceLevel === value}
-                    onClick={() => submit({ step: 'experience', experienceLevel: value })}
-                  />
-                ))}
-              </div>
-            </div>
+          ) : state.step === 'pastRaces' ? (
+            <PastRacesPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'distance' ? (
             <div className="space-y-4">
               {/*
@@ -315,6 +302,8 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
                 ))}
               </div>
             </div>
+          ) : state.step === 'hours' ? (
+            <HoursPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'race' ? (
             <RacePanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'adaptive' ? (
@@ -408,7 +397,6 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
 
 function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
   const [sportBackground, setSportBackground] = useState<string[]>(answers.sportBackground ?? []);
-  const [availableHours, setAvailableHours] = useState(answers.availableHours ?? '');
   const [motivation, setMotivation] = useState(answers.motivation ?? '');
   const [bestTime, setBestTime] = useState(answers.bestTime ?? '');
   const [weakestDiscipline, setWeakestDiscipline] = useState<string[]>(answers.weakestDiscipline ?? []);
@@ -423,21 +411,6 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
   return (
     <div className="space-y-8">
       <StepHeading title={t('qAdaptive')} />
-
-      {/*
-        Outside every branch on purpose: how much time the athlete has
-        is a ceiling the plan has to respect at any experience level,
-        and it was previously asked of beginners only — leaving the
-        Coach with no volume budget for the athletes most likely to
-        have a demanding one.
-      */}
-      <FieldGroup label={t('availableHours')} note={t('optional')}>
-        {ONBOARDING_OPTIONS.availableHours.map((o) =>
-          opt(o, availableHours === o, () =>
-            setAvailableHours(availableHours === o ? '' : o),
-          ),
-        )}
-      </FieldGroup>
 
       {answers.experienceLevel === 'beginner' && (
         <>
@@ -525,7 +498,6 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
           // saved answer, and an answer from another level must not ride along.
           const all = {
             sportBackground: sportBackground.length > 0 ? sportBackground : undefined,
-            availableHours: availableHours || undefined,
             motivation: motivation || undefined,
             bestTime: bestTime || undefined,
             weakestDiscipline: weakestDiscipline.length > 0 ? weakestDiscipline : undefined,
@@ -541,6 +513,180 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
       >
         {t('continue')}
       </PrimaryButton>
+    </div>
+  );
+}
+
+/**
+ * "How many hours a week can you realistically train?" — asked, never
+ * suggested: no default, no placeholder number (Mads, 2026-09-19: "A and only
+ * A"). An integer 1–30; the flow refuses anything else.
+ */
+function HoursPanel({ answers, pending, t, submit }: PanelProps) {
+  const [hours, setHours] = useState(answers.hoursPerWeek === undefined ? '' : String(answers.hoursPerWeek));
+  const value = Number(hours);
+  const valid = hours !== '' && Number.isInteger(value) && value >= HOURS_PER_WEEK_MIN && value <= HOURS_PER_WEEK_MAX;
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) submit({ step: 'hours', hoursPerWeek: value });
+      }}
+    >
+      <StepHeading title={t('qHours')} help={t('qHoursSub')} />
+      <label htmlFor="onboarding-hours" className="sr-only">
+        {t('qHours')}
+      </label>
+      <input
+        id="onboarding-hours"
+        type="number"
+        inputMode="numeric"
+        min={HOURS_PER_WEEK_MIN}
+        max={HOURS_PER_WEEK_MAX}
+        step={1}
+        value={hours}
+        onChange={(e) => setHours(e.target.value)}
+        disabled={pending}
+        className="w-32 border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors focus:border-signal"
+      />
+      <PrimaryButton type="submit" data-action="submit-hours" disabled={pending || !valid} pending={pending}>
+        {t('continue')}
+      </PrimaryButton>
+    </form>
+  );
+}
+
+/**
+ * The races the athlete has finished, one row each — distance, date, finish
+ * time (optional), a note (optional). "I haven't raced yet" submits an empty
+ * list, which is an answer. The experience level is derived server-side from
+ * the count; nothing here asks for it.
+ */
+function PastRacesPanel({ answers, pending, t, submit }: PanelProps) {
+  const [races, setRaces] = useState<PastRace[]>(answers.pastRaces ?? []);
+  const [distance, setDistance] = useState<string>('');
+  const [date, setDate] = useState('');
+  const [finish, setFinish] = useState('');
+  const [note, setNote] = useState('');
+  const finishSeconds = parseFinishInput(finish);
+  const canAdd = distance !== '' && date !== '' && finishSeconds !== undefined && note.length <= 200;
+
+  function add() {
+    if (!canAdd) return;
+    setRaces((r) => [
+      ...r,
+      {
+        distance: distance as PastRace['distance'],
+        date,
+        finishSeconds: finishSeconds ?? null,
+        note: note.trim() === '' ? null : note.trim(),
+      },
+    ]);
+    setDistance('');
+    setDate('');
+    setFinish('');
+    setNote('');
+  }
+
+  return (
+    <div className="space-y-6">
+      <StepHeading title={t('qPastRaces')} help={t('qPastRacesSub')} />
+
+      {races.length > 0 && (
+        <ul className="divide-y divide-border border border-border">
+          {races.map((r, i) => (
+            <li key={`${r.date}-${i}`} data-past-race={i} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="font-body text-sm text-foreground">
+                {t(OPTION_MESSAGE_KEY[r.distance])} · {r.date}
+                {r.finishSeconds !== null && ` · ${formatFinish(r.finishSeconds)}`}
+                {r.note && <span className="ml-2 text-muted-foreground">{r.note}</span>}
+              </span>
+              <button
+                type="button"
+                data-action="remove-past-race"
+                aria-label={t('removePastRace')}
+                disabled={pending}
+                onClick={() => setRaces((list) => list.filter((_, k) => k !== i))}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="space-y-3 border border-dashed border-border p-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {ONBOARDING_OPTIONS.raceDistance.map((d) => (
+            <OptionTile key={d} label={t(OPTION_MESSAGE_KEY[d])} selected={distance === d} onClick={() => setDistance(d)} />
+          ))}
+        </div>
+        <label htmlFor="onboarding-past-race-date" className="sr-only">
+          {t('pastRaceDate')}
+        </label>
+        <input
+          id="onboarding-past-race-date"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          disabled={pending}
+          className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors focus:border-signal"
+        />
+        <label htmlFor="onboarding-past-race-finish" className="sr-only">
+          {t('pastRaceFinish')}
+        </label>
+        <input
+          id="onboarding-past-race-finish"
+          value={finish}
+          onChange={(e) => setFinish(e.target.value)}
+          placeholder={t('pastRaceFinish')}
+          disabled={pending}
+          className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+        />
+        <label htmlFor="onboarding-past-race-note" className="sr-only">
+          {t('pastRaceNote')}
+        </label>
+        <input
+          id="onboarding-past-race-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={t('pastRaceNote')}
+          maxLength={200}
+          disabled={pending}
+          className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+        />
+        <button
+          type="button"
+          data-action="add-past-race"
+          onClick={add}
+          disabled={pending || !canAdd}
+          className="border border-border px-3 py-1.5 font-body text-sm text-foreground transition-colors hover:border-signal disabled:opacity-50"
+        >
+          {t('addPastRace')}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <PrimaryButton
+          data-action="submit-past-races"
+          onClick={() => submit({ step: 'pastRaces', pastRaces: races })}
+          disabled={pending || races.length === 0}
+          pending={pending}
+        >
+          {t('continue')}
+        </PrimaryButton>
+        <button
+          type="button"
+          data-action="no-past-races"
+          disabled={pending}
+          onClick={() => submit({ step: 'pastRaces', pastRaces: [] })}
+          className="font-body text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          {t('noPastRaces')}
+        </button>
+      </div>
     </div>
   );
 }
@@ -663,16 +809,19 @@ function PrimaryButton({
   disabled,
   pending,
   type = 'button',
+  'data-action': dataAction,
 }: {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   pending?: boolean;
   type?: 'button' | 'submit';
+  'data-action'?: string;
 }) {
   return (
     <button
       type={type}
+      data-action={dataAction}
       onClick={onClick}
       disabled={disabled}
       className="inline-flex h-11 min-w-[160px] items-center justify-center gap-2 bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-40"

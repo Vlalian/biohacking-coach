@@ -20,13 +20,27 @@ import { signIn, signUp } from '@/lib/auth-client';
  * under a dark canvas in both themes, the form on a red-edged surface, the
  * Momentum name with its full stop in signal red. The `auth-*` tokens live in
  * globals.css and hold the same contrast bar as the rest of the palette.
+ *
+ * On success it pushes to '/', the gate page, which sends a returning athlete
+ * on in the language they stored (showable-version/34).
+ *
+ * `allowSignUp` is the deployment's `DISABLE_SIGNUP`, read on the server and
+ * passed in: while registration is closed the sign-in page offers no way to a
+ * form better-auth would refuse (showable-version/04). It defaults to open, so
+ * a local dev server behaves as it always has.
  */
 
 const INPUT =
   'mt-2 h-12 w-full border border-auth-line bg-auth-input px-4 text-base text-auth-foreground outline-none transition-colors placeholder:text-auth-muted focus:border-sidebar-primary focus:ring-1 focus:ring-sidebar-primary';
 const LABEL = 'block font-body text-[13px] font-semibold uppercase tracking-[0.16em] text-auth-muted';
 
-export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+export function AuthForm({
+  mode,
+  allowSignUp = true,
+}: {
+  mode: 'sign-in' | 'sign-up';
+  allowSignUp?: boolean;
+}) {
   const t = useTranslations('Auth');
   const router = useRouter();
   const [name, setName] = useState('');
@@ -157,23 +171,25 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
         </button>
 
-        <p className="mt-5 text-center font-body text-sm text-auth-muted">
-          {isSignUp ? (
-            <Link
-              href="/sign-in"
-              className="underline decoration-sidebar-primary underline-offset-4 transition-colors hover:text-auth-foreground"
-            >
-              {t('toSignIn')}
-            </Link>
-          ) : (
-            <Link
-              href="/sign-up"
-              className="underline decoration-sidebar-primary underline-offset-4 transition-colors hover:text-auth-foreground"
-            >
-              {t('toSignUp')}
-            </Link>
-          )}
-        </p>
+        {(isSignUp || allowSignUp) && (
+          <p className="mt-5 text-center font-body text-sm text-auth-muted">
+            {isSignUp ? (
+              <Link
+                href="/sign-in"
+                className="underline decoration-sidebar-primary underline-offset-4 transition-colors hover:text-auth-foreground"
+              >
+                {t('toSignIn')}
+              </Link>
+            ) : (
+              <Link
+                href="/sign-up"
+                className="underline decoration-sidebar-primary underline-offset-4 transition-colors hover:text-auth-foreground"
+              >
+                {t('toSignUp')}
+              </Link>
+            )}
+          </p>
+        )}
       </form>
     </main>
   );

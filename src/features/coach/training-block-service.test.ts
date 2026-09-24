@@ -178,7 +178,7 @@ describe('ensureBlocksAdjusted — a valid reply is written once, as the Coach',
 
     const call = callCoach.mock.calls[0][0];
     expect(call.tools.map((t: { name: string }) => t.name)).toEqual(['adjust_training_blocks']);
-    expect(call.system).toContain('Block 1 of 6');
+    expect(call.system).toContain('Base: 2026-09-14');
     expect(call.system).toContain('Ironman Copenhagen on 2027-08-15');
   });
 

@@ -673,6 +673,7 @@ function chatPlanningBlocks(planning: ChatPlanning | null): PromptBlock[] {
  */
 const ORIGIN_LABEL: Record<SessionOrigin, string> = {
   coach: 'you planned this',
+  arithmetic: 'the plan structure put this here',
   head_coach: "the athlete's Head Coach set this",
   athlete: 'the athlete added this themselves',
   garmin: "logged from the athlete's watch",
@@ -845,6 +846,13 @@ export function renderBlockAdjustmentPrompt(ctx: BlockAdjustmentContext): string
 export interface WeekDraftContext extends WeeklyContext {
   window: PlanningWindow;
   skeleton: SkeletonDay[];
+  /**
+   * The week the structure already wrote (`training-architecture/34`), or null
+   * when it wrote nothing. When it exists it *replaces* the skeleton: the
+   * Coach adjusts real sessions the athlete can already see, rather than
+   * filling roles into an empty week.
+   */
+  baseline?: BaselineSession[] | null;
   passages: RetrievedPassage[];
   citations: Citation[];
 }
@@ -907,6 +915,32 @@ function draftWindowBlock(today: string, window: PlanningWindow, fixedConstraint
   return lines.join('\n');
 }
 
+/** A session the structure wrote, as this prompt needs it. */
+export interface BaselineSession {
+  date: string;
+  sport: string;
+  type: string;
+  durationMinutes: number | null;
+  zone: string | null;
+  title: string;
+}
+
+/**
+ * The week as it stands — what the structure drew, one line per session. The
+ * Coach is adjusting a plan, not inventing one, and saying so is the whole
+ * point of `training-architecture/34`: the athlete has already seen these.
+ */
+function baselineBlock(baseline: BaselineSession[]): string {
+  const lines = baseline.map(
+    (s) =>
+      `${s.date}: ${s.sport} ${s.type}${s.durationMinutes ? ` ${s.durationMinutes} min` : ''}` +
+      `${s.zone ? ` ${s.zone}` : ''} — ${s.title}`,
+  );
+  return `BASELINE WEEK (what the plan structure already put in the athlete's calendar):
+${lines.join('\n')}
+Adjust it for this athlete and this week. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.`;
+}
+
 /**
  * The skeleton as one dated line per day, with the instruction that makes it a
  * default rather than a diktat (Mads, 2026-09-09: the structure is the
@@ -947,7 +981,7 @@ ${lines.join('\n')}`;
 export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
   assertNoDirectIdentifier(ctx.checkIn);
 
-  const { feedbackSummary, unavailableDates, today, window, skeleton, passages, citations } = ctx;
+  const { feedbackSummary, unavailableDates, today, window, skeleton, baseline, passages, citations } = ctx;
   const {
     readiness,
     phase,
@@ -987,7 +1021,7 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
 
     unavailableBlock(unavailableDates),
 
-    skeletonBlock(skeleton),
+    baseline && baseline.length > 0 ? baselineBlock(baseline) : skeletonBlock(skeleton),
 
     trainingScienceBlock(passages, citations),
 

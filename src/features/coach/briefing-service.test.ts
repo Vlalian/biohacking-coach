@@ -140,6 +140,7 @@ describe('startBriefing — reports gated on shareAthleteReports (prompt materia
     getAthleteById.mockResolvedValue({
       experienceLevel: 'intermediate',
       raceTarget: 'IM Copenhagen',
+      hoursPerWeek: null,
       trainingSessionsPerWeek: 6,
       profile: { onboarding: null },
     });
@@ -482,7 +483,7 @@ describe('startBriefing — the prompt material the rest of the suite does not r
 
     const call = callCoach.mock.calls[0][0];
     expect(call.messages).toEqual([{ role: 'user', content: "Brief me on this athlete." }]);
-    expect(call.maxTokens).toBe(1400);
+    expect(call.maxTokens).toBe(2000);
     expect(call.system).toContain('Danish');
   });
 });
@@ -517,7 +518,7 @@ describe('continueBriefing — the failure log', () => {
 
     const call = callCoach.mock.calls[0][0];
     expect((call.messages as { role: string; content: string }[]).at(-1)).toEqual({ role: 'user', content: 'how is her sleep?' });
-    expect(call.maxTokens).toBe(1400);
+    expect(call.maxTokens).toBe(2000);
     expect(appendBriefingMessages).toHaveBeenCalledWith('coach_1', 'b1', [
       { role: 'head_coach', content: 'how is her sleep?' },
       { role: 'coach_ai', content: 'my read' },
@@ -606,5 +607,23 @@ describe('startBriefing — the races reach the Head Coach (training-architectur
 
     expect(getRaces).not.toHaveBeenCalled();
     expect(lastSystem()).not.toContain('No Target Race');
+  });
+});
+
+describe('buildBriefingContextFor — the length script reads what the model reads (showable-version/19)', () => {
+  it('is exported, and its render is the prompt the briefing sends', async () => {
+    const { buildBriefingContextFor } = await import('./briefing-service');
+    const { renderBriefingPrompt } = await import('./briefing');
+    getBriefingPlan.mockResolvedValue([
+      { date: '2026-08-04', type: 'Endurance', status: 'completed', duration: 90, zone: 'Z2', note: 'steady' },
+    ]);
+    getPreferredNameForAthlete.mockResolvedValue('Mads');
+
+    const ctx = await buildBriefingContextFor(activeLink(false, false), TODAY);
+
+    expect(ctx.plan).toHaveLength(1);
+    expect(ctx.reports).toBeNull();
+    expect(ctx.preferredName).toBe('Mads');
+    expect(renderBriefingPrompt(ctx)).toContain('PLAN');
   });
 });
