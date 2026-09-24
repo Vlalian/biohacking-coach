@@ -49,17 +49,20 @@ export interface PlanningWindow {
  * `firstDay` is the athlete's own start, asked at the end of onboarding
  * (`training-architecture/36`). It moves the opening of the window and nothing
  * else: the no-day-count floor stands, and so does the fall-through. Mads ruled
- * on 2026-09-23 that no session lands before that day *from anyone*, which is
- * why the bound is here — this is the one place the rule lives, and the week
- * draft and `commitWeeklyPlan` both derive their write range from it. A day
+ * on 2026-09-23 that no session lands before that day *from anyone*. A day
  * already past is spent and changes nothing, which is what makes it safe to
  * keep reading an answer given months ago.
  *
- * Pure, and deliberately the *only* place this rule lives. The Weekly Session's
- * `commitWeeklyPlan` and automatic generation both derive their write range from
- * here, so it is one rule and not two — and it constrains the write rather than
- * only instructing the model, which is the correction this ticket exists for.
- * A prompt line is an instruction; this is a bound.
+ * It is a parameter rather than a read, because this function is pure and the
+ * profile is not. Every caller that writes must pass it: `commitWeeklyPlan`
+ * and `conversationWindow` do, through `chosenFirstDay`. {@link wholeWeekWindow}
+ * is the one write path it does not reach — a week brought in to discuss is
+ * written whole, as drafted (Mads, 2026-09-15), and reconciling that with the
+ * 2026-09-23 ruling is a decision neither ticket settles.
+ *
+ * Pure, and it constrains the write rather than only instructing the model,
+ * which is the correction this ticket exists for. A prompt line is an
+ * instruction; this is a bound.
  */
 export function planningWindow(
   today: string,
@@ -67,8 +70,7 @@ export function planningWindow(
   unavailableDates: string[] = [],
   firstDay?: string,
 ): PlanningWindow {
-  // Stryker disable next-line EqualityOperator — `>` and `>=` differ only when the two are equal, and then both branches are that same day.
-  const start = firstDay && firstDay > today ? firstDay : today;
+  const start = notBefore(today, firstDay);
   const endOfThisWeek = addDays(weekStartOf(start), 6);
 
   if (hasAPlannableDay(start, endOfThisWeek, fixedConstraints, unavailableDates)) {
@@ -90,6 +92,21 @@ export function planningWindow(
     excludedDates: excludedBetween(nextWeekStart, nextWeekEnd, fixedConstraints, unavailableDates),
     fellThrough: true,
   };
+}
+
+/**
+ * `day`, unless `floor` is later — the one comparison behind every "no session
+ * before this" bound in the planner.
+ *
+ * Written once because it is the rule, not an inequality: {@link planningWindow}
+ * and `weekWindow` both push a window's opening forward to the athlete's chosen
+ * first day, and a second copy is a second place for it to drift. An absent or
+ * already-past floor leaves `day` exactly as it was, which is what keeps every
+ * caller that passes nothing behaving as it did before `training-architecture/36`.
+ */
+export function notBefore(day: string, floor: string | undefined): string {
+  // Stryker disable next-line EqualityOperator — `>` and `>=` differ only when the two are equal, and then both branches are that same day.
+  return floor && floor > day ? floor : day;
 }
 
 /**

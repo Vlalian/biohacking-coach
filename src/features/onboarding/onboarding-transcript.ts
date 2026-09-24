@@ -31,6 +31,13 @@ function pastRacesLine(value: unknown): string {
     .join(' · ');
 }
 
+/** The three answers as the Coach's log reads them (`training-architecture/36`). */
+const FIRST_DAY_TRANSCRIPT: Record<FirstDayChoice, string> = {
+  today: 'Starting today',
+  tomorrow: 'Starting tomorrow',
+  nextMonday: 'Starting next Monday',
+};
+
 /**
  * The athlete's answer as one human-readable transcript line.
  *
@@ -39,13 +46,6 @@ function pastRacesLine(value: unknown): string {
  * so a step whose line rendered wrongly would have shown up in an athlete's
  * transcript rather than in a test.
  */
-/** The three answers as the Coach's log reads them (`training-architecture/36`). */
-const FIRST_DAY_TRANSCRIPT: Record<FirstDayChoice, string> = {
-  today: 'Starting today',
-  tomorrow: 'Starting tomorrow',
-  nextMonday: 'Starting next Monday',
-};
-
 export function answerText(payload: StepAnswer): string {
   switch (payload.step) {
     case 'language':

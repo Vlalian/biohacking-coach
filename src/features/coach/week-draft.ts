@@ -1,6 +1,12 @@
 import { addDays, weekStartOf } from '@/lib/date';
 import type { Citation } from '@/lib/citation';
-import { excludedBetween, hasAPlannableDay, planningWindow, type PlanningWindow } from './planning-window';
+import {
+  excludedBetween,
+  hasAPlannableDay,
+  notBefore,
+  planningWindow,
+  type PlanningWindow,
+} from './planning-window';
 import type { ProposedSession } from './weekly-session';
 import { PLAN_EVENT } from './plan-proposal';
 import { effectiveWeeklySessionDay, WEEKDAYS } from './weekly-offer';
@@ -273,10 +279,7 @@ export function weekWindow(
    */
   firstDay?: string,
 ): PlanningWindow | null {
-  // Stryker disable next-line EqualityOperator — as above: at equality both branches are the same day.
-  const earliest = firstDay && firstDay > today ? firstDay : today;
-  // Stryker disable next-line EqualityOperator: equivalent — on the Monday itself both branches are that Monday.
-  const start = earliest > weekStart ? earliest : weekStart;
+  const start = notBefore(weekStart, notBefore(today, firstDay));
   const end = addDays(weekStart, 6);
   if (!hasAPlannableDay(start, end, fixedConstraints, unavailableDates)) return null;
   return {
@@ -323,18 +326,23 @@ export function wholeWeekWindow(
  * rather than honoured: Coach Chat is the resting conversation and lives for
  * months, so "the week it once discussed" must stop being its window once that
  * week is no longer current.
+ *
+ * `firstDay` bounds the fall-through only. The whole-week branch is deliberately
+ * left alone: that week came from a draft, and a draft is already bounded by
+ * `weekWindow` at the moment it is composed.
  */
 export function conversationWindow(
   today: string,
   discussedWeekStart: string | null,
   fixedConstraints: string[],
   unavailableDates: string[],
+  firstDay?: string,
 ): PlanningWindow {
   const thisWeek = weekStartOf(today);
   const current = discussedWeekStart === thisWeek || discussedWeekStart === addDays(thisWeek, 7);
   return current
     ? wholeWeekWindow(discussedWeekStart, fixedConstraints, unavailableDates)
-    : planningWindow(today, fixedConstraints, unavailableDates);
+    : planningWindow(today, fixedConstraints, unavailableDates, firstDay);
 }
 
 /** The week after today's, as a window — the common case for a draft. */

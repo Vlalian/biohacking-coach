@@ -78,6 +78,15 @@ describe('conversationWindow — the week a chat may write (training-architectur
     expect(conversationWindow(today, '2026-09-28', [], [])).toEqual(planningWindow(today));
   });
 
+  it('carries the athlete’s chosen first day into the fall-through window', () => {
+    // No discussed week, so this falls through to `planningWindow`. The bound
+    // has to travel with it, or a chat with no draft behind it writes days the
+    // athlete said were not theirs (`training-architecture/36`).
+    expect(conversationWindow(today, null, [], [], '2026-09-18').start).toBe('2026-09-18');
+    // A day already past is spent and changes nothing.
+    expect(conversationWindow(today, null, [], [], '2026-09-10')).toEqual(planningWindow(today));
+  });
+
   it('resolves the excluded days of the week it chose, not of today’s', () => {
     expect(conversationWindow(today, NEXT_MON, ['Monday'], ['2026-09-25']).excludedDates).toEqual([
       NEXT_MON,

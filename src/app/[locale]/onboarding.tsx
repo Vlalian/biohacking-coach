@@ -22,6 +22,7 @@ import {
 } from '@/features/onboarding/onboarding-flow';
 import { formatFinish, parseFinishInput, type PastRace } from '@/features/onboarding/past-races';
 import { PreferredNameField } from '@/components/preferred-name-field';
+import { dateKey } from '@/lib/date';
 import { answerOnboardingAction } from './onboarding-actions';
 
 /**
@@ -543,7 +544,7 @@ function FirstDayPanel({ answers, pending, t, submit }: PanelProps) {
   // day is the right anchor: it is the day the athlete is looking at.
   const [choice, setChoice] = useState<FirstDayChoice>(() => {
     const now = new Date();
-    return firstDayChoiceOf(answers.firstDay, todayKeyOf(now), now);
+    return firstDayChoiceOf(answers.firstDay, dateKey(now), now);
   });
   return (
     <form
@@ -571,10 +572,6 @@ function FirstDayPanel({ answers, pending, t, submit }: PanelProps) {
   );
 }
 
-/** The browser's own day as a date key — the anchor the tiles are read against. */
-function todayKeyOf(now: Date): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
 
 /** The three answers, as the step labels them. */
 const FIRST_DAY_MESSAGE_KEY: Record<FirstDayChoice, string> = {
