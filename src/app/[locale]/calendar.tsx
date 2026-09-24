@@ -222,8 +222,16 @@ export function Calendar({
   coachAthleteId,
   proposal = null,
   health = [],
+  phase = null,
 }: {
   sessions: Session[];
+  /**
+   * The two lines under the month (Mads, 2026-09-24, from the export's
+   * Information header): the block today falls in with the week inside it,
+   * and the race with the days to go. Null renders nothing — an athlete with
+   * no race or no block gets the month alone, not a placeholder.
+   */
+  phase?: { blockName: string; week: number; weeks: number; raceName: string; daysToRace: number } | null;
   unavailableDates: string[];
   /**
    * The athlete's Injuries and Illnesses, open and closed, drawn as a layer
@@ -394,6 +402,17 @@ export function Calendar({
             {format.dateTime(viewedMonth, { month: 'long' })}{' '}
             <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
           </h1>
+          {phase && (
+            <div className="mt-3 flex flex-col gap-1 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground" data-phase-line="">
+              <span>{t('phaseLine', { block: phase.blockName, week: phase.week, weeks: phase.weeks })}</span>
+              <span>
+                {phase.raceName} ·{' '}
+                <span className="text-signal">
+                  {t('raceLine', { days: phase.daysToRace })}
+                </span>
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <GhostButton

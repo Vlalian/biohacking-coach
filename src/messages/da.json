@@ -301,6 +301,8 @@
   },
   "Calendar": {
     "weekNumber": "Uge {n}",
+    "phaseLine": "{block} · uge {week} af {weeks}",
+    "raceLine": "T-{days} {days, plural, =1 {dag} other {dage}}",
     "discussing": "Næste uge er ved at blive drøftet med Coachen — åbn Coachen for at afslutte.",
     "empty": "Ingen sessioner planlagt endnu.",
     "rate": "Bedøm {type}-session",

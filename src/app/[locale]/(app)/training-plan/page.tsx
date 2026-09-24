@@ -14,6 +14,8 @@ import { spansFrom } from '@/features/health/health-layer';
 import { today } from '@/lib/date';
 import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
+import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
+import { daysBetween } from '@/lib/date';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
@@ -77,6 +79,19 @@ export default async function TrainingPlanPage({
   // Coach's own prompts read, so the strip and the Coach never disagree.
   const horizon = athlete ? await getResolvedBlocks(athlete.id, todayKey) : { race: null, blocks: [] };
 
+  // The two lines under the month: the block and the race, from the same
+  // resolved horizon the strip and the Coach read, so none of them disagree.
+  const block = horizon.race ? currentBlock(todayKey, horizon.blocks) : null;
+  const phase =
+    horizon.race && block
+      ? {
+          blockName: block.name,
+          ...blockPosition(todayKey, block),
+          raceName: horizon.race.name,
+          daysToRace: Math.max(0, daysBetween(todayKey, horizon.race.date)),
+        }
+      : null;
+
   // The week the Coach drafted, if one is waiting for the athlete's decision —
   // or a pointer to the conversation it moved into (training-architecture/18),
   // or that the draft is being written right now, by the shell's after() this
@@ -123,6 +138,7 @@ export default async function TrainingPlanPage({
         todayKey={todayKey}
         proposal={proposal}
         health={health}
+        phase={phase}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />
       <GarminUpload />

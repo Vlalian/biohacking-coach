@@ -301,6 +301,8 @@
   },
   "Calendar": {
     "weekNumber": "Week {n}",
+    "phaseLine": "{block} · week {week} of {weeks}",
+    "raceLine": "T-{days} {days, plural, =1 {day} other {days}}",
     "discussing": "Next week is being discussed with the Coach — open the Coach to finish.",
     "empty": "No sessions planned yet.",
     "rate": "Rate {type} session",
