@@ -824,7 +824,9 @@
   "CoachDay": {
     "headline": "<b>{name}</b>s ugentlige planlægningsdag: <b>{day}</b>",
     "intro": "{name}s træningsuge begynder <b>{day}</b>. Hver uge udarbejder Coachen de næste syv dage, <b>du</b> ser dem først, og <b>{name}</b> bestemmer.",
-    "nextDraft": "Næste udkast: <b>dig</b> {coachDate} · <b>{name}</b> {athleteDate}",
+    "nextDraft": "Du ser udkastet <b>{coachDate}</b>; <b>{name}</b> ser det {athleteDate}.",
+    "gotIt": "Forstået",
+    "changeDay": "Skift dag",
     "pickerLabel": "Ugentlig planlægningsdag",
     "confirmQuestion": "Skift dagen til {day}? Det gælder fra næste udkast.",
     "confirm": "Skift dag",

@@ -3,7 +3,8 @@ import { PrescribePanel } from '../prescribe-panel';
 import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
 import { WeeklySessionDayCard } from '../weekly-session-day-card';
-import { getPreferredNameForAthlete } from '@/features/user-prefs/user-prefs-repository';
+import { getPreferredNameForAthlete, getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
+import { resolveUserId } from '@/app/[locale]/current-actor';
 import { displayNameFor, raceFacts } from '@/features/coach/weekly-session-day';
 import { WeekDraftReview } from '../week-draft-review';
 import { DraftingCard } from '@/app/[locale]/drafting-card';
@@ -35,6 +36,12 @@ export default async function CoachAthletePlanPage({
   // (preferred-name/02), here rather than in the roster view: only this card
   // addresses the athlete by name.
   const preferredName = await getPreferredNameForAthlete(athleteId);
+  // Whether this coach has been walked through the week cycle
+  // (training-architecture/41). Read from the *user*, not the coach row: the
+  // cycle is the same for every athlete, so it is taught once. `Coach` carries
+  // no userId by design (ADR 0006), hence the session read here.
+  const userId = await resolveUserId();
+  const instructed = userId ? (await getUiPrefs(userId)).weekCycleInstructed === true : false;
 
   return (
     <>
@@ -69,6 +76,7 @@ export default async function CoachAthletePlanPage({
         athleteName={displayNameFor(preferredName)}
         race={raceFacts(todayKey, view.blocks)}
         locale={locale}
+        instructed={instructed}
       />
       <CoachCalendar
         athleteId={athleteId}

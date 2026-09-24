@@ -8,6 +8,7 @@ const {
   getCoachAthleteView,
   getLatestBriefingWithMessages,
   getPreferredNameForAthlete,
+  getUiPrefs,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -20,6 +21,7 @@ const {
   getCoachAthleteView: vi.fn(),
   getLatestBriefingWithMessages: vi.fn(() => Promise.resolve(null)),
   getPreferredNameForAthlete: vi.fn(() => Promise.resolve<string | null>(null)),
+  getUiPrefs: vi.fn(() => Promise.resolve<Record<string, unknown>>({})),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -42,7 +44,7 @@ vi.mock('@/features/coach/conversation-repository', () => ({
 }));
 // The plan tab's one extra read: the athlete's Preferred Name for the
 // planning-day card (training-architecture/28), through the user seam.
-vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getPreferredNameForAthlete }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getPreferredNameForAthlete, getUiPrefs }));
 // Client components pulling in browser deps, and a server-action module whose
 // import chain reaches auth. The pages' own wiring is what is under test.
 vi.mock('@/app/[locale]/calendar', () => ({ Calendar: () => null }));
@@ -187,5 +189,20 @@ describe('the Plan tab — the planning-day card (training-architecture/28)', ()
     getPreferredNameForAthlete.mockResolvedValue(null);
     const card = find(await render(PlanPage as Page), 'WeeklySessionDayCard');
     expect(card!.props.athleteName).toBeNull();
+  });
+
+  // training-architecture/41: the cycle is taught once per coach, so the flag
+  // is read from the signed-in user's prefs, not from the athlete.
+  it('tells the card this coach has already been instructed', async () => {
+    getUiPrefs.mockResolvedValue({ weekCycleInstructed: true });
+    const card = find(await render(PlanPage as Page), 'WeeklySessionDayCard');
+    expect(getUiPrefs).toHaveBeenCalledWith('coach_user');
+    expect(card!.props.instructed).toBe(true);
+  });
+
+  it('treats a coach with no prefs as not yet instructed', async () => {
+    getUiPrefs.mockResolvedValue({});
+    const card = find(await render(PlanPage as Page), 'WeeklySessionDayCard');
+    expect(card!.props.instructed).toBe(false);
   });
 });

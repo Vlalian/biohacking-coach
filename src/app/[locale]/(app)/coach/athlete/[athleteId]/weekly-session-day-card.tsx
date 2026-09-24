@@ -14,7 +14,7 @@ import {
   type DayChoice,
   type RaceFacts,
 } from '@/features/coach/weekly-session-day';
-import { setWeeklySessionDayAction } from './day-actions';
+import { dismissWeekCycleAction, setWeeklySessionDayAction } from './day-actions';
 
 /**
  * The athlete's Weekly Session Day, stated as a fact and explained
@@ -28,10 +28,16 @@ import { setWeeklySessionDayAction } from './day-actions';
  * race fact is computed from the same arithmetic the draft runs on — never
  * typed into copy — so the card cannot disagree with the draft it describes.
  *
- * Changing the day is a deliberate step: a tile proposes, a confirm line
- * appears, and only Confirm calls the action (`dayChoice` holds that rule as a
- * pure function). The write is the existing `weekly_session_day_set`, narrated
- * once as before.
+ * Changing the day is a deliberate step: the tiles sit behind a Change day
+ * control, a tile proposes, a confirm line appears, and only Confirm calls the
+ * action (`dayChoice` holds that rule as a pure function). The write is the
+ * existing `weekly_session_day_set`, narrated once as before.
+ *
+ * `training-architecture/41`: a Head Coach who has never been instructed gets
+ * the fold open with a Got it button — the cycle is the least intuitive thing
+ * on the site and nobody had a reason to click a closed summary. It is taught
+ * once per coach (the flag is on the user), and the fold stays as the permanent
+ * reference afterwards.
  */
 
 const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
@@ -53,7 +59,9 @@ export function WeeklySessionDayCard({
   athleteName,
   race,
   locale,
+  instructed,
   initialProposed = null,
+  initialChanging = false,
 }: {
   athleteId: string;
   value: string | null;
@@ -62,8 +70,12 @@ export function WeeklySessionDayCard({
   athleteName: string | null;
   race: RaceFacts | null;
   locale: string;
+  /** Whether this coach has already been shown the weekly cycle and dismissed it. */
+  instructed: boolean;
   /** Test seam only: render the card mid-choice. Never passed by the page. */
   initialProposed?: string | null;
+  /** Test seam only: render the card with the day picker already open. Never passed by the page. */
+  initialChanging?: boolean;
 }) {
   const t = useTranslations('CoachDay');
   const tDays = useTranslations('Settings');
@@ -71,6 +83,8 @@ export function WeeklySessionDayCard({
   const [pending, startTransition] = useTransition();
   const [choice, setChoice] = useState<DayChoice>({ current: value, proposed: initialProposed, write: null });
   const [notice, setNotice] = useState<string | null>(null);
+  const [changing, setChanging] = useState(initialChanging);
+  const [dismissed, setDismissed] = useState(false);
 
   const name = athleteName ?? t('theAthlete');
   const dates = nextDraftDates(todayKey, choice.current);
@@ -84,6 +98,15 @@ export function WeeklySessionDayCard({
       setChoice(state);
       if (error) setNotice(t('error', { reason: error }));
       else router.refresh();
+    });
+  };
+
+  const teaching = !instructed && !dismissed;
+
+  const dismiss = () => {
+    startTransition(async () => {
+      await dismissWeekCycleAction(athleteId);
+      setDismissed(true);
     });
   };
 
@@ -109,6 +132,16 @@ export function WeeklySessionDayCard({
         })}
       </p>
 
+      {!changing ? (
+        <button
+          type="button"
+          data-action="change-day"
+          onClick={() => setChanging(true)}
+          className="mt-3 rounded border border-border px-3 py-1 font-body text-sm text-foreground"
+        >
+          {t('changeDay')}
+        </button>
+      ) : (
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t('pickerLabel')}>
         {DAYS.map((day) => {
           const isCurrent = choice.current === day;
@@ -133,6 +166,7 @@ export function WeeklySessionDayCard({
           );
         })}
       </div>
+      )}
 
       {choice.proposed && (
         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3" data-day-confirm="">
@@ -159,7 +193,7 @@ export function WeeklySessionDayCard({
       )}
       {notice && <p className="mt-2 text-sm text-signal">{notice}</p>}
 
-      <details className="mt-4">
+      <details className="mt-4" open={teaching}>
         <summary className="cursor-pointer font-body text-sm text-foreground underline">{t('howTitle')}</summary>
         <ol className="mt-2 list-decimal space-y-2 pl-5 font-body text-sm text-foreground">
           <li>
@@ -172,6 +206,17 @@ export function WeeklySessionDayCard({
           <li>{t.rich('step4', stepArgs)}</li>
         </ol>
         <p className="mt-2 font-body text-sm text-muted-foreground">{t('changing')}</p>
+        {teaching && (
+          <button
+            type="button"
+            data-action="dismiss-week-cycle"
+            onClick={dismiss}
+            disabled={pending}
+            className="mt-3 rounded border border-signal bg-signal px-3 py-1 text-sm text-signal-foreground disabled:opacity-50"
+          >
+            {t('gotIt')}
+          </button>
+        )}
       </details>
     </section>
   );

@@ -824,7 +824,9 @@
   "CoachDay": {
     "headline": "<b>{name}</b>'s weekly planning day: <b>{day}</b>",
     "intro": "{name}'s training week starts on <b>{day}</b>. Every week the Coach drafts the next seven days, <b>you</b> get to look first, and <b>{name}</b> decides.",
-    "nextDraft": "Next draft: <b>you</b> {coachDate} · <b>{name}</b> {athleteDate}",
+    "nextDraft": "You see the draft <b>{coachDate}</b>; <b>{name}</b> sees it {athleteDate}.",
+    "gotIt": "Got it",
+    "changeDay": "Change day",
     "pickerLabel": "Weekly planning day",
     "confirmQuestion": "Change the day to {day}? It applies from the next draft.",
     "confirm": "Change day",

@@ -27,7 +27,7 @@ const update = vi.fn(() => ({ set }));
 
 vi.mock('@/db', () => ({ getDb: () => ({ select, update }) }));
 
-const { getUiPrefs, setUiLanguage, setPreferredName, getPreferredNameForAthlete } = await import(
+const { getUiPrefs, setUiLanguage, setPreferredName, setWeekCycleInstructed, getPreferredNameForAthlete } = await import(
   './user-prefs-repository',
 );
 
@@ -97,5 +97,22 @@ describe('getPreferredNameForAthlete', () => {
     expect(await getPreferredNameForAthlete('athlete_1')).toBeNull();
     selectRows = [];
     expect(await getPreferredNameForAthlete('synthetic_1')).toBeNull();
+  });
+});
+
+describe('setWeekCycleInstructed', () => {
+  it('records that this coach has been shown the week cycle, keeping their other prefs', async () => {
+    selectRows = [{ uiPrefs: { language: 'da', preferredName: 'Sarah' } }];
+    await setWeekCycleInstructed('user-1');
+    expect(updatedSet).toEqual({
+      uiPrefs: { language: 'da', preferredName: 'Sarah', weekCycleInstructed: true },
+    });
+    expect(vi.mocked(eq)).toHaveBeenCalledWith(user.id, 'user-1');
+  });
+
+  it('writes the flag for a user who had no prefs at all', async () => {
+    selectRows = [];
+    await setWeekCycleInstructed('user-2');
+    expect(updatedSet).toEqual({ uiPrefs: { weekCycleInstructed: true } });
   });
 });

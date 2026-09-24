@@ -24,6 +24,13 @@ export interface UiPrefs {
    * Absent when they left the field blank — the Coach is then nameless.
    */
   preferredName?: string;
+  /**
+   * Set once a Head Coach has been shown the week cycle in full and dismissed
+   * it (`training-architecture/41`). Per user, not per athlete: the cycle is the
+   * same for everyone they coach, so it is taught once. Absent means never
+   * instructed — there is no `false`.
+   */
+  weekCycleInstructed?: true;
 }
 
 export async function getUiPrefs(userId: string): Promise<UiPrefs> {
@@ -44,6 +51,15 @@ export async function setUiLanguage(
   await getDb()
     .update(user)
     .set({ uiPrefs: { ...current, language } })
+    .where(eq(user.id, userId));
+}
+
+/** Records that this user has seen the week cycle, merging over any other stored prefs. */
+export async function setWeekCycleInstructed(userId: string): Promise<void> {
+  const current = await getUiPrefs(userId);
+  await getDb()
+    .update(user)
+    .set({ uiPrefs: { ...current, weekCycleInstructed: true } })
     .where(eq(user.id, userId));
 }
 
