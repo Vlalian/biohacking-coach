@@ -116,7 +116,7 @@ export default async function CoachRosterPage({
                   {race ? (
                     <span className="mt-1 block font-body text-sm uppercase tracking-[0.14em] text-muted-foreground">
                       {race.name} ·{' '}
-                      <span className="text-signal">{t('raceCountdown', { days: race.days })}</span>
+                      <span className="whitespace-nowrap text-signal">{t('raceCountdown', { days: race.days })}</span>
                     </span>
                   ) : (
                     <span className="mt-1 block font-body text-sm uppercase tracking-[0.14em] text-muted-foreground">
