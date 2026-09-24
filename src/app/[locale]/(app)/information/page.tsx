@@ -1,12 +1,10 @@
 import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
+import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import {
-  getAthleteByUserId,
   getInformationViewLayout,
 } from '@/features/athlete/athlete-repository';
 import { buildDataset } from '@/features/information-view/build-dataset';
@@ -32,13 +30,13 @@ export default async function InformationPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
 
   const t = await getTranslations('Information');
-  const athlete = await getAthleteByUserId(session!.user.id);
+  const athlete = await getCurrentAthlete();
   // The header names the athlete the way the shell does: first name only, and
   // it never leaves the page (ADR 0006 — nothing here reaches a prompt).
   const firstName = session!.user.name.trim().split(/\s+/)[0] ?? '';
