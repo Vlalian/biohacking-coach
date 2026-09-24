@@ -182,15 +182,15 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     // they render with reports withheld.
     const prompt = renderBriefingPrompt(ctx({ blocks: coachOnly, reports: null }));
     expect(prompt).toContain('TRAINING BLOCKS');
-    expect(prompt).toContain('Build the Volume · to 2027-01-10 · Coach');
-    expect(prompt).toContain('Taper · to 2027-08-15 · Coach · current');
-    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Coach · current');
+    expect(prompt).toContain('Build the Volume · to 2027-01-10 · Momentum');
+    expect(prompt).toContain('Taper · to 2027-08-15 · Momentum · current');
+    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Momentum · current');
     // No flag, no line — not "unrealistic: null".
     expect(prompt).not.toContain('unrealistic');
   });
 
-  it('carries the suggest-do-not-overwrite line only when a block is the Head Coach’s', () => {
-    const line = "The Training Blocks are the Head Coach's.";
+  it('carries the suggest-do-not-overwrite line only when a block is the coach’s', () => {
+    const line = "The Training Blocks are the coach's.";
     expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).not.toContain(line);
 
     const withHuman = {
@@ -200,7 +200,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     const prompt = renderBriefingPrompt(ctx({ blocks: withHuman }));
     expect(prompt).toContain(line);
     expect(prompt).toContain('say so as a suggestion');
-    expect(prompt).toContain('Long Rides · to 2027-01-10 · Head Coach');
+    expect(prompt).toContain('Long Rides · to 2027-01-10 · coach');
   });
 
   it('reports the unrealistic flag with its reason, and the arithmetic draft as such', () => {
@@ -214,7 +214,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
       }),
     );
     expect(prompt).toContain('Block 1 of 2 · to 2027-01-10 · draft');
-    expect(prompt).toContain('The Coach has flagged the Target Race as unrealistic: eleven months is short');
+    expect(prompt).toContain('Momentum has flagged the Target Race as unrealistic: eleven months is short');
   });
 
   it('carries one line while a stored set no longer fits the race, and none otherwise (training-architecture/19)', () => {
@@ -226,7 +226,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     );
     expect(prompt).toContain(
       'The stored Training Blocks no longer fit the race date: the last block, "Taper", still ends 2027-06-01. ' +
-        'The blocks listed above are the arithmetic draft; the Head Coach re-pins the stored set from the notice on their next login.',
+        'The blocks listed above are the arithmetic draft; the coach re-pins the stored set from the notice on their next login.',
     );
   });
 

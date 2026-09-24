@@ -312,12 +312,12 @@ function planBlock(plan: BriefingPlanEntry[]): string {
 
 const BLOCK_AUTHOR_LABEL: Record<BlockAuthor, string> = {
   arithmetic: 'draft',
-  coach_ai: 'Coach',
-  head_coach: 'Head Coach',
+  coach_ai: 'Momentum',
+  head_coach: 'coach',
 };
 
 const HEAD_COACH_BLOCKS_LINE =
-  "The Training Blocks are the Head Coach's. If you would change one, say so as a suggestion; do not present a different structure as the plan.";
+  "The Training Blocks are the coach's. If you would change one, say so as a suggestion; do not present a different structure as the plan.";
 
 /**
  * The Training Blocks, always visible like the plan they structure.
@@ -341,11 +341,11 @@ function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
     lines.push(
       `The stored Training Blocks no longer fit the race date: the last block, "${blocks.staleSet.lastBlockName}", ` +
         `still ends ${blocks.staleSet.endsOn}. The blocks listed above are the arithmetic draft; ` +
-        'the Head Coach re-pins the stored set from the notice on their next login.',
+        'the coach re-pins the stored set from the notice on their next login.',
     );
   }
   if (blocks.raceUnrealistic) {
-    lines.push(`The Coach has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
+    lines.push(`Momentum has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
   }
   return `TRAINING BLOCKS (the horizon toward the Target Race, always visible):\n${lines.join('\n')}`;
 }
