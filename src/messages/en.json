@@ -645,6 +645,9 @@
     "blocksDrafted": "I've shaped your training toward {race}: {blocks}",
     "weekDrafted": "I've drafted a training week for you — have a look at your plan when you're ready",
     "weekDraftedFrom": "I've drafted a training week for you, starting {day} — have a look at your plan when you're ready",
+    "weekAdjusted": "I've adjusted the week already in your plan — have a look when you're ready",
+    "weekAdjustedFrom": "I've adjusted the week already in your plan, from {day} — have a look when you're ready",
+    "weekDraftChange": "{clause}. {change}",
     "weeklyDaySet": "{coach} moved your weekly planning day to {day}",
     "weeklyDaySetNoDetail": "{coach} changed your weekly planning day",
     "weekDraftShaped": "{coach} shaped next week's plan before it reached you",
@@ -889,6 +892,8 @@
   "ProposalCard": {
     "title": "Next week is drafted",
     "lead": "{count, plural, one {# session} other {# sessions}} for the week of {week}. Accept it, talk it over with Momentum, or leave the week as it is.",
+    "titleAdjusted": "Next week, adjusted",
+    "leadAdjusted": "{count, plural, one {# session} other {# sessions}} for the week of {week}, adjusted from what your plan already held. Accept it, talk it over with Momentum, or leave the week as it is.",
     "accept": "Accept",
     "discuss": "Discuss with Momentum",
     "decline": "Not this week",

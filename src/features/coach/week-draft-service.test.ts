@@ -639,6 +639,35 @@ describe('the draft is seeded with the week the structure already wrote (trainin
   });
 });
 
+describe('the draft says whether it adjusted a full week, and what it changed (training-architecture/40)', () => {
+  const ROW = { date: '2026-09-22', sport: 'bike', type: 'Endurance', durationMinutes: 90, zone: 'Z2', title: 'Easy ride' };
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+  });
+
+  it('records a draft over the structure’s week as adjusted, with the Coach’s sentence', async () => {
+    getArithmeticSessionsForWeek.mockResolvedValue([ROW]);
+    callCoach.mockResolvedValue(toolReply({ sessions: PROPOSED, whatChanged: 'Moved the long ride to Sunday.' }));
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ adjusted: true, whatChanged: 'Moved the long ride to Sunday.' });
+  });
+
+  it('records a draft over an empty week as planned, and no sentence when the Coach gave none', async () => {
+    getArithmeticSessionsForWeek.mockResolvedValue([]);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ adjusted: false, whatChanged: null });
+  });
+
+  it('asks the Coach for the sentence in the tool it answers with', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const [tool] = callCoach.mock.calls[0][0].tools;
+    expect(tool.input_schema.properties.whatChanged).toMatchObject({ type: 'string' });
+    expect(tool.input_schema.required).toEqual(['sessions']);
+  });
+});
+
 describe('the draft reads the four weeks before the drafted one (training-architecture/44)', () => {
   const past = (date: string, status: string, origin: string, duration: number | null = 60) => ({
     id: `s-${date}`, date, type: 'Endurance', status, parked: false, dayOrder: 0, version: 1, title: null,

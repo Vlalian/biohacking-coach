@@ -25,6 +25,7 @@ import {
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   validateProposedPlan,
   weekFeedbackFrom,
+  whatChangedFrom,
   fourWeekSummary,
   RECENT_WEEKS,
   type ProposedSession,
@@ -131,6 +132,8 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
       sessions: asked.sessions,
       citations: asked.citations,
       skeleton: asked.skeleton,
+      adjusted: asked.adjusted,
+      whatChanged: asked.whatChanged,
     }),
   );
   if (outcome === 'coach-failed') return outcome;
@@ -235,6 +238,8 @@ export async function redraftWeek(
       sessions: asked.sessions,
       citations: asked.citations,
       skeleton: asked.skeleton,
+      adjusted: asked.adjusted,
+      whatChanged: asked.whatChanged,
     }),
   );
   if (outcome === 'coach-failed') return outcome;
@@ -365,6 +370,9 @@ interface Drafted {
   sessions: ProposedSession[];
   citations: RetrievalResult['citations'];
   skeleton: SkeletonDay[];
+  /** The week already held the structure's sessions (`training-architecture/40`). */
+  adjusted: boolean;
+  whatChanged: string | null;
 }
 
 type AskFailure = 'coach-failed' | 'malformed';
@@ -396,9 +404,14 @@ async function askCoach(
   );
   if (reply === 'coach-failed') return reply;
 
-  const sessions = proposalFrom(athleteId, reply, window);
-  if (!sessions) return 'malformed';
-  return { sessions, citations: gathered.grounding.citations, skeleton: gathered.skeleton };
+  const proposal = proposalFrom(athleteId, reply, window);
+  if (!proposal) return 'malformed';
+  return {
+    ...proposal,
+    citations: gathered.grounding.citations,
+    skeleton: gathered.skeleton,
+    adjusted: gathered.adjusted,
+  };
 }
 
 /** Runs one step of the draft; a throw is logged as this surface's failure and named, never rethrown. */
@@ -416,7 +429,11 @@ async function guarded<T>(athleteId: string, step: () => Promise<T>): Promise<T 
  * (no tool call, or what the validator refused), since the draft has no
  * conversation for the Coach's words to land in.
  */
-function proposalFrom(athleteId: string, reply: CoachReply, window: PlanningWindow): ProposedSession[] | null {
+function proposalFrom(
+  athleteId: string,
+  reply: CoachReply,
+  window: PlanningWindow,
+): { sessions: ProposedSession[]; whatChanged: string | null } | null {
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (!call) {
     logCoachFailure({ surface: 'week_draft', athleteId, conversationId: null, error: new Error('no tool call') });
@@ -432,7 +449,7 @@ function proposalFrom(athleteId: string, reply: CoachReply, window: PlanningWind
     });
     return null;
   }
-  return validated.sessions;
+  return { sessions: validated.sessions, whatChanged: whatChangedFrom(call.input) };
 }
 
 /** The prompt, the skeleton it was built from, and the grounding it carried. */
@@ -441,7 +458,7 @@ async function gatherContext(
   today: string,
   window: PlanningWindow,
   unavailableDates: string[],
-): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult }> {
+): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; adjusted: boolean }> {
   const weekStart = weekStartOf(today);
   // The drafted week, not this one: the history the draft reads counts back
   // from the week it is writing (`training-architecture/44`).
@@ -497,7 +514,9 @@ async function gatherContext(
     passages: grounding.passages,
     citations: grounding.citations,
   };
-  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding };
+  // The fact the narration needs and cannot recover later: the draft adjusted
+  // a week the structure had filled, rather than filling an empty one.
+  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, adjusted: baseline.length > 0 };
 }
 
 const NO_GROUNDING: RetrievalResult = { passages: [], citations: [] };

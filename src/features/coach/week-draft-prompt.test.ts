@@ -262,6 +262,13 @@ describe('the baseline week — what the structure already wrote (training-archi
     expect(lines).toContain('2026-09-21: swim Endurance 66 min Z2 — Easy swim');
   });
 
+  it('asks for one sentence on what changed when there was a week to change (training-architecture/40)', () => {
+    expect(renderWeekDraftPrompt(ctx({ baseline }))).toContain(
+      'The athlete can already see this week: say in one sentence, in whatChanged, what you changed.',
+    );
+    expect(renderWeekDraftPrompt(ctx())).not.toContain('whatChanged');
+  });
+
   it('falls back to the skeleton when the structure wrote nothing for this week', () => {
     for (const value of [null, []]) {
       const out = renderWeekDraftPrompt(ctx({ baseline: value }));

@@ -42,6 +42,13 @@ export interface WeekDraft {
   citations: Citation[];
   /** True when this is the Head Coach's approved version rather than the Coach's draft. */
   approved: boolean;
+  /**
+   * True when the draft adjusted a week the structure had already filled
+   * (`training-architecture/40`), so the card says "adjusted", not "drafted".
+   * False for any event written before the flag, and for a Head Coach's
+   * approved version, which does not carry it.
+   */
+  adjusted?: boolean;
   createdAt: Date;
 }
 
@@ -93,6 +100,7 @@ function draftOf(event: WeekDraftEvent, weekStart: string): WeekDraft | null {
     sessions: rec.sessions as ProposedSession[],
     citations: arrayOr<Citation>(rec.citations),
     approved: event.type === WEEK_DRAFT_EVENT.approved,
+    adjusted: rec.adjusted === true,
     createdAt: event.createdAt,
   };
 }

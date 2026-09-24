@@ -157,6 +157,12 @@ describe('pendingWeekDraft — the latest unresolved draft for a week', () => {
     }
   });
 
+  it('carries whether the draft adjusted a full week — false for one written before the flag (training-architecture/40)', () => {
+    const flagged = { ...drafted('d1', NEXT_MON, 1), payload: { weekStart: NEXT_MON, sessions: [], adjusted: true } };
+    expect(pendingWeekDraft([flagged], NEXT_MON)?.adjusted).toBe(true);
+    expect(pendingWeekDraft([drafted('d1', NEXT_MON, 1)], NEXT_MON)?.adjusted).toBe(false);
+  });
+
   it('a newer draft supersedes an older one', () => {
     const p = pendingWeekDraft([drafted('d1', NEXT_MON, 1), drafted('d2', NEXT_MON, 2)], NEXT_MON);
     expect(p?.id).toBe('d2');

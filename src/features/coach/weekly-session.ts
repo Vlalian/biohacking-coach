@@ -437,6 +437,11 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
           required: ['date', 'type', 'durationMinutes', 'zone', 'note'],
         },
       },
+      whatChanged: {
+        type: 'string',
+        description:
+          "When you changed the week you were given, one sentence in the athlete's language on what you changed. Leave it out when you changed nothing.",
+      },
     },
     required: ['sessions'],
   },
@@ -458,6 +463,15 @@ function positiveMinutes(value: unknown): number | null {
     value <= MAX_SESSION_MINUTES
     ? value
     : null;
+}
+
+/**
+ * The Coach's one sentence on what it changed in the week it was given
+ * (`training-architecture/40`), or null when it gave none. Optional in the
+ * tool, so an absent, blank or non-string value is simply no sentence.
+ */
+export function whatChangedFrom(input: unknown): string | null {
+  return optionalString((input as { whatChanged?: unknown } | null | undefined)?.whatChanged)?.trim() ?? null;
 }
 
 export type ValidatePlanResult =

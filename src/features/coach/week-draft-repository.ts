@@ -107,6 +107,14 @@ export interface NewWeekDraft {
   sessions: ProposedSession[];
   citations: Citation[];
   skeleton: SkeletonDay[];
+  /**
+   * The week already held the structure's sessions, so the draft adjusted it
+   * rather than filling an empty one (`training-architecture/40`). Narration
+   * reads it later, when that fact can no longer be recovered.
+   */
+  adjusted?: boolean;
+  /** The Coach's one sentence on what it changed, when it gave one. */
+  whatChanged?: string | null;
 }
 
 /**
@@ -129,8 +137,10 @@ export interface NewWeekDraft {
  * event names no human by construction (`narration.ts:coachClause`).
  */
 export async function recordWeekDraft(draft: NewWeekDraft): Promise<'drafted' | 'exists'> {
-  const { athleteId, weekStart, visibleFrom, sessions, citations, skeleton } = draft;
-  const payload = { weekStart, visibleFrom, sessions, citations, skeleton };
+  const { athleteId, weekStart, visibleFrom, sessions, citations, skeleton, adjusted, whatChanged } = draft;
+  // An absent field is left out of the JSON, so a draft that says nothing
+  // about either writes exactly the payload it always did.
+  const payload = { weekStart, visibleFrom, sessions, citations, skeleton, adjusted, whatChanged };
 
   const statement = sql`
     INSERT INTO ${events} (

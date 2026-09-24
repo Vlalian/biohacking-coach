@@ -80,6 +80,31 @@ describe('ProposalCard', () => {
   });
 });
 
+describe('ProposalCard — a week the structure had already filled (training-architecture/40)', () => {
+  const render = (draft: typeof DRAFT & { adjusted?: boolean }) =>
+    renderToStaticMarkup(
+      <CoachOverlayContext.Provider value={overlay}>
+        <ProposalCard draft={draft} />
+      </CoachOverlayContext.Provider>,
+    );
+
+  it('says the week was adjusted, not drafted, when it already held sessions', () => {
+    const html = render({ ...DRAFT, adjusted: true });
+    expect(html).toContain('titleAdjusted()');
+    expect(html).toContain('leadAdjusted(count=2,week=2026-09-21)');
+    expect(html).not.toContain('title()');
+  });
+
+  it('keeps the drafted wording for an empty week and for a draft that carries no flag', () => {
+    for (const draft of [{ ...DRAFT, adjusted: false }, DRAFT]) {
+      const html = render(draft);
+      expect(html).toContain('title()');
+      expect(html).toContain('lead(count=2,week=2026-09-21)');
+      expect(html).not.toContain('Adjusted');
+    }
+  });
+});
+
 describe('isDecided — when the card’s buttons go', () => {
   it('is decided after accept, decline, and a replaced draft — a stale card must not keep submitting', () => {
     // `replaced` means the server said not-found: the draft this card shows is

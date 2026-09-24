@@ -945,7 +945,8 @@ function baselineBlock(baseline: BaselineSession[]): string {
   );
   return `BASELINE WEEK (what the plan structure already put in the athlete's calendar):
 ${lines.join('\n')}
-Adjust it for this athlete and this week. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.`;
+Adjust it for this athlete and this week. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.
+The athlete can already see this week: say in one sentence, in whatChanged, what you changed.`;
 }
 
 /**

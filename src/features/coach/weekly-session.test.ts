@@ -9,6 +9,7 @@ import {
   validateProposedPlan,
   weekFeedbackFrom,
   fourWeekSummary,
+  whatChangedFrom,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   PROPOSE_WEEK_PLAN_TOOL,
   type Readiness,
@@ -173,6 +174,18 @@ describe('weekFeedbackFrom', () => {
         session({ id: 'mind-only', feedbackBody: null, feedbackMind: 4 }),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('whatChangedFrom (training-architecture/40)', () => {
+  it('is the Coach’s sentence, trimmed', () => {
+    expect(whatChangedFrom({ sessions: [], whatChanged: '  Moved the long ride to Sunday.  ' })).toBe('Moved the long ride to Sunday.');
+  });
+
+  it('is null when the Coach gave none, a blank one, or something that is not text', () => {
+    for (const input of [{ sessions: [] }, { whatChanged: '   ' }, { whatChanged: 3 }, null, undefined]) {
+      expect(whatChangedFrom(input)).toBeNull();
+    }
   });
 });
 

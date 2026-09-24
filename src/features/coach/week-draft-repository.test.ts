@@ -189,6 +189,13 @@ describe('recordWeekDraft', () => {
     });
   });
 
+  it('records whether the week was adjusted, and the Coach’s sentence, on the event (training-architecture/40)', async () => {
+    executeRows = [{ id: 'new' }];
+    await recordWeekDraft({ ...draft, adjusted: true, whatChanged: 'Swapped Tuesday and Thursday.' });
+    const payload = executed[0].params.find((p) => typeof p === 'string' && p.startsWith('{')) as string;
+    expect(JSON.parse(payload)).toMatchObject({ adjusted: true, whatChanged: 'Swapped Tuesday and Thursday.' });
+  });
+
   it('reports exists when the guard let nothing through — the loser of two tabs', async () => {
     executeRows = [];
     expect(await recordWeekDraft(draft)).toBe('exists');
