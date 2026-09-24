@@ -177,6 +177,11 @@ export const sessions = pgTable(
     startTime: timestamp('start_time'),
     sport: text('sport'),
     summary: jsonb('summary'),
+    // The activity's identity at its source — `garmin:<start time>` for an
+    // uploaded one (`garmin-integration/03`, ballot 3). The key a history
+    // import and a later API sync dedupe on; null for everything the app
+    // itself wrote and for an activity with no start time (ballot 9).
+    externalId: text('external_id'),
     // Session Feedback — two 1–5 smiley scores and a comment, set on rating.
     feedbackBody: integer('feedback_body'),
     feedbackMind: integer('feedback_mind'),
@@ -202,6 +207,11 @@ export const sessions = pgTable(
   (table) => [
     // The calendar always reads sessions for one athlete; index that path.
     index('sessions_athlete_date_idx').on(table.athleteId, table.date),
+    // One session per source activity per athlete. Partial, so the many rows
+    // with no external identity never collide.
+    uniqueIndex('sessions_athlete_external_id_idx')
+      .on(table.athleteId, table.externalId)
+      .where(sql`${table.externalId} is not null`),
     // Guard columns hold closed value sets — encode them so a bad write fails at
     // the database, not silently downstream in an authority check.
     check(
@@ -328,6 +338,9 @@ export const detectedActivities = pgTable(
     startTime: timestamp('start_time'),
     summary: jsonb('summary'),
     samples: jsonb('samples').notNull(),
+    // Same key as `sessions.external_id`, so an activity that arrived as a
+    // proposal is not imported again as history through the other door.
+    externalId: text('external_id'),
     matchedSessionId: uuid('matched_session_id').references(() => sessions.id, {
       onDelete: 'set null',
     }),

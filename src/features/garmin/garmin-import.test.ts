@@ -10,7 +10,7 @@ vi.mock('@/db', () => ({
 }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsOnDates }));
 
-const { proposeDetectedActivities } = await import('./garmin-import');
+const { parseUpload, proposeDetectedActivities } = await import('./garmin-import');
 
 // 90 minutes long on purpose: a fixture measured in seconds cannot tell a
 // duration in minutes from one in seconds, and that is the mistake this file
@@ -131,4 +131,35 @@ describe('proposeDetectedActivities', () => {
     // Not even the plan is read for a file that never parsed.
     expect(getSessionsOnDates).not.toHaveBeenCalled();
   });
+
+  // garmin-integration/03: the same key a history import dedupes on, so an
+  // activity that arrived as a proposal is not imported again as history.
+  it('stamps the external id on a detected activity', async () => {
+    await upload();
+    expect(written()[0]).toEqual(expect.objectContaining({ externalId: 'garmin:2026-07-10T08:00:00.000Z' }));
+  });
 });
+
+// garmin-integration/03: the one parse both uploads share, so a file fails the
+// same way through either button.
+describe('parseUpload', () => {
+  it('reads a GPX file into its activities', async () => {
+    const read = await parseUpload('run.gpx', Buffer.from(GPX));
+    expect(read.ok && read.sessions.map((s) => s.date)).toEqual(['2026-07-10']);
+  });
+
+  it('reads a FIT file into its activities, by a name in any case', async () => {
+    const { buildFitFile } = await import('./fit-fixture');
+    const read = await parseUpload('ride.Fit', buildFitFile());
+    expect(read.ok && read.sessions).toHaveLength(1);
+  });
+
+  it('carries a FIT file’s own failure reason through', async () => {
+    expect(await parseUpload('x.FIT', Buffer.from('not fit'))).toEqual({ ok: false, reason: 'not-a-fit-file' });
+  });
+
+  it('calls a GPX with no activity unreadable, not empty', async () => {
+    expect(await parseUpload('empty.gpx', Buffer.from('<gpx></gpx>'))).toEqual({ ok: false, reason: 'unreadable' });
+  });
+});
+

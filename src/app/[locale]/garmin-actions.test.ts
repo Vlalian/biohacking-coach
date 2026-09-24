@@ -11,6 +11,8 @@ const {
   declineDetectedActivity,
   undoDetectedImport,
   revalidatePath,
+  importTrainingHistory,
+  removeImportedHistory,
 } = vi.hoisted(() => ({
   resolveAthleteId: vi.fn(),
   proposeDetectedActivities: vi.fn(),
@@ -18,11 +20,18 @@ const {
   declineDetectedActivity: vi.fn(),
   undoDetectedImport: vi.fn(),
   revalidatePath: vi.fn(),
+  importTrainingHistory: vi.fn(),
+  removeImportedHistory: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('./current-actor', () => ({ resolveAthleteId }));
-vi.mock('@/features/garmin/garmin-import', () => ({ proposeDetectedActivities }));
+// The real parser stays: the history action's per-file reasons come from it.
+vi.mock('@/features/garmin/garmin-import', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/garmin/garmin-import')>()),
+  proposeDetectedActivities,
+}));
+vi.mock('@/features/garmin/history-import-service', () => ({ importTrainingHistory, removeImportedHistory }));
 vi.mock('@/features/garmin/detected-activity', () => ({
   acceptDetectedActivity,
   declineDetectedActivity,
@@ -34,6 +43,8 @@ const {
   acceptDetectedActivityAction,
   declineDetectedActivityAction,
   undoDetectedImportAction,
+  importHistoryAction,
+  removeImportedHistoryAction,
 } = await import('./garmin-actions');
 
 /**
@@ -63,6 +74,8 @@ beforeEach(() => {
   acceptDetectedActivity.mockReset();
   declineDetectedActivity.mockReset();
   undoDetectedImport.mockReset();
+  importTrainingHistory.mockReset();
+  removeImportedHistory.mockReset();
   revalidatePath.mockClear();
 });
 
@@ -241,3 +254,85 @@ describe('undoDetectedImportAction', () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `garmin-integration/03` — the history upload. Many files at once; each is
+ * parsed on its own with the same parser detection uses, a file that fails is
+ * named with its reason, and every file that parsed is imported together in
+ * one call.
+ */
+describe('importHistoryAction', () => {
+  const GPX = `<?xml version="1.0"?>
+<gpx><trk><type>running</type><trkseg>
+  <trkpt lat="55.0000" lon="12.0000"><ele>10</ele><time>2026-07-10T08:00:00Z</time></trkpt>
+  <trkpt lat="55.0001" lon="12.0000"><ele>11</ele><time>2026-07-10T09:30:00Z</time></trkpt>
+</trkseg></trk></gpx>`;
+
+  function formWith(...files: File[]): FormData {
+    const form = new FormData();
+    for (const file of files) form.append('file', file);
+    return form;
+  }
+
+  beforeEach(() => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    importTrainingHistory.mockImplementation(async (_a: string, parsed: unknown[]) => ({ ok: true, imported: parsed.length, proposed: 0 }));
+  });
+
+  it('imports the valid files and names the failing one', async () => {
+    const result = await importHistoryAction(
+      formWith(new File([GPX], 'ride.gpx'), new File([Buffer.from('not fit')], 'broken.fit')),
+    );
+
+    expect(result).toEqual({ ok: true, imported: 1, proposed: 0, failed: [{ name: 'broken.fit', reason: 'not-a-fit-file' }] });
+    const [athleteId, parsed, today] = importTrainingHistory.mock.calls[0];
+    expect(athleteId).toBe(ATHLETE);
+    expect(parsed).toHaveLength(1);
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(importTrainingHistory).toHaveBeenCalledTimes(1);
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+  });
+
+  it('imports every parsed file in the one call', async () => {
+    await importHistoryAction(formWith(new File([GPX], 'a.gpx'), new File([GPX.replaceAll('2026-07-10', '2026-07-11')], 'b.gpx')));
+    expect(importTrainingHistory.mock.calls[0][1]).toHaveLength(2);
+  });
+
+  it('refuses an empty form and an anonymous caller', async () => {
+    expect(await importHistoryAction(new FormData())).toEqual({ ok: false, reason: 'empty' });
+    expect(await importHistoryAction(formWith(new File([], 'empty.fit')))).toEqual({ ok: false, reason: 'empty' });
+    resolveAthleteId.mockResolvedValue(null);
+    expect(await importHistoryAction(formWith(new File([GPX], 'ride.gpx')))).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(importTrainingHistory).not.toHaveBeenCalled();
+  });
+
+  it('passes the lock through and refreshes nothing', async () => {
+    importTrainingHistory.mockResolvedValue({ ok: false, reason: 'locked' });
+    expect(await importHistoryAction(formWith(new File([GPX], 'ride.gpx')))).toEqual({ ok: false, reason: 'locked' });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('refreshes nothing when no file could be read', async () => {
+    const result = await importHistoryAction(formWith(new File([Buffer.from('nope')], 'x.fit')));
+    expect(result).toEqual({ ok: true, imported: 0, proposed: 0, failed: [{ name: 'x.fit', reason: 'not-a-fit-file' }] });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe('removeImportedHistoryAction', () => {
+  it('removes the signed-in athlete’s imported history and refreshes', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    removeImportedHistory.mockResolvedValue(undefined);
+
+    expect(await removeImportedHistoryAction()).toEqual({ ok: true });
+    expect(removeImportedHistory).toHaveBeenCalledWith(ATHLETE);
+    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+  });
+
+  it('refuses an anonymous caller', async () => {
+    resolveAthleteId.mockResolvedValue(null);
+    expect(await removeImportedHistoryAction()).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(removeImportedHistory).not.toHaveBeenCalled();
+  });
+});
+

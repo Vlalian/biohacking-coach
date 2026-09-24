@@ -188,7 +188,16 @@ export async function mergeAthleteProfile(
   athleteId: string,
   changes: Partial<AthleteProfile>,
 ): Promise<void> {
-  await getDb()
+  await athleteProfileMerge(athleteId, changes);
+}
+
+/**
+ * The same atomic merge as {@link mergeAthleteProfile}, as a statement not yet
+ * run — for a caller that has to land it in one `db.batch` with other writes
+ * (the history import's lock, `garmin-integration/03`).
+ */
+export function athleteProfileMerge(athleteId: string, changes: Partial<AthleteProfile>) {
+  return getDb()
     .update(athlete)
     .set({ profile: profileMergedWith(changes), updatedAt: new Date() })
     .where(eq(athlete.id, athleteId));

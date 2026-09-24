@@ -1,8 +1,9 @@
 import { getDb } from '@/db';
-import { detectedActivities } from '@/db/schema';
+import { detectedActivities, type NewDetectedActivityRow } from '@/db/schema';
 import { getSessionsOnDates } from '@/features/session/session-repository';
 import { parseFit, parseGpx, type FitParseFailure, type ParsedSession } from './garmin';
-import { matchActivities } from './match-activities';
+import { matchActivities, type MatchCandidate } from './match-activities';
+import { externalIdOf } from './history-import';
 
 /**
  * Why an upload did not land, in cases the athlete can act on differently.
@@ -18,6 +19,40 @@ export type ImportFailure = FitParseFailure | 'no-sessions';
 export type ImportResult =
   | { ok: true; count: number }
   | { ok: false; reason: ImportFailure };
+
+/** One uploaded file, parsed — or the reason it could not be. */
+export type UploadParse = { ok: true; sessions: ParsedSession[] } | { ok: false; reason: ImportFailure };
+
+/**
+ * Parses one uploaded `.fit` or `.gpx` file, by its name. Shared by detection
+ * and the history import (`garmin-integration/03`), so a file fails the same
+ * way, with the same reason, whichever button it came through. Nothing here
+ * writes, logs or keeps the bytes.
+ */
+export async function parseUpload(filename: string, buffer: Buffer): Promise<UploadParse> {
+  const isFit = filename.toLowerCase().endsWith('.fit');
+
+  let parsed: ParsedSession[];
+  if (isFit) {
+    const result = await parseFit(buffer);
+    // A FIT file reports which way it failed; that reason is carried through to
+    // the athlete rather than flattened into one generic message.
+    if (!result.ok) return { ok: false, reason: result.reason };
+    parsed = result.sessions;
+  } else {
+    parsed = parseGpx(buffer);
+  }
+
+  if (parsed.length === 0) {
+    // For FIT this genuinely means "read fine, held no activity": the header and
+    // checksum were verified before decoding, so the file is sound and simply
+    // carries no session. `parseGpx` returns the same empty list for malformed
+    // XML as for a valid track-less file and cannot tell them apart, so GPX
+    // stays on the honest generic reason rather than claiming the file was fine.
+    return { ok: false, reason: isFit ? 'no-sessions' : 'unreadable' };
+  }
+  return { ok: true, sessions: parsed };
+}
 
 /**
  * Turns an uploaded Garmin file into **proposed** Detected Activities.
@@ -50,51 +85,47 @@ export async function proposeDetectedActivities(params: {
 }): Promise<ImportResult> {
   const { athleteId, filename, buffer } = params;
 
-  const isFit = filename.toLowerCase().endsWith('.fit');
-
-  let parsed: ParsedSession[];
-  if (isFit) {
-    const result = await parseFit(buffer);
-    // A FIT file reports which way it failed; that reason is carried through to
-    // the athlete rather than flattened into one generic message.
-    if (!result.ok) return { ok: false, reason: result.reason };
-    parsed = result.sessions;
-  } else {
-    parsed = parseGpx(buffer);
-  }
-
-  if (parsed.length === 0) {
-    // For FIT this genuinely means "read fine, held no activity": the header and
-    // checksum were verified before decoding, so the file is sound and simply
-    // carries no session. `parseGpx` returns the same empty list for malformed
-    // XML as for a valid track-less file and cannot tell them apart, so GPX
-    // stays on the honest generic reason rather than claiming the file was fine.
-    return { ok: false, reason: isFit ? 'no-sessions' : 'unreadable' };
-  }
+  const read = await parseUpload(filename, buffer);
+  if (!read.ok) return read;
+  const parsed = read.sessions;
 
   const db = getDb();
   // Only the days the file actually covers are read, and the match is decided
   // before the write so the proposal already knows what it would complete.
   const days = [...new Set(parsed.map((p) => p.date))];
-  const matched = matchActivities(parsed, await getSessionsOnDates(athleteId, days));
+  const rows = proposalRows(athleteId, parsed, await getSessionsOnDates(athleteId, days));
 
-  const writes = matched.map(({ activity, matchedSessionId }) =>
-    db.insert(detectedActivities).values({
-      athleteId,
-      date: activity.date,
-      type: activity.sessionType,
-      sport: activity.sport,
-      duration: activity.duration,
-      note: activity.note,
-      startTime: activity.startTime ? new Date(activity.startTime) : null,
-      summary: activity.summary,
-      samples: activity.streams,
-      matchedSessionId,
-    }),
-  );
+  const writes = rows.map((row) => db.insert(detectedActivities).values(row));
 
   // A batch needs at least one statement; parsed.length > 0 guarantees one.
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 
   return { ok: true, count: parsed.length };
 }
+
+/**
+ * The `detected_activities` rows for a set of parsed activities, each matched
+ * against the sessions on its day. Shared by detection and by the history
+ * import's proposals (`garmin-integration/03`), so an activity becomes the same
+ * proposal whichever button brought it in, stamped with the same external id.
+ */
+export function proposalRows(
+  athleteId: string,
+  parsed: readonly ParsedSession[],
+  onDays: readonly MatchCandidate[],
+): NewDetectedActivityRow[] {
+  return matchActivities([...parsed], [...onDays]).map(({ activity, matchedSessionId }) => ({
+    athleteId,
+    date: activity.date,
+    type: activity.sessionType,
+    sport: activity.sport,
+    duration: activity.duration,
+    note: activity.note,
+    startTime: activity.startTime ? new Date(activity.startTime) : null,
+    summary: activity.summary,
+    samples: activity.streams,
+    externalId: externalIdOf(activity),
+    matchedSessionId,
+  }));
+}
+

@@ -3,10 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { resolveAthleteId } from './current-actor';
 import {
+  parseUpload,
   proposeDetectedActivities,
   type ImportResult,
   type ImportFailure,
 } from '@/features/garmin/garmin-import';
+import { importTrainingHistory, removeImportedHistory } from '@/features/garmin/history-import-service';
+import type { ParsedSession } from '@/features/garmin/garmin';
+import { today } from '@/lib/date';
 import {
   acceptDetectedActivity,
   declineDetectedActivity,
@@ -110,3 +114,57 @@ export async function undoDetectedImportAction(
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
+
+/** A file in a history upload that could not be read, and why. */
+export type HistoryFileFailure = { name: string; reason: ImportFailure };
+
+export type HistoryUploadResult =
+  | { ok: true; imported: number; proposed: number; failed: HistoryFileFailure[] }
+  | { ok: false; reason: ActionFailure | 'locked' };
+
+/**
+ * Server action for the history upload (`garmin-integration/03`) — onboarding's
+ * history step and Settings both call it.
+ *
+ * Every `file` entry is parsed on its own with the parser detection uses. A file
+ * that fails is reported by name with its reason, and does not stop the rest:
+ * every file that parsed is imported together, in one call, so the lock is set
+ * once for the whole upload. The bytes are never kept and neither they nor the
+ * names are logged; the names go back only to the athlete who sent them.
+ */
+export async function importHistoryAction(formData: FormData): Promise<HistoryUploadResult> {
+  const files = formData.getAll('file').filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) return { ok: false, reason: 'empty' };
+
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+
+  const { parsed, failed } = await readAll(files);
+  const result = await importTrainingHistory(athleteId, parsed, today());
+  if (!result.ok) return result;
+  if (parsed.length > 0) revalidatePath('/', 'layout');
+  return { ...result, failed };
+}
+
+/** Every file parsed on its own: the activities of the ones that read, and why the others did not. */
+async function readAll(files: readonly File[]): Promise<{ parsed: ParsedSession[]; failed: HistoryFileFailure[] }> {
+  const parsed: ParsedSession[] = [];
+  const failed: HistoryFileFailure[] = [];
+  for (const file of files) {
+    const read = await parseUpload(file.name, Buffer.from(await file.arrayBuffer()));
+    if (read.ok) parsed.push(...read.sessions);
+    else failed.push({ name: file.name, reason: read.reason });
+  }
+  return { parsed, failed };
+}
+
+/** Removes the imported history and re-opens the import (ballots 10–11). */
+export async function removeImportedHistoryAction(): Promise<{ ok: true } | { ok: false; reason: 'not-authenticated' }> {
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+
+  await removeImportedHistory(athleteId);
+  revalidatePath('/', 'layout');
+  return { ok: true };
+}
+

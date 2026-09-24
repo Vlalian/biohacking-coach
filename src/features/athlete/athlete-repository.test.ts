@@ -18,9 +18,8 @@ vi.mock('@/db', () => ({
   }),
 }));
 
-const { getAthleteByUserId, updateCommunicationStyle, updateExperienceLevel, updateHoursPerWeek } = await import(
-  './athlete-repository'
-);
+const { getAthleteByUserId, updateCommunicationStyle, updateExperienceLevel, updateHoursPerWeek, athleteProfileMerge } =
+  await import('./athlete-repository');
 
 function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
   return {
@@ -148,5 +147,27 @@ describe('updateHoursPerWeek (showable-version/40)', () => {
     expect(updateCalls[0]).toMatchObject({ hoursPerWeek: 10 });
     expect((updateCalls[0] as { updatedAt: Date }).updatedAt).toBeInstanceOf(Date);
     expect(updateWhere).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('athleteProfileMerge (garmin-integration/03)', () => {
+  beforeEach(() => {
+    updateCalls = [];
+    set.mockClear();
+    updateWhere.mockClear();
+  });
+
+  it('builds the atomic profile merge as a statement, for a caller to batch', async () => {
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const statement = athleteProfileMerge('athlete_1', { historyImportedAt: null });
+
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(updateWhere).toHaveBeenCalledTimes(1);
+    expect(statement).toBeInstanceOf(Promise);
+    const written = updateCalls[0] as { profile: import('drizzle-orm').SQL; updatedAt: Date };
+    const { sql, params } = new PgDialect().sqlToQuery(written.profile);
+    expect(sql).toContain('COALESCE("athlete"."profile", \'{}\'::jsonb) ||');
+    expect(params).toEqual([JSON.stringify({ historyImportedAt: null })]);
+    expect(written.updatedAt).toBeInstanceOf(Date);
   });
 });
