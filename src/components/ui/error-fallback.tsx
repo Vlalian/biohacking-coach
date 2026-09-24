@@ -35,7 +35,7 @@ function ErrorFallback({
       <div className="flex flex-col gap-1">
         <div
           data-slot="error-fallback-title"
-          className="font-display text-xl leading-none tracking-[0.03em] text-foreground"
+          className="font-display text-xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground"
         >
           {title}
         </div>

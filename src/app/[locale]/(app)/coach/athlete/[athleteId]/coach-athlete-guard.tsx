@@ -61,7 +61,7 @@ export async function NotACoach() {
   const t = await getTranslations('Roster');
   return (
     <div className="flex flex-col items-center gap-6 p-6 sm:p-8">
-      <p className="text-neutral-500">{t('notACoach')}</p>
+      <p className="text-muted-foreground">{t('notACoach')}</p>
     </div>
   );
 }

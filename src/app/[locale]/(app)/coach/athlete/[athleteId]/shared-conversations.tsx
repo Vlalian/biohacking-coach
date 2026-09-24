@@ -19,20 +19,20 @@ export async function SharedConversations({
 
   return (
     <section className="w-full max-w-3xl">
-      <h2 className="mb-3 text-lg font-semibold">{t('title')}</h2>
+      <h2 className="mb-3 font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
       {transcripts.length === 0 ? (
-        <p className="text-sm text-neutral-500">{t('empty')}</p>
+        <p className="text-sm text-muted-foreground">{t('empty')}</p>
       ) : (
         <div className="flex flex-col gap-4">
           {transcripts.map((c) => (
-            <div key={c.conversationId} className="rounded-lg border p-4">
-              <div className="mb-2 text-xs font-semibold text-neutral-500">
+            <div key={c.conversationId} className="border border-border bg-panel p-5">
+              <div className="mb-3 font-body text-[13px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 {t(c.kind === 'coach_chat' ? 'kindCoachChat' : 'kindWeeklySession')}
               </div>
               <ol className="flex flex-col gap-2">
                 {c.messages.map((m) => (
-                  <li key={m.seq} className="text-sm">
-                    <span className="text-neutral-500">
+                  <li key={m.seq} className="font-body text-base leading-relaxed text-foreground">
+                    <span className="text-muted-foreground">
                       {t(m.role === 'athlete' ? 'roleAthlete' : m.role === 'head_coach' ? 'roleHeadCoach' : 'roleCoach')}
                       :{' '}
                     </span>

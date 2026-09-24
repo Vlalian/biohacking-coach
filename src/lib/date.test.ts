@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { isValidDateKey, weekStartOf, addDays, formatFullDate, daysBetween } from './date';
+import { isValidDateKey, weekStartOf, addDays, formatFullDate, daysBetween, isoWeekNumber } from './date';
+
+describe('isoWeekNumber', () => {
+  it('numbers a Monday by the ISO week it starts, decided by its Thursday', () => {
+    expect(isoWeekNumber('2026-09-21')).toBe(39);
+    // The year boundary is where week numbers go wrong: these Mondays belong
+    // to week 1 of the *next* year, and the last one to a 53-week year.
+    expect(isoWeekNumber('2025-12-29')).toBe(1);
+    expect(isoWeekNumber('2024-12-30')).toBe(1);
+    expect(isoWeekNumber('2020-12-28')).toBe(53);
+  });
+});
 
 describe('isValidDateKey', () => {
   it('accepts a canonical real day', () => {

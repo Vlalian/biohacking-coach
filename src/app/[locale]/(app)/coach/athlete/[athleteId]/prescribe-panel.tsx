@@ -81,19 +81,19 @@ export function PrescribePanel({ athleteId }: { athleteId: string }) {
   });
 
   return (
-    <section className="w-full max-w-3xl rounded-lg border p-4">
-      <h2 className="mb-3 text-lg font-semibold">
+    <section className="w-full max-w-3xl border border-border bg-panel p-5 shadow-sm sm:p-6">
+      <h2 className="mb-3 font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">
         {t('addTitle')}
       </h2>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <label className="flex flex-col gap-1 text-xs">
+        <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
           {t('date')}
-          <input type="date" className="rounded border bg-background px-2 py-1 text-sm" {...field('date')} />
+          <input type="date" className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal" {...field('date')} />
         </label>
-        <label className="flex flex-col gap-1 text-xs">
+        <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
           {t('type')}
-          <select className="rounded border bg-background px-2 py-1 text-sm" {...field('type')}>
+          <select className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal" {...field('type')}>
             {PRESCRIBABLE_TYPES.map((ty) => (
               <option key={ty} value={ty}>
                 {ty}
@@ -101,32 +101,32 @@ export function PrescribePanel({ athleteId }: { athleteId: string }) {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-xs">
+        <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
           {t('duration')}
-          <input type="number" min={0} className="rounded border bg-background px-2 py-1 text-sm" {...field('duration')} />
+          <input type="number" min={0} className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal" {...field('duration')} />
         </label>
-        <label className="flex flex-col gap-1 text-xs">
+        <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
           {t('zone')}
-          <input className="rounded border bg-background px-2 py-1 text-sm" {...field('zone')} />
+          <input className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal" {...field('zone')} />
         </label>
-        <label className="col-span-2 flex flex-col gap-1 text-xs sm:col-span-1">
+        <label className="col-span-2 flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground sm:col-span-1">
           {t('sessionTitle')}
-          <input className="rounded border bg-background px-2 py-1 text-sm" {...field('title')} />
+          <input className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal" {...field('title')} />
         </label>
-        <label className="col-span-2 flex flex-col gap-1 text-xs sm:col-span-3">
+        <label className="col-span-2 flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground sm:col-span-3">
           {t('note')}
-          <input className="rounded border bg-background px-2 py-1 text-sm" {...field('note')} />
+          <input className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal" {...field('note')} />
         </label>
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 font-body text-sm text-destructive">{error}</p>}
 
       <div className="mt-3 flex gap-2">
         <button
           type="button"
           disabled={pending}
           onClick={submit}
-          className="rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+          className="inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50"
         >
           {t('add')}
         </button>

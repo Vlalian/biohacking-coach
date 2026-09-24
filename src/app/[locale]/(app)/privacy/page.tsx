@@ -59,7 +59,7 @@ export default async function PrivacyPage({
         read about their rights — points at them.
       */}
       <section className="w-full max-w-xl border border-border bg-panel p-5">
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+        <h2 className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
           {t('dataRightsTitle')}
         </h2>
         <p className="mt-2 font-body text-sm text-muted-foreground">
@@ -67,7 +67,7 @@ export default async function PrivacyPage({
         </p>
         <Link
           href="/settings"
-          className="mt-3 inline-block font-mono text-[10px] uppercase tracking-[0.16em] text-signal underline transition-opacity hover:opacity-80"
+          className="mt-3 inline-block font-body text-sm uppercase tracking-[0.16em] text-signal underline transition-opacity hover:opacity-80"
         >
           {t('dataRightsLink')}
         </Link>

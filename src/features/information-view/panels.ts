@@ -36,13 +36,20 @@ export type Panel = {
   series?: (dataset: InfoDataset) => PanelSeries[];
 };
 
+/**
+ * Chart colours follow the export's Information page (iron-insight-grid):
+ * one accent — the signal red — against the foreground and neutral greys, so
+ * a chart reads as one system with the rest of the View. Theme tokens, so
+ * both themes hold; the sport and zone palettes keep their own hues because
+ * those distinguish categories, not emphasis.
+ */
 export const FF_COLORS = {
-  fatigue: '#e05555',
-  fitness: '#4a90d9',
-  form: '#c9a96e',
+  fatigue: 'var(--signal)',
+  fitness: 'var(--foreground)',
+  form: 'var(--session-tempo)',
 } as const;
-export const BODY_COLOR = '#6db36d';
-export const MIND_COLOR = '#9a7bd0';
+export const BODY_COLOR = 'var(--foreground)';
+export const MIND_COLOR = 'var(--signal)';
 export const SPORT_COLOR: Record<string, string> = {
   swim: '#4fa3d9',
   bike: '#c9a96e',

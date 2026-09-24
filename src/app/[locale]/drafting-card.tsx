@@ -65,7 +65,7 @@ export function DraftingCard({ weekStart, waiter }: { weekStart: string; waiter:
 
   return (
     <section
-      className="mb-5 rounded-lg border border-dashed border-signal/40 bg-signal/5 px-5 py-4"
+      className="mb-5 border border-dashed border-signal/60 border-l-4 border-l-signal bg-panel px-5 py-4"
       data-drafting-card={weekStart}
       aria-live="polite"
     >

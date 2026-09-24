@@ -10,10 +10,10 @@ import { CoachOverlayContext, type ChatSeed, type CoachReference } from './coach
 
 /** The escape hatch reads as an equal of Sign out — same weight, same footer. */
 const ESCAPE_HATCH_CLASS =
-  'flex w-full items-center gap-3 px-0 py-0 text-left font-body text-sm tracking-wide text-muted-foreground no-underline transition-colors hover:text-signal';
+  'flex w-full items-center gap-3 border-l-4 border-transparent px-4 py-3 text-left font-display text-base font-semibold uppercase tracking-wide text-sidebar-foreground/70 no-underline transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground';
 
 const SIGN_OUT_BUTTON_CLASS =
-  'flex w-full items-center gap-3 px-0 py-0 text-left font-body text-sm tracking-wide text-muted-foreground no-underline transition-colors hover:text-signal disabled:opacity-50';
+  'flex w-full items-center gap-3 border-l-4 border-transparent px-4 py-3 text-left font-display text-base font-semibold uppercase tracking-wide text-sidebar-foreground/70 no-underline transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-50';
 
 const VIEW_PATH: Record<ViewId, string> = {
   'training-plan': '/training-plan',
@@ -66,7 +66,7 @@ export function ShellChrome({
     () => ({
       // A proper noun, not prose — stays English in every locale (matches the
       // page <title> in layout.tsx), so it is not routed through next-intl.
-      appName: 'Biohacking Coach',
+      appName: 'Momentum',
       openNav: t('openNav'),
       closeNav: t('closeNav'),
       navLandmark: t('navLandmark'),
@@ -127,7 +127,7 @@ export function ShellChrome({
           // that footer is part of the shared shell, so this one placement makes
           // it reachable from *every* View — the athlete's five and the Head
           // Coach's Roster, which the same shell has wrapped since PR #41.
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
             <Link
               // Carries the View being left. The interview is its own page, so
               // `/feedback` is the only path it can see for itself — every

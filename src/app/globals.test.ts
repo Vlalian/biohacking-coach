@@ -16,8 +16,8 @@ const css = readFileSync(new URL('./globals.css', import.meta.url), 'utf8');
 describe('parseThemes — the tokens as globals.css declares them', () => {
   it('parses --background and --border for light and dark, alpha included', () => {
     const t = parseThemes(css);
-    expect(t.light['--background']).toEqual({ L: 0.985, C: 0.005, h: 85, alpha: 1 });
-    expect(t.dark['--background']).toEqual({ L: 0.14, C: 0.008, h: 60, alpha: 1 });
+    expect(t.light['--background']).toEqual({ L: 0.975, C: 0.002, h: 260, alpha: 1 });
+    expect(t.dark['--background']).toEqual({ L: 0.12, C: 0.006, h: 260, alpha: 1 });
     expect(Object.keys(t.light)).toContain('--muted-foreground');
   });
 });
@@ -155,6 +155,27 @@ describe.each(['light', 'dark'] as const)('%s theme holds the contrast bar', (th
     const t = tokens();
     expect(contrast(t['--muted-foreground'], t['--background'])).toBeGreaterThanOrEqual(7);
     expect(contrast(t['--muted-foreground'], t['--card'])).toBeGreaterThanOrEqual(7);
+  });
+
+  // The chrome is graphite in both themes since the Momentum port (2026-09-24),
+  // so the tokens that sit on it as text are measured against it, not the page.
+  it.each(['--sidebar-foreground', '--sidebar-primary'])('%s on the sidebar is at least 4.5', (name) => {
+    const t = tokens();
+    expect(contrast(t[name], t['--sidebar'])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The sign-in canvas (ported from the Lovable sign-in export, 2026-09-24) is
+  // dark in both themes and has tokens of its own; they hold the same bar.
+  it('the auth tokens hold the bar on the auth surface and input', () => {
+    const t = tokens();
+    for (const bg of ['--auth-surface', '--auth-input']) {
+      expect(contrast(t['--auth-foreground'], t[bg])).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t['--auth-muted'], t[bg])).toBeGreaterThanOrEqual(7);
+      // The red as text on the dark surface is the chrome's brighter one, as on the sidebar.
+      expect(contrast(t['--sidebar-primary'], t[bg])).toBeGreaterThanOrEqual(4.5);
+      expect(t['--auth-line'].alpha).toBe(1);
+      expect(contrast(t['--auth-line'], t[bg])).toBeGreaterThanOrEqual(3);
+    }
   });
 
   it.each(['--border', '--input', '--ring', '--sidebar-border'])('%s is opaque and at least 3.0 on background and card', (name) => {

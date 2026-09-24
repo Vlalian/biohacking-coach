@@ -89,7 +89,7 @@ describe('answerOnboardingAction', () => {
     // the duplication by passing the personalised greeting through.
     const storedGreeting = answerOnboardingStep.mock.calls[0][3] as string;
     expect(storedGreeting).not.toContain('Mads');
-    expect(storedGreeting).toBe("I'm your Coach. Ironman Copenhagen is your target. Let's get to work.");
+    expect(storedGreeting).toBe("I'm Momentum. Ironman Copenhagen is your target. Let's get to work.");
     // The seam reads the request's own session, in the Onboarding namespace.
     expect(getSession).toHaveBeenCalledWith({ headers: expect.any(Headers) });
     expect(getTranslations).toHaveBeenCalledWith('Onboarding');
@@ -111,7 +111,7 @@ describe('answerOnboardingAction', () => {
     };
 
     expect(answerOnboardingStep.mock.calls[0][3]).toBe(
-      "I'm your Coach. Ironman Kalmar is your target. Let's get to work.",
+      "I'm Momentum. Ironman Kalmar is your target. Let's get to work.",
     );
     expect(result.displayGreetingBody).toBe("Ironman Kalmar is your target. Let's get to work.");
   });
@@ -214,10 +214,10 @@ describe('answerOnboardingAction', () => {
     });
 
     expect(answerOnboardingStep.mock.calls[0][3]).toBe(
-      'Jeg er din Coach. Ironman Copenhagen er dit mål. Lad os komme i gang.',
+      'Jeg er Momentum. Ironman Copenhagen er dit mål. Lad os komme i gang.',
     );
     expect(result).toMatchObject({
-      displayGreetingIntro: 'Hej Captain. Jeg er din Coach.',
+      displayGreetingIntro: 'Hej Captain. Jeg er Momentum.',
       displayGreetingBody: 'Ironman Copenhagen er dit mål. Lad os komme i gang.',
     });
   });
@@ -232,7 +232,7 @@ describe('answerOnboardingAction', () => {
       raceDate: '2027-08-15',
     }) as { displayGreetingIntro?: string };
 
-    expect(result.displayGreetingIntro).toBe("I'm your Coach.");
+    expect(result.displayGreetingIntro).toBe("I'm Momentum.");
   });
 
   it('stores the Preferred Name on the user, identity-side, only after the step is accepted', async () => {

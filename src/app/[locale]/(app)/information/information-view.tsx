@@ -58,9 +58,14 @@ export function InformationView({
   dataset,
   initialLayout,
   saveLayout,
+  athleteName,
 }: {
   dataset: InfoDataset;
   initialLayout: InformationViewLayout;
+  /** The headline: the athlete's first name on their own page, the name the
+   *  athlete gave the app on the Head Coach's Data tab. Falls back to the
+   *  View's title when neither is known. */
+  athleteName?: string;
   /**
    * The persistence action. The athlete page passes the action that saves their
    * own layout; the coach page passes the one that saves the coach's ONE
@@ -173,7 +178,7 @@ export function InformationView({
     <button
       key={p.id}
       data-fav-id={fav ? p.id : undefined}
-      className={`w-full px-2 py-1 text-left font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:text-signal ${
+      className={`w-full px-2 py-1 text-left font-body text-sm uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-signal ${
         dropHover === p.id ? 'bg-panel text-signal' : ''
       }`}
       onClick={() => jumpToPanel(p.id)}
@@ -185,15 +190,65 @@ export function InformationView({
     </button>
   );
 
+  const latest = dataset.weekly[dataset.weekly.length - 1];
+  const bigStats: Array<[string, number | null | undefined, boolean]> = [
+    ['fitness', latest?.fitness, false],
+    ['fatigue', latest?.fatigue, false],
+    ['form', latest?.form, true],
+  ];
+
   return (
-    <div className="w-full max-w-5xl">
+    <div className="w-full">
+      {/* The export's header (iron-insight-grid, Information): the View as a
+          kicker, the athlete's name as the display headline, the race and its
+          countdown beneath, and Fitness / Fatigue / Form as the big numbers.
+          Data only — no reading of what the numbers mean (ADR 0004). */}
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-6 border-b border-border pb-8">
+        <div className="min-w-0">
+          <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground sm:text-6xl">
+            {athleteName || t('title')}
+          </h1>
+          <p className="mt-3 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
+            {dataset.raceName && dataset.weeksToRace != null ? (
+              <>
+                {dataset.raceName} ·{' '}
+                <span className="text-signal">
+                  {dataset.weeksToRace} {t('weeksUntil')}
+                </span>
+              </>
+            ) : (
+              t('subtitle')
+            )}
+          </p>
+        </div>
+        {latest && (
+          <dl className="flex gap-8">
+            {bigStats.map(([key, value, accent]) => (
+              <div key={key}>
+                <dt className="font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
+                  {t(key)}
+                </dt>
+                <dd
+                  className={[
+                    'mt-1 font-display text-4xl font-bold leading-none tracking-[0.02em]',
+                    accent ? 'text-signal' : 'text-foreground',
+                  ].join(' ')}
+                >
+                  {value ?? '—'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </header>
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <CompareOverlayTrigger sessions={vm.windowed.sessions} />
         <span className="flex gap-1.5">
           {RANGE_KEYS.map((r) => (
             <button
               key={r}
-              className={`border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors ${
+              className={`inline-flex h-10 items-center border px-4 font-body text-[15px] font-medium transition-colors ${
                 range === r
                   ? 'border-signal text-signal'
                   : 'border-border text-muted-foreground hover:text-foreground'
@@ -204,7 +259,7 @@ export function InformationView({
             </button>
           ))}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('readingCount', { n: vm.available.length, total: PANELS.length })}
         </span>
       </div>
@@ -216,10 +271,10 @@ export function InformationView({
       )}
 
       <div className="flex gap-8">
-        <nav className="hidden w-44 shrink-0 sm:block">
+        <nav className="hidden w-48 shrink-0 sm:block">
           <div className="sticky top-4 flex flex-col gap-0.5">
             {vm.favPanels.length > 0 && (
-              <div className="flex items-center gap-1 px-2 pt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-signal">
+              <div className="flex items-center gap-1 px-2 pt-2 font-body text-sm uppercase tracking-[0.16em] text-signal">
                 <Star className="h-3 w-3" style={{ fill: 'var(--signal)' }} />
                 {t('favorites')}
               </div>
@@ -227,7 +282,7 @@ export function InformationView({
             {vm.favPanels.map((p) => railItem(p, true))}
             {vm.groups.map((g) => (
               <div key={g.familyKey}>
-                <div className="px-2 pt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                <div className="px-2 pt-3 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                   {t(g.familyKey)}
                 </div>
                 {g.panels.map((p) => railItem(p, false))}
@@ -236,7 +291,7 @@ export function InformationView({
           </div>
         </nav>
 
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-2">
           <ComparisonGraph
             dataset={vm.windowed}
             graphIds={graphIds}
@@ -247,17 +302,24 @@ export function InformationView({
             <div
               key={p.id}
               id={`iv-anchor-${p.id}`}
-              className={enlarged.includes(p.id) ? 'md:col-span-2' : ''}
+              className={enlarged.includes(p.id) ? 'lg:col-span-2' : ''}
             >
-              <div className="border border-border bg-panel p-5" data-panel={p.id}>
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <span className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
+              <div className="scroll-mt-6 border border-border bg-panel p-5 sm:p-6" data-panel={p.id}>
+                <div className="mb-5 flex items-start justify-between gap-3">
+                  <span className="flex items-center gap-2 font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+                    {isFavorite(favorites, p.id) && (
+                      <Star
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                        style={{ fill: 'var(--signal)', stroke: 'var(--signal)' }}
+                      />
+                    )}
                     {t(p.titleKey)}
                   </span>
                   <span className="flex items-center gap-1 text-muted-foreground">
                     {p.series && (
                       <button
-                        className={`rounded p-1.5 transition-colors hover:text-foreground ${
+                        className={`inline-flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground ${
                           graphIds.includes(p.id) ? 'text-signal' : ''
                         }`}
                         title={t('addToGraph')}
@@ -269,7 +331,7 @@ export function InformationView({
                       </button>
                     )}
                     <button
-                      className={`rounded p-1.5 transition-colors hover:text-foreground ${
+                      className={`inline-flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground ${
                         enlarged.includes(p.id) ? 'text-signal' : ''
                       }`}
                       title={t('enlarge')}
@@ -280,7 +342,7 @@ export function InformationView({
                       <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
                     <button
-                      className="rounded p-1.5 transition-colors hover:text-foreground"
+                      className="inline-flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground"
                       title={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-label={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-pressed={isFavorite(favorites, p.id)}
@@ -326,14 +388,14 @@ function ComparisonGraph({
     p.series!(dataset).map((s) => ({ panel: p, ...s })),
   );
   return (
-    <div className="md:col-span-2">
-      <div className="border border-signal/40 bg-panel p-5" data-panel="comparison-graph">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <span className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
+    <div className="lg:col-span-2">
+      <div className="border border-signal/60 bg-panel p-5 sm:p-6" data-panel="comparison-graph">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <span className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
             {t('graphTitle')}
           </span>
           <button
-            className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground underline transition-colors hover:text-signal"
+            className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground underline transition-colors hover:text-signal"
             onClick={onClear}
           >
             {t('graphClear')}
@@ -343,7 +405,7 @@ function ComparisonGraph({
           {picked.map((p) => (
             <span
               key={p.id}
-              className="inline-flex items-center gap-1.5 border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground"
+              className="inline-flex items-center gap-1.5 border border-border px-2 py-0.5 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground"
             >
               {t(p.titleKey)}
               <button
@@ -363,7 +425,7 @@ function ComparisonGraph({
           ))}
         </ChartSvg>
         <Legend items={entries.map((e) => [`${t(e.panel.titleKey)} — ${t(e.labelKey)}`, e.color])} />
-        <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        <div className="mt-3 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('graphNote')}
         </div>
       </div>
@@ -376,7 +438,7 @@ function RpeChip({ value, color }: { value: number | null; color: string }) {
   if (value == null) return <>—</>;
   return (
     <span
-      className="rounded px-1.5 py-0.5 font-mono text-xs"
+      className="px-1.5 py-0.5 font-mono text-sm"
       style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}
     >
       {value}/10
@@ -398,7 +460,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
   };
 
   const compareButtonClass =
-    'flex items-center gap-1.5 border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-signal hover:text-signal';
+    'flex items-center gap-1.5 border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:border-signal hover:text-signal';
 
   if (!open) {
     return (
@@ -424,18 +486,18 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
           {show && canCompare(selected) ? (
             <>
               <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-                <span className="font-display text-2xl leading-none tracking-[0.03em] text-foreground">
+                <span className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
                   {t('compareResultTitle')}
                 </span>
                 <span className="flex gap-2">
                   <button
-                    className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                    className="border border-border px-2.5 py-1 font-body text-sm uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => setShow(false)}
                   >
                     {t('compareBack')}
                   </button>
                   <button
-                    className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                    className="border border-border px-2.5 py-1 font-body text-sm uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => setOpen(false)}
                   >
                     {t('compareClose')}
@@ -452,7 +514,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                     <div className="font-display text-lg leading-none tracking-[0.02em] text-foreground">
                       {c.title ?? c.type}
                     </div>
-                    <div className="mb-2 mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <div className="mb-2 mt-1 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                       {c.date} ·{' '}
                       <span style={{ color: SPORT_COLOR[c.sport ?? ''] || 'inherit' }}>
                         {t(SPORT_KEY[c.sport ?? ''] || 'other')}
@@ -474,23 +536,23 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                       <RpeChip value={c.mind} color="#9a7bd0" />
                     </div>
                     {c.comment && (
-                      <div className="mt-2 text-xs italic text-muted-foreground">“{c.comment}”</div>
+                      <div className="mt-2 font-body text-sm italic text-muted-foreground">“{c.comment}”</div>
                     )}
                   </div>
                 ))}
               </div>
-              <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+              <div className="mt-3 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                 {t('compareNote')}
               </div>
             </>
           ) : (
             <>
               <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-                <span className="font-display text-2xl leading-none tracking-[0.03em] text-foreground">
+                <span className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
                   {t('compareTitle')}
                 </span>
                 <button
-                  className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                  className="border border-border px-2.5 py-1 font-body text-sm uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground"
                   onClick={() => setOpen(false)}
                 >
                   {t('compareClose')}
@@ -498,7 +560,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
               </div>
               <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
                 <select
-                  className="border border-border bg-background px-2 py-1 font-mono text-xs uppercase tracking-wider"
+                  className="border border-border bg-background px-2 py-1 font-mono text-sm uppercase tracking-wider"
                   value={filter.sport}
                   onChange={(e) => setFilter((f) => ({ ...f, sport: e.target.value }))}
                 >
@@ -510,7 +572,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                   ))}
                 </select>
                 <select
-                  className="border border-border bg-background px-2 py-1 font-mono text-xs uppercase tracking-wider"
+                  className="border border-border bg-background px-2 py-1 font-mono text-sm uppercase tracking-wider"
                   value={filter.type}
                   onChange={(e) => setFilter((f) => ({ ...f, type: e.target.value }))}
                 >
@@ -521,14 +583,14 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                     </option>
                   ))}
                 </select>
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                   {t('compareHint')}
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <tr className="border-b border-border text-left font-body text-[13px] uppercase tracking-[0.14em] text-muted-foreground">
                       <th />
                       <th className="py-2 font-medium">{t('colDate')}</th>
                       <th className="py-2 font-medium">{t('colSession')}</th>
@@ -556,7 +618,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                             }
                           />
                         </td>
-                        <td className="py-1.5 font-mono text-xs">{s.date}</td>
+                        <td className="py-1.5 font-mono text-sm">{s.date}</td>
                         <td className="py-1.5">{s.title ?? s.type}</td>
                         <td className="py-1.5" style={{ color: SPORT_COLOR[s.sport ?? ''] || 'inherit' }}>
                           {t(SPORT_KEY[s.sport ?? ''] || 'other')}
@@ -574,7 +636,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
               </div>
               <div className="mt-4">
                 <button
-                  className="border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-signal"
+                  className="border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-signal"
                   disabled={!canCompare(selected)}
                   onClick={() => canCompare(selected) && setShow(true)}
                 >

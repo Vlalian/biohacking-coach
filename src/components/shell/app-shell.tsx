@@ -18,7 +18,9 @@ import {
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
-/*  Ported from the Lovable design (iron-insight-grid, shell brief).   */
+/*  Ported from the Lovable export (iron-insight-grid, 2026-09-23):     */
+/*  graphite top bar and drawer in both themes, the two-tone wordmark,  */
+/*  the red Coach control, display-face nav entries.                    */
 /*  Presentational only — data in via props, writes out via callbacks. */
 /*  Every visible string arrives via the required `t` prop; no baked-  */
 /*  in English default (handoff-contract rule 2).                      */
@@ -94,6 +96,9 @@ const VIEW_ICONS: Record<ViewId, typeof MessageSquare> = {
   feedback: MessageSquareWarning,
 };
 
+/** The reference pages, listed at the foot of the drawer rather than among the daily Views. */
+const FOOTER_VIEWS: ViewId[] = ['glossary', 'settings', 'privacy'];
+
 /* ------------------------------------------------------------------ */
 /*  Shell                                                              */
 /* ------------------------------------------------------------------ */
@@ -140,24 +145,19 @@ export function AppShell({
     // (showable-version/30, Mads on the S5, 2026-09-17). The dynamic unit follows.
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {/* Top bar — always holds the drawer trigger */}
-      <header className="relative z-40 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-3 sm:px-5">
+      <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar px-3 text-sidebar-foreground sm:px-5">
         <button
           type="button"
           onClick={onToggleNavDrawer}
           aria-label={navDrawerOpen ? t.closeNav : t.openNav}
           aria-expanded={navDrawerOpen}
-          className="inline-flex h-9 w-9 items-center justify-center border border-border text-muted-foreground transition-colors hover:border-signal hover:text-signal"
+          className="inline-flex h-10 w-10 items-center justify-center border border-sidebar-border text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           <PanelLeft className="h-4 w-4" />
         </button>
 
         <div className="flex min-w-0 items-baseline gap-3">
-          <span className="font-display text-xl leading-none tracking-[0.08em] text-foreground">
-            {t.appName}
-          </span>
-          <span className="hidden truncate font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground sm:inline">
-            {t.views[currentView]}
-          </span>
+          <Wordmark name={t.appName} size="bar" />
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -169,22 +169,22 @@ export function AppShell({
             aria-label={coachOpen ? t.closeCoach : t.openCoach}
             title={coachOpen ? t.closeCoach : t.openCoach}
             className={[
-              'inline-flex h-9 items-center gap-2 border px-2.5 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
+              'inline-flex h-10 items-center gap-2 border px-3 font-display text-base font-semibold uppercase tracking-wide transition-colors',
               coachOpen
                 ? 'border-signal bg-signal text-signal-foreground'
-                : 'border-border text-muted-foreground hover:border-signal hover:text-signal',
+                : 'border-signal bg-signal/90 text-signal-foreground hover:bg-signal',
             ].join(' ')}
           >
             <MessageSquare className="h-4 w-4" />
             <span className="hidden sm:inline">{t.coachOverlayTitle}</span>
           </button>
           {isCoachedMode && (
-            <span className="hidden border border-signal px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-signal sm:inline">
+            <span className="hidden border border-sidebar-primary px-2 py-1 font-body text-sm font-semibold uppercase tracking-[0.18em] text-sidebar-primary sm:inline">
               {t.coachedModeBadge}
             </span>
           )}
           {athleteName && (
-            <span className="hidden font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground md:inline">
+            <span className="hidden font-body text-sm font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/70 md:inline">
               {athleteName}
             </span>
           )}
@@ -212,51 +212,39 @@ export function AppShell({
           aria-label={t.navLandmark}
           inert={!navDrawerOpen}
           className={[
-            'absolute inset-y-0 left-0 z-40 flex w-[86%] max-w-[300px] flex-col border-r border-border bg-sidebar transition-transform duration-200 ease-out sm:w-[20%] sm:min-w-[220px]',
+            'absolute inset-y-0 left-0 z-40 flex w-[86%] max-w-[300px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-200 ease-out sm:w-[20%] sm:min-w-[240px]',
             navDrawerOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
-          <div className="flex items-center justify-between border-b border-rule px-4 py-3">
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-              {t.navLandmark}
-            </span>
+          <div className="flex items-center justify-between border-b border-sidebar-border px-5 py-5">
+            <Wordmark name={t.appName} size="drawer" />
             <button
               type="button"
               onClick={onToggleNavDrawer}
               aria-label={t.closeNav}
-              className="text-muted-foreground transition-colors hover:text-signal"
+              className="inline-flex h-10 w-10 items-center justify-center text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-4">
+            {availableViews
+              .filter((v) => !FOOTER_VIEWS.includes(v))
+              .map((view) => (
+                <NavItem key={view} view={view} active={view === currentView} label={t.views[view]} onGo={go} />
+              ))}
+          </ul>
 
-          <ul className="min-h-0 flex-1 overflow-y-auto py-2">
-            {availableViews.map((view) => {
-              const Icon = VIEW_ICONS[view];
-              const active = view === currentView;
-              return (
-                <li key={view}>
-                  <button
-                    type="button"
-                    onClick={() => go(view)}
-                    aria-current={active ? 'page' : undefined}
-                    className={[
-                      'flex w-full items-center gap-3 border-l-2 px-4 py-2.5 text-left transition-colors',
-                      active
-                        ? 'border-signal bg-accent text-foreground'
-                        : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-                    ].join(' ')}
-                  >
-                    <Icon className={active ? 'h-4 w-4 text-signal' : 'h-4 w-4'} />
-                    <span className="font-body text-sm tracking-wide">{t.views[view]}</span>
-                  </button>
-                </li>
-              );
-            })}
+          {/* The reference pages sit at the bottom, above Feedback and Sign out
+              (Mads, 2026-09-24); the top of the drawer is for the daily Views. */}
+          <ul className="shrink-0 space-y-1 border-t border-sidebar-border px-2 py-3">
+            {FOOTER_VIEWS.filter((v) => availableViews.includes(v)).map((view) => (
+              <NavItem key={view} view={view} active={view === currentView} label={t.views[view]} onGo={go} compact />
+            ))}
           </ul>
 
           {navFooter && (
-            <div className="shrink-0 border-t border-rule px-4 py-3">{navFooter}</div>
+            <div className="shrink-0 border-t border-sidebar-border px-2 py-3">{navFooter}</div>
           )}
         </nav>
 
@@ -277,6 +265,90 @@ export function AppShell({
         )}
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  One entry in the Navigation Drawer, for the daily Views and the     */
+/*  reference pages alike, so the two lists cannot drift apart.         */
+/* ------------------------------------------------------------------ */
+
+function NavItem({
+  view,
+  active,
+  label,
+  onGo,
+  compact = false,
+}: {
+  view: ViewId;
+  active: boolean;
+  label: string;
+  onGo: (view: ViewId) => void;
+  compact?: boolean;
+}) {
+  const Icon = VIEW_ICONS[view];
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onGo(view)}
+        aria-current={active ? 'page' : undefined}
+        className={[
+          'flex w-full items-center gap-3 border-l-4 px-4 text-left transition-colors',
+          compact ? 'py-2.5' : 'py-3',
+          active
+            ? 'border-signal bg-signal text-signal-foreground'
+            : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+        ].join(' ')}
+      >
+        <Icon className="h-4 w-4" />
+        <span className="font-display text-base font-semibold uppercase tracking-wide">{label}</span>
+      </button>
+    </li>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  The Momentum mark (Lovable sign-in export, 2026-09-24): three       */
+/*  m-glyphs, two fading into the chrome and one in the signal red,     */
+/*  rolling in one after another, then the name. The name prop is the  */
+/*  accessible label and the text; the glyphs are decoration.           */
+/* ------------------------------------------------------------------ */
+
+const MARK_PATH =
+  'M2 19V9h3v1.25A4.1 4.1 0 0 1 8.25 8.7c1.55 0 2.75.62 3.5 1.82A4.55 4.55 0 0 1 15.4 8.7c3 0 4.6 1.85 4.6 5.05V19h-3.2v-4.85c0-1.68-.68-2.5-2.03-2.5-1.38 0-2.22.98-2.22 2.72V19H9.3v-4.85c0-1.68-.67-2.5-2.02-2.5-1.4 0-2.23.98-2.23 2.72V19H2Z';
+const MARK_TONES = ['text-sidebar-foreground/20', 'text-sidebar-foreground/45', 'text-sidebar-primary'];
+
+const WORDMARK_SIZE = {
+  bar: { glyph: 'h-6 w-6', text: 'text-2xl' },
+  drawer: { glyph: 'h-7 w-7', text: 'text-3xl' },
+} as const;
+
+function Wordmark({ name, size }: { name: string; size: keyof typeof WORDMARK_SIZE }) {
+  const { glyph, text } = WORDMARK_SIZE[size];
+  return (
+    <span className="group/brand flex items-center" aria-label={name}>
+      <span aria-hidden="true" className="flex items-end -space-x-2">
+        {MARK_TONES.map((tone) => (
+          <svg
+            key={tone}
+            viewBox="0 0 24 24"
+            className={[
+              'momentum-mark-part shrink-0 fill-current transition-transform duration-300 group-hover/brand:translate-x-0.5',
+              glyph,
+              tone,
+            ].join(' ')}
+          >
+            <path d={MARK_PATH} />
+          </svg>
+        ))}
+      </span>
+      <span
+        className={`momentum-wordmark ml-3 font-bold uppercase italic leading-none text-sidebar-foreground ${text}`}
+      >
+        {name}
+      </span>
+    </span>
   );
 }
 
@@ -328,17 +400,17 @@ function CoachOverlay({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         aria-label={t.moveCoachOverlay}
-        className="flex cursor-grab touch-none items-center justify-between border-b border-rule bg-background px-4 py-3 active:cursor-grabbing"
+        className="flex cursor-grab touch-none items-center justify-between border-b border-sidebar-border bg-sidebar px-4 py-3 text-sidebar-foreground active:cursor-grabbing"
       >
-        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-signal">
-          <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="flex items-center gap-2 font-display text-base font-semibold uppercase tracking-wide text-sidebar-primary">
+          <GripHorizontal className="h-4 w-4 text-sidebar-foreground/70" />
           {title}
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label={t.closeCoach}
-          className="text-muted-foreground transition-colors hover:text-signal"
+          className="inline-flex h-10 w-10 items-center justify-center text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           <X className="h-4 w-4" />
         </button>

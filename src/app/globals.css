@@ -7,14 +7,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Trackside brand fonts, loaded via next/font/google in the locale layout
+  /* Momentum brand fonts, loaded via next/font/google in the locale layout
      and exposed there as CSS variables (--font-inter etc.) on <html>. Literal
      var() references here, not a self-referencing --font-sans: Tailwind v4
      resolves @theme inline at parse time, so `--font-sans: var(--font-sans)`
      (shadcn init's default) resolves to nothing. */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-display: var(--font-bebas-neue), Impact, sans-serif;
+  --font-display: var(--font-oswald), var(--font-bebas-neue), Impact, sans-serif;
   --font-body: var(--font-barlow), var(--font-inter), ui-sans-serif,
     system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular,
@@ -30,6 +30,12 @@
   --color-session-tempo: var(--session-tempo);
   --color-session-recovery: var(--session-recovery);
   --color-session-rest: var(--session-rest);
+  --color-auth-canvas: var(--auth-canvas);
+  --color-auth-surface: var(--auth-surface);
+  --color-auth-input: var(--auth-input);
+  --color-auth-foreground: var(--auth-foreground);
+  --color-auth-muted: var(--auth-muted);
+  --color-auth-line: var(--auth-line);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -68,109 +74,190 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Trackside theme — ported from the Lovable design (iron-insight-grid).
-   Warm off-white paper, burnt-orange/signal-red accent, and the Session Type
-   palette matching CONTEXT.md exactly (endurance blue, intensity red, tempo
-   amber, recovery green, rest grey). All colors in oklch, light + dark. */
+/* Momentum theme — ported from the Lovable export (iron-insight-grid,
+   2026-09-23): a bright graphite field, a dark graphite sidebar in both
+   themes, and the signal red. The Session Type palette matches CONTEXT.md
+   exactly (endurance blue, intensity red, tempo amber, recovery green, rest
+   grey). All colors in oklch, light + dark. */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.985 0.005 85);
-  --foreground: oklch(0.16 0.01 60);
+  --radius: 0.125rem;
+  --background: oklch(0.975 0.002 260);
+  --foreground: oklch(0.18 0.006 260);
   --panel: oklch(1 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.01 60);
+  --card-foreground: oklch(0.18 0.006 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.01 60);
-  --primary: oklch(0.16 0.01 60);
-  --primary-foreground: oklch(0.985 0.005 85);
-  --secondary: oklch(0.94 0.008 80);
-  --secondary-foreground: oklch(0.16 0.01 60);
-  --muted: oklch(0.94 0.008 80);
-  --muted-foreground: oklch(0.45 0.015 70);
-  --accent: oklch(0.94 0.008 80);
-  --accent-foreground: oklch(0.16 0.01 60);
+  --popover-foreground: oklch(0.18 0.006 260);
+  --primary: oklch(0.18 0.006 260);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.93 0.003 260);
+  --secondary-foreground: oklch(0.18 0.006 260);
+  --muted: oklch(0.94 0.003 260);
+  --muted-foreground: oklch(0.43 0.008 260);
+  --accent: oklch(0.91 0.006 260);
+  --accent-foreground: oklch(0.18 0.006 260);
   --accent-signal: oklch(0.55 0.18 35);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.55 0.24 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  /* Control edges are opaque, never an alpha wash: the 10 % wash measured
-     1.1 : 1 against the page, and a button whose edge cannot be seen is a
-     button nobody presses (showable-version/38, 2026-09-19). 3.2 : 1 here;
-     `src/app/globals.test.ts` holds every edge at 3.0 and every text token at
-     4.5 (muted at 7.0) in both themes. `--rule` stays a hairline divider. */
-  --border: oklch(0.64 0.012 70);
-  --rule: oklch(0.16 0.01 60 / 8%);
-  --input: oklch(0.64 0.012 70);
-  --ring: oklch(0.55 0.18 35);
-  --chart-1: oklch(0.16 0.01 60);
-  --chart-2: oklch(0.55 0.18 35);
-  --chart-3: oklch(0.5 0.02 70);
-  --chart-4: oklch(0.7 0.02 70);
-  --chart-5: oklch(0.85 0.01 80);
-  --sidebar: oklch(0.985 0.005 85);
-  --sidebar-foreground: oklch(0.16 0.01 60);
-  --sidebar-primary: oklch(0.16 0.01 60);
-  --sidebar-primary-foreground: oklch(0.985 0.005 85);
-  --sidebar-accent: oklch(0.94 0.008 80);
-  --sidebar-accent-foreground: oklch(0.16 0.01 60);
-  --sidebar-border: oklch(0.64 0.012 70);
-  --sidebar-ring: oklch(0.55 0.18 35);
+  /* Control edges are opaque, never an alpha wash: the export's 16 % wash
+     measured 1.1 : 1 against the page, and a button whose edge cannot be
+     seen is a button nobody presses (showable-version/38, 2026-09-19).
+     `src/app/globals.test.ts` holds every edge at 3.0 and every text token
+     at 4.5 (muted at 7.0) in both themes. `--rule` stays a hairline divider. */
+  --border: oklch(0.62 0.01 260);
+  --rule: oklch(0.18 0.006 260 / 10%);
+  --input: oklch(0.62 0.01 260);
+  --ring: oklch(0.55 0.22 25);
+  --chart-1: oklch(0.18 0.006 260);
+  --chart-2: oklch(0.55 0.22 25);
+  --chart-3: oklch(0.5 0.01 260);
+  --chart-4: oklch(0.7 0.01 260);
+  --chart-5: oklch(0.85 0.005 260);
+  /* The sidebar and top bar are graphite in the light theme too — the
+     export's chrome is dark whatever the page is. Its border is the same
+     opaque grey as the page's, which reads on both fields. */
+  --sidebar: oklch(0.16 0.006 260);
+  --sidebar-foreground: oklch(0.94 0.002 260);
+  /* The accent as text on the graphite chrome: the page's signal red measures
+     3.6 : 1 there, so the chrome carries the brighter red the dark theme uses. */
+  --sidebar-primary: oklch(0.68 0.24 25);
+  --sidebar-primary-foreground: oklch(0.12 0.006 260);
+  --sidebar-accent: oklch(0.23 0.006 260);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(0.62 0.01 260);
+  --sidebar-ring: oklch(0.62 0.24 25);
   --signal: oklch(0.55 0.22 25);
   /* Warnings must not read as the signal red: a caution is not an error and not
      an informational accent. Amber, distinct from both, and from the session
      colours it sits near. */
   --warning: oklch(0.55 0.15 65);
-  --signal-foreground: oklch(0.99 0.005 85);
+  --signal-foreground: oklch(0.99 0 0);
   --session-endurance: oklch(0.55 0.14 245);
   --session-intensity: oklch(0.55 0.22 25);
   --session-tempo: oklch(0.68 0.15 70);
   --session-recovery: oklch(0.55 0.12 155);
   --session-rest: oklch(0.6 0.01 70);
+  /* The sign-in canvas (Lovable sign-in export): a night-ride photo under a
+     dark surface in both themes. The signal red on it is the chrome's brighter
+     one for the same reason as the sidebar; the line is opaque, not the
+     export's 18 % wash. */
+  --auth-canvas: oklch(0.105 0.008 255);
+  --auth-surface: oklch(0.15 0.008 255);
+  --auth-input: oklch(0.205 0.008 255);
+  --auth-foreground: oklch(0.97 0.002 255);
+  --auth-muted: oklch(0.76 0.008 255);
+  --auth-line: oklch(0.56 0.01 255);
 }
 
 .dark {
-  --background: oklch(0.14 0.008 60);
-  --foreground: oklch(0.94 0.005 80);
-  --panel: oklch(0.185 0.008 60);
-  --card: oklch(0.185 0.008 60);
-  --card-foreground: oklch(0.94 0.005 80);
-  --popover: oklch(0.185 0.008 60);
-  --popover-foreground: oklch(0.94 0.005 80);
-  --primary: oklch(0.94 0.005 80);
-  --primary-foreground: oklch(0.14 0.008 60);
-  --secondary: oklch(0.24 0.008 60);
-  --secondary-foreground: oklch(0.94 0.005 80);
-  --muted: oklch(0.24 0.008 60);
-  --muted-foreground: oklch(0.72 0.01 70);
-  --accent: oklch(0.24 0.008 60);
-  --accent-foreground: oklch(0.94 0.005 80);
+  --background: oklch(0.12 0.006 260);
+  --foreground: oklch(0.95 0.002 260);
+  --panel: oklch(0.17 0.006 260);
+  --card: oklch(0.17 0.006 260);
+  --card-foreground: oklch(0.95 0.002 260);
+  --popover: oklch(0.17 0.006 260);
+  --popover-foreground: oklch(0.95 0.002 260);
+  --primary: oklch(0.95 0.002 260);
+  --primary-foreground: oklch(0.12 0.006 260);
+  --secondary: oklch(0.24 0.006 260);
+  --secondary-foreground: oklch(0.95 0.002 260);
+  --muted: oklch(0.24 0.006 260);
+  --muted-foreground: oklch(0.72 0.008 260);
+  --accent: oklch(0.24 0.006 260);
+  --accent-foreground: oklch(0.95 0.002 260);
   --accent-signal: oklch(0.72 0.17 40);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.5 0.01 60);
+  --border: oklch(0.5 0.008 260);
   --rule: oklch(1 0 0 / 7%);
-  --input: oklch(0.5 0.01 60);
+  --input: oklch(0.5 0.008 260);
   --ring: oklch(0.72 0.17 40);
-  --chart-1: oklch(0.94 0.005 80);
+  --chart-1: oklch(0.95 0.002 260);
   --chart-2: oklch(0.72 0.17 40);
-  --chart-3: oklch(0.65 0.01 70);
-  --chart-4: oklch(0.5 0.01 70);
-  --chart-5: oklch(0.35 0.01 60);
-  --sidebar: oklch(0.14 0.008 60);
-  --sidebar-foreground: oklch(0.94 0.005 80);
-  --sidebar-primary: oklch(0.94 0.005 80);
-  --sidebar-primary-foreground: oklch(0.14 0.008 60);
-  --sidebar-accent: oklch(0.24 0.008 60);
-  --sidebar-accent-foreground: oklch(0.94 0.005 80);
-  --sidebar-border: oklch(0.5 0.01 60);
+  --chart-3: oklch(0.65 0.008 260);
+  --chart-4: oklch(0.5 0.008 260);
+  --chart-5: oklch(0.35 0.006 260);
+  --sidebar: oklch(0.1 0.006 260);
+  --sidebar-foreground: oklch(0.95 0.002 260);
+  --sidebar-primary: oklch(0.68 0.24 25);
+  --sidebar-primary-foreground: oklch(0.12 0.006 260);
+  --sidebar-accent: oklch(0.2 0.006 260);
+  --sidebar-accent-foreground: oklch(0.95 0.002 260);
+  --sidebar-border: oklch(0.5 0.008 260);
   --sidebar-ring: oklch(0.72 0.17 40);
   --signal: oklch(0.68 0.24 25);
   --warning: oklch(0.78 0.15 75);
-  --signal-foreground: oklch(0.14 0.008 60);
+  --signal-foreground: oklch(0.12 0.006 260);
   --session-endurance: oklch(0.68 0.15 245);
   --session-intensity: oklch(0.68 0.24 25);
   --session-tempo: oklch(0.8 0.16 80);
   --session-recovery: oklch(0.7 0.15 155);
   --session-rest: oklch(0.55 0.01 70);
+  --auth-canvas: oklch(0.075 0.006 255);
+  --auth-surface: oklch(0.12 0.006 255);
+  --auth-input: oklch(0.18 0.006 255);
+  --auth-foreground: oklch(0.97 0.002 255);
+  --auth-muted: oklch(0.76 0.008 255);
+  --auth-line: oklch(0.56 0.01 255);
+}
+
+/* The sign-in canvas: the photo fades into the surface from the bottom and
+   the left, and faint diagonal speed lines cross it. */
+.auth-backdrop {
+  background:
+    linear-gradient(to top, var(--auth-canvas), transparent 58%, var(--auth-canvas)),
+    linear-gradient(to right, color-mix(in oklab, var(--auth-canvas) 70%, transparent), transparent 62%);
+}
+
+.auth-speed-lines {
+  background-image: repeating-linear-gradient(
+    128deg,
+    transparent 0,
+    transparent 5rem,
+    color-mix(in oklab, var(--auth-foreground) 7%, transparent) calc(5rem + 1px),
+    transparent calc(5rem + 2px)
+  );
+}
+
+/* The Momentum mark: three m-glyphs roll in one after another. */
+@keyframes momentum-roll-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-0.45rem) rotate(-10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) rotate(0);
+  }
+}
+
+.momentum-mark-part {
+  animation: momentum-roll-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 50% 70%;
+}
+
+/* The glyphs roll in one after another, and follow each other on hover. */
+.momentum-mark-part:nth-child(2) {
+  animation-delay: 90ms;
+  transition-delay: 35ms;
+}
+
+.momentum-mark-part:nth-child(3) {
+  animation-delay: 180ms;
+  transition-delay: 70ms;
+}
+
+/* The name beside the mark is set in Outfit, as in the export. */
+.momentum-wordmark {
+  font-family: var(--font-outfit), var(--font-oswald), sans-serif;
+  letter-spacing: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .momentum-mark-part {
+    animation: none;
+    transition: none;
+  }
 }
 
 @layer base {
@@ -180,6 +267,10 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: var(--signal);
+    color: var(--signal-foreground);
   }
   html {
     @apply font-sans;

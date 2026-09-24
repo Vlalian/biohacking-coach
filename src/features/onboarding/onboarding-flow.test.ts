@@ -38,29 +38,29 @@ describe('coachGreeting — in the athlete’s language', () => {
 
   it('names the athlete and the race in English', () => {
     expect(coachGreeting('Mads', 'Ironman Copenhagen', tEn)).toEqual({
-      intro: "Hello Mads. I'm your Coach.",
+      intro: "Hello Mads. I'm Momentum.",
       body: "Ironman Copenhagen is your target. Let's get to work.",
     });
   });
 
   it('drops the name and the race when absent', () => {
-    expect(coachGreeting('', '', tEn)).toEqual({ intro: "I'm your Coach.", body: "Let's get to work." });
+    expect(coachGreeting('', '', tEn)).toEqual({ intro: "I'm Momentum.", body: "Let's get to work." });
     expect(coachGreeting(null, 'Kalmar', tEn)).toEqual({
-      intro: "I'm your Coach.",
+      intro: "I'm Momentum.",
       body: "Kalmar is your target. Let's get to work.",
     });
     expect(coachGreeting('Mads', '', tEn)).toEqual({
-      intro: "Hello Mads. I'm your Coach.",
+      intro: "Hello Mads. I'm Momentum.",
       body: "Let's get to work.",
     });
   });
 
   it('speaks Danish when handed the Danish catalogue', () => {
     expect(coachGreeting('Johny', 'Ironman Frankfurt', tDa)).toEqual({
-      intro: 'Hej Johny. Jeg er din Coach.',
+      intro: 'Hej Johny. Jeg er Momentum.',
       body: 'Ironman Frankfurt er dit mål. Lad os komme i gang.',
     });
-    expect(coachGreeting('', '', tDa)).toEqual({ intro: 'Jeg er din Coach.', body: 'Lad os komme i gang.' });
+    expect(coachGreeting('', '', tDa)).toEqual({ intro: 'Jeg er Momentum.', body: 'Lad os komme i gang.' });
   });
 });
 

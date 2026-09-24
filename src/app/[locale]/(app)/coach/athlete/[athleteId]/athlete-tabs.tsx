@@ -39,7 +39,7 @@ export function AthleteTabs({
             href={tab.href}
             aria-current={active ? 'page' : undefined}
             className={[
-              'border-b-2 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors',
+              'border-b-2 px-4 h-10 font-body text-[15px] font-medium transition-colors',
               active
                 ? 'border-signal text-signal'
                 : 'border-transparent text-muted-foreground hover:text-foreground',

@@ -48,7 +48,7 @@ export function CitationList({
         data-citations-toggle=""
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="self-start font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
+        className="self-start font-body text-sm uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
       >
         {citationSummary(heading, citations.length)}
       </button>
@@ -69,7 +69,7 @@ export function CitationEntries({ citations }: { citations: Citation[] }) {
       {citations.map((c) => (
         <li
           key={c.sourceId}
-          className="text-xs leading-relaxed text-muted-foreground"
+          className="text-sm leading-relaxed text-muted-foreground"
         >
           {c.url ? (
             <a

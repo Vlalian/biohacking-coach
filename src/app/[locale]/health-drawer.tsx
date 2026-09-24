@@ -117,7 +117,7 @@ export function HealthDrawer({
         className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-panel shadow-2xl outline-none"
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+          <span className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
             {isCoach ? t('coachTitle') : t('title')}
           </span>
           <button
@@ -202,7 +202,7 @@ export function HealthDrawer({
 
           {closed.length > 0 && (
             <details className="mt-6" data-history-fold="">
-              <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <summary className="cursor-pointer font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                 {t('history')} ({closed.length})
               </summary>
               <ul className="mt-2 divide-y divide-border border border-border">
@@ -273,7 +273,7 @@ function RecordLine({ span, locale, t }: { span: HealthSpan; locale: string; t: 
   return (
     <p className="font-body text-sm text-foreground">
       {span.name ?? kindLabel}
-      <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="ml-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('since', { date: formatFullDate(span.from, locale) })}
         {span.to && ` — ${formatFullDate(span.to, locale)}`}
       </span>
@@ -286,7 +286,7 @@ function RecordGlance({ span, t }: { span: HealthSpan; t: T }) {
   const parts = span.capacity ? glanceParts(span.capacity) : [];
   if (parts.length === 0 && span.bother === null) return null;
   return (
-    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+    <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
       {parts.map((p) => t(`glance_${p.allowance}_${p.discipline}`)).join(' · ')}
       {span.bother !== null && `${parts.length > 0 ? ' · ' : ''}${t('botherLabel', { value: span.bother })}`}
     </p>
@@ -341,7 +341,7 @@ function RecordRow({
             type="button"
             onClick={onClose}
             disabled={pending}
-            className="border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
+            className="border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
           >
             {span.kind === 'injury' ? t('imBack') : t('illnessOver')}
           </button>
@@ -351,7 +351,7 @@ function RecordRow({
               data-action="delete"
               onClick={onDelete}
               disabled={pending}
-              className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+              className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
             >
               {t('declaredByMistake')}
             </button>
@@ -376,7 +376,7 @@ function BotherControl({
 }) {
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('botherQuestion')}
       </p>
       <div className="mt-1 flex gap-1">
@@ -389,7 +389,7 @@ function BotherControl({
             aria-pressed={value === n}
             onClick={() => onChange(value === n ? null : n)}
             className={[
-              'h-7 w-7 border font-mono text-[11px] transition-colors disabled:opacity-50',
+              'h-7 w-7 border font-body text-sm transition-colors disabled:opacity-50',
               value === n
                 ? 'border-signal text-signal'
                 : 'border-border text-muted-foreground hover:text-foreground',
@@ -439,13 +439,13 @@ function Thread({
 
   return (
     <div className="border-t border-dashed border-border px-3 py-3">
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('notesDivider')}
       </p>
       <ul className="mt-2 space-y-2">
         {(notes ?? []).map((note) => (
           <li key={note.id} className="font-body text-sm text-foreground">
-            <span className="mr-2 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="mr-2 font-body text-[13px] uppercase tracking-[0.16em] text-muted-foreground">
               {note.authorRole === 'head_coach' ? t('authorHeadCoach') : t('authorAthlete')}
             </span>
             {note.body}
@@ -457,7 +457,7 @@ function Thread({
         onChange={(e) => setDraft(e.target.value)}
         rows={2}
         aria-label={t('addNote')}
-        className="mt-2 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
+        className="mt-2 w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
       />
       <button
         type="button"
@@ -466,7 +466,7 @@ function Thread({
           onAdd(draft);
           setDraft('');
         }}
-        className="mt-2 border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        className="mt-2 border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
       >
         {t('addNote')}
       </button>
@@ -500,8 +500,8 @@ function DeclareForm({
 
   return (
     <section className="mt-6">
-      <h2 className="font-display text-xl tracking-[0.04em] text-foreground">{t('whatCanYouDo')}</h2>
-      <p className="mt-1 font-body text-xs text-muted-foreground">{t('whatCanYouDoNote')}</p>
+      <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('whatCanYouDo')}</h2>
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('whatCanYouDoNote')}</p>
       <div className="mt-3 space-y-2">
         {DISCIPLINES.map((d) => (
           <div key={d} data-discipline={d} className="flex items-center justify-between gap-3">
@@ -514,7 +514,7 @@ function DeclareForm({
                   aria-pressed={capacity[d] === a}
                   onClick={() => setCapacity({ ...capacity, [d]: a })}
                   className={[
-                    'border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors',
+                    'border px-2.5 py-1 font-body text-sm uppercase tracking-[0.12em] transition-colors',
                     capacity[d] === a
                       ? 'border-signal text-signal'
                       : 'border-border text-muted-foreground hover:text-foreground',
@@ -530,7 +530,7 @@ function DeclareForm({
       {/* What and where, in the athlete's words — a name to tell two injuries
           apart, not a diagnosis; optional, and never read by the planner. */}
       <div className="mt-3">
-        <label htmlFor="health-injury-name" className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <label htmlFor="health-injury-name" className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('nameLabel')}
         </label>
         <input
@@ -541,7 +541,7 @@ function DeclareForm({
           placeholder={t('namePlaceholder')}
           maxLength={60}
           disabled={pending}
-          className="mt-1 w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
+          className="mt-1 w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
       </div>
       <div className="mt-3">
@@ -552,7 +552,7 @@ function DeclareForm({
           type="button"
           disabled={pending || !restricted}
           onClick={() => onInjury(capacity, bother, name)}
-          className="border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
+          className="border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
         >
           {t('declareInjury')}
         </button>
@@ -560,7 +560,7 @@ function DeclareForm({
           type="button"
           disabled={pending}
           onClick={() => onIllness(bother)}
-          className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          className="border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
         >
           {t('imIll')}
         </button>

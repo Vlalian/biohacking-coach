@@ -39,6 +39,9 @@ export default async function InformationPage({
 
   const t = await getTranslations('Information');
   const athlete = await getAthleteByUserId(session!.user.id);
+  // The header names the athlete the way the shell does: first name only, and
+  // it never leaves the page (ADR 0006 — nothing here reaches a prompt).
+  const firstName = session!.user.name.trim().split(/\s+/)[0] ?? '';
 
   // The signed-in athlete's own rows only — the repository scopes both reads
   // to this athlete id, so the dataset cannot contain anyone else's training
@@ -56,20 +59,13 @@ export default async function InformationPage({
         dataset={dataset}
         initialLayout={layout}
         saveLayout={saveLayoutAction}
+        athleteName={firstName}
       />
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-8 p-6 sm:p-8">
-      <header className="flex w-full max-w-5xl flex-col items-start gap-1 border-b border-border pb-6">
-        <h1 className="font-display text-4xl leading-none tracking-[0.03em] text-foreground">
-          {t('title')}
-        </h1>
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
-          {t('subtitle')}
-        </p>
-      </header>
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center gap-8 px-4 py-6 sm:px-8 lg:py-8">
       {view ?? <p className="text-muted-foreground">{t('noAthlete')}</p>}
     </div>
   );

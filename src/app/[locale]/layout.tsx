@@ -2,14 +2,15 @@ import type { Metadata } from 'next';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { setRequestLocale, getTranslations } from 'next-intl/server';
-import { Inter, Barlow, Bebas_Neue, JetBrains_Mono } from 'next/font/google';
+import { Inter, Barlow, Bebas_Neue, JetBrains_Mono, Oswald, Outfit } from 'next/font/google';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from '@/components/theme-provider';
 import '../globals.css';
 
-// The Trackside brand fonts (ported from the Lovable design): Inter is the
-// base body font, Barlow is the display-adjacent body face, Bebas Neue is the
-// display/headline face, JetBrains Mono is the label/mono face. Each exposes
+// The Momentum brand fonts (ported from the Lovable export): Inter is the
+// base body font, Barlow is the display-adjacent body face, Oswald is the
+// display/headline face (bold italic uppercase in the export; Bebas Neue stays
+// as its fallback), JetBrains Mono is the label/mono face. Each exposes
 // a CSS variable that globals.css's @theme inline block wires to font-sans /
 // font-body / font-display / font-mono.
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -17,6 +18,18 @@ const barlow = Barlow({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
   variable: '--font-barlow',
+});
+const oswald = Oswald({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  style: ['normal'],
+  variable: '--font-oswald',
+});
+// Outfit sets only the wordmark's name, as in the Lovable export.
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['700'],
+  variable: '--font-outfit',
 });
 const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
@@ -44,7 +57,7 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: 'Metadata' });
 
   return {
-    title: 'Biohacking Coach',
+    title: 'Momentum',
     description: t('description'),
   };
 }
@@ -76,7 +89,7 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       suppressHydrationWarning
-      className={`${inter.variable} ${barlow.variable} ${bebasNeue.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${barlow.variable} ${oswald.variable} ${outfit.variable} ${bebasNeue.variable} ${jetbrainsMono.variable}`}
     >
       <body>
         <ThemeProvider

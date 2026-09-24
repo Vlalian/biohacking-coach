@@ -44,7 +44,7 @@ export function SignOutButton({
           setPending(false);
         }
       }}
-      className={className ?? 'text-sm text-neutral-500 underline disabled:opacity-50'}
+      className={className ?? 'font-body text-sm text-muted-foreground underline underline-offset-4 disabled:opacity-50'}
     >
       {icon}
       {t('signOut')}

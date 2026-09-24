@@ -30,7 +30,7 @@ export function ScoreRow({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </span>
       <div className="flex gap-1.5" role="group" aria-label={label}>
@@ -111,10 +111,10 @@ export function RatingModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
+          <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">
             {t('title')}
           </p>
-          <h2 className="mt-1 font-display text-2xl tracking-[0.04em] text-foreground">
+          <h2 className="mt-1 font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">
             {t('subtitle', { type: session.type })}
           </h2>
         </div>
@@ -123,7 +123,7 @@ export function RatingModal({
         <ScoreRow label={t('mind')} value={mind} onPick={setMind} />
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
             {t('comment')}
           </span>
           <textarea
@@ -131,7 +131,7 @@ export function RatingModal({
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder={t('commentPlaceholder')}
-            className="resize-none border border-border bg-background p-2 font-body text-sm text-foreground outline-none focus:border-signal"
+            className="resize-none border border-border bg-background p-3 font-body text-base text-foreground outline-none focus:border-signal"
           />
         </label>
 
@@ -145,7 +145,7 @@ export function RatingModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 border border-border py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground"
+            className="flex-1 border border-border h-10 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             {t('skip')}
           </button>
@@ -153,7 +153,7 @@ export function RatingModal({
             type="button"
             onClick={onSave}
             disabled={pending || body < 1 || mind < 1}
-            className="flex-[2] bg-signal py-2 font-mono text-[11px] uppercase tracking-[0.2em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="flex-[2] bg-signal h-11 font-body text-base font-semibold text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             {t('save')}
           </button>
