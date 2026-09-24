@@ -27,10 +27,13 @@ import { grantConsentsAction, withdrawConsentAction } from './consent-actions';
  * stamped against.
  */
 
+// The export's consent screen (2026-09-24) keeps a plain posture — no
+// display face, no kicker — but sits on the theme's tokens and the control
+// ladder rather than default greys.
 const PRIMARY =
-  'rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+  'inline-flex h-11 w-full items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:cursor-not-allowed disabled:opacity-40';
 const SECONDARY =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900';
+  'inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50';
 
 function isRequired(purpose: ConsentPurpose): boolean {
   return REQUIRED_CONSENT_PURPOSES.includes(purpose);
@@ -97,14 +100,14 @@ export function ConsentScreen({
   const intro = mode === 'gate' ? copy.intro : copy.manageIntro;
 
   return (
-    <section className="flex w-full max-w-lg flex-col gap-5">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold">{heading}</h1>
-        <p className="text-sm text-neutral-500">{intro}</p>
-        <p className="text-sm leading-relaxed text-neutral-500">{copy.controller}</p>
+    <section className="flex w-full max-w-lg flex-col gap-6 font-body text-foreground">
+      <header className="flex flex-col gap-3">
+        <h1 className="text-2xl font-semibold text-foreground">{heading}</h1>
+        <p className="text-[15px] leading-relaxed text-foreground">{intro}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{copy.controller}</p>
       </header>
 
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-4">
         {purposes.map((purpose) => {
           const p = copy.purposes[purpose];
           const required = isRequired(purpose);
@@ -112,17 +115,17 @@ export function ConsentScreen({
           return (
             <li
               key={purpose}
-              className="flex flex-col gap-1 rounded border border-neutral-200 p-3 dark:border-neutral-800"
+              className="flex flex-col gap-2 border border-border bg-panel p-4"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{p.title}</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-base font-medium text-foreground">{p.title}</span>
+                    <span className="border border-border px-2 py-0.5 text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                       {required ? copy.requiredLabel : copy.optionalLabel}
                     </span>
                   </div>
-                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                  <p className="text-[15px] leading-relaxed text-foreground">
                     {p.body}
                   </p>
                 </div>
@@ -130,7 +133,7 @@ export function ConsentScreen({
                 {mode === 'gate' && (
                   <input
                     type="checkbox"
-                    className="mt-1 h-4 w-4 shrink-0"
+                    className="mt-1 h-5 w-5 shrink-0 accent-[var(--signal)]"
                     checked={checked.has(purpose)}
                     disabled={pending}
                     onChange={() => toggle(purpose)}
@@ -144,8 +147,8 @@ export function ConsentScreen({
                   <span
                     className={
                       isGranted
-                        ? 'text-xs font-medium text-green-700 dark:text-green-500'
-                        : 'text-[13px] text-neutral-500'
+                        ? 'text-[15px] font-medium text-session-recovery'
+                        : 'text-[15px] text-muted-foreground'
                     }
                   >
                     {isGranted ? copy.grantedState : copy.notGrantedState}
@@ -181,7 +184,7 @@ export function ConsentScreen({
               )}
 
               {mode === 'manage' && required && isGranted && (
-                <p className="mt-1 text-[13px] text-amber-700 dark:text-amber-500">
+                <p className="mt-1 text-[13px] text-warning">
                   {copy.withdrawRequiredWarning}
                 </p>
               )}
@@ -201,7 +204,7 @@ export function ConsentScreen({
             {copy.agree}
           </button>
           {!allRequiredChecked && (
-            <p className="text-[13px] text-neutral-500">{copy.requiredHint}</p>
+            <p className="text-sm text-muted-foreground">{copy.requiredHint}</p>
           )}
         </div>
       ) : (
@@ -211,7 +214,7 @@ export function ConsentScreen({
       )}
 
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-destructive">
           {copy.retryError}
         </p>
       )}

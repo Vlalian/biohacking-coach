@@ -164,6 +164,20 @@ describe.each(['light', 'dark'] as const)('%s theme holds the contrast bar', (th
     expect(contrast(t[name], t['--sidebar'])).toBeGreaterThanOrEqual(4.5);
   });
 
+  // The sign-in canvas (ported from the Lovable sign-in export, 2026-09-24) is
+  // dark in both themes and has tokens of its own; they hold the same bar.
+  it('the auth tokens hold the bar on the auth surface and input', () => {
+    const t = tokens();
+    for (const bg of ['--auth-surface', '--auth-input']) {
+      expect(contrast(t['--auth-foreground'], t[bg])).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t['--auth-muted'], t[bg])).toBeGreaterThanOrEqual(7);
+      // The red as text on the dark surface is the chrome's brighter one, as on the sidebar.
+      expect(contrast(t['--sidebar-primary'], t[bg])).toBeGreaterThanOrEqual(4.5);
+      expect(t['--auth-line'].alpha).toBe(1);
+      expect(contrast(t['--auth-line'], t[bg])).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it.each(['--border', '--input', '--ring', '--sidebar-border'])('%s is opaque and at least 3.0 on background and card', (name) => {
     const t = tokens();
     expect(t[name].alpha).toBe(1);

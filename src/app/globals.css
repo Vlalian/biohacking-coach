@@ -30,6 +30,12 @@
   --color-session-tempo: var(--session-tempo);
   --color-session-recovery: var(--session-recovery);
   --color-session-rest: var(--session-rest);
+  --color-auth-canvas: var(--auth-canvas);
+  --color-auth-surface: var(--auth-surface);
+  --color-auth-input: var(--auth-input);
+  --color-auth-foreground: var(--auth-foreground);
+  --color-auth-muted: var(--auth-muted);
+  --color-auth-line: var(--auth-line);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -131,6 +137,16 @@
   --session-tempo: oklch(0.68 0.15 70);
   --session-recovery: oklch(0.55 0.12 155);
   --session-rest: oklch(0.6 0.01 70);
+  /* The sign-in canvas (Lovable sign-in export): a night-ride photo under a
+     dark surface in both themes. The signal red on it is the chrome's brighter
+     one for the same reason as the sidebar; the line is opaque, not the
+     export's 18 % wash. */
+  --auth-canvas: oklch(0.105 0.008 255);
+  --auth-surface: oklch(0.15 0.008 255);
+  --auth-input: oklch(0.205 0.008 255);
+  --auth-foreground: oklch(0.97 0.002 255);
+  --auth-muted: oklch(0.76 0.008 255);
+  --auth-line: oklch(0.56 0.01 255);
 }
 
 .dark {
@@ -177,6 +193,61 @@
   --session-tempo: oklch(0.8 0.16 80);
   --session-recovery: oklch(0.7 0.15 155);
   --session-rest: oklch(0.55 0.01 70);
+  --auth-canvas: oklch(0.075 0.006 255);
+  --auth-surface: oklch(0.12 0.006 255);
+  --auth-input: oklch(0.18 0.006 255);
+  --auth-foreground: oklch(0.97 0.002 255);
+  --auth-muted: oklch(0.76 0.008 255);
+  --auth-line: oklch(0.56 0.01 255);
+}
+
+/* The sign-in canvas: the photo fades into the surface from the bottom and
+   the left, and faint diagonal speed lines cross it. */
+.auth-backdrop {
+  background:
+    linear-gradient(to top, var(--auth-canvas), transparent 58%, var(--auth-canvas)),
+    linear-gradient(to right, color-mix(in oklab, var(--auth-canvas) 70%, transparent), transparent 62%);
+}
+
+.auth-speed-lines {
+  background-image: repeating-linear-gradient(
+    128deg,
+    transparent 0,
+    transparent 5rem,
+    color-mix(in oklab, var(--auth-foreground) 7%, transparent) calc(5rem + 1px),
+    transparent calc(5rem + 2px)
+  );
+}
+
+/* The Momentum mark: three m-glyphs roll in one after another. */
+@keyframes momentum-roll-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-0.45rem) rotate(-10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) rotate(0);
+  }
+}
+
+.momentum-mark-part {
+  animation: momentum-roll-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 50% 70%;
+}
+
+.momentum-mark-part:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.momentum-mark-part:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .momentum-mark-part {
+    animation: none;
+  }
 }
 
 @layer base {

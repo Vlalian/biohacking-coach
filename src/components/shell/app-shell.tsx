@@ -315,21 +315,40 @@ export function AppShell({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Wordmark — the product name in two tones, as the export set its own  */
-/*  (TRACK|SIDE): the head of the word in the chrome's foreground, the   */
-/*  tail in the signal red. A name the map does not know renders whole, */
-/*  so the mark never splits a word at a place nobody chose.            */
+/*  The Momentum mark (Lovable sign-in export, 2026-09-24): three       */
+/*  m-glyphs, two fading into the chrome and one in the signal red,     */
+/*  rolling in one after another, then the name. The name prop is the  */
+/*  accessible label and the text; the glyphs are decoration.           */
 /* ------------------------------------------------------------------ */
 
+const MARK_PATH =
+  'M2 19V9h3v1.25A4.1 4.1 0 0 1 8.25 8.7c1.55 0 2.75.62 3.5 1.82A4.55 4.55 0 0 1 15.4 8.7c3 0 4.6 1.85 4.6 5.05V19h-3.2v-4.85c0-1.68-.68-2.5-2.03-2.5-1.38 0-2.22.98-2.22 2.72V19H9.3v-4.85c0-1.68-.67-2.5-2.02-2.5-1.4 0-2.23.98-2.23 2.72V19H2Z';
+const MARK_TONES = ['text-sidebar-foreground/20', 'text-sidebar-foreground/45', 'text-sidebar-primary'];
+
 function Wordmark({ name, className }: { name: string; className: string }) {
-  const SPLIT: Record<string, number> = { momentum: 5 };
-  const split = SPLIT[name.toLowerCase()] ?? name.length;
+  const large = className.includes('3xl');
   return (
-    <span
-      className={`font-display font-bold uppercase leading-none tracking-wide text-sidebar-foreground ${className}`}
-    >
-      {name.slice(0, split)}
-      {split < name.length && <span className="text-sidebar-primary">{name.slice(split)}</span>}
+    <span className="group/brand flex items-center" aria-label={name}>
+      <span aria-hidden="true" className="flex items-end -space-x-2">
+        {MARK_TONES.map((tone) => (
+          <svg
+            key={tone}
+            viewBox="0 0 24 24"
+            className={[
+              'momentum-mark-part shrink-0 fill-current transition-transform duration-300 group-hover/brand:translate-x-0.5',
+              large ? 'h-7 w-7' : 'h-6 w-6',
+              tone,
+            ].join(' ')}
+          >
+            <path d={MARK_PATH} />
+          </svg>
+        ))}
+      </span>
+      <span
+        className={`ml-3 font-display font-bold uppercase italic leading-none text-sidebar-foreground ${className}`}
+      >
+        {name}
+      </span>
     </span>
   );
 }

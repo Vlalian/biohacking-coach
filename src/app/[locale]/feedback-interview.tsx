@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, CornerDownLeft } from 'lucide-react';
+import { AlertTriangle, CornerDownLeft, MessageSquareWarning } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import type { FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
@@ -97,12 +97,16 @@ export function FeedbackInterview({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10 sm:px-6">
       <header className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+        <span className="inline-flex items-center gap-2 font-body text-sm uppercase tracking-[0.22em] text-muted-foreground">
+          <MessageSquareWarning className="h-4 w-4" aria-hidden="true" />
+          {t('title')}
+        </span>
+        <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
           {t('title')}
         </h1>
-        <p className="max-w-[62ch] font-body text-sm leading-relaxed text-muted-foreground">
+        <p className="mt-2 max-w-[62ch] font-body text-base leading-relaxed text-muted-foreground">
           {t('intro')}
         </p>
       </header>
@@ -111,10 +115,10 @@ export function FeedbackInterview({
         <div className="flex flex-col gap-5 px-4 py-5">
           {messages.length === 0 && !pending ? (
             <div className="flex flex-col items-center gap-2 border border-dashed border-border px-5 py-8 text-center">
-              <p className="font-display text-xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+              <p className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
                 {t('emptyTitle')}
               </p>
-              <p className="text-sm leading-relaxed text-muted-foreground">{t('emptyBody')}</p>
+              <p className="text-base leading-relaxed text-muted-foreground">{t('emptyBody')}</p>
             </div>
           ) : (
             messages.map((m) => <InterviewRow key={m.id} message={m} t={t} />)
@@ -161,15 +165,15 @@ export function FeedbackInterview({
             }}
             disabled={pending}
             placeholder={t('placeholder')}
-            className="max-h-32 min-h-11 flex-1 resize-none border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
+            className="max-h-32 min-h-11 flex-1 resize-none border border-border bg-background px-3 py-2.5 text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
           />
           <button
             type="submit"
             disabled={pending || draft.trim().length === 0}
-            className="flex shrink-0 items-center gap-1.5 bg-signal h-11 px-4 font-body text-base font-semibold text-signal-foreground transition-opacity disabled:opacity-35"
+            className="inline-flex h-11 shrink-0 items-center gap-2 border border-foreground px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-foreground hover:text-background disabled:opacity-35"
           >
             {t('send')}
-            <CornerDownLeft className="h-3 w-3" />
+            <CornerDownLeft className="h-4 w-4" />
           </button>
         </form>
       </section>
@@ -214,8 +218,8 @@ function FallbackBox({
   }
 
   return (
-    <section className="flex flex-col gap-2 border border-border bg-panel p-4">
-      <h2 className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
+    <section className="flex flex-col gap-2 border border-border bg-panel p-5">
+      <h2 className="font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">
         {t('fallbackTitle')}
       </h2>
       <p className="font-body text-sm text-muted-foreground">{t('fallbackBody')}</p>
@@ -230,13 +234,13 @@ function FallbackBox({
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder={t('fallbackPlaceholder')}
-          className="resize-y border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
+          className="mt-2 resize-y border border-border bg-background p-3 text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-foreground"
         />
         <div className="flex items-center gap-3">
           <button
             type="submit"
             disabled={pending || body.trim().length === 0}
-            className="self-start border border-border h-11 px-4 font-body text-base font-semibold text-foreground transition-opacity disabled:opacity-35"
+            className="inline-flex h-11 items-center self-start bg-foreground px-5 font-body text-base font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-35"
           >
             {t('fallbackSend')}
           </button>
@@ -271,7 +275,7 @@ function InterviewRow({
         <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('youLabel')}
         </span>
-        <p className="max-w-[85%] whitespace-pre-wrap border border-border bg-background px-3 py-2 text-sm leading-relaxed text-foreground">
+        <p className="max-w-[85%] whitespace-pre-wrap border border-border bg-background px-4 py-3 text-base leading-relaxed text-foreground">
           {message.content}
         </p>
       </div>
@@ -283,7 +287,7 @@ function InterviewRow({
       <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('interviewerLabel')}
       </span>
-      <p className="max-w-[62ch] whitespace-pre-wrap text-[15px] leading-[1.7] text-foreground">
+      <p className="max-w-[62ch] whitespace-pre-wrap text-base leading-[1.7] text-foreground">
         {message.content}
       </p>
     </div>

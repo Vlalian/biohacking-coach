@@ -367,7 +367,7 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
         onChange={(e) => setRace(e.target.value)}
         placeholder={t('racePlaceholder')}
         disabled={pending}
-        className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+        className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
       />
       <label htmlFor="onboarding-race-date" className="sr-only">
         {t('qRaceDate')}
@@ -378,7 +378,7 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
         value={raceDate}
         onChange={(e) => setRaceDate(e.target.value)}
         disabled={pending}
-        className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors focus:border-signal"
+        className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors focus:border-signal"
       />
       <PrimaryButton
         type="submit"
@@ -475,7 +475,7 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
               onChange={(e) => setBestTime(e.target.value)}
               placeholder={t('bestTimePlaceholder')}
               disabled={pending}
-              className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+              className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
             />
           </div>
           <FieldGroup label={t('weakest')} note={t('optionalMulti')}>
@@ -506,7 +506,7 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
               onChange={(e) => setTargetTime(e.target.value)}
               placeholder={t('targetTimePlaceholder')}
               disabled={pending}
-              className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+              className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
             />
           </div>
           <FieldGroup label={t('metrics')} note={t('optionalMulti')}>
@@ -651,7 +651,7 @@ function OptionTile({
           : 'border-border bg-panel hover:border-muted-foreground',
       ].join(' ')}
     >
-      <span className="font-body text-sm text-foreground">{label}</span>
+      <span className="font-body text-base text-foreground">{label}</span>
       {selected && <Check className="h-4 w-4 shrink-0 text-signal" />}
     </button>
   );
@@ -675,11 +675,11 @@ function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 bg-signal px-5 py-2.5 font-body text-sm uppercase tracking-[0.24em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+      className="inline-flex h-11 min-w-[160px] items-center justify-center gap-2 bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-40"
     >
-      {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
       {children}
-      {!pending && <ArrowRight className="h-3 w-3" />}
+      {!pending && <ArrowRight className="h-4 w-4" />}
     </button>
   );
 }
