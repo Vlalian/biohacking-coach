@@ -41,7 +41,7 @@ function Thinking({
       className={cn(thinkingVariants({ tone }), className)}
       {...props}
     >
-      <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <div className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </div>
       <div className="flex items-center gap-1.5" aria-hidden="true">

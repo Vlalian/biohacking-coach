@@ -22,7 +22,7 @@ import {
 
 /* ------------------------------------------------------------------ */
 /*  Ported from the Lovable export (iron-insight-grid, 2026-09-23):     */
-/*  graphite top bar and drawer in both themes, the TRACKSIDE wordmark, */
+/*  graphite top bar and drawer in both themes, the two-tone wordmark,  */
 /*  the red Coach control, display-face nav entries.                    */
 /*  Presentational only — data in via props, writes out via callbacks. */
 /*  Every visible string arrives via the required `t` prop; no baked-  */
@@ -315,13 +315,15 @@ export function AppShell({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Wordmark — the product name as the export sets it: TRACK in the     */
-/*  chrome's foreground, SIDE in the signal red. Any other name renders */
-/*  whole, so the mark never splits a word it does not know.            */
+/*  Wordmark — the product name in two tones, as the export set its own  */
+/*  (TRACK|SIDE): the head of the word in the chrome's foreground, the   */
+/*  tail in the signal red. A name the map does not know renders whole, */
+/*  so the mark never splits a word at a place nobody chose.            */
 /* ------------------------------------------------------------------ */
 
 function Wordmark({ name, className }: { name: string; className: string }) {
-  const split = /^trackside$/i.test(name) ? 5 : name.length;
+  const SPLIT: Record<string, number> = { momentum: 5, trackside: 5 };
+  const split = SPLIT[name.toLowerCase()] ?? name.length;
   return (
     <span
       className={`font-display font-bold uppercase leading-none tracking-wide text-sidebar-foreground ${className}`}

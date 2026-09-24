@@ -48,7 +48,7 @@ export function CheckInReminder({
               type="button"
               data-action="open-check-in"
               onClick={onOpen}
-              className="bg-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal-foreground transition-opacity hover:opacity-90"
+              className="bg-signal h-10 px-4 font-body text-[15px] font-medium text-signal-foreground transition-opacity hover:opacity-90"
             >
               {t('offerAccept')}
             </button>
@@ -56,7 +56,7 @@ export function CheckInReminder({
               type="button"
               data-action="dismiss-check-in"
               onClick={onSkip}
-              className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+              className="border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               {t('offerDismiss')}
             </button>

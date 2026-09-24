@@ -130,10 +130,10 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         {messages.length === 0 && !inFlight ? (
           <div className="flex flex-col items-center gap-2 border border-dashed border-border bg-panel px-5 py-8 text-center">
-            <p className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
+            <p className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
               {t('emptyTitle')}
             </p>
-            <p className="text-sm leading-relaxed text-muted-foreground">{t('emptyBody')}</p>
+            <p className="text-base leading-relaxed text-muted-foreground">{t('emptyBody')}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
@@ -143,10 +143,10 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
 
             {inFlight && (
               <div className="flex flex-col items-end gap-1" data-sending>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                   {t('youLabel')}
                 </span>
-                <p className="max-w-[85%] whitespace-pre-wrap border border-dashed border-border bg-panel px-3 py-2 text-sm leading-relaxed text-muted-foreground">
+                <p className="max-w-[85%] whitespace-pre-wrap border border-dashed border-border bg-panel px-4 py-3 text-base leading-relaxed text-muted-foreground">
                   {inFlight}
                 </p>
               </div>
@@ -172,7 +172,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
 
       {visibleNotice.kind === 'planned' && (
         <div className="shrink-0 px-4 pt-2">
-          <div className="flex items-start gap-2 border-l-2 border-signal bg-panel px-3 py-2 text-sm text-foreground">
+          <div className="flex items-start gap-2 border-l-2 border-signal bg-panel px-3 py-2 text-base text-foreground">
             <Check className="mt-0.5 h-4 w-4 shrink-0 text-signal" />
             <span>{tWeekly('planned', { count: visibleNotice.count })}</span>
           </div>
@@ -184,7 +184,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
         // the composer the athlete is looking at, and a screen-reader user
         // otherwise gets no signal that their message did not send.
         <div className="shrink-0 px-4 pt-2" role="alert">
-          <div className="flex items-start gap-2 border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-foreground">
+          <div className="flex items-start gap-2 border border-destructive/40 bg-destructive/5 px-3 py-2 text-base text-foreground">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
             <span>
               {visibleNotice.kind === 'consentRequired' ? (
@@ -210,7 +210,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
 
       <footer className="shrink-0 border-t border-border px-4 py-3">
         {reference && (
-          <div className="mb-2 inline-flex items-center gap-2 border border-signal/40 bg-signal/5 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-signal">
+          <div className="mb-2 inline-flex items-center gap-2 border border-signal/40 bg-signal/5 px-2.5 py-1 font-body text-sm uppercase tracking-[0.12em] text-signal">
             {reference.label}
             <button
               type="button"
@@ -239,12 +239,12 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
             }}
             disabled={busy}
             placeholder={t('placeholder')}
-            className="max-h-32 min-h-9 flex-1 resize-none border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
+            className="max-h-40 min-h-11 flex-1 resize-none border border-border bg-panel px-3 py-2.5 text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={busy || draft.trim().length === 0}
-            className="flex shrink-0 items-center gap-1.5 bg-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity disabled:opacity-35"
+            className="flex shrink-0 items-center gap-1.5 bg-signal h-11 px-4 font-body text-base font-semibold text-signal-foreground transition-opacity disabled:opacity-35"
           >
             {t('send')}
             <CornerDownLeft className="h-3 w-3" />
@@ -266,10 +266,10 @@ function ChatRow({
   if (message.role === 'athlete') {
     return (
       <div className="flex flex-col items-end gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('youLabel')}
         </span>
-        <p className="max-w-[85%] whitespace-pre-wrap border border-border bg-panel px-3 py-2 text-sm leading-relaxed text-foreground">
+        <p className="max-w-[85%] whitespace-pre-wrap border border-border bg-panel px-4 py-3 text-base leading-relaxed text-foreground">
           {message.content}
         </p>
       </div>
@@ -280,16 +280,16 @@ function ChatRow({
   return (
     <div
       className={[
-        'flex flex-col gap-1.5 border-l-2 pl-3',
+        'flex flex-col gap-2 border-l-2 pl-4',
         isHeadCoach ? 'border-muted-foreground' : 'border-signal',
       ].join(' ')}
     >
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em]">
+      <span className="font-body text-sm uppercase tracking-[0.16em]">
         <span className={isHeadCoach ? 'text-foreground' : 'text-signal'}>
           {isHeadCoach ? t('headCoachLabel') : t('coachLabel')}
         </span>
       </span>
-      <p className="max-w-[62ch] whitespace-pre-wrap text-[15px] leading-[1.7] text-foreground">
+      <p className="max-w-[62ch] whitespace-pre-wrap text-base leading-[1.7] text-foreground">
         {message.content}
       </p>
       <CoachMessageFooter message={message} t={t} />

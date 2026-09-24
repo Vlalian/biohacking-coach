@@ -96,7 +96,7 @@ export function ShellChrome({
     () => ({
       // A proper noun, not prose — stays English in every locale (matches the
       // page <title> in layout.tsx), so it is not routed through next-intl.
-      appName: 'Trackside',
+      appName: 'Momentum',
       openNav: t('openNav'),
       closeNav: t('closeNav'),
       navLandmark: t('navLandmark'),

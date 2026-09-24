@@ -185,7 +185,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
         className="flex w-full max-w-lg flex-col gap-4 border border-border bg-panel p-6 shadow-2xl outline-none"
       >
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">{t('kicker')}</p>
+          <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">{t('kicker')}</p>
           <h2 id="coach-chores-title" className="text-lg font-semibold">
             {t('title', { count: chores.length })}
           </h2>

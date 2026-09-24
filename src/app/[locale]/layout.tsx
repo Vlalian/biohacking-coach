@@ -7,7 +7,7 @@ import { routing } from '@/i18n/routing';
 import { ThemeProvider } from '@/components/theme-provider';
 import '../globals.css';
 
-// The Trackside brand fonts (ported from the Lovable export): Inter is the
+// The Momentum brand fonts (ported from the Lovable export): Inter is the
 // base body font, Barlow is the display-adjacent body face, Oswald is the
 // display/headline face (bold italic uppercase in the export; Bebas Neue stays
 // as its fallback), JetBrains Mono is the label/mono face. Each exposes
@@ -51,7 +51,7 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: 'Metadata' });
 
   return {
-    title: 'Trackside',
+    title: 'Momentum',
     description: t('description'),
   };
 }

@@ -62,7 +62,7 @@ export default async function CoachRosterPage({
                 className="flex items-center justify-between p-4 hover:bg-neutral-50 dark:hover:bg-neutral-900"
               >
                 <span className="font-medium">{entry.name}</span>
-                <span className="flex gap-2 text-xs text-neutral-500">
+                <span className="flex gap-2 text-[13px] text-neutral-500">
                   {entry.awaitingReview && (
                     <span className="rounded-full border border-signal px-2 py-0.5 text-signal">
                       {t('weekToReview')}

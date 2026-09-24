@@ -127,11 +127,11 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
 
   return (
     <section
-      className="mb-5 rounded-lg border border-signal/40 bg-signal/5 px-5 py-4"
+      className="mb-5 border-l-4 border-signal bg-panel px-5 py-4 shadow-sm"
       data-draft-id={draft.id}
       aria-live="polite"
     >
-      <h2 className="font-display text-xl tracking-[0.04em] text-foreground">{t('title')}</h2>
+      <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
       <p className="mt-1 font-body text-sm text-muted-foreground">
         {t('lead', { count: draft.sessions.length, week: draft.weekStart })}
       </p>
@@ -144,7 +144,7 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
             />
             <div className="min-w-0 flex-1">
               <div className="font-body text-sm text-foreground">{sessionLine(s)}</div>
-              {s.note && <div className="mt-0.5 font-body text-xs text-muted-foreground">{s.note}</div>}
+              {s.note && <div className="mt-0.5 font-body text-[13px] text-muted-foreground">{s.note}</div>}
             </div>
           </li>
         ))}
@@ -156,7 +156,7 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
             onClick={accept}
             disabled={pending}
             data-decision="accept"
-            className="rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50"
           >
             {t('accept')}
           </button>
@@ -165,7 +165,7 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
             onClick={discuss}
             disabled={pending}
             data-decision="discuss"
-            className="rounded border border-border px-3 py-1 text-sm text-foreground disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
           >
             {t('discuss')}
           </button>
@@ -174,13 +174,13 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
             onClick={decline}
             disabled={pending}
             data-decision="decline"
-            className="rounded border border-border px-3 py-1 text-sm text-muted-foreground disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center border border-border px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
           >
             {t('decline')}
           </button>
         </div>
       )}
-      {line && <p className="mt-2 font-body text-sm text-foreground">{t(line.key, line.values)}</p>}
+      {line && <p className="mt-2 font-body text-base text-foreground">{t(line.key, line.values)}</p>}
     </section>
   );
 }

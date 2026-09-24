@@ -101,7 +101,7 @@ export function ConsentScreen({
       <header className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold">{heading}</h1>
         <p className="text-sm text-neutral-500">{intro}</p>
-        <p className="text-xs leading-relaxed text-neutral-500">{copy.controller}</p>
+        <p className="text-sm leading-relaxed text-neutral-500">{copy.controller}</p>
       </header>
 
       <ul className="flex flex-col gap-3">
@@ -145,7 +145,7 @@ export function ConsentScreen({
                     className={
                       isGranted
                         ? 'text-xs font-medium text-green-700 dark:text-green-500'
-                        : 'text-xs text-neutral-500'
+                        : 'text-[13px] text-neutral-500'
                     }
                   >
                     {isGranted ? copy.grantedState : copy.notGrantedState}
@@ -181,7 +181,7 @@ export function ConsentScreen({
               )}
 
               {mode === 'manage' && required && isGranted && (
-                <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+                <p className="mt-1 text-[13px] text-amber-700 dark:text-amber-500">
                   {copy.withdrawRequiredWarning}
                 </p>
               )}
@@ -201,7 +201,7 @@ export function ConsentScreen({
             {copy.agree}
           </button>
           {!allRequiredChecked && (
-            <p className="text-xs text-neutral-500">{copy.requiredHint}</p>
+            <p className="text-[13px] text-neutral-500">{copy.requiredHint}</p>
           )}
         </div>
       ) : (

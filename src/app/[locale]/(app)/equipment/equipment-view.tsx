@@ -65,15 +65,15 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
     <div className="w-full max-w-4xl">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">{t('eyebrow')}</p>
-          <h1 className="mt-2 font-display text-5xl tracking-[0.04em] text-foreground">{t('title')}</h1>
+          <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">{t('eyebrow')}</p>
+          <h1 className="mt-2 font-display text-5xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h1>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">{t('lede')}</p>
         </div>
         {items.length > 0 && (
           <button
             type="button"
             onClick={() => setForm({ open: true, mode: 'create' })}
-            className="flex items-center gap-2 border border-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground"
+            className="flex items-center gap-2 border border-signal h-11 px-4 font-body text-base font-semibold text-signal transition-colors hover:bg-signal hover:text-signal-foreground"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             {t('addItem')}
@@ -90,7 +90,7 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
       {items.length === 0 && (
         <div className="mt-10 border border-dashed border-border bg-panel px-8 py-14 text-center">
           <Bike className="mx-auto h-8 w-8 text-signal" aria-hidden="true" />
-          <h2 className="mt-4 font-display text-3xl tracking-[0.04em] text-foreground">
+          <h2 className="mt-4 font-display text-3xl font-bold uppercase italic tracking-[0.03em] text-foreground">
             {t('emptyTitle')}
           </h2>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
@@ -99,7 +99,7 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
           <button
             type="button"
             onClick={() => setForm({ open: true, mode: 'create' })}
-            className="mt-6 inline-flex items-center gap-2 border border-signal px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground"
+            className="mt-6 inline-flex items-center gap-2 border border-signal px-4 py-2.5 font-body text-sm uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             {t('emptyCta')}
@@ -117,10 +117,10 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
               <section key={cat}>
                 <div className="flex items-center gap-2">
                   <Icon className="h-3.5 w-3.5 text-signal" aria-hidden="true" />
-                  <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                  <h2 className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
                     {t(`category_${cat}`)}
                   </h2>
-                  <span className="font-mono text-[10px] text-muted-foreground">{catItems.length}</span>
+                  <span className="font-body text-sm text-muted-foreground">{catItems.length}</span>
                 </div>
                 <ul className="mt-3 divide-y divide-border border border-border bg-panel">
                   {catItems.map((item) => (
@@ -133,7 +133,7 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
                         {item.details && (
                           <p className="mt-1 text-sm text-muted-foreground">{item.details}</p>
                         )}
-                        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        <p className="mt-1.5 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                           {t('added')} {item.addedDate}
                         </p>
                       </div>
@@ -234,7 +234,7 @@ function EquipmentForm({
         className="w-full max-w-md border border-border bg-panel outline-none"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
+          <h2 className="font-body text-sm uppercase tracking-[0.24em] text-signal">
             {item ? t('editItem') : t('addItem')}
           </h2>
           <button
@@ -256,7 +256,7 @@ function EquipmentForm({
           }}
         >
           <fieldset>
-            <legend className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <legend className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('fieldCategory')}
             </legend>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -266,7 +266,7 @@ function EquipmentForm({
                   type="button"
                   onClick={() => setCategory(cat)}
                   className={[
-                    'border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors',
+                    'border h-10 px-4 font-body text-[15px] font-medium transition-colors',
                     category === cat
                       ? 'border-signal text-signal'
                       : 'border-border text-muted-foreground hover:text-foreground',
@@ -279,7 +279,7 @@ function EquipmentForm({
           </fieldset>
 
           <label className="block">
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('fieldName')}
             </span>
             <input
@@ -291,7 +291,7 @@ function EquipmentForm({
           </label>
 
           <label className="block">
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('fieldDetails')}
             </span>
             <textarea
@@ -307,14 +307,14 @@ function EquipmentForm({
             <button
               type="button"
               onClick={onCancel}
-              className="border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+              className="border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"
             >
               {t('cancel')}
             </button>
             <button
               type="submit"
               disabled={!name.trim() || pending}
-              className="border border-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-40"
+              className="border border-signal h-11 px-4 font-body text-base font-semibold text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-40"
             >
               {t('save')}
             </button>

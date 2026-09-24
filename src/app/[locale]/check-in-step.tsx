@@ -23,7 +23,7 @@ function ScoreRow({
 }) {
   return (
     <div>
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </span>
       <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label={label}>
@@ -34,7 +34,7 @@ function ScoreRow({
             disabled={disabled}
             aria-pressed={value === score}
             onClick={() => onChange(score)}
-            className={`h-8 w-8 border font-mono text-[11px] transition-colors disabled:opacity-40 ${
+            className={`h-8 w-8 border font-body text-sm transition-colors disabled:opacity-40 ${
               value === score
                 ? 'border-signal bg-signal text-signal-foreground'
                 : 'border-border text-muted-foreground hover:text-foreground'
@@ -115,7 +115,7 @@ export function CheckInStep({
       <ScoreRow label={t('sleep')} value={sleepQuality} onChange={setSleepQuality} disabled={pending} />
 
       <label className="block">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('signal')}
         </span>
         {/*
@@ -124,7 +124,7 @@ export function CheckInStep({
           whose contents reach the model verbatim - so what it is for, and what it
           is not for, belongs where they are typing rather than in a privacy page.
         */}
-        <p className="mt-1 font-body text-xs text-muted-foreground">{t('signalHint')}</p>
+        <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('signalHint')}</p>
         <textarea
           value={notableSignal}
           onChange={(e) => setNotableSignal(e.target.value)}
@@ -132,7 +132,7 @@ export function CheckInStep({
           maxLength={500}
           disabled={pending}
           placeholder={t('signalPlaceholder')}
-          className="mt-1.5 w-full resize-none border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
+          className="mt-1.5 w-full resize-none border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
       </label>
 
@@ -140,7 +140,7 @@ export function CheckInStep({
         <button
           type="submit"
           disabled={pending || !complete}
-          className="inline-flex items-center gap-2 bg-signal px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="inline-flex items-center gap-2 bg-signal px-4 py-2.5 font-body text-sm uppercase tracking-[0.24em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {t('submit')}

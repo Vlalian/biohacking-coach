@@ -108,7 +108,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
   return (
     <section className="w-full max-w-3xl rounded-lg border p-4" data-version={current.version}>
       <h2 className="mb-1 text-lg font-semibold">{t('title')}</h2>
-      <p className="mb-3 font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
+      <p className="mb-3 font-mono text-sm uppercase tracking-[0.24em] text-muted-foreground">
         {t('toward', { race: current.raceName, date: current.raceDate })}
       </p>
 
@@ -124,7 +124,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
           {current.blocks.map((block, i) => (
             <li key={i + 1} className="flex items-baseline justify-between gap-3 text-sm">
               <span>{block.name}</span>
-              <span className="font-mono text-xs text-muted-foreground">{block.endDate}</span>
+              <span className="font-mono text-sm text-muted-foreground">{block.endDate}</span>
             </li>
           ))}
         </ol>
@@ -163,7 +163,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
                   </span>
                 )}
               </label>
-              <span className="pb-1 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <span className="pb-1 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
                 {t(AUTHOR_KEY[block.authoredBy])}
               </span>
               <button

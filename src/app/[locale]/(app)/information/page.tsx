@@ -63,10 +63,10 @@ export default async function InformationPage({
   return (
     <div className="flex flex-col items-center gap-8 p-6 sm:p-8">
       <header className="flex w-full max-w-5xl flex-col items-start gap-1 border-b border-border pb-6">
-        <h1 className="font-display text-4xl leading-none tracking-[0.03em] text-foreground">
+        <h1 className="font-display text-4xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
           {t('title')}
         </h1>
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <p className="font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
           {t('subtitle')}
         </p>
       </header>

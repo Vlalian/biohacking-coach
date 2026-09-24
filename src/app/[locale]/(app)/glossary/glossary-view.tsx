@@ -58,7 +58,7 @@ export function GlossaryView() {
     <div className="w-full max-w-5xl divide-y divide-border border border-border bg-panel">
       {SECTIONS.map((section, index) => (
         <details key={section.id} open={index === 0} className="group px-5 py-4">
-          <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none font-body text-sm uppercase tracking-[0.24em] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden">
             <ChevronRight
               aria-hidden="true"
               className="mr-2 inline-block size-3 transition-transform group-open:rotate-90"

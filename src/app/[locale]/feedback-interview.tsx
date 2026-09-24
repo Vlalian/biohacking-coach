@@ -99,7 +99,7 @@ export function FeedbackInterview({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl leading-none tracking-[0.03em] text-foreground">
+        <h1 className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
           {t('title')}
         </h1>
         <p className="max-w-[62ch] font-body text-sm leading-relaxed text-muted-foreground">
@@ -111,7 +111,7 @@ export function FeedbackInterview({
         <div className="flex flex-col gap-5 px-4 py-5">
           {messages.length === 0 && !pending ? (
             <div className="flex flex-col items-center gap-2 border border-dashed border-border px-5 py-8 text-center">
-              <p className="font-display text-xl leading-none tracking-[0.03em] text-foreground">
+              <p className="font-display text-xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
                 {t('emptyTitle')}
               </p>
               <p className="text-sm leading-relaxed text-muted-foreground">{t('emptyBody')}</p>
@@ -161,12 +161,12 @@ export function FeedbackInterview({
             }}
             disabled={pending}
             placeholder={t('placeholder')}
-            className="max-h-32 min-h-9 flex-1 resize-none border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
+            className="max-h-32 min-h-11 flex-1 resize-none border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-signal"
           />
           <button
             type="submit"
             disabled={pending || draft.trim().length === 0}
-            className="flex shrink-0 items-center gap-1.5 bg-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity disabled:opacity-35"
+            className="flex shrink-0 items-center gap-1.5 bg-signal h-11 px-4 font-body text-base font-semibold text-signal-foreground transition-opacity disabled:opacity-35"
           >
             {t('send')}
             <CornerDownLeft className="h-3 w-3" />
@@ -215,7 +215,7 @@ function FallbackBox({
 
   return (
     <section className="flex flex-col gap-2 border border-border bg-panel p-4">
-      <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+      <h2 className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
         {t('fallbackTitle')}
       </h2>
       <p className="font-body text-sm text-muted-foreground">{t('fallbackBody')}</p>
@@ -236,7 +236,7 @@ function FallbackBox({
           <button
             type="submit"
             disabled={pending || body.trim().length === 0}
-            className="self-start border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-foreground transition-opacity disabled:opacity-35"
+            className="self-start border border-border h-11 px-4 font-body text-base font-semibold text-foreground transition-opacity disabled:opacity-35"
           >
             {t('fallbackSend')}
           </button>
@@ -268,7 +268,7 @@ function InterviewRow({
   if (message.role === 'athlete') {
     return (
       <div className="flex flex-col items-end gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('youLabel')}
         </span>
         <p className="max-w-[85%] whitespace-pre-wrap border border-border bg-background px-3 py-2 text-sm leading-relaxed text-foreground">
@@ -280,7 +280,7 @@ function InterviewRow({
 
   return (
     <div className="flex flex-col gap-1.5 border-l-2 border-muted-foreground pl-3">
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('interviewerLabel')}
       </span>
       <p className="max-w-[62ch] whitespace-pre-wrap text-[15px] leading-[1.7] text-foreground">

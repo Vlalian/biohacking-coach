@@ -120,11 +120,11 @@ export function CoachThread({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <header className="shrink-0 border-b border-border px-5 py-3">
         <div className="flex items-baseline justify-between gap-3">
-          <span className="font-display text-2xl leading-none tracking-[0.04em] text-foreground">
+          <span className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
             {t('title')}
           </span>
           {athleteFirstName && (
-            <div className="text-right font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="text-right font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               <div>{athleteFirstName}</div>
               {raceTarget && <div className="text-signal">{raceTarget}</div>}
             </div>

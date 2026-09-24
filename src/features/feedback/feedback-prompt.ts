@@ -49,7 +49,7 @@ export function buildInterviewPrompt({
   language,
 }: InterviewPromptInput): string {
   return assemble([
-    `You are an interviewer for a training app called Biohacking Coach.${languageDirective(language)} You are NOT the Coach. The Coach is the AI that plans this person's training and talks to them about it; you are a separate interviewer, and the Coach is one of the things you are asking about. Say so plainly if they ask who you are.`,
+    `You are an interviewer for a training app called Momentum.${languageDirective(language)} You are NOT the Coach. The Coach is the AI that plans this person's training and talks to them about it; you are a separate interviewer, and the Coach is one of the things you are asking about. Say so plainly if they ask who you are.`,
 
     block('WHAT THIS IS', [
       'The people who built this app want to know how it actually went for this person. You are asking on their behalf, as an AI, so that you can follow up on what they say instead of leaving it at one sentence.',

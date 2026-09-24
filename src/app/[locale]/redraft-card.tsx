@@ -86,7 +86,7 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
       data-redraft-card={weekStart}
       aria-live="polite"
     >
-      <h2 className="font-display text-xl tracking-[0.04em] text-foreground">{t('title')}</h2>
+      <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
       <p className="mt-1 font-body text-sm text-muted-foreground">{t('lead', { week: weekStart })}</p>
       {!pending && (
         <div className="mt-3">

@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Trackside brand fonts, loaded via next/font/google in the locale layout
+  /* Momentum brand fonts, loaded via next/font/google in the locale layout
      and exposed there as CSS variables (--font-inter etc.) on <html>. Literal
      var() references here, not a self-referencing --font-sans: Tailwind v4
      resolves @theme inline at parse time, so `--font-sans: var(--font-sans)`
@@ -68,7 +68,7 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Trackside theme — ported from the Lovable export (iron-insight-grid,
+/* Momentum theme — ported from the Lovable export (iron-insight-grid,
    2026-09-23): a bright graphite field, a dark graphite sidebar in both
    themes, and the signal red. The Session Type palette matches CONTEXT.md
    exactly (endurance blue, intensity red, tempo amber, recovery green, rest
