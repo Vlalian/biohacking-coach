@@ -145,3 +145,16 @@ export async function commitDayChoice(
   if (result.ok) return { state: dayChoice(confirmed, { type: 'written' }), error: null };
   return { state: dayChoice(confirmed, { type: 'cancel' }), error: result.reason };
 }
+
+/**
+ * Got it, as the card runs it (`training-architecture/41`, review). The fold
+ * closes only if the flag was actually stored: a refused write leaves the
+ * instruction where it is and hands back the reason, the way a refused day
+ * change does. Pure apart from the `write` it is given.
+ */
+export async function commitDismissal(
+  write: () => Promise<DayWriteResult>,
+): Promise<{ dismissed: boolean; error: string | null }> {
+  const result = await write();
+  return result.ok ? { dismissed: true, error: null } : { dismissed: false, error: result.reason };
+}

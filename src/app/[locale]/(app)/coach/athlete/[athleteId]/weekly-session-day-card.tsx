@@ -8,6 +8,7 @@ import { effectiveWeeklySessionDay } from '@/features/coach/weekly-offer';
 import {
   coachSeesDay,
   commitDayChoice,
+  commitDismissal,
   dayChoice,
   dayMessageKey,
   nextDraftDates,
@@ -105,8 +106,10 @@ export function WeeklySessionDayCard({
 
   const dismiss = () => {
     startTransition(async () => {
-      await dismissWeekCycleAction(athleteId);
-      setDismissed(true);
+      setNotice(null);
+      const { dismissed: done, error } = await commitDismissal(() => dismissWeekCycleAction(athleteId));
+      setDismissed(done);
+      if (error) setNotice(t('error', { reason: error }));
     });
   };
 

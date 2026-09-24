@@ -38,8 +38,9 @@ export default async function CoachAthletePlanPage({
   const preferredName = await getPreferredNameForAthlete(athleteId);
   // Whether this coach has been walked through the week cycle
   // (training-architecture/41). Read from the *user*, not the coach row: the
-  // cycle is the same for every athlete, so it is taught once. `Coach` carries
-  // no userId by design (ADR 0006), hence the session read here.
+  // cycle is the same for every athlete, so it is taught once. The guard hands
+  // back a `Coach` (`features/coach/coach.ts`), which is id and layout and
+  // nothing else, so the signed-in user comes from the session instead.
   const userId = await resolveUserId();
   const instructed = userId ? (await getUiPrefs(userId)).weekCycleInstructed === true : false;
 

@@ -42,25 +42,29 @@ export async function getUiPrefs(userId: string): Promise<UiPrefs> {
   return (rows[0]?.uiPrefs as UiPrefs | null) ?? {};
 }
 
+/** The whole prefs object, as stored — the one write in this module. */
+async function writeUiPrefs(userId: string, prefs: UiPrefs): Promise<void> {
+  await getDb().update(user).set({ uiPrefs: prefs }).where(eq(user.id, userId));
+}
+
+/**
+ * One preference, merged over whatever else is stored. Every setter that only
+ * adds a key goes through here, so the merge rule is written once rather than
+ * once per preference — a setter that forgot to spread would silently drop the
+ * others.
+ */
+async function patchUiPrefs(userId: string, patch: UiPrefs): Promise<void> {
+  await writeUiPrefs(userId, { ...(await getUiPrefs(userId)), ...patch });
+}
+
 /** Sets the chosen language, merging over any other stored prefs. */
-export async function setUiLanguage(
-  userId: string,
-  language: string,
-): Promise<void> {
-  const current = await getUiPrefs(userId);
-  await getDb()
-    .update(user)
-    .set({ uiPrefs: { ...current, language } })
-    .where(eq(user.id, userId));
+export async function setUiLanguage(userId: string, language: string): Promise<void> {
+  await patchUiPrefs(userId, { language });
 }
 
 /** Records that this user has seen the week cycle, merging over any other stored prefs. */
 export async function setWeekCycleInstructed(userId: string): Promise<void> {
-  const current = await getUiPrefs(userId);
-  await getDb()
-    .update(user)
-    .set({ uiPrefs: { ...current, weekCycleInstructed: true } })
-    .where(eq(user.id, userId));
+  await patchUiPrefs(userId, { weekCycleInstructed: true });
 }
 
 /**
@@ -75,7 +79,8 @@ export async function setPreferredName(
   const next: UiPrefs = { ...(await getUiPrefs(userId)) };
   if (preferredName === null) delete next.preferredName;
   else next.preferredName = preferredName;
-  await getDb().update(user).set({ uiPrefs: next }).where(eq(user.id, userId));
+  // Not `patchUiPrefs`: clearing removes the key, and a patch can only add one.
+  await writeUiPrefs(userId, next);
 }
 
 /**
