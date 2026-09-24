@@ -112,8 +112,10 @@
      opaque grey as the page's, which reads on both fields. */
   --sidebar: oklch(0.16 0.006 260);
   --sidebar-foreground: oklch(0.94 0.002 260);
-  --sidebar-primary: oklch(0.55 0.22 25);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
+  /* The accent as text on the graphite chrome: the page's signal red measures
+     3.6 : 1 there, so the chrome carries the brighter red the dark theme uses. */
+  --sidebar-primary: oklch(0.68 0.24 25);
+  --sidebar-primary-foreground: oklch(0.12 0.006 260);
   --sidebar-accent: oklch(0.23 0.006 260);
   --sidebar-accent-foreground: oklch(0.99 0 0);
   --sidebar-border: oklch(0.62 0.01 260);

@@ -100,6 +100,18 @@ export function formatFullDate(key: string, locale: string): string {
  * Whole days from `from` to `to`, negative when `to` is earlier. Keys are
  * UTC midnights, so a DST change never makes a day 23 or 25 hours long here.
  */
+/**
+ * ISO-8601 week number of the Monday `mondayKey` names, in UTC. The Thursday
+ * of the week decides which year it belongs to, which is what makes the last
+ * days of December week 1 in some years and week 53 in others.
+ */
+export function isoWeekNumber(mondayKey: string): number {
+  const thursday = new Date(`${mondayKey}T00:00:00Z`);
+  thursday.setUTCDate(thursday.getUTCDate() + 3);
+  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  return Math.floor((thursday.getTime() - yearStart) / 86_400_000 / 7) + 1;
+}
+
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }

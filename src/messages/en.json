@@ -773,7 +773,7 @@
   },
   "BlockStrip": {
     "weekOf": "week {week} of {weeks}",
-    "weeksToRace": "{weeks, plural, =1 {1 week} other {# weeks}} to {race}"
+    "weeksToRace": "{weeks, plural, =1 {week} other {weeks}} to {race}"
   },
   "CoachChores": {
     "kicker": "Waiting for you",

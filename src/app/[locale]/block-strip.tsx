@@ -48,13 +48,13 @@ export function BlockStrip({
   const progress = weeks > 0 ? Math.min(100, Math.round((week / weeks) * 100)) : 0;
 
   return (
-    <section className="w-full max-w-[1500px] overflow-hidden border-l-4 border-signal bg-primary px-6 py-5 text-primary-foreground">
+    <section className="w-full max-w-[1500px] overflow-hidden border-l-4 border-signal bg-sidebar px-6 py-5 text-sidebar-foreground">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <p className="flex items-baseline gap-3">
-          <span className="font-display text-5xl font-bold italic leading-none text-signal">
+          <span className="font-display text-5xl font-bold italic leading-none text-sidebar-primary">
             {weeksToRace}
           </span>
-          <span className="font-body text-base uppercase tracking-[0.16em] text-primary-foreground">
+          <span className="font-body text-base uppercase tracking-[0.16em] text-sidebar-foreground">
             {t('weeksToRace', { weeks: weeksToRace, race: race.name })}
           </span>
         </p>
@@ -62,12 +62,12 @@ export function BlockStrip({
           <span className="font-display text-lg font-bold uppercase italic tracking-[0.04em]">
             {block.name}
           </span>
-          <span className="font-body text-sm uppercase tracking-[0.14em] text-primary-foreground">
+          <span className="font-body text-sm uppercase tracking-[0.14em] text-sidebar-foreground">
             {t('weekOf', { week, weeks })}
           </span>
         </p>
       </div>
-      <div className="mt-4 h-2 w-full bg-primary-foreground/15" aria-hidden="true">
+      <div className="mt-4 h-2 w-full bg-sidebar-foreground/15" aria-hidden="true">
         <div className="h-full bg-signal" style={{ width: `${progress}%` }} />
       </div>
     </section>

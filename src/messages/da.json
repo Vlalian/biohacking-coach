@@ -773,7 +773,7 @@
   },
   "BlockStrip": {
     "weekOf": "uge {week} af {weeks}",
-    "weeksToRace": "{weeks, plural, =1 {1 uge} other {# uger}} til {race}"
+    "weeksToRace": "{weeks, plural, =1 {uge} other {uger}} til {race}"
   },
   "CoachChores": {
     "kicker": "Venter på dig",

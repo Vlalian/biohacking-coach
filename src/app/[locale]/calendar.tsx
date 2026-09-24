@@ -5,7 +5,7 @@ import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { Bandage, ChevronDown, ChevronsUpDown, Pill, Plus, type LucideIcon } from 'lucide-react';
 import type { Session } from '@/features/session/session';
-import { dateKey, weekStartOf } from '@/lib/date';
+import { dateKey, isoWeekNumber, weekStartOf } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
 import type { MoveResult } from '@/features/session/session-move';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
@@ -122,16 +122,6 @@ export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
   'not-linked': 'bounceError',
   'not-a-coach': 'bounceError',
 };
-
-/** ISO-8601 week number of the Monday `mondayKey` names, in UTC. */
-export function isoWeekNumber(mondayKey: string): number {
-  const d = new Date(`${mondayKey}T00:00:00Z`);
-  // Thursday of the same ISO week decides the year the week belongs to.
-  const thursday = new Date(d);
-  thursday.setUTCDate(d.getUTCDate() + 3);
-  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
-  return Math.floor((thursday.getTime() - yearStart) / 86_400_000 / 7) + 1;
-}
 
 type Day = {
   date: string;
@@ -693,7 +683,7 @@ function WeekRow({
           // The chevron's rotation is the only cue that a week is expanded, and
           // rotation is invisible to a screen reader.
           aria-expanded={expanded}
-          className="relative flex items-start gap-1 overflow-hidden bg-foreground px-2.5 py-3 text-left font-display text-base font-bold uppercase italic tracking-[0.04em] text-primary-foreground outline-none transition-colors hover:text-signal focus-visible:text-signal focus-visible:ring-1 focus-visible:ring-signal md:flex-col"
+          className="relative flex items-start gap-1 overflow-hidden bg-sidebar px-2.5 py-3 text-left font-display text-base font-bold uppercase italic tracking-[0.04em] text-sidebar-foreground outline-none transition-colors hover:text-sidebar-primary focus-visible:text-sidebar-primary focus-visible:ring-1 focus-visible:ring-sidebar-primary md:flex-col"
         >
           <span className="absolute left-0 top-0 h-full w-[3px] bg-signal" aria-hidden="true" />
           <ChevronDown

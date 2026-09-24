@@ -157,6 +157,13 @@ describe.each(['light', 'dark'] as const)('%s theme holds the contrast bar', (th
     expect(contrast(t['--muted-foreground'], t['--card'])).toBeGreaterThanOrEqual(7);
   });
 
+  // The chrome is graphite in both themes since the Momentum port (2026-09-24),
+  // so the tokens that sit on it as text are measured against it, not the page.
+  it.each(['--sidebar-foreground', '--sidebar-primary'])('%s on the sidebar is at least 4.5', (name) => {
+    const t = tokens();
+    expect(contrast(t[name], t['--sidebar'])).toBeGreaterThanOrEqual(4.5);
+  });
+
   it.each(['--border', '--input', '--ring', '--sidebar-border'])('%s is opaque and at least 3.0 on background and card', (name) => {
     const t = tokens();
     expect(t[name].alpha).toBe(1);

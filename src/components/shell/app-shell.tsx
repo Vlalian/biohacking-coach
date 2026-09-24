@@ -201,7 +201,7 @@ export function AppShell({
             <span className="hidden sm:inline">{t.coachOverlayTitle}</span>
           </button>
           {isCoachedMode && (
-            <span className="hidden border border-signal px-2 py-1 font-body text-sm font-semibold uppercase tracking-[0.18em] text-signal sm:inline">
+            <span className="hidden border border-sidebar-primary px-2 py-1 font-body text-sm font-semibold uppercase tracking-[0.18em] text-sidebar-primary sm:inline">
               {t.coachedModeBadge}
             </span>
           )}
@@ -259,7 +259,7 @@ export function AppShell({
             </button>
           </div>
           <div className="px-5 pb-1 pt-4">
-            <span className="font-body text-xs font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/70">
+            <span className="font-body text-[13px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/70">
               {t.navLandmark}
             </span>
           </div>
@@ -322,14 +322,14 @@ export function AppShell({
 /* ------------------------------------------------------------------ */
 
 function Wordmark({ name, className }: { name: string; className: string }) {
-  const SPLIT: Record<string, number> = { momentum: 5, trackside: 5 };
+  const SPLIT: Record<string, number> = { momentum: 5 };
   const split = SPLIT[name.toLowerCase()] ?? name.length;
   return (
     <span
       className={`font-display font-bold uppercase leading-none tracking-wide text-sidebar-foreground ${className}`}
     >
       {name.slice(0, split)}
-      {split < name.length && <span className="text-signal">{name.slice(split)}</span>}
+      {split < name.length && <span className="text-sidebar-primary">{name.slice(split)}</span>}
     </span>
   );
 }
@@ -384,7 +384,7 @@ function CoachOverlay({
         aria-label={t.moveCoachOverlay}
         className="flex cursor-grab touch-none items-center justify-between border-b border-sidebar-border bg-sidebar px-4 py-3 text-sidebar-foreground active:cursor-grabbing"
       >
-        <span className="flex items-center gap-2 font-display text-base font-semibold uppercase tracking-wide text-signal">
+        <span className="flex items-center gap-2 font-display text-base font-semibold uppercase tracking-wide text-sidebar-primary">
           <GripHorizontal className="h-4 w-4 text-sidebar-foreground/70" />
           {title}
         </span>

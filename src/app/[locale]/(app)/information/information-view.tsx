@@ -62,7 +62,9 @@ export function InformationView({
 }: {
   dataset: InfoDataset;
   initialLayout: InformationViewLayout;
-  /** The header's name; omitted on the Head Coach's Data tab, which names the athlete above. */
+  /** The headline: the athlete's first name on their own page, the name the
+   *  athlete gave the app on the Head Coach's Data tab. Falls back to the
+   *  View's title when neither is known. */
   athleteName?: string;
   /**
    * The persistence action. The athlete page passes the action that saves their
