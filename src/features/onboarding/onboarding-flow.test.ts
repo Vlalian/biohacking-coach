@@ -10,6 +10,10 @@ import {
   coachGreeting,
   completeProfile,
   cursorAfter,
+  chosenFirstDay,
+  defaultFirstDay,
+  firstDayChoiceOf,
+  firstDayDate,
   nextStep,
   previousStep,
   stepAfter,
@@ -87,6 +91,7 @@ describe('the questionnaire shape', () => {
       'race',
       'adaptive',
       'constraints',
+      'firstDay',
     ]);
   });
 });
@@ -131,7 +136,10 @@ describe('nextStep', () => {
       raceDate: '2027-08-15',
     };
     expect(nextStep(answers, { name: true, adaptive: true })).toBe('constraints');
-    expect(nextStep(answers, { name: true, adaptive: true, constraints: true })).toBe('done');
+    expect(nextStep(answers, { name: true, adaptive: true, constraints: true })).toBe('firstDay');
+    expect(
+      nextStep({ ...answers, firstDay: 'today' }, { name: true, adaptive: true, constraints: true }),
+    ).toBe('done');
   });
 
   it('is the resume point: an interrupted flow restarts at the first unanswered step', () => {
@@ -194,7 +202,8 @@ describe('previousStep / stepAfter — the way back, and the walk forward again 
     expect(stepAfter('hours')).toBe('race');
     expect(stepAfter('race')).toBe('adaptive');
     expect(stepAfter('adaptive')).toBe('constraints');
-    expect(stepAfter('constraints')).toBe('done');
+    expect(stepAfter('constraints')).toBe('firstDay');
+    expect(stepAfter('firstDay')).toBe('done');
   });
 
   it('names the adaptive fields each level asks, so a walk after a level change clears the other level’s answers (review, 2026-09-18)', () => {
@@ -219,7 +228,7 @@ describe('previousStep / stepAfter — the way back, and the walk forward again 
 
 describe('past races and hours — training-architecture/35', () => {
   it('the steps are language, name, pastRaces, distance, hours, race, adaptive, constraints', () => {
-    expect(ONBOARDING_STEPS).toEqual(['language', 'name', 'pastRaces', 'distance', 'hours', 'race', 'adaptive', 'constraints']);
+    expect(ONBOARDING_STEPS).toEqual(['language', 'name', 'pastRaces', 'distance', 'hours', 'race', 'adaptive', 'constraints', 'firstDay']);
   });
 
   it('pastRaces with two entries stores them and derives intermediate', () => {
@@ -491,7 +500,9 @@ describe('a Race is optional, and saying so is an answer', () => {
 
     const rest = { name: true, adaptive: true, constraints: true };
     expect(nextStep(nameOnly, rest)).toBe('race');
-    expect(nextStep({ ...nameOnly, raceDate: '2027-08-15' }, rest)).toBe('done');
+    // Past the race step the walk continues to the closing question, not to done.
+    expect(nextStep({ ...nameOnly, raceDate: '2027-08-15' }, rest)).toBe('firstDay');
+    expect(nextStep({ ...nameOnly, raceDate: '2027-08-15', firstDay: 'today' }, rest)).toBe('done');
   });
 
   it('refuses a race without a date, and a date that is not one', () => {
@@ -721,6 +732,16 @@ describe('OPTION_MESSAGE_KEY', () => {
   const catalogues = { en, da } as const;
   const keys = Object.values(OPTION_MESSAGE_KEY);
 
+  it('gives the closing first-day question and its three answers a string in every locale', () => {
+    // `training-architecture/36`. The step renders its own labels rather than
+    // going through OPTION_MESSAGE_KEY, so the loop below cannot see it.
+    for (const key of ['stepFirstDay', 'qFirstDay', 'qFirstDaySub', 'firstDayToday', 'firstDayTomorrow', 'firstDayNextMonday']) {
+      for (const [locale, catalogue] of Object.entries(catalogues)) {
+        expect((catalogue.Onboarding as Record<string, string>)[key], `${locale}.${key}`).toBeTruthy();
+      }
+    }
+  });
+
   it('gives every rendered option a message key', () => {
     const labelled = [
       ...ONBOARDING_OPTIONS.sportBackground,
@@ -755,5 +776,84 @@ describe('OPTION_MESSAGE_KEY', () => {
     for (const catalogue of Object.values(catalogues)) {
       expect((catalogue.Onboarding as Record<string, string>).opt10plus).toBeUndefined();
     }
+  });
+});
+
+describe('the first training day (training-architecture/36)', () => {
+  it('asks for the first day after the constraints step, and only then is done', () => {
+    const answers = {
+      language: 'da',
+      pastRaces: [],
+      experienceLevel: 'beginner' as const,
+      raceDistance: 'Full' as const,
+      hoursPerWeek: 8,
+      raceTarget: 'IM CPH',
+      raceDate: '2027-08-15',
+    };
+    const submitted = { name: true, adaptive: true, constraints: true };
+
+    expect(ONBOARDING_STEPS.at(-1)).toBe('firstDay');
+    expect(nextStep(answers, submitted)).toBe('firstDay');
+    expect(nextStep({ ...answers, firstDay: 'today' }, submitted)).toBe('done');
+    expect(previousStep('firstDay')).toBe('constraints');
+    expect(stepAfter('constraints')).toBe('firstDay');
+    expect(stepAfter('firstDay')).toBe('done');
+  });
+
+  it('refuses a first-day value outside the three offered', () => {
+    expect(
+      applyAnswer({}, {}, { step: 'firstDay', firstDay: 'someday' } as never, TODAY),
+    ).toBeNull();
+    // Stored as the date it resolved to, so a later read cannot re-resolve it
+    // into a different day.
+    expect(applyAnswer({}, {}, { step: 'firstDay', firstDay: 'today' }, TODAY)?.answers.firstDay).toBe(TODAY);
+    expect(
+      applyAnswer({}, {}, { step: 'firstDay', firstDay: 'nextMonday' }, '2026-09-23')?.answers.firstDay,
+    ).toBe('2026-09-28');
+  });
+
+  it('pre-selects today before 18:00 and tomorrow from 18:00, on the athlete’s own clock', () => {
+    // The device knows its own local time, so the cutoff is decided where the
+    // question is asked. The server stores only which of the three was picked:
+    // a wrong guess about the hour changes the pre-selection, never the plan.
+    expect(defaultFirstDay(new Date('2026-09-23T17:59:00'))).toBe('today');
+    expect(defaultFirstDay(new Date('2026-09-23T18:00:00'))).toBe('tomorrow');
+    expect(defaultFirstDay(new Date('2026-09-23T23:30:00'))).toBe('tomorrow');
+    expect(defaultFirstDay(new Date('2026-09-23T00:01:00'))).toBe('today');
+  });
+
+  it('reads a stored day back to the tile it came from, and defaults when it matches none', () => {
+    const evening = new Date('2026-09-23T19:00:00');
+    const morning = new Date('2026-09-23T09:00:00');
+    expect(firstDayChoiceOf('2026-09-23', '2026-09-23', morning)).toBe('today');
+    expect(firstDayChoiceOf('2026-09-24', '2026-09-23', morning)).toBe('tomorrow');
+    expect(firstDayChoiceOf('2026-09-28', '2026-09-23', morning)).toBe('nextMonday');
+    // A date from another day — Back across midnight — falls back to the clock.
+    expect(firstDayChoiceOf('2026-01-01', '2026-09-23', evening)).toBe('tomorrow');
+    expect(firstDayChoiceOf(undefined, '2026-09-23', morning)).toBe('today');
+  });
+
+  it('gives the chosen day only while it is still ahead — a day that has arrived is no constraint', () => {
+    // Both the block arithmetic and the Coach's draft read this, so "already
+    // arrived" collapses to undefined once rather than in each of them.
+    expect(chosenFirstDay({ onboardingAnswers: { firstDay: '2026-09-28' } }, '2026-09-23')).toBe('2026-09-28');
+    expect(chosenFirstDay({ onboardingAnswers: { firstDay: '2026-09-24' } }, '2026-09-23')).toBe('2026-09-24');
+    // The day itself is not ahead of itself, so there is nothing left to honour.
+    expect(chosenFirstDay({ onboardingAnswers: { firstDay: '2026-09-23' } }, '2026-09-23')).toBeUndefined();
+    // And once it is behind, it is spent — every later week plans normally.
+    expect(chosenFirstDay({ onboardingAnswers: { firstDay: '2026-09-28' } }, '2026-09-29')).toBeUndefined();
+    // Never asked, or no answers at all.
+    expect(chosenFirstDay({}, '2026-09-23')).toBeUndefined();
+    expect(chosenFirstDay(undefined, '2026-09-23')).toBeUndefined();
+  });
+
+  it('resolves each choice against today — next Monday is the next one, never today', () => {
+    expect(firstDayDate('today', '2026-09-23')).toBe('2026-09-23'); // a Wednesday
+    expect(firstDayDate('tomorrow', '2026-09-23')).toBe('2026-09-24');
+    expect(firstDayDate('nextMonday', '2026-09-23')).toBe('2026-09-28');
+    // Asked on a Monday, "next Monday" is a week away, not this morning.
+    expect(firstDayDate('nextMonday', '2026-09-28')).toBe('2026-10-05');
+    // And on a Sunday it is tomorrow, not eight days out.
+    expect(firstDayDate('nextMonday', '2026-09-27')).toBe('2026-09-28');
   });
 });

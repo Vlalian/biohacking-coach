@@ -204,6 +204,35 @@ describe('ensureBlockFilled', () => {
     expect(sharedMinutes).toBeLessThan(8 * 60 * 0.8);
   });
 
+  it('starts the block on the athlete’s chosen day, not on today', async () => {
+    // `training-architecture/36`: asked at the end of onboarding, and the
+    // structure writes nothing before it. TODAY is a Wednesday; next Monday is
+    // the 12th.
+    getAthleteById.mockResolvedValue(
+      // Stored as the date it resolved to when answered, not as the choice.
+      athlete({ profile: { fixedConstraints: [], onboardingAnswers: { firstDay: '2026-10-12' } } }),
+    );
+
+    await ensureBlockFilled('athlete_1', TODAY);
+    const rows = (insertArithmeticSessions.mock.calls[0])[1];
+    expect(rows.every((r) => r.date >= '2026-10-12')).toBe(true);
+    expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it('starts today for an athlete who was never asked, or whose chosen day has passed', async () => {
+    // Anyone who onboarded before the question existed, and anyone whose
+    // "tomorrow" is yesterday by the time the fill runs again.
+    await ensureBlockFilled('athlete_1', TODAY);
+    expect((insertArithmeticSessions.mock.calls[0])[1].some((r) => r.date === TODAY)).toBe(true);
+
+    insertArithmeticSessions.mockClear();
+    getAthleteById.mockResolvedValue(
+      athlete({ profile: { fixedConstraints: [], onboardingAnswers: { firstDay: TODAY } } }),
+    );
+    await ensureBlockFilled('athlete_1', TODAY);
+    expect((insertArithmeticSessions.mock.calls[0])[1].some((r) => r.date === TODAY)).toBe(true);
+  });
+
   it('reports no-race, no-hours and a missing athlete without writing anything', async () => {
     getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
     expect(await ensureBlockFilled('athlete_1', TODAY)).toBe('no-race');

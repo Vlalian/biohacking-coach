@@ -266,9 +266,17 @@ export function weekWindow(
   today: string,
   fixedConstraints: string[] = [],
   unavailableDates: string[] = [],
+  /**
+   * The athlete's chosen first training day (`training-architecture/36`). The
+   * window never opens before it, so the Coach's draft cannot write into days
+   * the athlete said were not theirs yet. A day already past changes nothing.
+   */
+  firstDay?: string,
 ): PlanningWindow | null {
+  // Stryker disable next-line EqualityOperator — as above: at equality both branches are the same day.
+  const earliest = firstDay && firstDay > today ? firstDay : today;
   // Stryker disable next-line EqualityOperator: equivalent — on the Monday itself both branches are that Monday.
-  const start = today > weekStart ? today : weekStart;
+  const start = earliest > weekStart ? earliest : weekStart;
   const end = addDays(weekStart, 6);
   if (!hasAPlannableDay(start, end, fixedConstraints, unavailableDates)) return null;
   return {

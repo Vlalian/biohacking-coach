@@ -444,3 +444,20 @@ describe('wholeWeekWindow — the window a late acceptance validates against', (
     expect(wholeWeekWindow(NEXT_MON)).toEqual({ start: NEXT_MON, end: '2026-09-27', excludedDates: [], fellThrough: false });
   });
 });
+
+describe('weekWindow and the athlete’s chosen first day (training-architecture/36)', () => {
+  it('never opens a drafted week before the day the athlete chose', () => {
+    // The Coach's draft derives its write range from here, so this is where
+    // "no session before it, from anyone" has to hold for the draft.
+    expect(weekWindow('2026-10-05', '2026-10-07', [], [], '2026-10-09')?.start).toBe('2026-10-09');
+    // A chosen day inside a later week does not pull that week's start back.
+    expect(weekWindow('2026-10-12', '2026-10-07', [], [], '2026-10-09')?.start).toBe('2026-10-12');
+    // No choice, or one already past, is the behaviour that was there before.
+    expect(weekWindow('2026-10-05', '2026-10-07', [], [])?.start).toBe('2026-10-07');
+    expect(weekWindow('2026-10-05', '2026-10-07', [], [], '2026-10-01')?.start).toBe('2026-10-07');
+  });
+
+  it('gives no window when the chosen day leaves nothing plannable in the week', () => {
+    expect(weekWindow('2026-10-05', '2026-10-07', [], [], '2026-10-12')).toBeNull();
+  });
+});

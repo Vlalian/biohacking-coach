@@ -46,6 +46,15 @@ export interface PlanningWindow {
  * current week is plannable, there is no remainder to plan, and the window falls
  * through to the next full week with {@link PlanningWindow.fellThrough} set.
  *
+ * `firstDay` is the athlete's own start, asked at the end of onboarding
+ * (`training-architecture/36`). It moves the opening of the window and nothing
+ * else: the no-day-count floor stands, and so does the fall-through. Mads ruled
+ * on 2026-09-23 that no session lands before that day *from anyone*, which is
+ * why the bound is here — this is the one place the rule lives, and the week
+ * draft and `commitWeeklyPlan` both derive their write range from it. A day
+ * already past is spent and changes nothing, which is what makes it safe to
+ * keep reading an answer given months ago.
+ *
  * Pure, and deliberately the *only* place this rule lives. The Weekly Session's
  * `commitWeeklyPlan` and automatic generation both derive their write range from
  * here, so it is one rule and not two — and it constrains the write rather than
@@ -56,19 +65,22 @@ export function planningWindow(
   today: string,
   fixedConstraints: string[] = [],
   unavailableDates: string[] = [],
+  firstDay?: string,
 ): PlanningWindow {
-  const endOfThisWeek = addDays(weekStartOf(today), 6);
+  // Stryker disable next-line EqualityOperator — `>` and `>=` differ only when the two are equal, and then both branches are that same day.
+  const start = firstDay && firstDay > today ? firstDay : today;
+  const endOfThisWeek = addDays(weekStartOf(start), 6);
 
-  if (hasAPlannableDay(today, endOfThisWeek, fixedConstraints, unavailableDates)) {
+  if (hasAPlannableDay(start, endOfThisWeek, fixedConstraints, unavailableDates)) {
     return {
-      start: today,
+      start,
       end: endOfThisWeek,
-      excludedDates: excludedBetween(today, endOfThisWeek, fixedConstraints, unavailableDates),
+      excludedDates: excludedBetween(start, endOfThisWeek, fixedConstraints, unavailableDates),
       fellThrough: false,
     };
   }
 
-  const nextWeekStart = addDays(weekStartOf(today), 7);
+  const nextWeekStart = addDays(weekStartOf(start), 7);
   const nextWeekEnd = addDays(nextWeekStart, 6);
   return {
     start: nextWeekStart,

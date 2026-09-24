@@ -532,7 +532,13 @@
     "optSprint": "Sprint",
     "optOlympic": "Olympic",
     "optHalf": "Half",
-    "optFull": "Full"
+    "optFull": "Full",
+    "stepFirstDay": "Start",
+    "qFirstDay": "When shall we start?",
+    "qFirstDaySub": "Your first training day. Signing up late in the evening is a poor reason to train tonight.",
+    "firstDayToday": "Today",
+    "firstDayTomorrow": "Tomorrow",
+    "firstDayNextMonday": "Next Monday"
   },
   "CoachThread": {
     "title": "Coach",

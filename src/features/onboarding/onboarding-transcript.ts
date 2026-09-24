@@ -1,4 +1,4 @@
-import type { StepAnswer } from './onboarding-flow';
+import type { FirstDayChoice, StepAnswer } from './onboarding-flow';
 
 /**
  * A list joined for the transcript, or nothing when it is not a list.
@@ -39,6 +39,13 @@ function pastRacesLine(value: unknown): string {
  * so a step whose line rendered wrongly would have shown up in an athlete's
  * transcript rather than in a test.
  */
+/** The three answers as the Coach's log reads them (`training-architecture/36`). */
+const FIRST_DAY_TRANSCRIPT: Record<FirstDayChoice, string> = {
+  today: 'Starting today',
+  tomorrow: 'Starting tomorrow',
+  nextMonday: 'Starting next Monday',
+};
+
 export function answerText(payload: StepAnswer): string {
   switch (payload.step) {
     case 'language':
@@ -56,6 +63,10 @@ export function answerText(payload: StepAnswer): string {
       return payload.raceDistance;
     case 'hours':
       return `${payload.hoursPerWeek} h/week`;
+    case 'firstDay':
+      // The choice, not the date it resolved to: the log records what the
+      // athlete said, and "next Monday" is what they said.
+      return FIRST_DAY_TRANSCRIPT[payload.firstDay];
     case 'race':
       // "No race yet" is an answer, so it gets a transcript line of its own
       // rather than an empty one — the Coach's log should show the athlete

@@ -13,6 +13,9 @@ import {
   type OnboardingStepId,
   type StepAnswer,
   cursorAfter,
+  FIRST_DAY_CHOICES,
+  firstDayChoiceOf,
+  type FirstDayChoice,
   HOURS_PER_WEEK_MAX,
   HOURS_PER_WEEK_MIN,
   previousStep,
@@ -81,6 +84,7 @@ const STEPS: OnboardingStepId[] = [
   'race',
   'adaptive',
   'constraints',
+  'firstDay',
 ];
 
 const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
@@ -92,6 +96,7 @@ const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   race: 'stepRace',
   adaptive: 'stepAdaptive',
   constraints: 'stepConstraints',
+  firstDay: 'stepFirstDay',
 };
 
 // One source for every option set: the validation module. The UI only maps
@@ -310,6 +315,8 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
             <AdaptivePanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'constraints' ? (
             <ConstraintsPanel answers={state.answers} pending={pending} t={t} submit={submit} />
+          ) : state.step === 'firstDay' ? (
+            <FirstDayPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : null}
         </div>
       </div>
@@ -516,6 +523,65 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
     </div>
   );
 }
+
+/**
+ * "When shall we start?" — today, tomorrow, or next Monday
+ * (`training-architecture/36`).
+ *
+ * The athlete friend signed up at 23:00 and was handed a session for that same
+ * evening. The pre-selection is decided here, on the device's own clock, which
+ * is the only place that knows the local hour: after 18:00 "today" has little
+ * left in it and "tomorrow" starts selected. A native shell later hands over
+ * the same `Date` and nothing about this changes. The server is told the
+ * choice, never the hour.
+ */
+function FirstDayPanel({ answers, pending, t, submit }: PanelProps) {
+  // Read once, on mount: the question should not change its mind under someone
+  // who is reading it at 17:59.
+  // The stored answer is a date, so a step re-entered with Back has to map it
+  // back to the tile it came from (`showable-version/32`). The client's own
+  // day is the right anchor: it is the day the athlete is looking at.
+  const [choice, setChoice] = useState<FirstDayChoice>(() => {
+    const now = new Date();
+    return firstDayChoiceOf(answers.firstDay, todayKeyOf(now), now);
+  });
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit({ step: 'firstDay', firstDay: choice });
+      }}
+    >
+      <StepHeading title={t('qFirstDay')} help={t('qFirstDaySub')} />
+      <div className="flex flex-wrap gap-2">
+        {FIRST_DAY_CHOICES.map((value) => (
+          <OptionTile
+            key={value}
+            label={t(FIRST_DAY_MESSAGE_KEY[value])}
+            selected={choice === value}
+            onClick={() => setChoice(value)}
+          />
+        ))}
+      </div>
+      <PrimaryButton type="submit" data-action="submit-first-day" disabled={pending} pending={pending}>
+        {t('continue')}
+      </PrimaryButton>
+    </form>
+  );
+}
+
+/** The browser's own day as a date key — the anchor the tiles are read against. */
+function todayKeyOf(now: Date): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** The three answers, as the step labels them. */
+const FIRST_DAY_MESSAGE_KEY: Record<FirstDayChoice, string> = {
+  today: 'firstDayToday',
+  tomorrow: 'firstDayTomorrow',
+  nextMonday: 'firstDayNextMonday',
+};
 
 /**
  * "How many hours a week can you realistically train?" — asked, never
