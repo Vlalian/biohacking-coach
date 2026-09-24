@@ -154,6 +154,18 @@ export async function updateRaceDistance(
 }
 
 /**
+ * Hours per week, changed after onboarding (`showable-version/40`). The caller
+ * checks the value with onboarding's own `isHoursPerWeek` first, for the same
+ * reason the Race Distance is checked before it reaches here.
+ */
+export async function updateHoursPerWeek(athleteId: string, hoursPerWeek: number): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ hoursPerWeek, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *

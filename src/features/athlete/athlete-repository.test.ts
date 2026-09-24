@@ -18,7 +18,9 @@ vi.mock('@/db', () => ({
   }),
 }));
 
-const { getAthleteByUserId, updateCommunicationStyle, updateExperienceLevel } = await import('./athlete-repository');
+const { getAthleteByUserId, updateCommunicationStyle, updateExperienceLevel, updateHoursPerWeek } = await import(
+  './athlete-repository'
+);
 
 function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
   return {
@@ -128,6 +130,22 @@ describe('updateExperienceLevel (training-architecture/35)', () => {
     await updateExperienceLevel('athlete_1', 'veteran');
     expect(set).toHaveBeenCalledTimes(1);
     expect(updateCalls[0]).toMatchObject({ experienceLevel: 'veteran' });
+    expect((updateCalls[0] as { updatedAt: Date }).updatedAt).toBeInstanceOf(Date);
+    expect(updateWhere).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('updateHoursPerWeek (showable-version/40)', () => {
+  beforeEach(() => {
+    updateCalls = [];
+    set.mockClear();
+    updateWhere.mockClear();
+  });
+
+  it('writes the hours to the athlete row, scoped by id', async () => {
+    await updateHoursPerWeek('athlete_1', 10);
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(updateCalls[0]).toMatchObject({ hoursPerWeek: 10 });
     expect((updateCalls[0] as { updatedAt: Date }).updatedAt).toBeInstanceOf(Date);
     expect(updateWhere).toHaveBeenCalledTimes(1);
   });

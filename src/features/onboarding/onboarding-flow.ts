@@ -484,8 +484,12 @@ function parsePastRaces(value: unknown, today: string): PastRace[] | null {
 export const HOURS_PER_WEEK_MIN = 1;
 export const HOURS_PER_WEEK_MAX = 30;
 
-/** A whole number of hours inside the band; anything else is refused. */
-function isHoursPerWeek(value: unknown): value is number {
+/**
+ * A whole number of hours inside the band; anything else is refused. Exported
+ * for Settings, which is a second door onto the same column
+ * (`showable-version/40`).
+ */
+export function isHoursPerWeek(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= HOURS_PER_WEEK_MIN && (value as number) <= HOURS_PER_WEEK_MAX;
 }
 

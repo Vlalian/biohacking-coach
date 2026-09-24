@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { eq, asc, inArray } from 'drizzle-orm';
+import { eq, asc, inArray, type SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { sessions } from '@/db/schema';
 import type { SessionRow } from '@/db/schema';
 
@@ -25,9 +26,13 @@ vi.mock('@/db', () => ({
   }),
 }));
 
-const { getArithmeticSessionsForWeek, getSessionsForAthlete, replaceCoachPlanForDateRange, insertArithmeticSessions } = await import(
-  './session-repository'
-);
+const {
+  getArithmeticSessionsForWeek,
+  getSessionsForAthlete,
+  replaceCoachPlanForDateRange,
+  insertArithmeticSessions,
+  replaceArithmeticWeeks,
+} = await import('./session-repository');
 
 function row(overrides: Partial<SessionRow> = {}): SessionRow {
   return {
@@ -223,6 +228,83 @@ describe('insertArithmeticSessions — the structure writes its own rows (traini
     insertValues.mockClear();
     await insertArithmeticSessions('athlete_1', []);
     expect(insertValues).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * `showable-version/40` — an hours change redraws the weeks the structure still
+ * owns. The delete is rendered to SQL and read back, because this clause is the
+ * seam that keeps every other week byte-identical: an accepted week, a Head
+ * Coach's prescription and the athlete's own sessions are protected by nothing
+ * else.
+ */
+describe('replaceArithmeticWeeks — the redraw after an hours change', () => {
+  const arith = {
+    date: '2026-10-14',
+    sport: 'run' as const,
+    type: 'Endurance' as const,
+    durationMinutes: 50,
+    zone: 'Z2',
+    title: 'Easy run',
+    note: null,
+  };
+
+  function renderedDelete() {
+    const condition = (deleteWhere.mock.calls[0] as unknown[])[0] as SQL;
+    return new PgDialect().sqlToQuery(condition);
+  }
+
+  beforeEach(() => {
+    deleteWhere.mockClear();
+    insertValues.mockClear();
+    batch.mockClear();
+  });
+
+  it('deletes only planned structure rows in the named weeks, then inserts, in one batch', async () => {
+    await replaceArithmeticWeeks('a1', ['2026-10-12', '2026-10-26'], [arith]);
+
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(2);
+    const { sql, params } = renderedDelete();
+    expect(params).toEqual(['a1', 'arithmetic', 'planned', '2026-10-12', '2026-10-18', '2026-10-26', '2026-11-01']);
+    expect(sql).toMatch(/"athlete_id" = \$1 and "sessions"\."origin" = \$2 and "sessions"\."status" = \$3/);
+    expect(sql).toMatch(/\("sessions"\."date" >= \$4 and "sessions"\."date" <= \$5\) or \("sessions"\."date" >= \$6 and "sessions"\."date" <= \$7\)/);
+    expect(sql).not.toMatch(/'coach'|'head_coach'|'athlete'/);
+  });
+
+  it('inserts the new rows as the structure’s own planned sessions', async () => {
+    await replaceArithmeticWeeks('a1', ['2026-10-12'], [arith]);
+
+    expect(insertValues).toHaveBeenCalledWith([
+      {
+        athleteId: 'a1',
+        date: '2026-10-14',
+        origin: 'arithmetic',
+        status: 'planned',
+        sport: 'run',
+        type: 'Endurance',
+        duration: 50,
+        zone: 'Z2',
+        title: 'Easy run',
+        note: null,
+        isTraining: true,
+      },
+    ]);
+  });
+
+  it('clears the weeks and inserts nothing when the redraw holds no rows', async () => {
+    await replaceArithmeticWeeks('a1', ['2026-10-12'], []);
+
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(1);
+    expect(insertValues).not.toHaveBeenCalled();
+  });
+
+  it('touches nothing when no week is named', async () => {
+    await replaceArithmeticWeeks('a1', [], [arith]);
+
+    expect(deleteWhere).not.toHaveBeenCalled();
+    expect(batch).not.toHaveBeenCalled();
   });
 });
 

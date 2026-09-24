@@ -25,7 +25,9 @@ import {
   updateRaceTarget,
   updateRaceDistance,
   updateExperienceLevel,
+  updateHoursPerWeek,
 } from '@/features/athlete/athlete-repository';
+import { previewRefill, refillWeeksFromHours } from '@/features/coach/block-fill-service';
 import { resolveAthlete, resolveUserId } from '../../current-actor';
 import {
   getLinkForAthlete,
@@ -35,7 +37,7 @@ import {
 import { withdrawPreviewDrafts } from '@/features/coach/week-draft-repository';
 import { today } from '@/lib/date';
 import type { LinkVisibility } from '@/features/coach/link-visibility';
-import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
+import { isHoursPerWeek, ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { setPreferredName, setUiLanguage } from '@/features/user-prefs/user-prefs-repository';
 import { parsePreferredName } from '@/features/user-prefs/preferred-name';
 import { routing } from '@/i18n/routing';
@@ -59,6 +61,14 @@ export type SettingsActionResult =
 export type AddRaceResult =
   | { ok: true; raceId: string }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
+
+/** An hours change reports how many weeks it redrew (`showable-version/40`). */
+export type HoursChangeResult =
+  | { ok: true; redrawn: number }
+  | { ok: false; reason: 'not-authenticated' | 'invalid' };
+
+/** The weeks an hours change would redraw, for the confirmation that names them. */
+export type HoursPreviewResult = { ok: true; weeks: string[] } | { ok: false; reason: 'not-authenticated' };
 
 export type AddPastRaceResult =
   | { ok: true; pastRaceId: string }
@@ -284,6 +294,35 @@ export async function removeRaceAction(raceId: string): Promise<SettingsActionRe
   await deleteRace(athlete.id, race.id);
   if (race.isTarget) await updateRaceTarget(athlete.id, null);
   return { ok: true };
+}
+
+/**
+ * Hours per week, changed after onboarding (`showable-version/40`).
+ *
+ * Checked with onboarding's own `isHoursPerWeek`: a whole number in the same
+ * band. The new number is stored, then the weeks the structure still owns are
+ * redrawn from it — this week, weeks the athlete accepted and weeks holding a
+ * Head Coach's prescription are never touched (`refillWeeksFromHours`). The
+ * redraw never throws; a failed one leaves the hours stored and the old weeks
+ * in place, and reports zero weeks redrawn.
+ */
+export async function updateHoursPerWeekAction(hours: number): Promise<HoursChangeResult> {
+  if (!isHoursPerWeek(hours)) return { ok: false, reason: 'invalid' };
+
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  await updateHoursPerWeek(athlete.id, hours);
+  const { weeks } = await refillWeeksFromHours(athlete.id, today());
+  return { ok: true, redrawn: weeks.length };
+}
+
+/** What {@link updateHoursPerWeekAction} would redraw today — a read, asked before the athlete confirms. */
+export async function previewHoursChangeAction(): Promise<HoursPreviewResult> {
+  const athlete = await actingAthlete();
+  if (!athlete) return { ok: false, reason: 'not-authenticated' };
+
+  return { ok: true, weeks: await previewRefill(athlete.id, today()) };
 }
 
 /** Weekly Session Day — any weekday. */

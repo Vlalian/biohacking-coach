@@ -6,8 +6,15 @@ import { addDays, weekStartOf } from '@/lib/date';
  * Every collaborator is mocked; what is proven here is the gate, the outcomes
  * and that a failure is reported rather than thrown at the page.
  */
-const { getAthleteById, getResolvedBlocks, getSessionsForAthlete, getUnavailableDates, insertArithmeticSessions, logCoachFailure } =
-  vi.hoisted(() => ({
+const {
+  getAthleteById,
+  getResolvedBlocks,
+  getSessionsForAthlete,
+  getUnavailableDates,
+  insertArithmeticSessions,
+  replaceArithmeticWeeks,
+  logCoachFailure,
+} = vi.hoisted(() => ({
     getAthleteById: vi.fn(),
     getResolvedBlocks: vi.fn(),
     getSessionsForAthlete: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
@@ -15,16 +22,23 @@ const { getAthleteById, getResolvedBlocks, getSessionsForAthlete, getUnavailable
     insertArithmeticSessions: vi.fn<(athleteId: string, rows: { date: string; durationMinutes: number | null }[]) => Promise<void>>(
       () => Promise.resolve(),
     ),
+    replaceArithmeticWeeks: vi.fn<
+      (athleteId: string, weeks: string[], rows: { date: string; durationMinutes: number | null }[]) => Promise<void>
+    >(() => Promise.resolve()),
     logCoachFailure: vi.fn(),
   }));
 
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
-vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete, insertArithmeticSessions }));
+vi.mock('@/features/session/session-repository', () => ({
+  getSessionsForAthlete,
+  insertArithmeticSessions,
+  replaceArithmeticWeeks,
+}));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 
-const { ensureBlockFilled } = await import('./block-fill-service');
+const { ensureBlockFilled, previewRefill, refillWeeksFromHours } = await import('./block-fill-service');
 
 const TODAY = '2026-10-07';
 const RACE = '2027-01-31';
@@ -237,5 +251,160 @@ describe('ensureBlockFilled', () => {
     const rows = (insertArithmeticSessions.mock.calls[0])[1];
     expect(rows.some((r) => new Date(`${r.date}T00:00:00Z`).getUTCDay() === 3)).toBe(false);
     expect(rows.some((r) => r.date === '2026-10-15')).toBe(false);
+  });
+});
+
+/**
+ * `showable-version/40` — hours changed in Settings. The weeks the structure
+ * still owns are redrawn from the new number; every other week is left to the
+ * repository's guarded delete, which never reaches it.
+ */
+describe('refillWeeksFromHours', () => {
+  const NEXT_WEEK = '2026-10-12';
+  const NEXT_WEEK_WED = '2026-10-14';
+  const WEEK_AFTER_WED = '2026-10-21';
+  const minutes = (rows: { durationMinutes: number | null }[]) => rows.reduce((m, r) => m + (r.durationMinutes ?? 0), 0);
+
+  async function sameWeekAt(hours: number) {
+    const { blockSessions } = await import('./block-sessions');
+    const blocks = await blocksFrom(TODAY, RACE);
+    return blockSessions(blocks[0], { raceDate: RACE, hours, fixedConstraints: [], unavailableDates: [], firstDay: TODAY }).filter(
+      (r) => weekStartOf(r.date) === NEXT_WEEK,
+    );
+  }
+
+  it('redraws the eligible weeks with the new hours and leaves every other row alone', async () => {
+    getAthleteById.mockResolvedValue(athlete({ hoursPerWeek: 12 }));
+    getSessionsForAthlete.mockResolvedValue([
+      { date: NEXT_WEEK_WED, origin: 'arithmetic', status: 'planned' },
+      { date: WEEK_AFTER_WED, origin: 'coach', status: 'planned' },
+    ]);
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'refilled', weeks: [NEXT_WEEK] });
+    const [athleteId, weeks, rows] = replaceArithmeticWeeks.mock.calls[0];
+    expect(athleteId).toBe('athlete_1');
+    expect(weeks).toEqual([NEXT_WEEK]);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => weekStartOf(r.date) === NEXT_WEEK)).toBe(true);
+    // Drawn from 12 h: the same week drawn at 8 h holds less.
+    expect(minutes(rows)).toBeGreaterThan(minutes(await sameWeekAt(8)));
+    expect(rows).toEqual(await sameWeekAt(12));
+  });
+
+  it('draws a week straddling a block boundary once, not once per block', async () => {
+    const blocks = await blocksFrom(TODAY, RACE);
+    const shared = weekStartOf(blocks[1].startDate);
+    getSessionsForAthlete.mockResolvedValue([{ date: addDays(shared, 1), origin: 'arithmetic', status: 'planned' }]);
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'refilled', weeks: [shared] });
+    const rows = replaceArithmeticWeeks.mock.calls[0][2];
+    const dates = rows.map((r) => r.date);
+    expect(new Set(dates).size).toBe(dates.length);
+    expect(rows.every((r) => weekStartOf(r.date) === shared)).toBe(true);
+  });
+
+  it('a block ending on a Monday draws that whole week — the fill’s owner rule', async () => {
+    // The week of 2026-10-19 opens on block 1's last day, so block 1 owns it,
+    // exactly as `weeksToFill` lists it under block 1 first.
+    const block = (index: number, startDate: string, endDate: string) =>
+      ({ index, total: 2, name: `Block ${index}`, startDate, endDate, authoredBy: 'arithmetic' }) as const;
+    const blocks = [block(1, '2026-10-05', '2026-10-19'), block(2, '2026-10-20', RACE)];
+    getResolvedBlocks.mockResolvedValue({ race: { id: 'race_1', date: RACE }, set: null, blocks });
+    getSessionsForAthlete.mockResolvedValue([{ date: '2026-10-21', origin: 'arithmetic', status: 'planned' }]);
+
+    await refillWeeksFromHours('athlete_1', TODAY);
+    const { blockSessions } = await import('./block-sessions');
+    const ctx = { raceDate: RACE, distance: null, hours: 8, fixedConstraints: [], unavailableDates: [], firstDay: TODAY };
+    expect(replaceArithmeticWeeks.mock.calls[0][2]).toEqual(
+      blockSessions(blocks[0], ctx).filter((r) => weekStartOf(r.date) === '2026-10-19'),
+    );
+  });
+
+  it('an athlete with no profile at all is redrawn for every day of the week', async () => {
+    getAthleteById.mockResolvedValue({ id: 'athlete_1', hoursPerWeek: 8 });
+    getSessionsForAthlete.mockResolvedValue([{ date: NEXT_WEEK_WED, origin: 'arithmetic', status: 'planned' }]);
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'refilled', weeks: [NEXT_WEEK] });
+  });
+
+  it('plans around the days the athlete cannot train', async () => {
+    getAthleteById.mockResolvedValue(athlete({ profile: { fixedConstraints: ['Wednesday'] } }));
+    getUnavailableDates.mockResolvedValue(['2026-10-15']);
+    getSessionsForAthlete.mockResolvedValue([{ date: NEXT_WEEK_WED, origin: 'arithmetic', status: 'planned' }]);
+
+    await refillWeeksFromHours('athlete_1', TODAY);
+    const rows = replaceArithmeticWeeks.mock.calls[0][2];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((r) => new Date(`${r.date}T00:00:00Z`).getUTCDay() === 3)).toBe(false);
+    expect(rows.some((r) => r.date === '2026-10-15')).toBe(false);
+    expect(getUnavailableDates).toHaveBeenCalledWith('athlete_1');
+  });
+
+  it('writes nothing when no week is the structure’s to redraw', async () => {
+    getSessionsForAthlete.mockResolvedValue([{ date: WEEK_AFTER_WED, origin: 'coach', status: 'planned' }]);
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'nothing-due', weeks: [] });
+    expect(replaceArithmeticWeeks).not.toHaveBeenCalled();
+  });
+
+  it('reports no-race and no-hours without writing anything', async () => {
+    getSessionsForAthlete.mockResolvedValue([{ date: NEXT_WEEK_WED, origin: 'arithmetic', status: 'planned' }]);
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [] });
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'no-race', weeks: [] });
+
+    getResolvedBlocks.mockResolvedValue({ race: { id: 'race_1', date: RACE }, set: null, blocks: [] });
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'no-race', weeks: [] });
+
+    getResolvedBlocks.mockResolvedValue({ race: { id: 'race_1', date: RACE }, set: null, blocks: await blocksFrom(TODAY, RACE) });
+    getAthleteById.mockResolvedValue(athlete({ hoursPerWeek: null }));
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'no-hours', weeks: [] });
+
+    getAthleteById.mockResolvedValue(null);
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'no-hours', weeks: [] });
+
+    expect(replaceArithmeticWeeks).not.toHaveBeenCalled();
+  });
+
+  it('never throws', async () => {
+    getSessionsForAthlete.mockRejectedValue(new Error('down'));
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY)).toEqual({ outcome: 'failed', weeks: [] });
+    expect(logCoachFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: 'block_fill', athleteId: 'athlete_1', conversationId: null }),
+    );
+  });
+});
+
+describe('previewRefill — what the confirmation names', () => {
+  it('names the weeks a redraw would write, and writes nothing', async () => {
+    getSessionsForAthlete.mockResolvedValue([
+      { date: '2026-10-14', origin: 'arithmetic', status: 'planned' },
+      { date: '2026-10-21', origin: 'coach', status: 'planned' },
+      { date: '2026-10-28', origin: 'arithmetic', status: 'planned' },
+    ]);
+
+    expect(await previewRefill('athlete_1', TODAY)).toEqual(['2026-10-12', '2026-10-26']);
+    expect(getResolvedBlocks).toHaveBeenCalledWith('athlete_1', TODAY);
+    expect(getSessionsForAthlete).toHaveBeenCalledWith('athlete_1');
+    expect(replaceArithmeticWeeks).not.toHaveBeenCalled();
+    expect(insertArithmeticSessions).not.toHaveBeenCalled();
+  });
+
+  it('names a week straddling a block boundary once', async () => {
+    const blocks = await blocksFrom(TODAY, RACE);
+    const shared = weekStartOf(blocks[1].startDate);
+    getSessionsForAthlete.mockResolvedValue([{ date: addDays(shared, 1), origin: 'arithmetic', status: 'planned' }]);
+
+    expect(await previewRefill('athlete_1', TODAY)).toEqual([shared]);
+  });
+
+  it('names no week after the last block', async () => {
+    const blocks = await blocksFrom(TODAY, RACE);
+    const last = blocks[blocks.length - 1];
+    getSessionsForAthlete.mockResolvedValue([
+      { date: addDays(weekStartOf(last.endDate), 7), origin: 'arithmetic', status: 'planned' },
+    ]);
+
+    expect(await previewRefill('athlete_1', TODAY)).toEqual([]);
   });
 });

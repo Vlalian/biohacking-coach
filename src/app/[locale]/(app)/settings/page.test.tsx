@@ -51,6 +51,8 @@ vi.mock('./settings-actions', () => ({
   removePastRaceAction: vi.fn(),
   removeRaceAction: vi.fn(),
   updateWeeklySessionDayAction: vi.fn(),
+  updateHoursPerWeekAction: vi.fn(),
+  previewHoursChangeAction: vi.fn(),
 }));
 
 const { getRaces } = vi.hoisted(() => ({
@@ -117,6 +119,7 @@ describe('SettingsPage', () => {
     getAthleteByUserId.mockResolvedValue({
       id: 'athlete_1',
       communicationStyle: null,
+      hoursPerWeek: 8,
       profile: null,
     });
     getLinkForAthlete.mockResolvedValue(undefined);
@@ -137,6 +140,8 @@ describe('SettingsPage', () => {
       races: [],
       pastRaces: [],
       raceDistance: '',
+      // The hours onboarding asked, editable here since showable-version/40.
+      hoursPerWeek: 8,
       weeklySessionDay: null,
       fixedConstraints: [],
     });

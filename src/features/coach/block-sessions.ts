@@ -394,6 +394,36 @@ export function weeksToFill(facts: {
   );
 }
 
+/** The origins that count as "this week is planned" — the athlete's own additions do not. */
+export const PLAN_ORIGINS: readonly string[] = ['coach', 'head_coach', 'arithmetic'];
+
+/**
+ * The weeks an hours change redraws (`showable-version/40`).
+ *
+ * A week after the current one whose planned plan rows are all the
+ * structure's own. A `coach` row means the athlete accepted a draft for it, a
+ * `head_coach` row is a prescription, and either keeps the week as it is. Rows
+ * that are not planned are a record of what happened, and the athlete's own
+ * sessions are not plan rows, so neither decides it. A week the structure never
+ * filled is not named — the next fill reads the new hours anyway.
+ */
+export function weeksToRefill(facts: {
+  today: string;
+  sessions: readonly { date: string; origin: string; status: string }[];
+}): string[] {
+  const thisWeek = weekStartOf(facts.today);
+  const structureOnly = new Map<string, boolean>();
+  for (const s of facts.sessions) {
+    if (s.status !== 'planned' || !PLAN_ORIGINS.includes(s.origin)) continue;
+    const week = weekStartOf(s.date);
+    structureOnly.set(week, (structureOnly.get(week) ?? true) && s.origin === 'arithmetic');
+  }
+  return [...structureOnly]
+    .filter(([week, ours]) => ours && week > thisWeek)
+    .map(([week]) => week)
+    .sort();
+}
+
 /** The later of two date keys — equal keys give that key, whichever side it came from. */
 // Stryker disable next-line EqualityOperator — `>` and `>=` differ only when the two are equal, and then both return the same key.
 const later = (a: string, b: string): string => (a > b ? a : b);

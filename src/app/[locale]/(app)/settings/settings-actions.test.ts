@@ -24,6 +24,9 @@ const {
   deletePastRace,
   getPastRaces,
   updateExperienceLevel,
+  updateHoursPerWeek,
+  refillWeeksFromHours,
+  previewRefill,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   getAthleteByUserId: vi.fn(),
@@ -48,6 +51,9 @@ const {
   deletePastRace: vi.fn(() => Promise.resolve()),
   getPastRaces: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
   updateExperienceLevel: vi.fn(() => Promise.resolve()),
+  updateHoursPerWeek: vi.fn(() => Promise.resolve()),
+  refillWeeksFromHours: vi.fn(() => Promise.resolve({ outcome: 'nothing-due', weeks: [] as string[] })),
+  previewRefill: vi.fn(() => Promise.resolve([] as string[])),
 }));
 
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
@@ -61,7 +67,9 @@ vi.mock('@/features/athlete/athlete-repository', () => ({
   updateRaceTarget,
   updateRaceDistance,
   updateExperienceLevel,
+  updateHoursPerWeek,
 }));
+vi.mock('@/features/coach/block-fill-service', () => ({ refillWeeksFromHours, previewRefill }));
 const getLinkForAthlete = vi.fn(() => Promise.resolve(undefined as unknown));
 const withdrawPreviewDrafts = vi.fn(() => Promise.resolve(0));
 vi.mock('@/features/coach/coach-repository', () => ({
@@ -100,6 +108,8 @@ const {
   removeRaceAction,
   updateLinkVisibilityAction,
   severCoachingLinkAction,
+  updateHoursPerWeekAction,
+  previewHoursChangeAction,
 } = await import('./settings-actions');
 
 const athlete = (over: Record<string, unknown> = {}) => ({
@@ -568,5 +578,50 @@ describe('past races in Settings (training-architecture/35)', () => {
     getSession.mockResolvedValue(null);
     await expect(addPastRaceAction({ distance: 'Half', date: '2025-01-01' })).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
     await expect(removePastRaceAction('pr_1')).resolves.toEqual({ ok: false, reason: 'not-authenticated' });
+  });
+});
+
+describe('updateHoursPerWeekAction (showable-version/40)', () => {
+  it('stores hours inside the bounds and redraws the weeks the structure owns', async () => {
+    refillWeeksFromHours.mockResolvedValue({ outcome: 'refilled', weeks: ['2026-10-12'] });
+
+    expect(await updateHoursPerWeekAction(10)).toEqual({ ok: true, redrawn: 1 });
+    expect(updateHoursPerWeek).toHaveBeenCalledWith('athlete_1', 10);
+    expect(refillWeeksFromHours).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
+  it('accepts both ends of the onboarding band', async () => {
+    refillWeeksFromHours.mockResolvedValue({ outcome: 'nothing-due', weeks: [] });
+    expect(await updateHoursPerWeekAction(1)).toEqual({ ok: true, redrawn: 0 });
+    expect(await updateHoursPerWeekAction(30)).toEqual({ ok: true, redrawn: 0 });
+  });
+
+  it.each([0, 31, 7.5, Number.NaN])('refuses %s and writes nothing', async (hours) => {
+    expect(await updateHoursPerWeekAction(hours)).toEqual({ ok: false, reason: 'invalid' });
+    expect(updateHoursPerWeek).not.toHaveBeenCalled();
+    expect(refillWeeksFromHours).not.toHaveBeenCalled();
+  });
+
+  it('refuses an anonymous caller and writes nothing', async () => {
+    getSession.mockResolvedValue(null);
+    expect(await updateHoursPerWeekAction(10)).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(updateHoursPerWeek).not.toHaveBeenCalled();
+  });
+});
+
+describe('previewHoursChangeAction (showable-version/40)', () => {
+  it('names the weeks a change would redraw, without writing', async () => {
+    previewRefill.mockResolvedValue(['2026-10-12', '2026-11-02']);
+
+    expect(await previewHoursChangeAction()).toEqual({ ok: true, weeks: ['2026-10-12', '2026-11-02'] });
+    expect(previewRefill).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(updateHoursPerWeek).not.toHaveBeenCalled();
+    expect(refillWeeksFromHours).not.toHaveBeenCalled();
+  });
+
+  it('refuses an anonymous caller', async () => {
+    getSession.mockResolvedValue(null);
+    expect(await previewHoursChangeAction()).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(previewRefill).not.toHaveBeenCalled();
   });
 });

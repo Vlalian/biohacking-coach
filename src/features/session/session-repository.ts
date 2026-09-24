@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, lte, or } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, type NewSessionRow } from '@/db/schema';
 import { addDays } from '@/lib/date';
@@ -308,23 +308,62 @@ export async function insertArithmeticSessions(
   rows: readonly ArithmeticSessionRow[],
 ): Promise<void> {
   if (rows.length === 0) return;
-  await getDb()
-    .insert(sessions)
-    .values(
-      rows.map((row) => ({
-        athleteId,
-        date: row.date,
-        origin: 'arithmetic',
-        status: 'planned',
-        sport: row.sport,
-        type: row.type,
-        duration: row.durationMinutes,
-        zone: row.zone,
-        title: row.title,
-        note: row.note,
-        isTraining: true,
-      })),
+  await getDb().insert(sessions).values(arithmeticValues(athleteId, rows));
+}
+
+/** The structure's rows as `sessions` values: planned, `origin = 'arithmetic'`. */
+function arithmeticValues(athleteId: string, rows: readonly ArithmeticSessionRow[]): NewSessionRow[] {
+  return rows.map((row) => ({
+    athleteId,
+    date: row.date,
+    origin: 'arithmetic',
+    status: 'planned',
+    sport: row.sport,
+    type: row.type,
+    duration: row.durationMinutes,
+    zone: row.zone,
+    title: row.title,
+    note: row.note,
+    isTraining: true,
+  }));
+}
+
+/**
+ * Redraws whole weeks of the structure's own rows (`showable-version/40`): an
+ * hours change in Settings replaces what the arithmetic drew for the named
+ * weeks with what it draws now.
+ *
+ * Only `origin = 'arithmetic'` rows still `planned`, and only inside each named
+ * week's Monday–Sunday, are deleted. The caller names only weeks no one else has
+ * planned (`weeksToRefill`), and this clause is the second guard: a Coach row,
+ * a Head Coach's prescription, the athlete's own session and anything already
+ * completed survive it whatever week they sit in. Delete and insert land in one
+ * `db.batch`, so a failure never leaves a week half-drawn.
+ */
+export async function replaceArithmeticWeeks(
+  athleteId: string,
+  weekStarts: readonly string[],
+  rows: readonly ArithmeticSessionRow[],
+): Promise<void> {
+  if (weekStarts.length === 0) return;
+  const db = getDb();
+
+  const clear = db
+    .delete(sessions)
+    .where(
+      and(
+        eq(sessions.athleteId, athleteId),
+        eq(sessions.origin, 'arithmetic'),
+        eq(sessions.status, 'planned'),
+        or(...weekStarts.map((week) => and(gte(sessions.date, week), lte(sessions.date, addDays(week, 6))))),
+      ),
     );
+
+  if (rows.length === 0) {
+    await db.batch([clear]);
+    return;
+  }
+  await db.batch([clear, db.insert(sessions).values(arithmeticValues(athleteId, rows))]);
 }
 
 /**

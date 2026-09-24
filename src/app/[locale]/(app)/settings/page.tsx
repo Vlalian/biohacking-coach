@@ -15,6 +15,8 @@ import {
   severCoachingLinkAction,
   updateCommunicationStyleAction,
   updateRaceDistanceAction,
+  updateHoursPerWeekAction,
+  previewHoursChangeAction,
   addRaceAction,
   setTargetRaceAction,
   removeRaceAction,
@@ -92,6 +94,7 @@ export default async function SettingsPage({
           note: r.note,
         })),
         raceDistance: athlete.raceDistance ?? '',
+        hoursPerWeek: athlete.hoursPerWeek,
         weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
         fixedConstraints: athlete.profile?.fixedConstraints ?? [],
       }}
@@ -113,6 +116,8 @@ export default async function SettingsPage({
       onAddPastRace={addPastRaceAction}
       onRemovePastRace={removePastRaceAction}
       onUpdateRaceDistance={updateRaceDistanceAction}
+      onPreviewHoursChange={previewHoursChangeAction}
+      onUpdateHoursPerWeek={updateHoursPerWeekAction}
       onUpdateWeeklySessionDay={updateWeeklySessionDayAction}
       onAddFixedConstraint={addFixedConstraintAction}
       onRemoveFixedConstraint={removeFixedConstraintAction}

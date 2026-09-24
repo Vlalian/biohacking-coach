@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { wholeWeekWindow } from './week-draft';
 import { addDays, weekStartOf } from '@/lib/date';
 import { trainingBlocks } from './training-blocks';
-import { blockSessions, isoWeekOdd, sessionsPerWeek, weekFactor, weekSessions, weeksToFill } from './block-sessions';
+import { blockSessions, isoWeekOdd, sessionsPerWeek, weekFactor, weekSessions, weeksToFill, weeksToRefill } from './block-sessions';
 
 /**
  * `training-architecture/34` — the arithmetic fills a week with real sessions.
@@ -452,5 +452,48 @@ describe('the distance floor reaches the calendar (training-architecture/34, rul
 
   it('plans a week without a recorded distance exactly as before', () => {
     expect(blockSessions(BLOCK, CTX)).toEqual(blockSessions(BLOCK, { ...CTX, distance: null }));
+  });
+});
+
+/**
+ * `showable-version/40` — an hours change in Settings redraws the weeks the
+ * structure still owns: after this one, not accepted (no `coach` row), and
+ * holding no Head Coach prescription. The athlete's own additions and anything
+ * already completed or skipped do not decide it.
+ */
+describe('weeksToRefill', () => {
+  const TODAY = '2026-10-07'; // a Wednesday; its week starts 2026-10-05
+  const s = (date: string, origin: string, status = 'planned') => ({ date, origin, status });
+
+  it('takes only weeks after this one whose planned sessions are all the structure’s', () => {
+    const sessions = [
+      s('2026-10-06', 'arithmetic'), // this week: never
+      s('2026-10-13', 'arithmetic'), // next week → refill
+      s('2026-10-20', 'arithmetic'),
+      s('2026-10-22', 'coach'), // accepted week → keep
+      s('2026-10-27', 'arithmetic'),
+      s('2026-10-29', 'head_coach'), // prescribed → keep
+      s('2026-11-03', 'arithmetic'),
+      s('2026-11-04', 'athlete'), // the athlete's own addition does not hold it
+    ];
+    expect(weeksToRefill({ today: TODAY, sessions })).toEqual(['2026-10-12', '2026-11-02']);
+  });
+
+  it('ignores completed and skipped rows', () => {
+    expect(
+      weeksToRefill({
+        today: TODAY,
+        sessions: [s('2026-10-13', 'coach', 'completed'), s('2026-10-15', 'head_coach', 'skipped'), s('2026-10-14', 'arithmetic')],
+      }),
+    ).toEqual(['2026-10-12']);
+  });
+
+  it('names no week the structure never filled', () => {
+    expect(weeksToRefill({ today: TODAY, sessions: [s('2026-10-13', 'athlete'), s('2026-10-20', 'garmin', 'completed')] })).toEqual([]);
+  });
+
+  it('lists the weeks in calendar order, whatever order the rows came in', () => {
+    const sessions = [s('2026-10-21', 'arithmetic'), s('2026-10-13', 'arithmetic'), s('2026-10-14', 'arithmetic')];
+    expect(weeksToRefill({ today: TODAY, sessions })).toEqual(['2026-10-12', '2026-10-19']);
   });
 });
