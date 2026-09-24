@@ -120,7 +120,7 @@ function Load({ D }: { D: InfoDataset }) {
   return (
     <>
       <ChartSvg w={300} h={110}>
-        <Bars vals={D.weekly.map((w) => w.tss ?? 0)} w={300} h={110} color="rgba(107,107,107,0.25)" />
+        <Bars vals={D.weekly.map((w) => w.tss ?? 0)} w={300} h={110} color="color-mix(in oklab, var(--foreground) 18%, transparent)" />
         {(['fitness', 'fatigue', 'form'] as const).map((k) => (
           <Line key={k} vals={D.weekly.map((w) => w[k] ?? 0)} w={300} h={110} color={FF_COLORS[k]} />
         ))}
@@ -130,7 +130,7 @@ function Load({ D }: { D: InfoDataset }) {
           ['Fitness', FF_COLORS.fitness],
           ['Fatigue', FF_COLORS.fatigue],
           ['Form', FF_COLORS.form],
-          [t('weeklyTss'), 'rgba(107,107,107,0.5)'],
+          [t('weeklyTss'), 'color-mix(in oklab, var(--foreground) 40%, transparent)'],
         ]}
       />
     </>
@@ -192,7 +192,7 @@ function Consistency({ D }: { D: InfoDataset }) {
                   width={Math.max(1, bw - 3).toFixed(1)}
                   height={hSkip.toFixed(1)}
                   rx={1.5}
-                  fill="rgba(224,85,85,0.55)"
+                  fill="color-mix(in oklab, var(--signal) 55%, transparent)"
                 />
               )}
             </g>
@@ -202,7 +202,7 @@ function Consistency({ D }: { D: InfoDataset }) {
       <Legend
         items={[
           [t('completed'), BODY_COLOR],
-          [t('skipped'), 'rgba(224,85,85,0.7)'],
+          [t('skipped'), 'color-mix(in oklab, var(--signal) 70%, transparent)'],
         ]}
       />
       <Note>{t('consistencyNote', { done: totDone, all: totAll })}</Note>
@@ -262,7 +262,7 @@ function Sleep({ D }: { D: InfoDataset }) {
   return (
     <>
       <ChartSvg w={300} h={100}>
-        <Bars vals={D.sleep.map((x) => x.hours)} w={300} h={100} color="rgba(154,123,208,0.45)" />
+        <Bars vals={D.sleep.map((x) => x.hours)} w={300} h={100} color="color-mix(in oklab, var(--foreground) 22%, transparent)" />
         <Line vals={D.sleep.map((x) => x.feeling * 2)} w={300} h={100} color="#c9a96e" />
       </ChartSvg>
       <Legend

@@ -300,6 +300,7 @@
     "error": "Det virkede ikke. Tjek dine oplysninger, og prøv igen."
   },
   "Calendar": {
+    "weekNumber": "Uge {n}",
     "discussing": "Næste uge er ved at blive drøftet med Coachen — åbn Coachen for at afslutte.",
     "empty": "Ingen sessioner planlagt endnu.",
     "rate": "Bedøm {type}-session",
@@ -802,9 +803,9 @@
     "error": "Det virkede ikke ({reason})."
   },
   "CoachDay": {
-    "headline": "<b>{name}</b>s ugentlige planlægningsdag: <b>{day}</b>",
-    "intro": "{name}s træningsuge begynder <b>{day}</b>. Hver uge udarbejder Coachen de næste syv dage, <b>du</b> ser dem først, og <b>{name}</b> bestemmer.",
-    "nextDraft": "Næste udkast: <b>dig</b> {coachDate} · <b>{name}</b> {athleteDate}",
+    "headline": "Ugentlig planlægningsdag: <b>{day}</b>",
+    "intro": "Hver uge udarbejder Coachen de næste syv dage. Du ser dem først, og {name} bestemmer. Træningsugen begynder <b>{day}</b>.",
+    "nextDraft": "Næste udkast: dig {coachDate} · {name} {athleteDate}",
     "pickerLabel": "Ugentlig planlægningsdag",
     "confirmQuestion": "Skift dagen til {day}? Det gælder fra næste udkast.",
     "confirm": "Skift dag",

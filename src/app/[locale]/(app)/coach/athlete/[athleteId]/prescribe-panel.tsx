@@ -126,7 +126,7 @@ export function PrescribePanel({ athleteId }: { athleteId: string }) {
           type="button"
           disabled={pending}
           onClick={submit}
-          className="rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+          className="inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50"
         >
           {t('add')}
         </button>

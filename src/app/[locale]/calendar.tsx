@@ -123,6 +123,16 @@ export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
   'not-a-coach': 'bounceError',
 };
 
+/** ISO-8601 week number of the Monday `mondayKey` names, in UTC. */
+export function isoWeekNumber(mondayKey: string): number {
+  const d = new Date(`${mondayKey}T00:00:00Z`);
+  // Thursday of the same ISO week decides the year the week belongs to.
+  const thursday = new Date(d);
+  thursday.setUTCDate(d.getUTCDate() + 3);
+  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  return Math.floor((thursday.getTime() - yearStart) / 86_400_000 / 7) + 1;
+}
+
 type Day = {
   date: string;
   dayNum: number;
@@ -480,7 +490,6 @@ export function Calendar({
             canOpenSession={!readOnly || Boolean(coachAthleteId)}
             canDrag={canDrag}
             todayKey={todayKey}
-            locale={locale}
             dragging={dragging}
             hoverDate={hoverDate}
             bounce={bounce}
@@ -547,7 +556,6 @@ function WeekRow({
   canOpenSession,
   canDrag,
   todayKey,
-  locale,
   dragging,
   hoverDate,
   bounce,
@@ -578,7 +586,6 @@ function WeekRow({
   /** Whether Session Chips may be dragged — not implied by `readOnly`. */
   canDrag: boolean;
   todayKey: string;
-  locale: string;
   dragging: { session: Session; week: string } | null;
   hoverDate: string | null;
   bounce: { date: string; messageKey: string } | null;
@@ -594,16 +601,11 @@ function WeekRow({
   onDropDay: (day: Day) => void;
   onToggleAvailability: (date: string, currentlyUnavailable: boolean) => void;
 }) {
-  // Explicit locale and time zone: `undefined` resolves both from the runtime —
-  // the server during SSR, the visitor in the browser — so the same week can
-  // render as two different strings and mismatch on hydration. It also ignored
-  // the app locale, putting an English week start under a Danish header. Same
-  // pattern as `formatFullDate` in session-drawer.tsx.
-  const weekLabel = new Intl.DateTimeFormat(locale, {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  }).format(new Date(`${week.isoWeekStart}T00:00:00Z`));
+  // The ISO week number, as the export's gutter shows it (Mads, 2026-09-24:
+  // "the first day of the week instead of the week number"). Computed in UTC
+  // from the Monday key, so it cannot depend on the server's or the browser's
+  // zone — the same reason the header days are formatted in UTC.
+  const weekLabel = t('weekNumber', { n: isoWeekNumber(week.isoWeekStart) });
 
   const status = weekStatus(
     week.days.map((d) => d.date),
@@ -678,7 +680,7 @@ function WeekRow({
           <ChevronDown
             className={['mt-1 h-3.5 w-3.5 shrink-0 transition-transform', expanded ? '' : '-rotate-90'].join(' ')}
           />
-          <span>{weekLabel}</span>
+          <span className="leading-tight">{weekLabel}</span>
         </button>
 
         {week.days.map((day) => {

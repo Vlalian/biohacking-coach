@@ -58,9 +58,12 @@ export function InformationView({
   dataset,
   initialLayout,
   saveLayout,
+  athleteName,
 }: {
   dataset: InfoDataset;
   initialLayout: InformationViewLayout;
+  /** The header's name; omitted on the Head Coach's Data tab, which names the athlete above. */
+  athleteName?: string;
   /**
    * The persistence action. The athlete page passes the action that saves their
    * own layout; the coach page passes the one that saves the coach's ONE
@@ -185,15 +188,68 @@ export function InformationView({
     </button>
   );
 
+  const latest = dataset.weekly[dataset.weekly.length - 1];
+  const bigStats: Array<[string, number | null | undefined, boolean]> = [
+    ['fitness', latest?.fitness, false],
+    ['fatigue', latest?.fatigue, false],
+    ['form', latest?.form, true],
+  ];
+
   return (
-    <div className="w-full max-w-5xl">
+    <div className="w-full">
+      {/* The export's header (iron-insight-grid, Information): the View as a
+          kicker, the athlete's name as the display headline, the race and its
+          countdown beneath, and Fitness / Fatigue / Form as the big numbers.
+          Data only — no reading of what the numbers mean (ADR 0004). */}
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-6 border-b border-border pb-8">
+        <div className="min-w-0">
+          <span className="font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
+            {t('title')}
+          </span>
+          <h1 className="mt-2 font-display text-5xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground sm:text-6xl">
+            {athleteName || t('title')}
+          </h1>
+          <p className="mt-3 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
+            {dataset.raceName && dataset.weeksToRace != null ? (
+              <>
+                {dataset.raceName} ·{' '}
+                <span className="text-signal">
+                  {dataset.weeksToRace} {t('weeksUntil')}
+                </span>
+              </>
+            ) : (
+              t('subtitle')
+            )}
+          </p>
+        </div>
+        {latest && (
+          <dl className="flex gap-8">
+            {bigStats.map(([key, value, accent]) => (
+              <div key={key}>
+                <dt className="font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
+                  {t(key)}
+                </dt>
+                <dd
+                  className={[
+                    'mt-1 font-display text-4xl font-bold leading-none tracking-[0.02em]',
+                    accent ? 'text-signal' : 'text-foreground',
+                  ].join(' ')}
+                >
+                  {value ?? '—'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </header>
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <CompareOverlayTrigger sessions={vm.windowed.sessions} />
         <span className="flex gap-1.5">
           {RANGE_KEYS.map((r) => (
             <button
               key={r}
-              className={`border px-3 py-1 font-body text-sm uppercase tracking-[0.16em] transition-colors ${
+              className={`inline-flex h-10 items-center border px-4 font-body text-[15px] font-medium transition-colors ${
                 range === r
                   ? 'border-signal text-signal'
                   : 'border-border text-muted-foreground hover:text-foreground'
@@ -216,7 +272,7 @@ export function InformationView({
       )}
 
       <div className="flex gap-8">
-        <nav className="hidden w-44 shrink-0 sm:block">
+        <nav className="hidden w-48 shrink-0 sm:block">
           <div className="sticky top-4 flex flex-col gap-0.5">
             {vm.favPanels.length > 0 && (
               <div className="flex items-center gap-1 px-2 pt-2 font-body text-sm uppercase tracking-[0.16em] text-signal">
@@ -236,7 +292,7 @@ export function InformationView({
           </div>
         </nav>
 
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-2">
           <ComparisonGraph
             dataset={vm.windowed}
             graphIds={graphIds}
@@ -247,11 +303,18 @@ export function InformationView({
             <div
               key={p.id}
               id={`iv-anchor-${p.id}`}
-              className={enlarged.includes(p.id) ? 'md:col-span-2' : ''}
+              className={enlarged.includes(p.id) ? 'lg:col-span-2' : ''}
             >
-              <div className="border border-border bg-panel p-5" data-panel={p.id}>
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <span className="font-display text-xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+              <div className="scroll-mt-6 border border-border bg-panel p-5 sm:p-6" data-panel={p.id}>
+                <div className="mb-5 flex items-start justify-between gap-3">
+                  <span className="flex items-center gap-2 font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+                    {isFavorite(favorites, p.id) && (
+                      <Star
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                        style={{ fill: 'var(--signal)', stroke: 'var(--signal)' }}
+                      />
+                    )}
                     {t(p.titleKey)}
                   </span>
                   <span className="flex items-center gap-1 text-muted-foreground">
@@ -326,10 +389,10 @@ function ComparisonGraph({
     p.series!(dataset).map((s) => ({ panel: p, ...s })),
   );
   return (
-    <div className="md:col-span-2">
-      <div className="border border-signal/40 bg-panel p-5" data-panel="comparison-graph">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <span className="font-display text-xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+    <div className="lg:col-span-2">
+      <div className="border border-signal/60 bg-panel p-5 sm:p-6" data-panel="comparison-graph">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <span className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
             {t('graphTitle')}
           </span>
           <button

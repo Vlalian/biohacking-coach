@@ -205,7 +205,7 @@ export function ConsentScreen({
           )}
         </div>
       ) : (
-        <Link href="/" className="text-sm text-blue-500 underline">
+        <Link href="/" className="inline-flex h-10 items-center gap-2 border border-border px-4 font-body text-[15px] font-medium text-foreground no-underline transition-colors hover:border-signal hover:text-signal">
           {copy.back}
         </Link>
       )}
