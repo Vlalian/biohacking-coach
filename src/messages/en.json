@@ -890,10 +890,10 @@
     "error": "That didn't work ({reason})."
   },
   "ProposalCard": {
-    "title": "Next week is drafted",
-    "lead": "{count, plural, one {# session} other {# sessions}} for the week of {week}. Accept it, talk it over with Momentum, or leave the week as it is.",
-    "titleAdjusted": "Next week, adjusted",
-    "leadAdjusted": "{count, plural, one {# session} other {# sessions}} for the week of {week}, adjusted from what your plan already held. Accept it, talk it over with Momentum, or leave the week as it is.",
+    "title": "The week of {week} is drafted",
+    "lead": "{count, plural, one {# session} other {# sessions}}. Accept it, talk it over with Momentum, or leave the week as it is.",
+    "titleAdjusted": "The week of {week}, adjusted",
+    "leadAdjusted": "{count, plural, one {# session} other {# sessions}}, adjusted from what your plan already held. Accept it, talk it over with Momentum, or leave the week as it is.",
     "accept": "Accept",
     "discuss": "Discuss with Momentum",
     "decline": "Not this week",
@@ -904,8 +904,6 @@
     "declineOther": "Something else",
     "declineSkip": "Skip",
     "declineDiscuss": "Or tell Momentum what is wrong",
-    "accepted": "Saved.",
-    "acceptedPast": "Saved — {count, plural, one {# of these days has} other {# of these days have}} already passed.",
     "declined": "Left as it is.",
     "replaced": "This draft was replaced — reload to see the current one.",
     "consentRequired": "To talk it over, first allow AI coaching under Privacy.",

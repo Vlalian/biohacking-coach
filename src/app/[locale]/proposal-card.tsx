@@ -38,25 +38,28 @@ export type CardOutcome =
   | { kind: 'consentRequired' }
   | { kind: 'error'; reason: string };
 
-/** The line the card shows for an outcome — pure, so the copy rules are testable without a click. */
 /**
  * Once decided, the buttons go: the card says what happened and the page
  * refresh replaces it. `replaced` counts — the server said the draft this card
  * shows no longer exists, and a card that kept submitting decisions against
  * that id was the stale-button bug (CodeRabbit, PR #69). A consent refusal or
- * an error is not a decision; the athlete may try again.
+ * an error is not a decision; the athlete may try again. Acceptance is not a
+ * decided state either: an accepted card is no card (showable-version/42).
  */
 export function isDecided(outcome: CardOutcome): boolean {
-  return outcome.kind === 'accepted' || outcome.kind === 'declined' || outcome.kind === 'replaced';
+  return outcome.kind === 'declined' || outcome.kind === 'replaced';
 }
+
+/** The line the card shows for an outcome — pure, so the copy rules are testable without a click. */
 
 export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record<string, string | number> } | null {
   switch (outcome.kind) {
     case 'idle':
     case 'asking':
-      return null;
+    // No "Saved." line: the card goes, and the sessions on the calendar are
+    // the confirmation (Mads, showable-version/42).
     case 'accepted':
-      return outcome.pastDays > 0 ? { key: 'acceptedPast', values: { count: outcome.pastDays } } : { key: 'accepted' };
+      return null;
     case 'declined':
       return { key: 'declined' };
     case 'replaced':
@@ -140,6 +143,11 @@ export function ProposalCard({
     });
 
   const line = outcomeKey(outcome);
+  // Accepted: gone at once. `router.refresh()` then confirms it server-side.
+  if (outcome.kind === 'accepted') return null;
+  // The card names the week it is about: two weeks can each hold a draft, and
+  // two cards both titled "next week" read as the same card coming back.
+  const week = format.dateTime(new Date(`${draft.weekStart}T00:00:00`), { day: 'numeric', month: 'long' });
 
   function sessionLine(s: WeekDraft['sessions'][number]): string {
     const day = format.dateTime(new Date(`${s.date}T00:00:00`), { weekday: 'short', day: 'numeric', month: 'short' });
@@ -155,10 +163,10 @@ export function ProposalCard({
       aria-live="polite"
     >
       <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">
-        {t(adjusted ? 'titleAdjusted' : 'title')}
+        {t(adjusted ? 'titleAdjusted' : 'title', { week })}
       </h2>
       <p className="mt-1 font-body text-sm text-muted-foreground">
-        {t(adjusted ? 'leadAdjusted' : 'lead', { count: draft.sessions.length, week: draft.weekStart })}
+        {t(adjusted ? 'leadAdjusted' : 'lead', { count: draft.sessions.length })}
       </p>
       <ul className="mt-3 divide-y divide-rule border-y border-rule">
         {draft.sessions.map((s, i) => (

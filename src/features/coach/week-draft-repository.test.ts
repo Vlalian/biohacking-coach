@@ -313,6 +313,15 @@ describe('getCalendarProposalState — what the athlete’s calendar shows (18; 
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({ kind: 'proposal', draft: { id: 'd-2026-09-14' } });
   });
 
+  it('shows the other week’s draft after one week is accepted, carrying its own week (showable-version/42)', async () => {
+    const written = { id: 'x', type: 'week_plan_written', payload: { weekStart: '2026-09-14' }, createdAt: new Date('2026-09-16T09:00:00Z') };
+    rowsQueue.push([drafted('2026-09-14'), written], [drafted('2026-09-21', '2026-09-16')]);
+    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({
+      kind: 'proposal',
+      draft: { id: 'd-2026-09-21', weekStart: '2026-09-21' },
+    });
+  });
+
   it('shows next week’s draft when this week has none, and nothing when it is not visible yet', async () => {
     rowsQueue.push([], [drafted('2026-09-21', '2026-09-16')]);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({ kind: 'proposal', draft: { id: 'd-2026-09-21' } });

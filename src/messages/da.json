@@ -890,10 +890,10 @@
     "error": "Det virkede ikke ({reason})."
   },
   "ProposalCard": {
-    "title": "Næste uge er udkastet",
-    "lead": "{count, plural, one {# session} other {# sessioner}} for ugen fra {week}. Accepter den, drøft den med Momentum, eller lad ugen være som den er.",
-    "titleAdjusted": "Næste uge er justeret",
-    "leadAdjusted": "{count, plural, one {# session} other {# sessioner}} for ugen fra {week}, justeret ud fra det, der allerede lå i din plan. Accepter den, drøft den med Momentum, eller lad ugen være som den er.",
+    "title": "Ugen fra {week} er udkastet",
+    "lead": "{count, plural, one {# session} other {# sessioner}}. Accepter den, drøft den med Momentum, eller lad ugen være som den er.",
+    "titleAdjusted": "Ugen fra {week}, justeret",
+    "leadAdjusted": "{count, plural, one {# session} other {# sessioner}}, justeret ud fra det, der allerede lå i din plan. Accepter den, drøft den med Momentum, eller lad ugen være som den er.",
     "accept": "Accepter",
     "discuss": "Drøft med Momentum",
     "decline": "Ikke denne uge",
@@ -904,8 +904,6 @@
     "declineOther": "Noget andet",
     "declineSkip": "Spring over",
     "declineDiscuss": "Eller fortæl Momentum, hvad der er galt",
-    "accepted": "Gemt.",
-    "acceptedPast": "Gemt — {count, plural, one {# af dagene er} other {# af dagene er}} allerede gået.",
     "declined": "Ladt som den er.",
     "replaced": "Udkastet er erstattet — genindlæs for at se det gældende.",
     "consentRequired": "For at drøfte den skal du først tillade AI-coaching under Privatliv.",
