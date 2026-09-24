@@ -112,18 +112,18 @@ if (-not (Test-Path (Join-Path $Docs ".scratch"))) {
 # From $Docs: the things that CHANGE and are authoritative - the tracker, and
 # the agent conventions that govern it. These must never be copied.
 #
-# From $Main: per-checkout tooling and static reference. .agents/ is reached
-# through $Main rather than $Docs on purpose - the skills CLI mirrors it into
-# .claude/skills/ as symlinks holding absolute paths into whichever checkout ran
-# the install, so the path a session sees must be its own checkout's.
-# Since 2026-09-22 $Main\.agents is ITSELF a junction into $Docs\.agents, so the
-# skills are versioned with the tracker; this link resolves through to it and
-# the indirection is deliberate. Do not "fix" it to point at $Docs directly.
+# From $Main: per-checkout static reference.
+#
+# The project skills are not in this plan by name: since 2026-09-24 they live in
+# $Docs\.claude\skills (tracked there, so a cloud Project that attaches both
+# repositories loads them), and the canonical .claude\skills is a junction to
+# that folder. Get-ClaudeLinkPlan below enumerates .claude's children, so the
+# skills junction reaches every worktree the same way commands\ and hooks\ do.
+# The old .agents\skills copy and the generated .claude\commands mirrors are gone.
 $Links = [ordered]@{
   ".scratch"    = (Join-Path $Docs ".scratch")
   "docs\agents" = (Join-Path $Docs "docs\agents")
   "poc"         = (Join-Path $Main "poc")
-  ".agents"     = (Join-Path $Main ".agents")
 }
 
 # .claude is deliberately absent from the plan above. It is linked child by
@@ -288,13 +288,15 @@ foreach ($rel in $FileCopies.Keys) {
 #    not "fix" the link back into a plain file - that recreates the single,
 #    unversioned copy this removed. (mklink needs an elevated shell; the
 #    junctions above do not, which is why these two are the odd ones out.)
-#    CONTEXT-BRIEF.md is the generated index of CONTEXT.md + OVERVIEW.md (both
-#    gitignored, both in the main folder); importing the brief instead of the two
-#    whole files is what keeps a session's opening context at ~6k tokens rather
-#    than ~41k (2026-09-15). Rebuild it with scripts/context-brief.mjs.
+#    CONTEXT-BRIEF.md is the generated index of CONTEXT.md + OVERVIEW.md;
+#    importing the brief instead of the two whole files is what keeps a
+#    session's opening context at ~6k tokens rather than ~41k (2026-09-15).
+#    Since 2026-09-24 it is generated INTO $Docs and tracked there, so a cloud
+#    Project gets it through bc-docs's own CLAUDE.md; the import below reads the
+#    same file. Rebuild with: node scripts/context-brief.mjs $Docs
 $claudeMd = @"
 @AGENTS.md
-@$MainFwd/CONTEXT-BRIEF.md
+@$DocsFwd/CONTEXT-BRIEF.md
 "@
 # WriteAllText writes UTF-8 WITHOUT a BOM (Set-Content -Encoding utf8 would add one,
 # and a leading BOM can break the first @-import).
