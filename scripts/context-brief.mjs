@@ -15,9 +15,14 @@
  *
  *     node scripts/context-brief.mjs [repo-root]
  *
- * Both inputs are gitignored and live only in the canonical checkout. The root
- * defaults to the current directory; from a worktree, pass the canonical
- * checkout explicitly.
+ * Both inputs live in the private docs repo (bc-docs), and since 2026-09-24 the
+ * brief is written next to them and tracked there, so a cloud Project reads the
+ * same index a local session does. Pass that repo as the root:
+ *
+ *     node scripts/context-brief.mjs C:/Users/madsk/bc-docs
+ *
+ * The root defaults to the current directory, which only works where the two
+ * sources are present.
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
