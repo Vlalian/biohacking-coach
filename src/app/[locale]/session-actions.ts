@@ -85,7 +85,8 @@ export async function createAthleteSessionAction(input: {
     note: input.note,
     today: today(),
   });
-  if (result.ok) revalidatePath('/', 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }
 
@@ -106,7 +107,8 @@ export async function updateAthleteSessionAction(
     note: input.note,
     expectedVersion,
   });
-  if (result.ok) revalidatePath('/', 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }
 
@@ -118,6 +120,7 @@ export async function deleteAthleteSessionAction(
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const result = await deleteAthleteSession({ athleteId, sessionId, expectedVersion });
-  if (result.ok) revalidatePath('/', 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }

@@ -16,6 +16,14 @@ import {
   X,
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
+import type { SessionConflict } from '@/features/session/conflict';
+import {
+  beginCreate,
+  beginDelete,
+  beginEdit,
+  type WriteOutcome,
+  type Writes,
+} from '@/features/session/calendar-writes';
 import { offeredStatusActions } from '@/features/session/session-status-rules';
 import type { DrawerPolicy } from '@/features/session/drawer-policy';
 import { athleteDrawerPolicy, headCoachDrawerPolicy } from '@/features/session/drawer-policy';
@@ -155,6 +163,8 @@ export function SessionDrawer({
   onRate,
   onEditRequest,
   coachAthleteId,
+  onBeginWrite,
+  onSettleWrite,
 }: {
   state: DrawerState;
   /** Resolved fresh every render, never snapshotted at open-time — after a
@@ -179,6 +189,13 @@ export function SessionDrawer({
    * a tampered value buys nothing (ADR 0006).
    */
   coachAthleteId?: string;
+  /**
+   * The calendar's own writes (showable-version/44). Add, edit and delete show
+   * on the calendar at once through these and settle with the server's answer,
+   * with no page re-render; the status actions still refresh.
+   */
+  onBeginWrite: (start: (writes: Writes, shown: Session[]) => Writes) => void;
+  onSettleWrite: (key: string, outcome: WriteOutcome) => void;
 }) {
   const t = useTranslations('SessionDrawer');
   const router = useRouter();
@@ -215,6 +232,35 @@ export function SessionDrawer({
       }
       router.refresh();
       after?.();
+    });
+  }
+
+  /**
+   * Add, edit and delete: shown on the calendar at once, settled by the
+   * server's answer. A refusal puts the calendar back — on a conflict, to the
+   * row that won, so the next submit carries the version as it now stands while
+   * the form keeps what was typed. That used to take a `router.refresh()`.
+   */
+  function write(
+    key: string,
+    start: (writes: Writes, shown: Session[]) => Writes,
+    action: () => Promise<
+      | ({ ok: true } & WriteOutcome)
+      | { ok: false; reason: ActionRefusal; conflict?: SessionConflict }
+    >,
+    after?: () => void,
+  ) {
+    setError(null);
+    onBeginWrite(start);
+    startTransition(async () => {
+      const result = await action();
+      if (result.ok) {
+        onSettleWrite(key, result);
+        after?.();
+        return;
+      }
+      onSettleWrite(key, { ok: false, conflict: result.conflict });
+      setError(result.reason);
     });
   }
 
@@ -265,9 +311,22 @@ export function SessionDrawer({
               locale={locale}
               pending={pending}
               t={t}
-              onSubmit={(input) =>
-                run(() => createAthleteSessionAction({ date: state.date, ...input }), onClose)
-              }
+              onSubmit={(input) => {
+                const key = `tmp:${crypto.randomUUID()}`;
+                const draft = {
+                  date: state.date,
+                  type: input.type,
+                  duration: input.durationMin,
+                  isTraining: input.isTraining,
+                  note: input.note,
+                };
+                write(
+                  key,
+                  (w, shown) => beginCreate(w, shown, key, draft, todayKey),
+                  () => createAthleteSessionAction({ date: state.date, ...input }),
+                  onClose,
+                );
+              }}
             />
           ) : mode === 'edit' && session && coachAthleteId ? (
             <HeadCoachSessionForm
@@ -275,7 +334,20 @@ export function SessionDrawer({
               pending={pending}
               t={t}
               onSubmit={(input) =>
-                run(
+                write(
+                  session.id,
+                  // The same columns the server writes (head-coach-service `contentColumns`).
+                  (w, shown) =>
+                    beginEdit(w, shown, session.id, {
+                      date: input.date,
+                      type: input.type.trim(),
+                      duration: input.duration ?? null,
+                      zone: input.zone ?? null,
+                      title: input.title ?? null,
+                      note: input.note ?? null,
+                      // The form sends no flag, and the server writes its default.
+                      isTraining: true,
+                    }),
                   () =>
                     editPrescribedSessionAction(
                       coachAthleteId,
@@ -301,7 +373,18 @@ export function SessionDrawer({
                 note: session.note ?? '',
               }}
               onSubmit={(input) =>
-                run(() => updateAthleteSessionAction(session.id, input, session.version), onClose)
+                write(
+                  session.id,
+                  (w, shown) =>
+                    beginEdit(w, shown, session.id, {
+                      type: input.type,
+                      duration: input.durationMin,
+                      isTraining: input.isTraining,
+                      note: input.note,
+                    }),
+                  () => updateAthleteSessionAction(session.id, input, session.version),
+                  onClose,
+                )
               }
             />
           ) : session ? (
@@ -335,7 +418,9 @@ export function SessionDrawer({
               onRate={() => onRate(session)}
               onEdit={() => onEditRequest(session)}
               onDelete={() =>
-                run(
+                write(
+                  session.id,
+                  (w) => beginDelete(w, session.id),
                   () =>
                     coachAthleteId
                       ? deletePrescribedSessionAction(coachAthleteId, session.id, session.version)

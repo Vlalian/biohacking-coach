@@ -353,6 +353,7 @@
     "bounceNotYours": "Det er atletens egen session — den bliver, hvor de har lagt den.",
     "bounceError": "Det virkede ikke. Prøv igen.",
     "bounceParked": "Denne session holdes af en hviledag. Flyt hvileblokken først.",
+    "bounceSaving": "Din sidste ændring gemmes stadig. Prøv igen om et øjeblik.",
     "statusHealthy": "Rask",
     "statusIll": "Syg",
     "statusUninjured": "Uskadt",

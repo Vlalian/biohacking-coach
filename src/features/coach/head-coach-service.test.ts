@@ -190,6 +190,16 @@ describe('prescribeSession — the Head Coach adds a Prescribed Session', () => 
 });
 
 describe('editPrescribedSession — the content tier holds', () => {
+  it('reports the version it wrote, so the calendar keeps the session current without a reload (showable-version/44)', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+    limit.mockResolvedValue([sessionRow({ origin: 'head_coach', version: 4 })]);
+    updateReturning.mockResolvedValueOnce([{ version: 5 }]);
+
+    const result = await editPrescribedSession({ headCoachId: COACH, athleteId: ATHLETE, sessionId: 's1', input: VALID, expectedVersion: 4, today: TODAY });
+
+    expect(result).toEqual({ ok: true, sessionId: 's1', version: 5 });
+  });
+
   it('edits a Coach-authored session and records a head_coach event', async () => {
     getActiveLink.mockResolvedValue(LINK);
     limit.mockResolvedValue([sessionRow({ origin: 'coach' })]);
@@ -203,7 +213,7 @@ describe('editPrescribedSession — the content tier holds', () => {
       today: TODAY,
     });
 
-    expect(result).toEqual({ ok: true, sessionId: 's1' });
+    expect(result).toEqual({ ok: true, sessionId: 's1', version: 2 });
     expect(updateSet).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Revised threshold set' }),
     );
@@ -359,7 +369,7 @@ describe('moveSessionAsHeadCoach — the Head Coach re-places a session', () => 
       expectedVersion: 1,
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, version: 2 });
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({ actorType: 'head_coach', actorId: COACH }),
     );

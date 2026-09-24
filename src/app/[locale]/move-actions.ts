@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { resolveAthleteId } from './current-actor';
 import { moveSession, type MoveResult } from '@/features/session/session-move';
 import { isValidDateKey, today } from '@/lib/date';
@@ -35,6 +34,7 @@ export async function moveSessionAction(
     expectedVersion,
   });
 
-  if (result.ok) revalidatePath('/', 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }

@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { resolveHeadCoachId } from '../../../../current-actor';
 import {
   deletePrescribedSession,
@@ -41,7 +40,8 @@ export async function prescribeSessionAction(
     // already closed must not be judged against a browser's idea of today.
     today: today(),
   });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }
 
@@ -64,9 +64,8 @@ export async function editPrescribedSessionAction(
     // immutability must not be judged against a browser's idea of today.
     today: today(),
   });
-  // 'layout' is main's: the edited session shows on more than this page, so a
-  // page-scoped revalidate left the other tabs stale.
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }
 
@@ -87,7 +86,8 @@ export async function deletePrescribedSessionAction(
     // immutability must not be judged against a browser's idea of today.
     today: today(),
   });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }
 
@@ -119,6 +119,7 @@ export async function moveSessionAsCoachAction(
     today: today(),
   });
 
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
+  // No revalidation (showable-version/44): the calendar holds this write from
+  // the result, and other views read fresh on the next navigation.
   return result;
 }

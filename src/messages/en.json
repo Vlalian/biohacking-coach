@@ -353,6 +353,7 @@
     "bounceNotYours": "This is the athlete's own session — it stays where they put it.",
     "bounceError": "That didn't work. Try again.",
     "bounceParked": "This session is held by a rest day. Move the rest block first.",
+    "bounceSaving": "Still saving your last change. Try again in a moment.",
     "statusHealthy": "Healthy",
     "statusIll": "Ill",
     "statusUninjured": "Uninjured",

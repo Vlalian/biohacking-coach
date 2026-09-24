@@ -123,7 +123,7 @@ describe('Calendar — what a read-only calendar offers', () => {
     // surface stayed read-only. Removing the button must not take drag with it.
     const markup = render({
       readOnly: true,
-      onMove: async () => ({ ok: true }),
+      onMove: async () => ({ ok: true, version: 2 }),
     });
 
     expect(markup).toContain('draggable="true"');
@@ -227,6 +227,18 @@ describe('liftRefusal', () => {
 
   it('lets an ordinary planned session in the current week be lifted', () => {
     expect(liftRefusal({ date: MONDAY_THIS_WEEK, status: 'planned', parked: false }, TODAY)).toBeNull();
+  });
+
+  it('refuses a session whose last write has not come back yet (showable-version/44)', () => {
+    // A second drag would send the version the first write is about to
+    // replace, and be refused as stale. Waiting a moment is the honest answer.
+    const session = { date: MONDAY_THIS_WEEK, status: 'planned', parked: false };
+    expect(liftRefusal(session, TODAY, true)).toBe('saving');
+    expect(liftRefusal(session, TODAY, false)).toBeNull();
+  });
+
+  it('names the permanent refusal before the passing one', () => {
+    expect(liftRefusal({ date: TODAY, status: 'completed', parked: false }, TODAY, true)).toBe('frozen');
   });
 
   it('agrees with isFrozen rather than re-deciding it', async () => {

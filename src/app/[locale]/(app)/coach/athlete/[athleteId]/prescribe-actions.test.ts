@@ -115,7 +115,7 @@ describe('the plan-authoring actions', () => {
     expect(service).not.toHaveBeenCalled();
   });
 
-  it.each(cases)('%s revalidates the layout, not just the page', async (
+  it.each(cases)('%s does not re-render the page — the calendar holds the write (showable-version/44)', async (
     _name,
     call,
     service,
@@ -125,9 +125,9 @@ describe('the plan-authoring actions', () => {
 
     await call();
 
-    // The athlete surface is three nested tab routes; page-scoped revalidation
-    // would leave the other two serving what they read before.
-    expect(revalidatePath).toHaveBeenCalledWith(`/coach/athlete/${ATHLETE}`, 'layout');
+    // The calendar shows the write from this result; the prescribe panel
+    // refreshes the page itself; the other tabs read fresh on navigation.
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each(cases)('%s revalidates nothing when refused', async (_name, call, service) => {
@@ -159,7 +159,7 @@ describe('moveSessionAsCoachAction', () => {
       // A coach move is a contested write like any other (FR-5).
       expectedVersion: 1,
     });
-    expect(revalidatePath).toHaveBeenCalledWith(`/coach/athlete/${ATHLETE}`, 'layout');
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('refuses a caller with no coach row, without touching the plan', async () => {

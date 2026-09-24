@@ -50,7 +50,9 @@ import type { SessionConflict } from '@/features/session/conflict';
  */
 
 export type HeadCoachActionResult =
-  | { ok: true; sessionId: string }
+  // `version` is what an edit wrote, so the calendar keeps the session current
+  // without a reload (showable-version/44); prescribe and delete have none to report.
+  | { ok: true; sessionId: string; version?: number }
   | {
       ok: false;
       reason:
@@ -286,7 +288,7 @@ export async function editPrescribedSession(params: {
     },
   });
 
-  return written.ok ? { ok: true, sessionId } : written;
+  return written.ok ? { ok: true, sessionId, version: written.version } : written;
 }
 
 /**

@@ -5,6 +5,7 @@ import { getSessionAuthority } from './session-repository';
 import { createdStatusFor, validateAthleteSessionDraft } from './athlete-session-rules';
 import { casDeleteSession, casUpdateSession } from './versioned-write';
 import type { SessionConflict } from './conflict';
+import { toSession, type Session } from './session';
 
 /**
  * The Athlete Session adapter: reads, writes, and nothing else.
@@ -15,7 +16,9 @@ import type { SessionConflict } from './conflict';
  */
 
 export type CreateAthleteSessionResult =
-  | { ok: true; sessionId: string }
+  // The row as written — server-set status and dayOrder included — so the
+  // calendar can swap its placeholder for it without a reload (showable-version/44).
+  | { ok: true; session: Session }
   | { ok: false; reason: 'invalid' };
 
 /**
@@ -67,7 +70,7 @@ export async function createAthleteSession(params: {
         WHERE ${sessions.athleteId} = ${athleteId} AND ${sessions.date} = ${date}
       )`,
     })
-    .returning({ id: sessions.id });
+    .returning();
 
   await db.insert(events).values({
     athleteId,
@@ -77,11 +80,13 @@ export async function createAthleteSession(params: {
     payload: { sessionId: row.id, date, type },
   });
 
-  return { ok: true, sessionId: row.id };
+  return { ok: true, session: toSession(row) };
 }
 
 export type AthleteSessionWriteResult =
-  | { ok: true }
+  // An edit reports the version it wrote, so the calendar keeps the session
+  // current without a reload (showable-version/44). A delete has none to report.
+  | { ok: true; version?: number }
   | { ok: false; reason: 'not-found' | 'not-owner' | 'not-athlete-authored' | 'invalid' }
   | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 

@@ -8,6 +8,16 @@ import type { Session } from '@/features/session/session';
 import { dateKey, isoWeekNumber, weekStartOf } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
 import type { MoveResult } from '@/features/session/session-move';
+import type { SessionConflict } from '@/features/session/conflict';
+import {
+  NO_WRITES,
+  beginMove,
+  inFlightIds,
+  settle,
+  shownSessions,
+  type WriteOutcome,
+  type Writes,
+} from '@/features/session/calendar-writes';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { moveSessionAction } from './move-actions';
 import { markUnavailableDateAction, clearUnavailableDateAction } from './availability-actions';
@@ -32,7 +42,7 @@ export const HEADER_DAYS: readonly Date[] = Array.from({ length: 7 }, (_, i) => 
 // 'conflict' is the only reason the client cannot predict: it means someone
 // else — the Head Coach — changed this session while it was on screen, so the
 // move was refused rather than allowed to overwrite them (versioned-write.ts).
-type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked';
+type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked' | 'saving';
 
 /**
  * Every reason a Session Move can come back refused from the server, and the
@@ -87,11 +97,15 @@ type MoveRefusal =
 export function liftRefusal(
   session: { date: string; status: string; parked: boolean },
   todayKey: string,
-): Extract<BounceReason, 'frozen' | 'parked'> | null {
+  /** A write to this session is still waiting on the server (showable-version/44). */
+  inFlight = false,
+): LiftRefusal | null {
   if (isFrozen({ date: session.date, status: session.status }, todayKey)) return 'frozen';
   if (session.parked) return 'parked';
-  return null;
+  return inFlight ? 'saving' : null;
 }
+
+type LiftRefusal = Extract<BounceReason, 'frozen' | 'parked' | 'saving'>;
 
 /**
  * The message for each refusal the *calendar* decides for itself, so that a
@@ -105,6 +119,7 @@ export const BOUNCE_KEY: Record<BounceReason, string> = {
   frozen: 'bounceFrozen',
   conflict: 'bounceConflict',
   parked: 'bounceParked',
+  saving: 'bounceSaving',
 };
 
 export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
@@ -254,7 +269,9 @@ export function Calendar({
     sessionId: string,
     targetDate: string,
     expectedVersion: number,
-  ) => Promise<{ ok: true } | { ok: false; reason: MoveRefusal }>;
+  ) => Promise<
+    { ok: true; version: number } | { ok: false; reason: MoveRefusal; conflict?: SessionConflict }
+  >;
   /**
    * The athlete this calendar belongs to, when the Head Coach is the one
    * looking at it. Opens the Session Drawer on their behalf.
@@ -294,9 +311,20 @@ export function Calendar({
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
   const [healthDrawer, setHealthDrawer] = useState<HealthDrawerState>({ open: false });
   const [ratingSession, setRatingSession] = useState<Session | null>(null);
+  // This calendar's own writes (showable-version/44). What it renders is derived
+  // from the props and these, never a copy of the props, so a refresh landing
+  // mid-write cannot undo the write — see calendar-writes.ts.
+  const [writes, setWrites] = useState<Writes>(NO_WRITES);
+  const shown = shownSessions(sessions, writes);
+  const inFlight = new Set(inFlightIds(writes));
+  // For the drawer: it starts a write on what is shown now, and settles it
+  // with the server's answer.
+  const beginWrite = (start: (w: Writes, current: Session[]) => Writes) =>
+    setWrites((w) => start(w, shownSessions(sessions, w)));
+  const settleWrite = (key: string, outcome: WriteOutcome) => setWrites((w) => settle(w, key, outcome));
 
   const byDate = new Map<string, Session[]>();
-  for (const s of sessions) {
+  for (const s of shown) {
     const list = byDate.get(s.date);
     if (list) list.push(s);
     else byDate.set(s.date, [s]);
@@ -307,7 +335,7 @@ export function Calendar({
   // ghosted one taught the athlete it shows things it does not mean.
   const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable);
   const allExpanded = weeks.length > 0 && weeks.every((w) => expanded.includes(w.isoWeekStart));
-  const hasAnySession = sessions.length > 0;
+  const hasAnySession = shown.length > 0;
 
   function toggleWeek(isoWeekStart: string) {
     setExpanded((prev) =>
@@ -348,24 +376,29 @@ export function Calendar({
       window.setTimeout(() => setBounce(null), 2600);
     } else if (dragging.session.date !== day.date) {
       const { id, version } = dragging.session;
+      const target = day.date;
+      // The chip lands on its new day now; the server's answer settles it. No
+      // page re-render: the version that comes back is all the chip needs.
+      beginWrite((w, current) => beginMove(w, current, id, target));
       startTransition(async () => {
         // Both callers carry the version the client read, so a move that lost
         // a race is refused rather than silently winning. `onMove` is the Head
         // Coach's path (it acts on someone else's calendar and needs the
         // athlete id), the default is the athlete's own.
         const result = onMove
-          ? await onMove(id, day.date, version)
-          : await moveSessionAction(id, day.date, version);
+          ? await onMove(id, target, version)
+          : await moveSessionAction(id, target, version);
+        // A refusal puts the chip back — or, on a conflict, where the winner put it.
+        settleWrite(id, result.ok ? result : { ok: false, conflict: 'conflict' in result ? result.conflict : undefined });
         // A refused move used to look identical to a successful one, because
         // the result was discarded and the refresh put the session back where
         // it started. Say so instead — for *every* reason. This matched only
         // `conflict` until 2026-09-04, so the sentence above was true of one
         // refusal out of five and silently false of the rest.
         if (!result.ok) {
-          setBounce({ date: day.date, messageKey: MOVE_REFUSAL_KEY[result.reason] });
+          setBounce({ date: target, messageKey: MOVE_REFUSAL_KEY[result.reason] });
           window.setTimeout(() => setBounce(null), 4000);
         }
-        router.refresh();
       });
     }
     setDragging(null);
@@ -500,6 +533,7 @@ export function Calendar({
             hoverDate={hoverDate}
             bounce={bounce}
             pending={pending}
+            inFlight={inFlight}
             t={t}
             rejectionFor={rejectionFor}
             onToggleWeek={() => toggleWeek(week.isoWeekStart)}
@@ -525,7 +559,9 @@ export function Calendar({
         <SessionDrawer
           coachAthleteId={coachAthleteId}
           state={drawer}
-          sessions={sessions}
+          sessions={shown}
+          onBeginWrite={beginWrite}
+          onSettleWrite={settleWrite}
           importedSessionIds={importedSessionIds}
           locale={locale}
           todayKey={todayKey}
@@ -566,6 +602,7 @@ function WeekRow({
   hoverDate,
   bounce,
   pending,
+  inFlight,
   t,
   rejectionFor,
   onToggleWeek,
@@ -596,6 +633,8 @@ function WeekRow({
   hoverDate: string | null;
   bounce: { date: string; messageKey: string } | null;
   pending: boolean;
+  /** Sessions with a write still waiting on the server: not liftable until it answers. */
+  inFlight: Set<string>;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
   rejectionFor: (day: Day) => BounceReason | null;
   onToggleWeek: () => void;
@@ -785,7 +824,7 @@ function WeekRow({
                       t={t}
                       marks={marks}
                       canDrag={canDrag}
-                      refusal={liftRefusal(s, todayKey)}
+                      refusal={liftRefusal(s, todayKey, inFlight.has(s.id))}
                       // Omitted only where there is genuinely no drawer to
                       // open. A coach viewing a linked athlete has one now.
                       // Omitted only where there is genuinely no drawer to
@@ -953,7 +992,7 @@ function SessionChip({
    * and translated and could never be reached, because the drag that would have
    * raised it could not start.
    */
-  refusal: 'frozen' | 'parked' | null;
+  refusal: LiftRefusal | null;
   /**
    * Omitted where there is nothing to open — the Head Coach's read-only
    * calendar, which renders no `SessionDrawer`. Without it this renders plain
