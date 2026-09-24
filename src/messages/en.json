@@ -585,6 +585,7 @@
     "qDistanceSub": "Not the race — the shape of the training. Pick this even if you have nothing booked.",
     "qRaceDate": "Race date",
     "noRaceYet": "I don't have a race yet",
+    "noRaceYetNote": "Without a race, the plan comes one week at a time. Add one later under Settings → Training and the whole season is built toward it.",
     "optSprint": "Sprint",
     "optOlympic": "Olympic",
     "optHalf": "Half",

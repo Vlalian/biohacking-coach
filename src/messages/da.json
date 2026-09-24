@@ -585,6 +585,7 @@
     "qDistanceSub": "Ikke løbet — formen på træningen. Vælg den, også selvom du ikke har noget booket.",
     "qRaceDate": "Løbsdato",
     "noRaceYet": "Jeg har ikke et løb endnu",
+    "noRaceYetNote": "Uden et løb bliver planen lagt én uge ad gangen. Tilføj et løb senere under Indstillinger → Træning, så bygges hele sæsonen op mod det.",
     "optSprint": "Sprint",
     "optOlympic": "Olympisk",
     "optHalf": "Half",

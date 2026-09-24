@@ -117,3 +117,12 @@ describe('OnboardingFlow — hours and past races (training-architecture/35)', (
     }
   });
 });
+
+describe('OnboardingFlow — the race step (training-architecture/40)', () => {
+  it('tells an athlete with no race what they will not get, and where to set one', () => {
+    const html = render('race', ANSWERED);
+    expect(html).toContain('noRaceYetNote');
+    // The note sits with the "no race yet" choice, after it, not above the race fields.
+    expect(html.indexOf('noRaceYetNote')).toBeGreaterThan(html.indexOf('noRaceYet()'));
+  });
+});

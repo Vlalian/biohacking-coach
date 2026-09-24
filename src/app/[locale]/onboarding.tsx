@@ -396,6 +396,8 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
       >
         {t('noRaceYet')}
       </button>
+      {/* What choosing it costs, said before it is chosen (training-architecture/40). */}
+      <p className="font-body text-sm text-muted-foreground">{t('noRaceYetNote')}</p>
     </form>
   );
 }
