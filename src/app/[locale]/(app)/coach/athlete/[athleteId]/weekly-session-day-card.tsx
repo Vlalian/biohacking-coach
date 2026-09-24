@@ -24,8 +24,11 @@ import { dismissWeekCycleAction, setWeeklySessionDayAction } from './day-actions
  * day does.
  *
  * Always visible: whose day it is and which, the next two draft dates (the
- * coach's first, `HEAD_COACH_LEAD_DAYS` before the athlete's), the seven tiles,
- * and a fold that walks the weekly cycle in four steps. Every date and every
+ * coach's first, `HEAD_COACH_LEAD_DAYS` before the athlete's), a control for
+ * changing the day, and a fold that walks the weekly cycle in four steps. The
+ * copy carries no markup and names the AI coach as such: a Head Coach reading
+ * this for the first time is not helped by bold words, and "the Coach" means
+ * nothing to someone outside the project (Mads on the PR #102 preview). Every date and every
  * race fact is computed from the same arithmetic the draft runs on — never
  * typed into copy — so the card cannot disagree with the draft it describes.
  *
@@ -42,9 +45,6 @@ import { dismissWeekCycleAction, setWeeklySessionDayAction } from './day-actions
  */
 
 const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
-
-/** The ruled card bolds the day, "you" and the name; the strings carry `<b>` tags for `t.rich`. */
-const bold = { b: (chunks: React.ReactNode) => <b>{chunks}</b> };
 
 /** `Tue 22 Sep` / `tir. 22. sep.` — the short form the calendar header uses. */
 function shortDate(key: string, locale: string): string {
@@ -98,7 +98,11 @@ export function WeeklySessionDayCard({
       const { state, error } = await commitDayChoice(choice, (day) => setWeeklySessionDayAction(athleteId, day));
       setChoice(state);
       if (error) setNotice(t('error', { reason: error }));
-      else router.refresh();
+      else {
+        // The day is a fact again: the tiles fold away the moment one lands.
+        setChanging(false);
+        router.refresh();
+      }
     });
   };
 
@@ -114,7 +118,6 @@ export function WeeklySessionDayCard({
   };
 
   const stepArgs = {
-    ...bold,
     name,
     coachDay,
     day: dayName,
@@ -124,11 +127,10 @@ export function WeeklySessionDayCard({
 
   return (
     <section className="w-full max-w-3xl rounded-lg border p-4" data-weekly-session-day-card="">
-      <h2 className="font-display text-lg leading-tight text-foreground">{t.rich('headline', { ...bold, name, day: dayName })}</h2>
-      <p className="mt-1 font-body text-sm text-foreground">{t.rich('intro', { ...bold, name, day: dayName })}</p>
+      <h2 className="font-display text-lg leading-tight text-foreground">{t('headline', { name, day: dayName })}</h2>
+      <p className="mt-1 font-body text-sm text-foreground">{t('intro', { name, day: dayName })}</p>
       <p className="mt-2 font-body text-sm text-muted-foreground">
-        {t.rich('nextDraft', {
-          ...bold,
+        {t('nextDraft', {
           name,
           coachDate: shortDate(dates.coachSees, locale),
           athleteDate: shortDate(dates.athleteSees, locale),
@@ -201,12 +203,12 @@ export function WeeklySessionDayCard({
         <ol className="mt-2 list-decimal space-y-2 pl-5 font-body text-sm text-foreground">
           <li>
             {race
-              ? t.rich('step1', { ...stepArgs, race: race.name, weeks: race.weeksOut, block: race.blockName ?? t('noBlock') })
-              : t.rich('step1NoRace', stepArgs)}
+              ? t('step1', { ...stepArgs, race: race.name, weeks: race.weeksOut, block: race.blockName ?? t('noBlock') })
+              : t('step1NoRace', stepArgs)}
           </li>
-          <li>{t.rich('step2', stepArgs)}</li>
-          <li>{t.rich('step3', stepArgs)}</li>
-          <li>{t.rich('step4', stepArgs)}</li>
+          <li>{t('step2', stepArgs)}</li>
+          <li>{t('step3', stepArgs)}</li>
+          <li>{t('step4', stepArgs)}</li>
         </ol>
         <p className="mt-2 font-body text-sm text-muted-foreground">{t('changing')}</p>
         {teaching && (

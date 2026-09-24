@@ -45,8 +45,9 @@ describe('WeeklySessionDayCard — the day as a fact, with the dates it drives',
   it('renders the headline with the name and day, both next-draft dates, the tiles and the fold', () => {
     const html = renderToStaticMarkup(<WeeklySessionDayCard {...base} initialChanging />);
     expect(html).toContain('headline(name=Sarah,day=dayWednesday())');
-    // The ruled card bolds the day, "you" and the name: the strings carry <b> tags that t.rich renders.
-    expect(html).toContain('<b>b</b>');
+    // No markup in the copy: the card is read cold by someone learning the
+    // cycle, and bold words do not help them (Mads on the PR #102 preview).
+    expect(html).not.toContain('<b>');
     // The coach sees it Tue 22 Sep, the athlete Wed 23 Sep — from `nextDraftDates`,
     // not copy; the locale decides the order of day and month.
     expect(html).toMatch(/coachDate=[^,]*, Sep 22|coachDate=[^,]*22 Sep/);
