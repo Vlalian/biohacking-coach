@@ -205,10 +205,7 @@ export function InformationView({
           Data only — no reading of what the numbers mean (ADR 0004). */}
       <header className="mb-8 flex flex-wrap items-end justify-between gap-6 border-b border-border pb-8">
         <div className="min-w-0">
-          <span className="font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
-            {t('title')}
-          </span>
-          <h1 className="mt-2 font-display text-5xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground sm:text-6xl">
+          <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground sm:text-6xl">
             {athleteName || t('title')}
           </h1>
           <p className="mt-3 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">

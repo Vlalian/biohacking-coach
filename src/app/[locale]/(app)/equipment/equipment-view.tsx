@@ -65,8 +65,7 @@ export function EquipmentView({ items }: { items: EquipmentItem[] }) {
     <div className="w-full max-w-4xl">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
         <div>
-          <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">{t('eyebrow')}</p>
-          <h1 className="mt-2 font-display text-5xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h1>
+          <h1 className="font-display text-5xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h1>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">{t('lede')}</p>
         </div>
         {items.length > 0 && (

@@ -106,6 +106,9 @@ const VIEW_ICONS: Record<ViewId, typeof MessageSquare> = {
   feedback: MessageSquareWarning,
 };
 
+/** The reference pages, listed at the foot of the drawer rather than among the daily Views. */
+const FOOTER_VIEWS: ViewId[] = ['glossary', 'settings', 'privacy'];
+
 const THEME_ICONS: Record<ThemePreference, typeof Sun> = {
   light: Sun,
   dark: Moon,
@@ -177,9 +180,6 @@ export function AppShell({
 
         <div className="flex min-w-0 items-baseline gap-3">
           <Wordmark name={t.appName} size="bar" />
-          <span className="hidden truncate font-body text-sm font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/70 sm:inline">
-            {t.views[currentView]}
-          </span>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -258,14 +258,8 @@ export function AppShell({
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="px-5 pb-1 pt-4">
-            <span className="font-body text-[13px] font-semibold uppercase tracking-[0.22em] text-sidebar-foreground/70">
-              {t.navLandmark}
-            </span>
-          </div>
-
-          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2">
-            {availableViews.map((view) => {
+          <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-4">
+            {availableViews.filter((v) => !FOOTER_VIEWS.includes(v)).map((view) => {
               const Icon = VIEW_ICONS[view];
               const active = view === currentView;
               return (
@@ -276,6 +270,33 @@ export function AppShell({
                     aria-current={active ? 'page' : undefined}
                     className={[
                       'flex w-full items-center gap-3 border-l-4 px-4 py-3 text-left transition-colors',
+                      active
+                        ? 'border-signal bg-signal text-signal-foreground'
+                        : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                    ].join(' ')}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="font-display text-base font-semibold uppercase tracking-wide">{t.views[view]}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* The reference pages sit at the bottom, above Feedback and Sign out
+              (Mads, 2026-09-24); the top of the drawer is for the daily Views. */}
+          <ul className="shrink-0 space-y-1 border-t border-sidebar-border px-2 py-3">
+            {FOOTER_VIEWS.filter((v) => availableViews.includes(v)).map((view) => {
+              const Icon = VIEW_ICONS[view];
+              const active = view === currentView;
+              return (
+                <li key={view}>
+                  <button
+                    type="button"
+                    onClick={() => go(view)}
+                    aria-current={active ? 'page' : undefined}
+                    className={[
+                      'flex w-full items-center gap-3 border-l-4 px-4 py-2.5 text-left transition-colors',
                       active
                         ? 'border-signal bg-signal text-signal-foreground'
                         : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',

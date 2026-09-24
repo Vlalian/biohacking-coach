@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useSyncExternalStore, useTransition } from 'react';
-import { useTranslations } from 'next-intl';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
 import {
   localWeekday,
@@ -41,7 +40,6 @@ export function CoachThread({
    *  is gets decided here, in the athlete's own timezone. */
   checkInOffer?: CheckInOfferInput | null;
 }) {
-  const t = useTranslations('CoachThread');
   const { checkInOfferDismissed, dismissCheckInOffer, chatSeed, setChatSeed } = useCoachOverlay();
 
   // Decided on the client only. The server and the browser can disagree about
@@ -118,19 +116,16 @@ export function CoachThread({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="shrink-0 border-b border-border px-5 py-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
-            {t('title')}
-          </span>
-          {athleteFirstName && (
-            <div className="text-right font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-              <div>{athleteFirstName}</div>
-              {raceTarget && <div className="text-signal">{raceTarget}</div>}
-            </div>
-          )}
-        </div>
-      </header>
+      {/* One title only: the panel's own bar names Momentum (Mads, 2026-09-24).
+          What stays here is who the thread is for and what they train toward. */}
+      {athleteFirstName && (
+        <header className="shrink-0 border-b border-border px-5 py-2.5">
+          <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
+            {athleteFirstName}
+            {raceTarget && <span className="text-signal"> · {raceTarget}</span>}
+          </p>
+        </header>
+      )}
 
       {offerCheckIn && !checkInOfferDismissed && (
         <CheckInReminder

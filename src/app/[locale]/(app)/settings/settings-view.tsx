@@ -111,10 +111,7 @@ export function SettingsView({
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
         <header className="border-b border-border pb-6">
-          <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">
-            {t('eyebrow')}
-          </p>
-          <h1 className="mt-2 font-display text-5xl font-bold uppercase italic tracking-[0.03em] text-foreground">
+          <h1 className="font-display text-5xl font-bold uppercase italic tracking-[0.03em] text-foreground">
             {t('title')}
           </h1>
           <p className="mt-2 max-w-md font-body text-sm text-muted-foreground">
@@ -436,10 +433,12 @@ function TrainingSection({
     <Section label={t('sectionTraining')}>
       <RaceDistanceField value={raceDistance} onSave={onUpdateRaceDistance} />
       <RacesSection races={races} onAdd={onAddRace} onSetTarget={onSetTargetRace} onRemove={onRemoveRace} />
-      <CommunicationStyleField
-        value={communicationStyle}
-        onSave={onUpdateCommunicationStyle}
-      />
+      {/* Communication Style is hidden until it is discussed after the test
+          round (Mads, 2026-09-24). The stored value, the action and the field
+          below all stay, so bringing it back is one line. */}
+      {SHOW_COMMUNICATION_STYLE && (
+        <CommunicationStyleField value={communicationStyle} onSave={onUpdateCommunicationStyle} />
+      )}
       <WeeklySessionDayField value={weeklySessionDay} linked={weeklySessionDayLinked} onSave={onUpdateWeeklySessionDay} />
       <FixedConstraintsField
         value={fixedConstraints}
@@ -507,6 +506,8 @@ function RaceDistanceField({
     </div>
   );
 }
+
+const SHOW_COMMUNICATION_STYLE = false;
 
 function CommunicationStyleField({
   value,

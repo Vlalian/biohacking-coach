@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, Check, CornerDownLeft, MessageSquareWarning } from 'lucide-react';
+import { AlertTriangle, Check, CornerDownLeft } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import type { FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
@@ -99,13 +99,6 @@ export function FeedbackInterview({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10 sm:px-6">
       <header className="flex flex-col gap-2">
-        <span
-          aria-hidden="true"
-          className="inline-flex items-center gap-2 font-body text-sm uppercase tracking-[0.22em] text-muted-foreground"
-        >
-          <MessageSquareWarning className="h-4 w-4" aria-hidden="true" />
-          {t('title')}
-        </span>
         <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
           {t('title')}
         </h1>

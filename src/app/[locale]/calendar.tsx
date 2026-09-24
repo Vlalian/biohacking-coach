@@ -385,10 +385,7 @@ export function Calendar({
           kicker, the month as the display headline with the year in signal. */}
       <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-foreground pb-5">
         <div>
-          <span className="font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
-            {t('viewTitle')}
-          </span>
-          <h1 className="mt-1 font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
+          <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
             {format.dateTime(viewedMonth, { month: 'long' })}{' '}
             <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
           </h1>
