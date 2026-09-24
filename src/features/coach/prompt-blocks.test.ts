@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { groundingBlock, onboardingBlock, recentWeeksBlock } from './prompt-blocks';
+import { COACH_IDENTITY, groundingBlock, onboardingBlock, openingBlock, recentWeeksBlock } from './prompt-blocks';
 
 describe('groundingBlock', () => {
   it('GROUNDING: asked what it knows, the Coach looks up before answering and never describes the tool as its scope (knowledge-oracle/07)', () => {
@@ -74,5 +74,17 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     ]) {
       expect(recentWeeksBlock([empty('2026-09-14'), week])).toContain('- Week of 2026-09-21: 0.0h done of');
     }
+  });
+});
+
+describe('the identity the model is given (showable-version/46)', () => {
+  it('tells the model it is Momentum, never Coach', () => {
+    expect(COACH_IDENTITY).toBe('You are Momentum, the AI coach in a luxury Ironman training app.');
+    expect(openingBlock('en', 'Coach Chat.')).toBe(`${COACH_IDENTITY} Coach Chat.`);
+    expect(openingBlock('en', 'Coach Chat.')).not.toMatch(/You are Coach\b/);
+  });
+
+  it('splices the language directive in after the identity', () => {
+    expect(openingBlock('da', 'Coach Chat.')).toMatch(/^You are Momentum, the AI coach in a luxury Ironman training app\.\nLANGUAGE: Respond in Danish\.[\s\S]* Coach Chat\.$/);
   });
 });

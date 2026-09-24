@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`a re-draft after a decline (training-architecture/30) > renders the other reason 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 
@@ -49,7 +49,7 @@ Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → 
 `;
 
 exports[`a re-draft after a decline (training-architecture/30) > renders the too-little reason 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 
@@ -97,7 +97,7 @@ Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → 
 `;
 
 exports[`a re-draft after a decline (training-architecture/30) > renders the too-much reason 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 
@@ -145,7 +145,7 @@ Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → 
 `;
 
 exports[`a re-draft after a decline (training-architecture/30) > renders the wrong-days reason 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 
@@ -193,7 +193,7 @@ Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → 
 `;
 
 exports[`a re-draft after a decline (training-architecture/30) > shows the Coach what it proposed and was turned down, and asks for a different shape 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 
@@ -241,7 +241,7 @@ Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → 
 `;
 
 exports[`renderWeekDraftPrompt > renders identically for the same context (golden) 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 
@@ -282,7 +282,7 @@ Low body/energy/mental → soften load. Poor sleep → recovery. High pulse → 
 `;
 
 exports[`the four weeks before the drafted one (training-architecture/44) > carries the last four weeks 1`] = `
-"You are Coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
+"You are Momentum, the AI coach in a luxury Ironman training app. Drafting next week on your own — the athlete is not in the conversation.
 
 POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.
 

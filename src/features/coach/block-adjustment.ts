@@ -35,6 +35,12 @@ export interface BlockAdjustmentContext {
   notableSignal: string | null;
   /** The last four weeks' rated sessions. */
   reflections: WeekFeedbackEntry[];
+  /**
+   * The Athlete Language, for the shared identity's directive
+   * (showable-version/46). Optional: nothing passes it yet, so block shaping
+   * still writes in English until the service reads the language.
+   */
+  language?: string;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

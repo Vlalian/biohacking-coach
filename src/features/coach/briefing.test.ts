@@ -1,3 +1,4 @@
+import { COACH_IDENTITY } from './prompt-blocks';
 import { describe, it, expect } from 'vitest';
 import {
   BRIEFING_OPENER,
@@ -53,7 +54,7 @@ describe('renderBriefingPrompt — the plan is always visible', () => {
 
   it('addresses the coach about the athlete, never the athlete', () => {
     const prompt = renderBriefingPrompt(ctx());
-    expect(prompt).toContain('briefing their Head Coach');
+    expect(prompt).toContain("briefing the athlete's coach");
     expect(prompt).toContain('never use a real name');
   });
 });
@@ -398,5 +399,14 @@ describe('briefingRaces — the race half of the profile', () => {
     expect(briefingRaces(rows, '2026-09-11').hasTargetRace).toBe(true);
     expect(briefingRaces(rows, '2027-08-16').hasTargetRace).toBe(false);
     expect(briefingRaces([rows[1]], '2026-09-11').hasTargetRace).toBe(false);
+  });
+});
+
+describe('renderBriefingPrompt — who is briefing whom (showable-version/46)', () => {
+  it('introduces itself as Momentum to the athlete’s coach, not as Coach to their Head Coach', () => {
+    const prompt = renderBriefingPrompt(ctx());
+    expect(prompt.startsWith(COACH_IDENTITY)).toBe(true);
+    expect(prompt).toContain("You are briefing the athlete's coach — a human coach — about this athlete");
+    expect(prompt).not.toMatch(/You are Coach\b/);
   });
 });

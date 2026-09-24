@@ -12,22 +12,24 @@ import { buildInterviewPrompt, TRUST_SIGNAL_QUESTION } from './feedback-prompt';
 describe('buildInterviewPrompt', () => {
   const prompt = buildInterviewPrompt({ askTrustSignal: false });
 
-  it('says it is not the Coach', () => {
+  it('says it is not Momentum, the AI coach (showable-version/46)', () => {
     // The single load-bearing sentence. The tester has to know who they are
-    // talking to before they will say the Coach got it wrong.
-    expect(prompt).toMatch(/not the Coach/i);
+    // talking to before they will say the Coach got it wrong — and the Coach is
+    // called Momentum in everything they read.
+    expect(prompt).toMatch(/not Momentum/i);
   });
 
   it('never calls itself Coach', () => {
     // `openingBlock` in the Coach's own prompt-blocks opens every Coach prompt
-    // with "You are Coach in a luxury Ironman training app". Reusing it here
+    // with COACH_IDENTITY ("You are Momentum, the AI coach …"). Reusing it here
     // would make the interviewer a second Coach in one line.
     expect(prompt).not.toMatch(/You are Coach/);
+    expect(prompt).not.toMatch(/You are Momentum/);
   });
 
   it('sends a coaching question back to the Coach thread', () => {
     expect(prompt).toMatch(/coaching question/i);
-    expect(prompt).toMatch(/Coach Chat|Coach thread/i);
+    expect(prompt).toContain('Momentum is the other thread');
   });
 
   it('forbids the postures an interviewer must not have', () => {

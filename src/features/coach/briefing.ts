@@ -5,6 +5,7 @@ import {
   assemble,
   block,
   buildOnboardingLines,
+  COACH_IDENTITY,
   languageDirective,
   type PromptBlock,
 } from './prompt-blocks';
@@ -426,7 +427,7 @@ export function renderBriefingPrompt(ctx: BriefingContext): string {
   const { today, language, plan, blocks, reports, transcripts, preferredName } = ctx;
 
   return assemble([
-    `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
+    `${COACH_IDENTITY}${languageDirective(language)} You are briefing the athlete's coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
     briefingPosture(preferredName),
     `TODAY: ${today}`,
     planBlock(plan),

@@ -675,7 +675,7 @@ function chatPlanningBlocks(planning: ChatPlanning | null): PromptBlock[] {
 const ORIGIN_LABEL: Record<SessionOrigin, string> = {
   coach: 'you planned this',
   arithmetic: 'the plan structure put this here',
-  head_coach: "the athlete's Head Coach set this",
+  head_coach: "the athlete's coach set this",
   athlete: 'the athlete added this themselves',
   garmin: "logged from the athlete's watch",
 };
@@ -753,7 +753,7 @@ function weekBlock(week: WeekSession[]): PromptBlock {
 
   const hasPrescribed = week.some((s) => s.origin === 'head_coach');
   const authority = hasPrescribed
-    ? `\n\nAUTHORITY: The Head Coach's sessions are theirs, not yours. Explain and defend them — why they were set, why they are a good idea — as one team, one plan, one voice. Never offer to change or remove one; the Head Coach decides. For your own sessions, talk freely about alternatives.`
+    ? `\n\nAUTHORITY: The sessions the athlete's coach set are theirs, not yours. Explain and defend them — why they were set, why they are a good idea — as one team, one plan, one voice. Never offer to change or remove one; the coach decides. Talking to the athlete, call them "your coach". For your own sessions, talk freely about alternatives.`
     : '';
 
   return `THIS WEEK (Mon-Sun, every session on the athlete's calendar this week — refer to a session by its day and type, never by a number or id):
@@ -823,7 +823,10 @@ function athleteBlock(ctx: BlockAdjustmentContext): string {
 export function renderBlockAdjustmentPrompt(ctx: BlockAdjustmentContext): string {
   const distance = ctx.race.distance ? `distance=${ctx.race.distance}` : 'distance unknown';
   return assemble([
-    `You are Coach in a luxury Ironman training app. You are shaping the Training Blocks of one athlete's horizon toward their Target Race. This runs once, in the background: the athlete is not in this conversation and will read the result later in your own voice, so do not address them here — call the tool.`,
+    openingBlock(
+      ctx.language,
+      "You are shaping the Training Blocks of one athlete's horizon toward their Target Race. This runs once, in the background: the athlete is not in this conversation and will read the result later in your own voice, so do not address them here — call the tool.",
+    ),
     `HORIZON: ${distance} · race=${ctx.race.name} on ${ctx.race.date} · ${ctx.weeksToRace} weeks from today (${ctx.today})`,
     `ARITHMETIC DRAFT (the horizon divided evenly, with no purpose yet):\n${ctx.draft.map(draftLine).join('\n')}`,
     athleteBlock(ctx),

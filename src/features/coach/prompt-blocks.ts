@@ -182,12 +182,20 @@ export function preferredNameBlock(preferredName?: string | null): PromptBlock {
 }
 
 /**
+ * What the model is told it is, in every prompt where it speaks as the AI
+ * coach (showable-version/46): **Momentum**, the name the athlete sees. One
+ * constant so a copy cannot drift. Three copies saying "You are Coach"
+ * outlived the rename in the UI.
+ */
+export const COACH_IDENTITY = 'You are Momentum, the AI coach in a luxury Ironman training app.';
+
+/**
  * The opening identity line, with the language directive spliced in exactly
- * where it has always sat — inside the first sentence, before the prompt names
- * which conversation this is.
+ * where it has always sat — after the identity, before the prompt names which
+ * conversation this is.
  */
 export function openingBlock(language: string | undefined, role: string): string {
-  return `You are Coach in a luxury Ironman training app.${languageDirective(language)} ${role}`;
+  return `${COACH_IDENTITY}${languageDirective(language)} ${role}`;
 }
 
 const EQUIPMENT_CATEGORY_LABEL: Record<EquipmentCategory, string> = {
