@@ -28,7 +28,7 @@ Your first ten minutes:
 3. Open Training Plan. The Coach drafts your first week in about half a minute — accept it,
    discuss it, or decline it.
 4. Have one conversation in Coach Chat. Ask what you would ask a coach.
-5. Open the Feedback Interview (the "Something to say?" hatch) and tell us what you think, in
+5. Open the Feedback Interview (the "Feedback?" link in the menu) and tell us what you think, in
    your own words. That is the whole point of this round.
 
 If you have a Garmin: Garmin Connect › the activity › Export Original, then "Upload Garmin
@@ -59,8 +59,8 @@ Dine første ti minutter:
 3. Åbn Træningsplan. Coachen laver et udkast til din første uge på cirka et halvt minut —
    accepter det, diskuter det, eller afvis det.
 4. Tag én samtale i Coach-chatten. Spørg om det, du ville spørge en coach om.
-5. Åbn Feedback-interviewet (lugen "Noget at sige?") og fortæl os, hvad du synes, med dine egne
-   ord. Det er hele formålet med denne runde.
+5. Åbn Feedback-interviewet (linket "Feedback?" i menuen) og fortæl os, hvad du synes, med dine
+   egne ord. Det er hele formålet med denne runde.
 
 Har du en Garmin: Garmin Connect › aktiviteten › Export Original, og så "Upload Garmin-fil" på
 Træningsplanen. Ikke et krav.

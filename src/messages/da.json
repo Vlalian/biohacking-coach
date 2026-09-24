@@ -23,7 +23,7 @@
     "viewPrivacy": "Privatliv & vilkår",
     "viewRoster": "Atleter",
     "viewFeedback": "Feedback-interview",
-    "feedbackHatch": "Noget at sige?"
+    "feedbackHatch": "Feedback?"
   },
   "AthletePage": {
     "greeting": "Velkommen tilbage, {name}",

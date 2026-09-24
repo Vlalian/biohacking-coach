@@ -70,7 +70,7 @@ describe('message catalogues', () => {
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.
     const cognates =
-      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing|Interviewer|Sprint|Half|Full)\b/g;
+      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing|Interviewer|Sprint|Half|Full|Feedback)\b/g;
     const cognateScope = (path: string) =>
       path.startsWith('Information.') ||
       path.startsWith('SessionDrawer.') ||
@@ -99,6 +99,12 @@ describe('message catalogues', () => {
       // label has nowhere to hide a forgotten translation, which is what the
       // guard is for.
       path === 'FeedbackInterview.interviewerLabel' ||
+      // The escape hatch in the drawer footer reads "Feedback?" in both
+      // languages (Mads, 2026-09-24). "Feedback" is the loanword this catalogue
+      // already uses in Danish — "Din feedback", "Send feedback" — and a
+      // one-word label has nowhere to hide a forgotten translation, which is
+      // what the guard is for.
+      path === 'Shell.feedbackHatch' ||
       // The Race Distances and their step label (`training-architecture/02`).
       // "Distance" is an ordinary Danish noun, and Danish triathletes name the
       // distances in English — a Half is a Half and a Full is a Full, the same

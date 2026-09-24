@@ -23,7 +23,7 @@
     "viewPrivacy": "Privacy & Terms",
     "viewRoster": "Roster",
     "viewFeedback": "Feedback Interview",
-    "feedbackHatch": "Something to say?"
+    "feedbackHatch": "Feedback?"
   },
   "AthletePage": {
     "greeting": "Welcome back, {name}",
