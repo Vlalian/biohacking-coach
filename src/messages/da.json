@@ -855,6 +855,7 @@
   },
   "WeeklySessionDayLine": {
     "text": "Din uge udarbejdes hver {coachDay} aften og vises for dig {day}: godkend den, drøft den, eller lad den ligge.",
+    "textLinked": "Din uge forberedes af {coach} og vises for dig {day}: godkend den, drøft den, eller lad den ligge.",
     "change": "Skift dagen under Indstillinger"
   },
   "WeekDraftReview": {

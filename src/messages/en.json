@@ -855,6 +855,7 @@
   },
   "WeeklySessionDayLine": {
     "text": "Your week is drafted every {coachDay} evening and shown to you {day}: accept it, discuss it, or leave it.",
+    "textLinked": "Your week is prepared by {coach} and shown to you {day}: accept it, discuss it, or leave it.",
     "change": "Change the day in Settings"
   },
   "WeekDraftReview": {

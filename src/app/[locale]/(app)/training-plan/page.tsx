@@ -16,6 +16,7 @@ import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
 import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
+import { getLinkForAthlete } from '@/features/coach/coach-repository';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
 import { Calendar } from '../../calendar';
@@ -97,6 +98,7 @@ export default async function TrainingPlanPage({
   // same request (29). Read with today as `asOf`: a linked Head Coach's
   // day-early preview is not the athlete's to see yet (17).
   const proposal = athlete ? await calendarSlotState(athlete.id, todayKey) : null;
+  const link = athlete ? await getLinkForAthlete(athlete.id) : undefined;
 
   // Stage 2 runs here, **after the response is sent**. The page renders now;
   // the ~20 s Coach call runs once the athlete has their calendar, and the next
@@ -129,7 +131,12 @@ export default async function TrainingPlanPage({
         blocks={horizon.blocks}
       />
       {/* One line on the athlete's own cycle (training-architecture/28); the day is changed in Settings. */}
-      {athlete && <WeeklySessionDayLine weeklySessionDay={athlete.profile?.weeklySessionDay} />}
+      {athlete && (
+        <WeeklySessionDayLine
+          weeklySessionDay={athlete.profile?.weeklySessionDay}
+          headCoachName={link ? (link.headCoachPreferredName ?? link.headCoachName) : null}
+        />
+      )}
       <Calendar
         sessions={trainingSessions}
         unavailableDates={unavailableDates}

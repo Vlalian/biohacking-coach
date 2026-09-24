@@ -60,6 +60,12 @@ const Calendar = vi.fn(() => null);
 vi.mock('../../calendar', () => ({ Calendar }));
 vi.mock('../../garmin-upload', () => ({ GarminUpload: () => null }));
 vi.mock('../../detected-activities', () => ({ DetectedActivities: () => null }));
+// The cycle line names a linked Head Coach (training-architecture/42): the
+// page reads the athlete's own link and hands the name down.
+const WeeklySessionDayLine = vi.fn(() => null);
+vi.mock('../../weekly-session-day-line', () => ({ WeeklySessionDayLine }));
+const getLinkForAthlete = vi.fn(async (): Promise<unknown> => undefined);
+vi.mock('@/features/coach/coach-repository', () => ({ getLinkForAthlete }));
 
 const { default: TrainingPlanPage } = await import('./page');
 
@@ -185,5 +191,27 @@ describe('TrainingPlanPage — the drafted week (training-architecture/18, 29)',
     getAthleteByUserId.mockResolvedValue(undefined);
     await render();
     expect(calendarSlotState).not.toHaveBeenCalled();
+  });
+});
+
+describe('TrainingPlanPage — the cycle line names a linked Head Coach (training-architecture/42)', () => {
+  const LINK = { id: 'link_1', coachId: 'coach_1', athleteId: 'athlete_1', status: 'active' };
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: { weeklySessionDay: 'Wednesday' } });
+  });
+
+  it('tells the cycle line who the Head Coach is, preferring their chosen name, reading the athlete’s own link', async () => {
+    getLinkForAthlete.mockResolvedValue({ headCoachName: 'Sarah Berg', headCoachPreferredName: 'Coach B', link: LINK });
+    const line = findElement(await render(), WeeklySessionDayLine)?.props;
+    expect(getLinkForAthlete).toHaveBeenCalledWith('athlete_1');
+    expect(line).toMatchObject({ weeklySessionDay: 'Wednesday', headCoachName: 'Coach B' });
+  });
+
+  it('falls back to the account name, and passes null when there is no link', async () => {
+    getLinkForAthlete.mockResolvedValue({ headCoachName: 'Sarah Berg', headCoachPreferredName: null, link: LINK });
+    expect(findElement(await render(), WeeklySessionDayLine)?.props.headCoachName).toBe('Sarah Berg');
+    getLinkForAthlete.mockResolvedValue(undefined);
+    expect(findElement(await render(), WeeklySessionDayLine)?.props.headCoachName).toBeNull();
   });
 });
