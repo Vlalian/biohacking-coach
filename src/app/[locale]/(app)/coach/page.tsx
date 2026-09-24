@@ -9,18 +9,11 @@ import { auth } from '@/lib/auth';
 import { getCoachByUserId } from '@/features/coach/coach-repository';
 import { getRosterWithReviews } from '@/features/coach/roster-service';
 import { getResolvedBlocks } from '@/features/coach/training-block-service';
-import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
-import { daysBetween, today } from '@/lib/date';
+import { initialsOf, rosterCardOf } from '@/features/coach/roster-card';
+import { today } from '@/lib/date';
 
 // Per-request: the page depends on who is signed in, so it is never prerendered.
 export const dynamic = 'force-dynamic';
-
-/** The initials on an athlete's card, from the name they gave the app. */
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : parts;
-  return letters.map((p) => p[0]!.toUpperCase()).join('') || '·';
-}
 
 export default async function CoachRosterPage({
   params,
@@ -60,17 +53,10 @@ export default async function CoachRosterPage({
   // exposes nothing the athlete page does not. A handful of reads; the Roster
   // is a handful of people.
   const cards = await Promise.all(
-    roster.map(async (entry) => {
-      const horizon = await getResolvedBlocks(entry.athleteId, todayKey);
-      const block = horizon.race ? currentBlock(todayKey, horizon.blocks) : null;
-      return {
-        entry,
-        race: horizon.race
-          ? { name: horizon.race.name, days: Math.max(0, daysBetween(todayKey, horizon.race.date)) }
-          : null,
-        block: block ? { name: block.name, ...blockPosition(todayKey, block) } : null,
-      };
-    }),
+    roster.map(async (entry) => ({
+      entry,
+      ...rosterCardOf(await getResolvedBlocks(entry.athleteId, todayKey), todayKey),
+    })),
   );
   const toReview = roster.filter((e) => e.awaitingReview).length;
 

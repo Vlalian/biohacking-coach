@@ -16,6 +16,9 @@ import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './s
 import { RacesSection, type SettingsRace } from './settings-races';
 import type { DeleteAccountResult } from './erasure-actions';
 
+/** Communication Style is hidden until the post-test discussion (Mads, 2026-09-24). */
+const SHOW_COMMUNICATION_STYLE = false;
+
 /** The profile fields Settings reads and edits — a narrower shape than the
  *  stored {@link import('@/features/athlete/athlete').Athlete}, resolved by
  *  the page from the athlete row plus the better-auth user. */
@@ -527,8 +530,6 @@ function RaceDistanceField({
     </div>
   );
 }
-
-const SHOW_COMMUNICATION_STYLE = false;
 
 function CommunicationStyleField({
   value,

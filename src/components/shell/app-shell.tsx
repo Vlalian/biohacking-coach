@@ -228,55 +228,19 @@ export function AppShell({
             </button>
           </div>
           <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-4">
-            {availableViews.filter((v) => !FOOTER_VIEWS.includes(v)).map((view) => {
-              const Icon = VIEW_ICONS[view];
-              const active = view === currentView;
-              return (
-                <li key={view}>
-                  <button
-                    type="button"
-                    onClick={() => go(view)}
-                    aria-current={active ? 'page' : undefined}
-                    className={[
-                      'flex w-full items-center gap-3 border-l-4 px-4 py-3 text-left transition-colors',
-                      active
-                        ? 'border-signal bg-signal text-signal-foreground'
-                        : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                    ].join(' ')}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="font-display text-base font-semibold uppercase tracking-wide">{t.views[view]}</span>
-                  </button>
-                </li>
-              );
-            })}
+            {availableViews
+              .filter((v) => !FOOTER_VIEWS.includes(v))
+              .map((view) => (
+                <NavItem key={view} view={view} active={view === currentView} label={t.views[view]} onGo={go} />
+              ))}
           </ul>
 
           {/* The reference pages sit at the bottom, above Feedback and Sign out
               (Mads, 2026-09-24); the top of the drawer is for the daily Views. */}
           <ul className="shrink-0 space-y-1 border-t border-sidebar-border px-2 py-3">
-            {FOOTER_VIEWS.filter((v) => availableViews.includes(v)).map((view) => {
-              const Icon = VIEW_ICONS[view];
-              const active = view === currentView;
-              return (
-                <li key={view}>
-                  <button
-                    type="button"
-                    onClick={() => go(view)}
-                    aria-current={active ? 'page' : undefined}
-                    className={[
-                      'flex w-full items-center gap-3 border-l-4 px-4 py-2.5 text-left transition-colors',
-                      active
-                        ? 'border-signal bg-signal text-signal-foreground'
-                        : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                    ].join(' ')}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="font-display text-base font-semibold uppercase tracking-wide">{t.views[view]}</span>
-                  </button>
-                </li>
-              );
-            })}
+            {FOOTER_VIEWS.filter((v) => availableViews.includes(v)).map((view) => (
+              <NavItem key={view} view={view} active={view === currentView} label={t.views[view]} onGo={go} compact />
+            ))}
           </ul>
 
           {navFooter && (
@@ -301,6 +265,46 @@ export function AppShell({
         )}
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  One entry in the Navigation Drawer, for the daily Views and the     */
+/*  reference pages alike, so the two lists cannot drift apart.         */
+/* ------------------------------------------------------------------ */
+
+function NavItem({
+  view,
+  active,
+  label,
+  onGo,
+  compact = false,
+}: {
+  view: ViewId;
+  active: boolean;
+  label: string;
+  onGo: (view: ViewId) => void;
+  compact?: boolean;
+}) {
+  const Icon = VIEW_ICONS[view];
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onGo(view)}
+        aria-current={active ? 'page' : undefined}
+        className={[
+          'flex w-full items-center gap-3 border-l-4 px-4 text-left transition-colors',
+          compact ? 'py-2.5' : 'py-3',
+          active
+            ? 'border-signal bg-signal text-signal-foreground'
+            : 'border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+        ].join(' ')}
+      >
+        <Icon className="h-4 w-4" />
+        <span className="font-display text-base font-semibold uppercase tracking-wide">{label}</span>
+      </button>
+    </li>
   );
 }
 

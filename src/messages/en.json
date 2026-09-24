@@ -126,7 +126,6 @@
     "bestSwim100": "Fastest 100 m swim"
   },
   "Equipment": {
-    "eyebrow": "View",
     "title": "Equipment",
     "lede": "What you train on, so Momentum can be specific.",
     "addItem": "Add equipment",
@@ -153,7 +152,6 @@
   },
   "Settings": {
     "weeklySessionDayLinked": "Your coach sets this while you are linked.",
-    "eyebrow": "View",
     "title": "Settings",
     "lede": "Durable preferences Momentum reads every time it plans for you.",
     "noAthlete": "We couldn't load your profile. Please sign out and try again.",
@@ -336,7 +334,6 @@
     "clearUnavailable": "Make {date} available again",
     "unavailableDay": "Unavailable — can't train this day",
     "parked": "Parked — awaiting re-placement",
-    "viewTitle": "Training Plan",
     "prevMonth": "Previous month",
     "nextMonth": "Next month",
     "expandAll": "Expand all weeks",

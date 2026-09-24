@@ -126,7 +126,6 @@
     "bestSwim100": "Hurtigste 100 m svømning"
   },
   "Equipment": {
-    "eyebrow": "Visning",
     "title": "Udstyr",
     "lede": "Hvad du træner på, så Momentum kan give specifikke råd.",
     "addItem": "Tilføj udstyr",
@@ -153,7 +152,6 @@
   },
   "Settings": {
     "weeklySessionDayLinked": "Din træner bestemmer denne, så længe I er koblet sammen.",
-    "eyebrow": "Visning",
     "title": "Indstillinger",
     "lede": "Faste præferencer, som Momentum læser, hver gang planen lægges.",
     "noAthlete": "Vi kunne ikke indlæse din profil. Log ud, og prøv igen.",
@@ -270,7 +268,7 @@
     "summaryReview": "{n} med en uge til gennemsyn",
     "raceCountdown": "T-{days} {days, plural, =1 {dag} other {dage}}",
     "blockLine": "{block} · uge {week} af {weeks}",
-    "noRace": "Intet løb sat"
+    "noRace": "Intet løb valgt"
   },
   "Prescribe": {
     "addTitle": "Ordinér en session",
@@ -295,7 +293,7 @@
     "kindCoachChat": "Samtale med Momentum",
     "kindWeeklySession": "Ugentlig session",
     "roleAthlete": "Atlet",
-    "roleCoach": "Træner",
+    "roleCoach": "Momentum",
     "roleHeadCoach": "Træner"
   },
   "Briefing": {
@@ -336,7 +334,6 @@
     "clearUnavailable": "Gør {date} tilgængelig igen",
     "unavailableDay": "Utilgængelig — kan ikke træne denne dag",
     "parked": "Parkeret — afventer ny placering",
-    "viewTitle": "Træningsplan",
     "prevMonth": "Forrige måned",
     "nextMonth": "Næste måned",
     "expandAll": "Udvid alle uger",

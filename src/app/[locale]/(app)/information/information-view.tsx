@@ -319,7 +319,7 @@ export function InformationView({
                   <span className="flex items-center gap-1 text-muted-foreground">
                     {p.series && (
                       <button
-                        className={`inline-flex h-9 w-9 items-center justify-center transition-colors hover:text-foreground ${
+                        className={`inline-flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground ${
                           graphIds.includes(p.id) ? 'text-signal' : ''
                         }`}
                         title={t('addToGraph')}
@@ -331,7 +331,7 @@ export function InformationView({
                       </button>
                     )}
                     <button
-                      className={`inline-flex h-9 w-9 items-center justify-center transition-colors hover:text-foreground ${
+                      className={`inline-flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground ${
                         enlarged.includes(p.id) ? 'text-signal' : ''
                       }`}
                       title={t('enlarge')}
@@ -342,7 +342,7 @@ export function InformationView({
                       <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
                     <button
-                      className="inline-flex h-9 w-9 items-center justify-center transition-colors hover:text-foreground"
+                      className="inline-flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground"
                       title={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-label={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-pressed={isFavorite(favorites, p.id)}

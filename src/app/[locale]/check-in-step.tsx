@@ -26,7 +26,7 @@ function ScoreRow({
       <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </span>
-      <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label={label}>
+      <div className="mt-1.5 grid grid-cols-10 gap-1" role="group" aria-label={label}>
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => (
           <button
             key={score}
@@ -34,7 +34,7 @@ function ScoreRow({
             disabled={disabled}
             aria-pressed={value === score}
             onClick={() => onChange(score)}
-            className={`h-8 w-8 border font-body text-sm transition-colors disabled:opacity-40 ${
+            className={`h-10 border font-body text-[15px] transition-colors disabled:opacity-40 ${
               value === score
                 ? 'border-signal bg-signal text-signal-foreground'
                 : 'border-border text-muted-foreground hover:text-foreground'
