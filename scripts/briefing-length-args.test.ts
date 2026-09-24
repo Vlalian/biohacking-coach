@@ -36,9 +36,19 @@ describe('parseBriefingLengthArgs — what the script measures', () => {
 });
 
 describe('words and sentences — how a reply is measured', () => {
-  it('counts words on whitespace and sentences on terminal punctuation', () => {
+  it('counts words as runs of non-space, whatever the spacing around them', () => {
     expect(words("Here's the read.\n\n**Adherence:** strong.")).toBe(5);
+    expect(words('  two   words ')).toBe(2);
+    expect(words('')).toBe(0);
+  });
+
+  it('counts a sentence at each . ! or ? that ends a word run', () => {
     expect(sentences('Strong overall. Skips cluster! Want more?')).toBe(3);
+    // A stop inside a number is not a sentence end; a stop at the very end is.
+    expect(sentences('Ran 3.5 km. Done.')).toBe(2);
+    // A run of marks ends one sentence, not two.
+    expect(sentences('Wait?! Now.')).toBe(2);
+    expect(sentences('a. b')).toBe(1);
     expect(sentences('')).toBe(0);
   });
 });

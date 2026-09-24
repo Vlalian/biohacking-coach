@@ -28,22 +28,32 @@ function valueAfter(argv: readonly string[], i: number): string {
   return value;
 }
 
+/** The options that take a value, and the field each one sets. A Map, so `constructor` is not an option. */
+const VALUE_OPTIONS = new Map<string, 'branch' | 'today'>([
+  ['--branch', 'branch'],
+  ['--today', 'today'],
+]);
+
 export function parseBriefingLengthArgs(argv: readonly string[], todayKey: string): BriefingLengthArgs {
-  const names: string[] = [];
-  let branch = DEFAULT_BRANCH;
-  let call = false;
-  let today = todayKey;
+  const parsed: BriefingLengthArgs = { names: [], branch: DEFAULT_BRANCH, call: false, today: todayKey };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '--call') call = true;
-    else if (a === '--branch') branch = valueAfter(argv, i++);
-    else if (a === '--today') today = valueAfter(argv, i++);
-    else names.push(a);
+    const field = VALUE_OPTIONS.get(argv[i]);
+    if (field) parsed[field] = valueAfter(argv, i++);
+    else if (argv[i] === '--call') parsed.call = true;
+    else parsed.names.push(argv[i]);
   }
-  if (!BRANCH_NAME.test(branch)) throw new Error(`Not a branch name: ${branch}`);
-  return { names: names.length > 0 ? names : DEFAULT_PERSONAS, branch, call, today };
+  if (!BRANCH_NAME.test(parsed.branch)) throw new Error(`Not a branch name: ${parsed.branch}`);
+  return { ...parsed, names: parsed.names.length > 0 ? parsed.names : DEFAULT_PERSONAS };
 }
 
-export const words = (s: string): number => s.split(/\s+/).filter(Boolean).length;
+/** Words: runs of non-space characters. */
+export const words = (s: string): number => (s.match(/\S+/g) ?? []).length;
 
-export const sentences = (s: string): number => s.split(/[.!?]+(?:\s|$)/).filter((x) => x.trim()).length;
+/**
+ * Sentences: each `.`, `!` or `?` followed by a space or the end of the text,
+ * so a stop inside `3.5` does not count and `?!` counts once. A trailing
+ * fragment with no mark is not a sentence (the 2026-09-23 counts on
+ * showable-version/19 used an earlier splitter that counted it; the
+ * difference is at most one per reply).
+ */
+export const sentences = (s: string): number => (s.match(/[.!?](?=\s|$)/g) ?? []).length;
