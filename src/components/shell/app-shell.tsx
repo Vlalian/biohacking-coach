@@ -157,7 +157,7 @@ export function AppShell({
         </button>
 
         <div className="flex min-w-0 items-baseline gap-3">
-          <Wordmark name={t.appName} size="bar" />
+          <Wordmark name={t.appName} />
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -216,8 +216,9 @@ export function AppShell({
             navDrawerOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
-          <div className="flex items-center justify-between border-b border-sidebar-border px-5 py-5">
-            <Wordmark name={t.appName} size="drawer" />
+          {/* No wordmark here (frontend-quality/11): the top bar's stays in view
+              with the drawer open, so a second one was a double. */}
+          <div className="flex items-center justify-end border-b border-sidebar-border px-5 py-5">
             <button
               type="button"
               onClick={onToggleNavDrawer}
@@ -319,13 +320,7 @@ const MARK_PATH =
   'M2 19V9h3v1.25A4.1 4.1 0 0 1 8.25 8.7c1.55 0 2.75.62 3.5 1.82A4.55 4.55 0 0 1 15.4 8.7c3 0 4.6 1.85 4.6 5.05V19h-3.2v-4.85c0-1.68-.68-2.5-2.03-2.5-1.38 0-2.22.98-2.22 2.72V19H9.3v-4.85c0-1.68-.67-2.5-2.02-2.5-1.4 0-2.23.98-2.23 2.72V19H2Z';
 const MARK_TONES = ['text-sidebar-foreground/20', 'text-sidebar-foreground/45', 'text-sidebar-primary'];
 
-const WORDMARK_SIZE = {
-  bar: { glyph: 'h-6 w-6', text: 'text-2xl' },
-  drawer: { glyph: 'h-7 w-7', text: 'text-3xl' },
-} as const;
-
-function Wordmark({ name, size }: { name: string; size: keyof typeof WORDMARK_SIZE }) {
-  const { glyph, text } = WORDMARK_SIZE[size];
+function Wordmark({ name }: { name: string }) {
   return (
     <span className="group/brand flex items-center" aria-label={name}>
       <span aria-hidden="true" className="flex items-end -space-x-2">
@@ -334,8 +329,7 @@ function Wordmark({ name, size }: { name: string; size: keyof typeof WORDMARK_SI
             key={tone}
             viewBox="0 0 24 24"
             className={[
-              'momentum-mark-part shrink-0 fill-current transition-transform duration-300 group-hover/brand:translate-x-0.5',
-              glyph,
+              'momentum-mark-part h-6 w-6 shrink-0 fill-current transition-transform duration-300 group-hover/brand:translate-x-0.5',
               tone,
             ].join(' ')}
           >
@@ -344,7 +338,7 @@ function Wordmark({ name, size }: { name: string; size: keyof typeof WORDMARK_SI
         ))}
       </span>
       <span
-        className={`momentum-wordmark ml-3 font-bold uppercase italic leading-none text-sidebar-foreground ${text}`}
+        className="momentum-wordmark ml-3 text-2xl font-bold uppercase italic leading-none text-sidebar-foreground"
       >
         {name}
       </span>

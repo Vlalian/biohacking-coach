@@ -13,4 +13,12 @@ describe('AppShell', () => {
     expect(source).toMatch(/className="flex h-dvh flex-col overflow-hidden/);
     expect(source).not.toMatch(/\bh-screen\b/);
   });
+
+  it('shows the brand once, in the top bar — the drawer does not repeat it (frontend-quality/11)', () => {
+    // The top bar sits outside the drawer's container, so its wordmark stays in
+    // view with the drawer open. A second one inside the drawer was the double.
+    const source = readFileSync(fileURLToPath(new URL('./app-shell.tsx', import.meta.url)), 'utf8');
+    expect(source.match(/<Wordmark /g)).toHaveLength(1);
+    expect(source.indexOf('<Wordmark')).toBeLessThan(source.indexOf('<nav'));
+  });
 });
