@@ -50,6 +50,18 @@ export default async function AthletePage({
       athlete = await getAthleteByUserId(session.user.id);
     }
 
+    // The language the athlete stored, applied before anything renders
+    // (showable-version/34): locale detection is off, so a bookmark, a live
+    // session and the sign-in form all arrive here in the URL's locale. An
+    // unfinished athlete has already chosen a language in onboarding's first
+    // step, so the consent and onboarding gates must not render in the URL's
+    // language either; the redirect lands back here, in theirs.
+    const { language } = await getUiPrefs(session.user.id);
+    const stored = localeAfterSignIn(language, locale, routing.locales);
+    if (stored !== locale) {
+      redirect({ href: '/', locale: stored });
+    }
+
     // The consent gate: before any of the athlete's data is processed, the
     // required processing purposes must be consented under the current
     // disclosure version (GDPR lawful basis; gdpr-decisions item A). This is the
@@ -103,14 +115,10 @@ export default async function AthletePage({
 
     // Every gate passed: Training Plan is the default View (ADR 0007), and it
     // — like every View — lives inside the shared Navigation Drawer / Coach
-    // Overlay shell, not inline on this gate page. In the language the athlete
-    // stored, when there is one (showable-version/34): locale detection is
-    // off, so a bookmark, a live session and the sign-in form all arrive here
-    // in the URL's locale, and this redirect is the one place the stored
-    // preference is applied.
+    // Overlay shell, not inline on this gate page. `locale` is the stored
+    // language by now, or the URL's when none is stored.
     if (athlete) {
-      const { language } = await getUiPrefs(session.user.id);
-      redirect({ href: '/training-plan', locale: localeAfterSignIn(language, locale, routing.locales) });
+      redirect({ href: '/training-plan', locale });
     }
 
     // Provisioning could not recover a row for this user — a broken profile,

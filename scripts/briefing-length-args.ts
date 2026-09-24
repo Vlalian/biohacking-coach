@@ -21,6 +21,13 @@ export interface BriefingLengthArgs {
 /** A plain branch name: on Windows the CLI runs through a shell, and only this shape may reach it. */
 const BRANCH_NAME = /^[\w./-]+$/;
 
+/** The operand after the option at `i`; a missing one, or another option, is refused rather than eaten. */
+function valueAfter(argv: readonly string[], i: number): string {
+  const value = argv[i + 1];
+  if (value === undefined || value.startsWith('--')) throw new Error(`${argv[i]} needs a value`);
+  return value;
+}
+
 export function parseBriefingLengthArgs(argv: readonly string[], todayKey: string): BriefingLengthArgs {
   const names: string[] = [];
   let branch = DEFAULT_BRANCH;
@@ -29,8 +36,8 @@ export function parseBriefingLengthArgs(argv: readonly string[], todayKey: strin
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--call') call = true;
-    else if (a === '--branch') branch = argv[++i] || DEFAULT_BRANCH;
-    else if (a === '--today') today = argv[++i] || todayKey;
+    else if (a === '--branch') branch = valueAfter(argv, i++);
+    else if (a === '--today') today = valueAfter(argv, i++);
     else names.push(a);
   }
   if (!BRANCH_NAME.test(branch)) throw new Error(`Not a branch name: ${branch}`);

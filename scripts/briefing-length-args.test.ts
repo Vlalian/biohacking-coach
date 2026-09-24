@@ -20,8 +20,14 @@ describe('parseBriefingLengthArgs — what the script measures', () => {
     });
   });
 
-  it('falls back to the default branch when --branch has no value', () => {
-    expect(parseBriefingLengthArgs(['--branch'], '2026-09-24').branch).toBe('seed-template');
+  it('refuses --branch with no value rather than guessing', () => {
+    expect(() => parseBriefingLengthArgs(['--branch'], '2026-09-24')).toThrow(/--branch needs a value/);
+  });
+
+  it('refuses an option where a value should be, instead of eating the next flag', () => {
+    expect(() => parseBriefingLengthArgs(['--branch', '--call'], '2026-09-24')).toThrow(/--branch needs a value/);
+    expect(() => parseBriefingLengthArgs(['--today', '--call'], '2026-09-24')).toThrow(/--today needs a value/);
+    expect(() => parseBriefingLengthArgs(['--today'], '2026-09-24')).toThrow(/--today needs a value/);
   });
 
   it('refuses anything but a plain branch name, so the shell only ever sees one', () => {

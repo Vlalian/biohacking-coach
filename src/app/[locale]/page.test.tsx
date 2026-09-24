@@ -119,8 +119,26 @@ describe('AthletePage', () => {
 
     await expect(render('en')).rejects.toThrow('REDIRECT');
 
+    // Back to this page in their language first; the /da render then sends
+    // them on to the Training Plan like anyone else.
     expect(getUiPrefs).toHaveBeenCalledWith('user_1');
+    expect(redirect).toHaveBeenCalledWith({ href: '/', locale: 'da' });
+
+    redirect.mockClear();
+    await expect(render('da')).rejects.toThrow('REDIRECT');
     expect(redirect).toHaveBeenCalledWith({ href: '/training-plan', locale: 'da' });
+  });
+
+  it('moves an unfinished athlete to their stored language before any gate renders (CodeRabbit, PR #101)', async () => {
+    // The language step stores `da` before onboarding is done; a later visit
+    // to /en must not render the consent or onboarding gate in English.
+    getSession.mockResolvedValue({ user: { id: 'user_1', name: 'Mads Kilstrup' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', experienceLevel: null, profile: null });
+    getUiPrefs.mockResolvedValue({ language: 'da' });
+
+    await expect(render('en')).rejects.toThrow('REDIRECT');
+
+    expect(redirect).toHaveBeenCalledWith({ href: '/', locale: 'da' });
   });
 
   it('keeps the URL locale when nothing is stored, or the stored value is not a language the app has', async () => {
