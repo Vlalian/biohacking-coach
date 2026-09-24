@@ -244,7 +244,12 @@
     "tabBriefing": "Briefing",
     "backToRoster": "Back to Roster",
     "reportsWithheld": "Reports private",
-    "transcriptsWithheld": "Transcripts private"
+    "transcriptsWithheld": "Transcripts private",
+    "summary": "{athletes, plural, one {# athlete} other {# athletes}}",
+    "summaryReview": "{n} with a week to review",
+    "raceCountdown": "T-{days} {days, plural, =1 {day} other {days}}",
+    "blockLine": "{block} · week {week} of {weeks}",
+    "noRace": "No race set"
   },
   "Prescribe": {
     "addTitle": "Prescribe a session",

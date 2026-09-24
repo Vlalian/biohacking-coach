@@ -244,7 +244,12 @@
     "tabBriefing": "Briefing",
     "backToRoster": "Tilbage til atleter",
     "reportsWithheld": "Rapporter private",
-    "transcriptsWithheld": "Udskrifter private"
+    "transcriptsWithheld": "Udskrifter private",
+    "summary": "{athletes, plural, one {# atlet} other {# atleter}}",
+    "summaryReview": "{n} med en uge til gennemsyn",
+    "raceCountdown": "T-{days} {days, plural, =1 {dag} other {dage}}",
+    "blockLine": "{block} · uge {week} af {weeks}",
+    "noRace": "Intet løb sat"
   },
   "Prescribe": {
     "addTitle": "Ordinér en session",
