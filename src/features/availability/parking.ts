@@ -16,7 +16,13 @@ import { sessions } from '@/db/schema';
  * A session-parked row (null) stays null. Decided in SQL over the column rather
  * than from a row read earlier: a day-park does not bump `version`, so a
  * compare-and-set would not notice one landing between the read and the write.
+ *
+ * The bound day is cast to `date` inside the statement. In a CASE Postgres has
+ * no column to infer the parameter's type from — the other arm is a bare NULL —
+ * so it resolved the text parameter as text and refused to assign it to a date
+ * column (42804). Every Session Move on production threw on it
+ * (showable-version/43, 2026-09-24).
  */
 export function parkedByDateAfterMoveTo(date: string): SQL {
-  return sql`CASE WHEN ${sessions.parkedByDate} IS NULL THEN NULL ELSE ${sql.param(date)} END`;
+  return sql`CASE WHEN ${sessions.parkedByDate} IS NULL THEN NULL ELSE ${sql.param(date)}::date END`;
 }
