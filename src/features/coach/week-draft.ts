@@ -296,17 +296,27 @@ export function weekWindow(
  * whole, as drafted). Excluded days are still excluded: a session on a day the
  * athlete ruled out was never valid. Never null — an all-excluded week simply
  * validates to nothing, which the caller refuses.
+ *
+ * `firstDay` is the one thing that shortens it (`training-architecture/36`;
+ * Mads, 2026-09-24). The two rulings look like they collide here and do not:
+ * the chosen day expires as soon as it is past, so this bound can only ever
+ * reach an athlete's first week, and the whole-week ruling exists to protect a
+ * settled athlete's mid-week conversation. A chosen day beyond the week leaves
+ * an empty range, which validates to nothing and the caller refuses — the same
+ * answer an all-excluded week already gave.
  */
 export function wholeWeekWindow(
   weekStart: string,
   fixedConstraints: string[] = [],
   unavailableDates: string[] = [],
+  firstDay?: string,
 ): PlanningWindow {
+  const start = notBefore(weekStart, firstDay);
   const end = addDays(weekStart, 6);
   return {
-    start: weekStart,
+    start,
     end,
-    excludedDates: excludedBetween(weekStart, end, fixedConstraints, unavailableDates),
+    excludedDates: excludedBetween(start, end, fixedConstraints, unavailableDates),
     fellThrough: false,
   };
 }
@@ -327,9 +337,9 @@ export function wholeWeekWindow(
  * months, so "the week it once discussed" must stop being its window once that
  * week is no longer current.
  *
- * `firstDay` bounds the fall-through only. The whole-week branch is deliberately
- * left alone: that week came from a draft, and a draft is already bounded by
- * `weekWindow` at the moment it is composed.
+ * `firstDay` bounds both branches, so "no session before the chosen day, from
+ * anyone" holds here by construction rather than by the accident that a week
+ * beginning before the chosen day happens to produce no draft to discuss.
  */
 export function conversationWindow(
   today: string,
@@ -341,7 +351,7 @@ export function conversationWindow(
   const thisWeek = weekStartOf(today);
   const current = discussedWeekStart === thisWeek || discussedWeekStart === addDays(thisWeek, 7);
   return current
-    ? wholeWeekWindow(discussedWeekStart, fixedConstraints, unavailableDates)
+    ? wholeWeekWindow(discussedWeekStart, fixedConstraints, unavailableDates, firstDay)
     : planningWindow(today, fixedConstraints, unavailableDates, firstDay);
 }
 
