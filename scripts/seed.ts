@@ -2,7 +2,7 @@ import '../src/db/load-env';
 import { guardDatabase } from './db-guard/protected-database';
 import { and, eq, or } from 'drizzle-orm';
 import { getDb } from '../src/db';
-import { athlete, coach, coachingLink, sessions } from '../src/db/schema';
+import { athlete, sessions } from '../src/db/schema';
 import { user } from '../src/db/auth-schema';
 import { auth } from '../src/lib/auth';
 import { startOfToday } from '../src/lib/date';
@@ -10,6 +10,7 @@ import { seedAthleteSessionId, seedWeekRows } from '../src/features/athlete/seed
 import { parseSeedArgs } from '../src/features/athlete/seed-personas';
 import { SEED_OWNER, personasFor } from '../src/features/athlete/synthetic-history';
 import { seedPersonas } from './personas/seed-personas';
+import { ensureCoachRow, linkAthletes } from './personas/seed-coach-rows';
 import { isDuplicateUser } from './tester-kit/mint';
 
 /**
@@ -50,9 +51,6 @@ import { isDuplicateUser } from './tester-kit/mint';
  *   npm run seed                       # Mads, Coach Riley, nothing fabricated
  *   npm run seed -- --with-personas    # ...plus the three personas on both Rosters
  */
-
-/** A fixed id for Mads's dev coach row, so the dual-role seed is idempotent. */
-const MADS_COACH_ID = 'd3a9e2f4-5b6c-4d7e-8f90-1a2b3c4d5e6f';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -167,49 +165,15 @@ async function seedCoach(rosterAthleteIds: string[]) {
     }
   }
 
-  const db = getDb();
-  const [coachUser] = await db
+  const [coachUser] = await getDb()
     .select({ id: user.id })
     .from(user)
     .where(eq(user.email, email))
     .limit(1);
   if (!coachUser) throw new Error('Coach user missing after signup.');
 
-  const [coachRow] = await db
-    .insert(coach)
-    .values({ userId: coachUser.id })
-    .onConflictDoNothing({ target: coach.userId })
-    .returning({ id: coach.id });
-  const coachId = coachRow?.id ?? (await coachIdForUser(coachUser.id));
-
-  await linkAthletes(coachId, rosterAthleteIds);
+  await linkAthletes(await ensureCoachRow(coachUser.id), rosterAthleteIds);
   console.log(`Coach Riley linked to ${rosterAthleteIds.length} athletes.`);
-}
-
-/** Resolves an existing coach row's id when the insert was a no-op. */
-async function coachIdForUser(userId: string): Promise<string> {
-  const [row] = await getDb()
-    .select({ id: coach.id })
-    .from(coach)
-    .where(eq(coach.userId, userId))
-    .limit(1);
-  if (!row) throw new Error('Coach row missing for user.');
-  return row.id;
-}
-
-/**
- * Creates one active Coaching Link per athlete, idempotently. The partial
- * unique index guards the active pair, so `onConflictDoNothing` makes a re-seed
- * a no-op rather than a duplicate.
- */
-async function linkAthletes(coachId: string, athleteIds: string[]) {
-  const db = getDb();
-  for (const athleteId of athleteIds) {
-    await db
-      .insert(coachingLink)
-      .values({ coachId, athleteId })
-      .onConflictDoNothing();
-  }
 }
 
 /**
@@ -221,16 +185,10 @@ async function linkAthletes(coachId: string, athleteIds: string[]) {
  * active Coaching Links. With them, he sees the same three Coach Riley does.
  */
 async function seedMadsAsCoach(madsUserId: string, rosterAthleteIds: string[]) {
-  // A reseed finds his coach row already there, possibly under another id
-  // (a preview seeded with a different SEED_MADS_EMAIL); link the row that
-  // exists, never the fixed id, or the Coaching Link fails its foreign key.
-  const [coachRow] = await getDb()
-    .insert(coach)
-    .values({ id: MADS_COACH_ID, userId: madsUserId })
-    .onConflictDoNothing({ target: coach.userId })
-    .returning({ id: coach.id });
-  const coachId = coachRow?.id ?? (await coachIdForUser(madsUserId));
-  await linkAthletes(coachId, rosterAthleteIds);
+  // Claimed by his user, never at a fixed id: a branch cut from `seed-template`
+  // already holds one, under the template's Mads, and an id the clause does not
+  // guard is how the seed used to die on its last statement (code-health/24).
+  await linkAthletes(await ensureCoachRow(madsUserId), rosterAthleteIds);
   console.log(
     `Mads also holds a coach row (dual-role dev), linked to ${rosterAthleteIds.length} athlete(s).`,
   );
