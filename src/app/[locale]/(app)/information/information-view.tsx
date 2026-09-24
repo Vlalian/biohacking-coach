@@ -322,7 +322,7 @@ export function InformationView({
                   <span className="flex items-center gap-1 text-muted-foreground">
                     {p.series && (
                       <button
-                        className={`rounded p-1.5 transition-colors hover:text-foreground ${
+                        className={`inline-flex h-9 w-9 items-center justify-center transition-colors hover:text-foreground ${
                           graphIds.includes(p.id) ? 'text-signal' : ''
                         }`}
                         title={t('addToGraph')}
@@ -334,7 +334,7 @@ export function InformationView({
                       </button>
                     )}
                     <button
-                      className={`rounded p-1.5 transition-colors hover:text-foreground ${
+                      className={`inline-flex h-9 w-9 items-center justify-center transition-colors hover:text-foreground ${
                         enlarged.includes(p.id) ? 'text-signal' : ''
                       }`}
                       title={t('enlarge')}
@@ -345,7 +345,7 @@ export function InformationView({
                       <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                     </button>
                     <button
-                      className="rounded p-1.5 transition-colors hover:text-foreground"
+                      className="inline-flex h-9 w-9 items-center justify-center transition-colors hover:text-foreground"
                       title={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-label={t(isFavorite(favorites, p.id) ? 'removeFavorite' : 'addFavorite')}
                       aria-pressed={isFavorite(favorites, p.id)}
@@ -441,7 +441,7 @@ function RpeChip({ value, color }: { value: number | null; color: string }) {
   if (value == null) return <>—</>;
   return (
     <span
-      className="rounded px-1.5 py-0.5 font-mono text-sm"
+      className="px-1.5 py-0.5 font-mono text-sm"
       style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}
     >
       {value}/10
@@ -539,7 +539,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
                       <RpeChip value={c.mind} color="#9a7bd0" />
                     </div>
                     {c.comment && (
-                      <div className="mt-2 text-xs italic text-muted-foreground">“{c.comment}”</div>
+                      <div className="mt-2 font-body text-sm italic text-muted-foreground">“{c.comment}”</div>
                     )}
                   </div>
                 ))}
@@ -593,7 +593,7 @@ function CompareOverlayTrigger({ sessions }: { sessions: InfoSession[] }) {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <tr className="border-b border-border text-left font-body text-[13px] uppercase tracking-[0.14em] text-muted-foreground">
                       <th />
                       <th className="py-2 font-medium">{t('colDate')}</th>
                       <th className="py-2 font-medium">{t('colSession')}</th>

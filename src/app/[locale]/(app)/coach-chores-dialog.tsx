@@ -186,7 +186,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
       >
         <div>
           <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">{t('kicker')}</p>
-          <h2 id="coach-chores-title" className="text-lg font-semibold">
+          <h2 id="coach-chores-title" className="font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">
             {t('title', { count: chores.length })}
           </h2>
         </div>
@@ -195,7 +195,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
           {chores.map((chore) => {
             const row = rowFor(rows, chore);
             return (
-              <li key={choreKey(chore)} className="flex flex-col gap-2 text-sm" data-state={row.kind}>
+              <li key={choreKey(chore)} className="flex flex-col gap-2 font-body text-base" data-state={row.kind}>
                 <p>
                   {t('moved', {
                     athlete: chore.athleteName,
@@ -210,7 +210,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
                     {t('tooFew', { dropped: row.repair.dropped.join(' · ') || t('nothing') })}
                   </p>
                 )}
-                {row.kind === 'error' && <p className="text-red-600">{t('error', { reason: row.reason })}</p>}
+                {row.kind === 'error' && <p className="font-body text-sm text-destructive">{t('error', { reason: row.reason })}</p>}
                 {row.kind === 'done' ? (
                   <p className="text-muted-foreground">{t('done')}</p>
                 ) : (
@@ -232,7 +232,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
           <button
             type="button"
             onClick={dismiss}
-            className="rounded px-3 py-1 text-sm text-muted-foreground hover:text-signal"
+            className="inline-flex h-10 items-center px-2 font-body text-[15px] text-muted-foreground transition-colors hover:text-signal"
           >
             {allDone ? t('close') : t('notNow')}
           </button>
@@ -241,7 +241,7 @@ export function CoachChoresDialogView({ chores, onClose }: { chores: CoachChore[
               type="button"
               disabled={anyPending}
               onClick={runAll}
-              className="rounded border border-border px-3 py-1 text-sm disabled:opacity-50"
+              className="inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
             >
               {t('repinAll')}
             </button>

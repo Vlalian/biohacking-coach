@@ -99,18 +99,18 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
     });
   };
 
-  const field = 'rounded border bg-background px-2 py-1 text-sm';
+  const field = 'h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal';
 
   return (
-    <section className="w-full max-w-3xl rounded-lg border p-4" data-draft-id={draft.id}>
-      <h2 className="mb-1 text-lg font-semibold">{t('title')}</h2>
+    <section className="w-full max-w-3xl border border-border bg-panel p-5 shadow-sm sm:p-6" data-draft-id={draft.id}>
+      <h2 className="mb-1 font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
       <p className="mb-3 font-body text-sm text-muted-foreground">{t('lead', { week: draft.weekStart })}</p>
 
       <ol className="flex flex-col gap-2">
         {rows.map((row) => (
-          <li key={row.key} className="flex flex-col gap-2 rounded border p-3">
+          <li key={row.key} className="flex flex-col gap-3 border border-border bg-background p-4">
             <div className="flex flex-wrap items-end gap-3">
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                 {t('day')}
                 <select className={field} data-field="date" value={row.date} onChange={(e) => edit(row.key, 'date', e.target.value)}>
                   {days.map((day) => (
@@ -120,7 +120,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                 {t('type')}
                 <select className={field} data-field="type" value={row.type} onChange={(e) => edit(row.key, 'type', e.target.value)}>
                   {PLAN_TYPES.map((type) => (
@@ -130,7 +130,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                 {t('duration')}
                 <input
                   type="number"
@@ -141,7 +141,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
                   onChange={(e) => edit(row.key, 'durationMinutes', e.target.value)}
                 />
               </label>
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                 {t('zone')}
                 <input className={`w-16 ${field}`} data-field="zone" value={row.zone} onChange={(e) => edit(row.key, 'zone', e.target.value)} />
               </label>
@@ -149,13 +149,13 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
                 type="button"
                 data-action="remove"
                 onClick={() => remove(row.key)}
-                className="ml-auto rounded border px-2 py-1 text-sm text-muted-foreground hover:text-foreground"
+                className="ml-auto inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
                 aria-label={t('remove')}
               >
                 {t('remove')}
               </button>
             </div>
-            <label className="flex flex-col gap-1 text-xs">
+            <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
               {t('note')}
               <textarea
                 className={`w-full field-sizing-content resize-none ${field}`}
@@ -170,7 +170,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
       </ol>
 
       <div className="mt-3 flex items-center gap-2">
-        <button type="button" data-action="add" onClick={add} className="rounded border px-3 py-1 text-sm">
+        <button type="button" data-action="add" onClick={add} className="inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50">
           {t('add')}
         </button>
         <button
@@ -184,7 +184,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
         </button>
       </div>
 
-      {notice && <p className="mt-2 text-sm text-muted-foreground">{notice}</p>}
+      {notice && <p className="mt-2 font-body text-sm text-muted-foreground">{notice}</p>}
     </section>
   );
 }

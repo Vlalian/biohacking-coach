@@ -106,9 +106,9 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
   const last = current.blocks.length - 1;
 
   return (
-    <section className="w-full max-w-3xl rounded-lg border p-4" data-version={current.version}>
-      <h2 className="mb-1 text-lg font-semibold">{t('title')}</h2>
-      <p className="mb-3 font-mono text-sm uppercase tracking-[0.24em] text-muted-foreground">
+    <section className="w-full max-w-3xl border border-border bg-panel p-5 shadow-sm sm:p-6" data-version={current.version}>
+      <h2 className="mb-1 font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
+      <p className="mb-3 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground">
         {t('toward', { race: current.raceName, date: current.raceDate })}
       </p>
 
@@ -116,13 +116,13 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
         // The race moved and the stored set no longer fits it. What is shown is
         // the arithmetic draft; what an edit would land on is the old set. No
         // inputs, no save — the Coach redraws it on the next background run.
-        <p className="mb-3 text-sm text-muted-foreground">{t('stale')}</p>
+        <p className="mb-3 font-body text-sm text-warning">{t('stale')}</p>
       )}
 
       {current.stale ? (
         <ol className="flex flex-col gap-1">
           {current.blocks.map((block, i) => (
-            <li key={i + 1} className="flex items-baseline justify-between gap-3 text-sm">
+            <li key={i + 1} className="flex items-baseline justify-between gap-3 font-body text-base">
               <span>{block.name}</span>
               <span className="font-mono text-sm text-muted-foreground">{block.endDate}</span>
             </li>
@@ -136,20 +136,20 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
           const isLast = i === last;
           return (
             <li key={position} className="grid grid-cols-[1fr_auto_auto_auto] items-end gap-3">
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                 {t('name')}
                 <input
-                  className="rounded border bg-background px-2 py-1 text-sm"
+                  className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal"
                   value={rows[i].name}
                   maxLength={40}
                   onChange={(e) => setRows((r) => r.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
                 />
               </label>
-              <label className="flex flex-col gap-1 text-xs">
+              <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
                 {t('endsOn')}
                 <input
                   type="date"
-                  className="rounded border bg-background px-2 py-1 text-sm disabled:opacity-50"
+                  className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal disabled:opacity-50"
                   value={rows[i].endDate}
                   min={addDays(previousEnd, 1)}
                   max={isLast ? current.raceDate : addDays(current.blocks[i + 1].endDate, -1)}
@@ -163,7 +163,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
                   </span>
                 )}
               </label>
-              <span className="pb-1 font-mono text-sm uppercase tracking-[0.2em] text-muted-foreground">
+              <span className="pb-1 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                 {t(AUTHOR_KEY[block.authoredBy])}
               </span>
               <button
@@ -180,7 +180,7 @@ export function BlockPanel({ athleteId, set }: { athleteId: string; set: BlockPa
       </ol>
       )}
 
-      {notice && <p className="mt-2 text-sm text-red-600">{notice}</p>}
+      {notice && <p className="mt-2 font-body text-sm text-destructive">{notice}</p>}
     </section>
   );
 }

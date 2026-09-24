@@ -86,7 +86,7 @@ function FfNow({ D }: { D: InfoDataset }) {
       {tiles.map(([label, value, color]) => (
         <div
           key={label}
-          className="flex-1 rounded-md border p-3 text-center"
+          className="flex-1 border p-3 text-center"
           style={{ borderColor: color }}
         >
           <div className="text-2xl font-semibold" style={{ color }}>
@@ -146,7 +146,7 @@ function Ramp({ D }: { D: InfoDataset }) {
           tl.delta == null || tl.delta === 0 ? 'var(--muted-foreground)' : tl.delta > 0 ? '#6db36d' : '#e05555';
         const text = tl.delta == null ? '—' : `${tl.delta > 0 ? '+' : ''}${tl.delta}`;
         return (
-          <div key={tl.label} className="flex-1 rounded-md border p-2 text-center">
+          <div key={tl.label} className="flex-1 border border-border p-2 text-center">
             <div className="text-xl font-semibold" style={{ color }}>
               {text}
             </div>
@@ -243,7 +243,7 @@ function Checkin({ D }: { D: InfoDataset }) {
         const vals = D.checkins.map((x) => x[key]);
         return (
           <div key={key}>
-            <div className="flex items-baseline justify-between text-xs">
+            <div className="flex items-baseline justify-between font-body text-[13px]">
               <span className="text-muted-foreground">{label}</span>
               <b style={{ color }}>{vals[vals.length - 1]}</b>
             </div>

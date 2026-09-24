@@ -97,7 +97,7 @@ export function WeeklySessionDayCard({
   };
 
   return (
-    <section className="w-full max-w-3xl rounded-lg border p-4" data-weekly-session-day-card="">
+    <section className="w-full max-w-3xl border border-border bg-panel p-5 shadow-sm sm:p-6" data-weekly-session-day-card="">
       <h2 className="font-display text-lg leading-tight text-foreground">{t.rich('headline', { ...bold, name, day: dayName })}</h2>
       <p className="mt-1 font-body text-sm text-foreground">{t.rich('intro', { ...bold, name, day: dayName })}</p>
       <p className="mt-2 font-body text-sm text-muted-foreground">
@@ -120,9 +120,9 @@ export function WeeklySessionDayCard({
               onClick={() => setChoice(dayChoice(choice, { type: 'tap', day }))}
               disabled={pending}
               aria-pressed={isCurrent}
-              className={`rounded border px-3 py-1 text-sm disabled:opacity-50 ${
+              className={`inline-flex h-10 items-center border px-4 font-body text-[15px] font-medium transition-colors disabled:opacity-50 ${
                 isCurrent
-                  ? 'border-signal bg-signal/10 text-foreground'
+                  ? 'border-signal bg-signal text-signal-foreground'
                   : isProposed
                     ? 'border-foreground text-foreground'
                     : 'border-border text-muted-foreground'
@@ -142,7 +142,7 @@ export function WeeklySessionDayCard({
             data-action="confirm-day"
             onClick={confirm}
             disabled={pending}
-            className="rounded border border-signal bg-signal px-3 py-1 text-sm text-signal-foreground disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50"
           >
             {t('confirm')}
           </button>
@@ -151,7 +151,7 @@ export function WeeklySessionDayCard({
             data-action="cancel-day"
             onClick={() => setChoice(dayChoice(choice, { type: 'cancel' }))}
             disabled={pending}
-            className="rounded border border-border px-3 py-1 text-sm text-foreground disabled:opacity-50"
+            className="inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
           >
             {t('cancel')}
           </button>

@@ -112,7 +112,7 @@ export default async function AthletePage({
     const t = await getTranslations('AthletePage');
     return (
       <main className="flex min-h-screen flex-col items-center gap-6 p-8">
-        <p className="text-neutral-500">{t('noAthlete')}</p>
+        <p className="text-muted-foreground">{t('noAthlete')}</p>
         <SignOutButton />
       </main>
     );
