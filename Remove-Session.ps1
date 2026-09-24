@@ -280,10 +280,27 @@ if ($removeExit -eq 0) {
 #    expiry, so this is eager cleanup, not the only cleanup - and it must never
 #    be fatal: the worktree is already gone, and a branch that outlives it costs
 #    nothing but one of the ten slots until it expires.
+#
+#    The call runs under 'Continue', not the script's 'Stop' (2026-09-24). In
+#    PowerShell 5.1, stderr from a native command captured with 2>&1 becomes an
+#    ErrorRecord, and under 'Stop' that record is a terminating error. So
+#    "ERROR: Branch dev/afk2 not found." killed the script here, AFTER the
+#    worktree was removed and BEFORE -CheckBranch ran. A missing branch is the
+#    expected case for every session created with -DatabaseUrl, so the exit code
+#    below decides the outcome, never stderr.
 $SessionBranch = "dev/$Name"
 if (Get-Command neon -ErrorAction SilentlyContinue) {
-  $out = neon branches delete $SessionBranch --project-id "plain-sky-06454855" --org-id "org-patient-wave-37211297" -o json 2>&1
-  if ($LASTEXITCODE -eq 0) {
+  $prevPref = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $out = neon branches delete $SessionBranch --project-id "plain-sky-06454855" --org-id "org-patient-wave-37211297" -o json 2>&1
+    $neonExit = $LASTEXITCODE
+  } catch {
+    $neonExit = 1
+  } finally {
+    $ErrorActionPreference = $prevPref
+  }
+  if ($neonExit -eq 0) {
     Write-Host "Deleted Neon branch $SessionBranch." -ForegroundColor Green
   } else {
     Write-Host "Neon branch $SessionBranch not deleted (absent, or CLI not logged in) - it expires on its own." -ForegroundColor DarkGray
