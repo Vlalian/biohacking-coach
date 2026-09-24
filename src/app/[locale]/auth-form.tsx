@@ -1,12 +1,9 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/navigation';
-import { localeAfterSignIn } from '@/i18n/locale-after-sign-in';
-import { routing } from '@/i18n/routing';
 import { signIn, signUp } from '@/lib/auth-client';
-import { preferredLocaleAction } from './locale-actions';
 
 /**
  * Sign-in and sign-up are the same form with one extra field, so they are one
@@ -17,14 +14,11 @@ import { preferredLocaleAction } from './locale-actions';
  * raw text: it keeps the UI translatable and avoids telling a stranger whether
  * an email is already registered.
  *
- * On success the form lands on the language the athlete stored, when there is
- * one: locale detection is off (showable-version/34), so a returning Danish
- * athlete who opened /en/sign-in would otherwise stay in English. A new
- * account has nothing stored and keeps the page's locale.
+ * On success it pushes to '/', the gate page, which sends a returning athlete
+ * on in the language they stored (showable-version/34).
  */
 export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const t = useTranslations('Auth');
-  const locale = useLocale();
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -49,8 +43,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         return;
       }
 
-      const stored = await preferredLocaleAction();
-      router.push('/', { locale: localeAfterSignIn(stored, locale, routing.locales) });
+      router.push('/');
       router.refresh();
     } catch {
       // A thrown request (network, etc.) is a failure like any other; show the

@@ -72,7 +72,7 @@ export const COACH_MODEL = process.env.COACH_MODEL || 'claude-sonnet-5';
  */
 const INFERENCE_GEO = 'us';
 
-function withInferenceGeo(
+export function withInferenceGeo(
   params: Anthropic.MessageCreateParamsNonStreaming,
 ): Anthropic.MessageCreateParamsNonStreaming {
   return {

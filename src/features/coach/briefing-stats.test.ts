@@ -5,7 +5,7 @@ import {
   type BriefingPlanEntry,
   type BriefingReports,
 } from './briefing';
-import { branchToMeasure, briefingInputStats } from './briefing-stats';
+import { briefingInputStats } from './briefing-stats';
 
 const plan: BriefingPlanEntry[] = [
   { date: '2026-08-04', type: 'Endurance', status: 'completed', duration: 90, zone: 'Z2', note: 'steady' },
@@ -66,19 +66,5 @@ describe('briefingInputStats — what reaches the prompt, counted', () => {
       withComment: 0,
       block: null,
     });
-  });
-});
-
-describe('branchToMeasure — the script never reads production', () => {
-  it('refuses production by name, whatever the case, and allows seed-template', () => {
-    expect(() => branchToMeasure('production')).toThrow(/production/);
-    expect(() => branchToMeasure('Production')).toThrow(/production/);
-    expect(branchToMeasure('seed-template')).toBe('seed-template');
-    expect(branchToMeasure('dev/afk')).toBe('dev/afk');
-  });
-
-  it('defaults to seed-template, the branch the personas live on', () => {
-    expect(branchToMeasure(undefined)).toBe('seed-template');
-    expect(branchToMeasure('')).toBe('seed-template');
   });
 });

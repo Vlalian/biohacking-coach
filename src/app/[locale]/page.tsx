@@ -4,6 +4,8 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
+import { localeAfterSignIn } from '@/i18n/locale-after-sign-in';
+import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
@@ -101,9 +103,14 @@ export default async function AthletePage({
 
     // Every gate passed: Training Plan is the default View (ADR 0007), and it
     // — like every View — lives inside the shared Navigation Drawer / Coach
-    // Overlay shell, not inline on this gate page.
+    // Overlay shell, not inline on this gate page. In the language the athlete
+    // stored, when there is one (showable-version/34): locale detection is
+    // off, so a bookmark, a live session and the sign-in form all arrive here
+    // in the URL's locale, and this redirect is the one place the stored
+    // preference is applied.
     if (athlete) {
-      redirect({ href: '/training-plan', locale });
+      const { language } = await getUiPrefs(session.user.id);
+      redirect({ href: '/training-plan', locale: localeAfterSignIn(language, locale, routing.locales) });
     }
 
     // Provisioning could not recover a row for this user — a broken profile,

@@ -38,18 +38,3 @@ export function briefingInputStats(ctx: BriefingContext, prompt: string): Briefi
     block: ctx.blocks?.phase ?? null,
   };
 }
-
-/**
- * The Neon branch `scripts/briefing-length.ts` measures. Production is refused
- * by name (GDPR decision 8: real athletes' data is reached only by the Vercel
- * production environment); the default is `seed-template`, where the personas
- * live. The script resolves the branch to a connection string itself, so
- * whatever `DATABASE_URL` says is never what it reads.
- */
-export function branchToMeasure(name: string | undefined): string {
-  const branch = name || 'seed-template';
-  if (branch.toLowerCase() === 'production') {
-    throw new Error('briefing-length never reads production; pass --branch seed-template (the default).');
-  }
-  return branch;
-}

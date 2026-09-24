@@ -1,13 +1,15 @@
 import '../src/db/load-env';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../src/db';
 import { athlete } from '../src/db/schema';
 import { BRIEFING_OPENER, renderBriefingPrompt } from '../src/features/coach/briefing';
 import { BRIEFING_MAX_TOKENS, buildBriefingContextFor } from '../src/features/coach/briefing-service';
-import { branchToMeasure, briefingInputStats } from '../src/features/coach/briefing-stats';
-import { COACH_MODEL } from '../src/features/coach/coach-client';
+import { briefingInputStats } from '../src/features/coach/briefing-stats';
+import { COACH_MODEL, withInferenceGeo } from '../src/features/coach/coach-client';
+import { parseBriefingLengthArgs, sentences, words } from './briefing-length-args';
+import { guardDatabase } from './db-guard/protected-database';
 import { today as todayKey } from '../src/lib/date';
 
 /**
@@ -25,45 +27,21 @@ import { today as todayKey } from '../src/lib/date';
  *     npm run briefing:length -- --branch dev/afk "Alex Rivera"
  *
  * Reads only. It resolves the Neon branch to a connection string itself (the
- * default is `seed-template`, where the personas live) and refuses `production`
- * by name; whatever `.env.local` says is never what it reads. Nothing is
- * written: no conversation row, no message. The decisions live in
- * `briefing-stats.ts`, where they are tested; this file only reads and prints.
+ * default is `seed-template`, where the personas live), so whatever `.env.local`
+ * says is never what it reads, and the resolved string goes through the repo's
+ * production guard (`db-guard/`) with no `--production` escape. Nothing is
+ * written: no conversation row, no message. The counts live in
+ * `briefing-stats.ts` and the argument decisions in `briefing-length-args.ts`,
+ * both tested; this file only reads and prints.
  */
 
-const NEON_PROJECT = 'plain-sky-06454855';
-const NEON_ORG = 'org-patient-wave-37211297';
-const DEFAULT_PERSONAS = ['Alex Rivera', 'Sam Chen'];
-
-interface Args {
-  names: string[];
-  branch: string;
-  call: boolean;
-  today: string;
-}
-
-function parseArgs(argv: string[]): Args {
-  const names: string[] = [];
-  let branch: string | undefined;
-  let call = false;
-  let today = todayKey();
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '--call') call = true;
-    else if (a === '--branch') branch = argv[++i];
-    else if (a === '--today') today = argv[++i];
-    else names.push(a);
-  }
-  return { names: names.length > 0 ? names : DEFAULT_PERSONAS, branch: branchToMeasure(branch), call, today };
-}
-
-/** The connection string for a branch, from the Neon CLI — never from the env file. */
+/** The connection string for a branch, from the Neon CLI (run as `e2e/global.setup.ts` runs it), never from the env file. */
 function connectionStringFor(branch: string): string {
-  if (!/^[\w./-]+$/.test(branch)) throw new Error(`Not a branch name: ${branch}`);
-  const out = execSync(
-    `neon connection-string ${branch} --pooled --project-id ${NEON_PROJECT} --org-id ${NEON_ORG}`,
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
-  ).trim();
+  const out = execFileSync('neon', ['connection-string', branch, '--pooled'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    shell: process.platform === 'win32',
+  }).trim();
   if (!out.startsWith('postgresql://')) throw new Error(`Could not resolve branch ${branch} (is 'neon login' done?)`);
   return out;
 }
@@ -83,12 +61,12 @@ const linkFor = (athleteId: string) => ({
   visibility: { shareAthleteReports: true, shareAiTranscripts: false },
 });
 
-const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
-const sentences = (s: string) => s.split(/[.!?]+(?:\s|$)/).filter((x) => x.trim()).length;
-
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  process.env.DATABASE_URL = connectionStringFor(args.branch);
+  const args = parseBriefingLengthArgs(process.argv.slice(2), todayKey());
+  const url = connectionStringFor(args.branch);
+  // The repo's guard, handed no argv: `--production` is not an option here.
+  guardDatabase(url, []);
+  process.env.DATABASE_URL = url;
   console.log(`branch ${args.branch} · today ${args.today} · model ${COACH_MODEL} · max_tokens ${BRIEFING_MAX_TOKENS}\n`);
   console.log('| athlete | block | sessions | skipped | reflections | with comment | prompt chars | ~tokens |');
   console.log('|---|---|---|---|---|---|---|---|');
@@ -111,14 +89,14 @@ async function main() {
   console.log('|---|---|---|---|---|---|');
   const replies: { label: string; text: string }[] = [];
   for (const { label, prompt } of prompts) {
-    const reply = await client.messages.create({
-      model: COACH_MODEL,
-      max_tokens: BRIEFING_MAX_TOKENS,
-      system: prompt,
-      messages: [{ role: 'user', content: BRIEFING_OPENER }],
-      // Inference stays in the US on every call (slice 15 / GDPR), as coach-client.ts does.
-      inference_geo: 'us',
-    } as Anthropic.MessageCreateParamsNonStreaming);
+    const reply = await client.messages.create(
+      withInferenceGeo({
+        model: COACH_MODEL,
+        max_tokens: BRIEFING_MAX_TOKENS,
+        system: prompt,
+        messages: [{ role: 'user', content: BRIEFING_OPENER }],
+      }),
+    );
     const text = reply.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)

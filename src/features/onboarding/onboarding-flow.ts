@@ -544,6 +544,10 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
   };
 }
 
+/** The four catalogue keys the greeting is built from; a translator over them. */
+export type GreetingKey = 'greetingIntroNamed' | 'greetingIntro' | 'greetingBodyRace' | 'greetingBody';
+export type GreetingTranslator = (key: GreetingKey, values?: Record<string, string>) => string;
+
 /**
  * The Coach's greeting when onboarding completes — the POC's `coachGreeting`,
  * unchanged in shape. The name is the **Preferred Name** the athlete chose
@@ -554,10 +558,6 @@ export function toCoachOnboarding(answers: OnboardingAnswers): Onboarding {
  * never carry a name (ADR 0006). The Coach's prompts resolve the Preferred
  * Name on their own path (`briefing.ts`, `prompt-blocks.ts`), not from here.
  */
-/** The four catalogue keys the greeting is built from; a translator over them. */
-export type GreetingKey = 'greetingIntroNamed' | 'greetingIntro' | 'greetingBodyRace' | 'greetingBody';
-export type GreetingTranslator = (key: GreetingKey, values?: Record<string, string>) => string;
-
 export function coachGreeting(
   name: string | null | undefined,
   race: string,
