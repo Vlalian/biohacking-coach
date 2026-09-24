@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { resolveHeadCoachId, setWeeklySessionDayAsHeadCoach, approveWeekDraft, coachDraftLanded, revalidatePath } = vi.hoisted(() => ({
+const { resolveHeadCoachId, resolveUserId, setWeeklySessionDayAsHeadCoach, approveWeekDraft, coachDraftLanded, revalidatePath, setWeekCycleInstructed } = vi.hoisted(() => ({
   resolveHeadCoachId: vi.fn(),
+  resolveUserId: vi.fn(),
+  setWeekCycleInstructed: vi.fn(),
   setWeeklySessionDayAsHeadCoach: vi.fn(),
   approveWeekDraft: vi.fn(),
   coachDraftLanded: vi.fn(),
@@ -9,10 +11,11 @@ const { resolveHeadCoachId, setWeeklySessionDayAsHeadCoach, approveWeekDraft, co
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath }));
-vi.mock('../../../../current-actor', () => ({ resolveHeadCoachId }));
+vi.mock('../../../../current-actor', () => ({ resolveHeadCoachId, resolveUserId }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ setWeekCycleInstructed }));
 vi.mock('@/features/coach/head-coach-week-service', () => ({ setWeeklySessionDayAsHeadCoach, approveWeekDraft, coachDraftLanded }));
 
-const { setWeeklySessionDayAction } = await import('./day-actions');
+const { setWeeklySessionDayAction, dismissWeekCycleAction } = await import('./day-actions');
 const { approveWeekDraftAction, coachDraftLandedAction } = await import('./week-draft-actions');
 
 /**
@@ -29,6 +32,7 @@ const SESSIONS = [{ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, 
 beforeEach(() => {
   vi.clearAllMocks();
   resolveHeadCoachId.mockResolvedValue(COACH);
+  resolveUserId.mockResolvedValue('user_1');
   setWeeklySessionDayAsHeadCoach.mockResolvedValue({ ok: true });
   approveWeekDraft.mockResolvedValue({ ok: true, changed: false });
 });
@@ -92,5 +96,20 @@ describe('coachDraftLandedAction — the coach page’s poll read (training-arch
     resolveHeadCoachId.mockResolvedValue(null);
     expect(await coachDraftLandedAction(ATHLETE, '2026-09-21')).toBe(false);
     expect(coachDraftLanded).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('dismissWeekCycleAction — the coach says they have read the cycle (training-architecture/41)', () => {
+  it('records it against the signed-in user and revalidates the athlete layout', async () => {
+    expect(await dismissWeekCycleAction(ATHLETE)).toEqual({ ok: true });
+    expect(setWeekCycleInstructed).toHaveBeenCalledWith('user_1');
+    expect(revalidatePath).toHaveBeenCalledWith(`/coach/athlete/${ATHLETE}`, 'layout');
+  });
+
+  it('refuses when nobody is signed in, writing nothing', async () => {
+    resolveUserId.mockResolvedValue(null);
+    expect(await dismissWeekCycleAction(ATHLETE)).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(setWeekCycleInstructed).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
