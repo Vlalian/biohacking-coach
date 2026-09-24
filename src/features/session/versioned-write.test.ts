@@ -19,6 +19,20 @@ const { casUpdateSession } = await import('./versioned-write');
 
 const OWNER = 'athlete_owner';
 
+/** The SQL a drizzle fragment renders, with `?` where a value is bound — the text Postgres parses. */
+function sqlText(fragment: unknown): string {
+  type Node = { value?: unknown; name?: unknown; queryChunks?: unknown[] };
+  const render = (node: unknown): string => {
+    if (!node || typeof node !== 'object') return '';
+    const n = node as Node;
+    if (n.queryChunks) return n.queryChunks.map(render).join('');
+    if (typeof n.name === 'string') return n.name;
+    if (Array.isArray(n.value)) return n.value.join('');
+    return '?';
+  };
+  return render(fragment);
+}
+
 beforeEach(() => {
   updateSet.mockClear();
   updateReturning.mockReset().mockResolvedValue([{ version: 2 }]);
@@ -50,6 +64,24 @@ describe('casUpdateSession — parking provenance follows a date write', () => {
     const written = updateSet.mock.calls[0][0] as { parkedByDate?: unknown };
     // The value is a CASE over the column, bound to the new day.
     expect(boundPairs(written.parkedByDate)).toEqual([['parked_by_date', '2026-07-18']]);
+  });
+
+  it('casts the carried day to date, so Postgres accepts it for a date column', async () => {
+    // Inside a CASE whose other arm is NULL, Postgres cannot infer the bound
+    // parameter's type from the column and resolves it as text — and refuses
+    // to assign text to `parked_by_date` (42804). Every Session Move on
+    // production threw on that (showable-version/43). The statement has to
+    // say `::date` itself.
+    await casUpdateSession({
+      athleteId: OWNER,
+      sessionId: 's1',
+      expectedVersion: 1,
+      set: { date: '2026-09-29' },
+      attempted: { date: '2026-09-29' },
+    });
+
+    const written = updateSet.mock.calls[0][0] as { parkedByDate?: unknown };
+    expect(sqlText(written.parkedByDate)).toMatch(/ELSE .*::date END/);
   });
 
   it('leaves parked_by_date alone when the date is not written', async () => {
