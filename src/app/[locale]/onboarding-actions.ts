@@ -51,6 +51,7 @@ const STEP_QUESTION_KEY: Record<StepAnswer['step'], string> = {
   hours: 'qHours',
   race: 'qRace',
   adaptive: 'qAdaptive',
+  history: 'qHistory',
   constraints: 'qConstraints',
 };
 

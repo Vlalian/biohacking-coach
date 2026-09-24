@@ -82,6 +82,7 @@ describe('the questionnaire shape', () => {
       'hours',
       'race',
       'adaptive',
+      'history',
       'constraints',
     ]);
   });
@@ -126,8 +127,9 @@ describe('nextStep', () => {
       raceTarget: 'IM CPH',
       raceDate: '2027-08-15',
     };
-    expect(nextStep(answers, { name: true, adaptive: true })).toBe('constraints');
-    expect(nextStep(answers, { name: true, adaptive: true, constraints: true })).toBe('done');
+    expect(nextStep(answers, { name: true, adaptive: true })).toBe('history');
+    expect(nextStep(answers, { name: true, adaptive: true, history: true })).toBe('constraints');
+    expect(nextStep(answers, { name: true, adaptive: true, history: true, constraints: true })).toBe('done');
   });
 
   it('is the resume point: an interrupted flow restarts at the first unanswered step', () => {
@@ -179,7 +181,8 @@ describe('previousStep / stepAfter — the way back, and the walk forward again 
     expect(previousStep('hours')).toBe('distance');
     expect(previousStep('race')).toBe('hours');
     expect(previousStep('adaptive')).toBe('race');
-    expect(previousStep('constraints')).toBe('adaptive');
+    expect(previousStep('history')).toBe('adaptive');
+    expect(previousStep('constraints')).toBe('history');
   });
 
   it('stepAfter walks forward in sequence regardless of what is answered, and ends at done', () => {
@@ -189,7 +192,8 @@ describe('previousStep / stepAfter — the way back, and the walk forward again 
     expect(stepAfter('distance')).toBe('hours');
     expect(stepAfter('hours')).toBe('race');
     expect(stepAfter('race')).toBe('adaptive');
-    expect(stepAfter('adaptive')).toBe('constraints');
+    expect(stepAfter('adaptive')).toBe('history');
+    expect(stepAfter('history')).toBe('constraints');
     expect(stepAfter('constraints')).toBe('done');
   });
 
@@ -214,8 +218,9 @@ describe('previousStep / stepAfter — the way back, and the walk forward again 
 });
 
 describe('past races and hours — training-architecture/35', () => {
-  it('the steps are language, name, pastRaces, distance, hours, race, adaptive, constraints', () => {
-    expect(ONBOARDING_STEPS).toEqual(['language', 'name', 'pastRaces', 'distance', 'hours', 'race', 'adaptive', 'constraints']);
+  // garmin-integration/03 put the history step between adaptive and constraints.
+  it('the steps are language, name, pastRaces, distance, hours, race, adaptive, history, constraints', () => {
+    expect(ONBOARDING_STEPS).toEqual(['language', 'name', 'pastRaces', 'distance', 'hours', 'race', 'adaptive', 'history', 'constraints']);
   });
 
   it('pastRaces with two entries stores them and derives intermediate', () => {
@@ -485,7 +490,7 @@ describe('a Race is optional, and saying so is an answer', () => {
       raceTarget: 'Ironman Copenhagen',
     };
 
-    const rest = { name: true, adaptive: true, constraints: true };
+    const rest = { name: true, adaptive: true, history: true, constraints: true };
     expect(nextStep(nameOnly, rest)).toBe('race');
     expect(nextStep({ ...nameOnly, raceDate: '2027-08-15' }, rest)).toBe('done');
   });
@@ -726,6 +731,8 @@ describe('OPTION_MESSAGE_KEY', () => {
       ...ONBOARDING_OPTIONS.trackedMetrics,
       ...ONBOARDING_OPTIONS.days,
       ...ONBOARDING_OPTIONS.weeklySessionDay,
+      ...ONBOARDING_OPTIONS.yearsTraining,
+      ...ONBOARDING_OPTIONS.recentWeeklyVolume,
     ];
     for (const value of labelled) {
       expect(OPTION_MESSAGE_KEY[value], `no message key for option "${value}"`).toBeTruthy();
@@ -751,5 +758,53 @@ describe('OPTION_MESSAGE_KEY', () => {
     for (const catalogue of Object.values(catalogues)) {
       expect((catalogue.Onboarding as Record<string, string>).opt10plus).toBeUndefined();
     }
+  });
+});
+
+// ── The history step — garmin-integration/03 ─────────────────────────────────
+
+describe('the history step (garmin-integration/03)', () => {
+  const throughRace = (level: 'beginner' | 'intermediate' | 'veteran') => ({
+    language: 'en',
+    pastRaces: level === 'beginner' ? [] : level === 'intermediate' ? [half] : [half, half, oly, oly],
+    experienceLevel: level,
+    raceDistance: 'Full' as const,
+    hoursPerWeek: 8,
+    noRaceYet: true,
+  });
+
+  it('asks for history after the adaptive step, for every experience level', () => {
+    for (const level of ['beginner', 'intermediate', 'veteran'] as const) {
+      expect(nextStep(throughRace(level), { name: true, adaptive: true })).toBe('history');
+      expect(nextStep(throughRace(level), { name: true, adaptive: true, history: true })).toBe('constraints');
+    }
+  });
+
+  it('counts an empty submission and stores the two closed-set answers', () => {
+    expect(applyAnswer({}, {}, { step: 'history' }, TODAY)?.submitted.history).toBe(true);
+    const answered = applyAnswer({}, { name: true }, { step: 'history', yearsTraining: '3-6', recentWeeklyVolume: '6-10h' }, TODAY);
+    expect(answered?.answers).toEqual({ yearsTraining: '3-6', recentWeeklyVolume: '6-10h' });
+    expect(answered?.submitted).toEqual({ name: true, history: true });
+  });
+
+  it('clears an answer the athlete took back', () => {
+    const cleared = applyAnswer({ yearsTraining: '1-3', recentWeeklyVolume: '3-6h' }, {}, { step: 'history' }, TODAY);
+    expect(cleared?.answers.yearsTraining).toBeUndefined();
+    expect(cleared?.answers.recentWeeklyVolume).toBeUndefined();
+  });
+
+  it.each([
+    [{ yearsTraining: '20' }],
+    [{ recentWeeklyVolume: '40h' }],
+    [{ yearsTraining: null }],
+    [{ recentWeeklyVolume: '' }],
+  ])('refuses a value outside the options (%o)', (fields) => {
+    expect(applyAnswer({}, {}, { step: 'history', ...fields } as never, TODAY)).toBeNull();
+  });
+
+  it('leaves the floor where it was: a skipped history step still completes the profile', () => {
+    const answers = { ...throughRace('beginner') };
+    expect(completeProfile(answers)).not.toBeNull();
+    expect(completeProfile({ ...answers, yearsTraining: undefined, recentWeeklyVolume: undefined })).not.toBeNull();
   });
 });

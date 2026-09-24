@@ -27,7 +27,7 @@ type Status =
  * `as const satisfies` alone would not do it. (CodeRabbit, PR #35, correcting
  * its own earlier suggestion on PR #37.)
  */
-const ERROR_KEY: Record<UploadFailure, string> = {
+export const ERROR_KEY: Record<UploadFailure, string> = {
   'not-a-fit-file': 'errorNotAFitFile',
   corrupt: 'errorCorrupt',
   'no-sessions': 'errorNoSessions',

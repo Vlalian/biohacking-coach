@@ -14,12 +14,17 @@ vi.mock('next-themes', () => ({ useTheme: () => ({ theme: 'system', setTheme: ()
 vi.mock('@/i18n/navigation', () => ({ usePathname: () => '/settings', useRouter: () => ({ replace: () => {} }) }));
 vi.mock('@/components/auth/sign-out-button', () => ({ SignOutButton: () => null }));
 vi.mock('@/components/change-password-form', () => ({ ChangePasswordForm: () => null }));
+// The history upload's server actions are a boundary; nothing here calls them.
+vi.mock('../../garmin-actions', () => ({ importHistoryAction: vi.fn(), removeImportedHistoryAction: vi.fn() }));
 
 const { SettingsView } = await import('./settings-view');
 
 const ok = async () => ({ ok: true }) as const;
 
-function render(coachingLink: { headCoachName: string; shareAthleteReports: boolean; shareAiTranscripts: boolean } | null) {
+function render(
+  coachingLink: { headCoachName: string; shareAthleteReports: boolean; shareAiTranscripts: boolean } | null,
+  historyImportedAt: string | null = null,
+) {
   return renderToStaticMarkup(
     <SettingsView
       profile={{
@@ -30,6 +35,8 @@ function render(coachingLink: { headCoachName: string; shareAthleteReports: bool
         pastRaces: [],
         raceDistance: 'Full',
         hoursPerWeek: 9,
+        historyImportedAt,
+        importedHistoryCount: historyImportedAt ? 42 : 0,
         weeklySessionDay: null,
         fixedConstraints: [],
       }}
@@ -78,5 +85,16 @@ describe('SettingsView', () => {
     const html = render(null);
     expect(html).toContain('hoursLabel');
     expect(html).toMatch(/id="settings-hours"[^>]*min="1"[^>]*max="30"[^>]*value="9"|value="9"[^>]*id="settings-hours"/);
+  });
+
+  it('offers the history upload in Training while it is open, and the count and the remove once it is used', () => {
+    const open = render(null);
+    expect(open).toContain('choose');
+    expect(open).toContain('multiple');
+    expect(open).not.toContain('>remove<');
+    const locked = render(null, '2026-09-20T10:00:00.000Z');
+    expect(locked).not.toContain('choose');
+    expect(locked).toContain('locked');
+    expect(locked).toContain('>remove<');
   });
 });

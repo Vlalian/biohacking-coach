@@ -168,6 +168,7 @@ describe('answerOnboardingAction', () => {
     ['hours', { step: 'hours', hoursPerWeek: 8 }, 'qHours', '8 h/week'],
     ['race', { step: 'race', noRaceYet: true }, 'qRace', 'No race booked yet'],
     ['adaptive', { step: 'adaptive' }, 'qAdaptive', '—'],
+    ['history', { step: 'history', yearsTraining: '3-6' }, 'qHistory', '3-6'],
     ['constraints', { step: 'constraints' }, 'qConstraints', '— · Sunday'],
   ] as const)(
     'records the %s step in the transcript as the Coach asked it and the athlete answered it',

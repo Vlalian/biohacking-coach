@@ -129,7 +129,7 @@ describe('answerOnboardingStep', () => {
           raceDate: '2026-08-30',
           hasHumanCoach: 'Yes',
         },
-        onboardingSubmitted: { name: true, adaptive: true },
+        onboardingSubmitted: { name: true, adaptive: true, history: true },
       },
     });
 
@@ -204,7 +204,7 @@ describe('answerOnboardingStep', () => {
           hoursPerWeek: 4,
           noRaceYet: true,
         },
-        onboardingSubmitted: { name: true, adaptive: true },
+        onboardingSubmitted: { name: true, adaptive: true, history: true },
       },
     });
 

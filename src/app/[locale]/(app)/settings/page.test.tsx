@@ -7,6 +7,7 @@ const {
   getLinkForAthlete,
   getUiPrefs,
   SettingsView,
+  countImportedHistory,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -20,6 +21,7 @@ const {
   getLinkForAthlete: vi.fn(),
   getUiPrefs: vi.fn(() => Promise.resolve({})),
   SettingsView: vi.fn(() => null),
+  countImportedHistory: vi.fn(() => Promise.resolve(0)),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -32,6 +34,7 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/coach/coach-repository', () => ({ getLinkForAthlete }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getUiPrefs }));
+vi.mock('@/features/garmin/history-import-service', () => ({ countImportedHistory }));
 // The client component pulls in browser deps (next-themes, i18n navigation);
 // the page's data wiring is what is under test here.
 vi.mock('./settings-view', () => ({ SettingsView }));
@@ -142,6 +145,9 @@ describe('SettingsPage', () => {
       raceDistance: '',
       // The hours onboarding asked, editable here since showable-version/40.
       hoursPerWeek: 8,
+      // No history imported yet: the upload is open (garmin-integration/03).
+      historyImportedAt: null,
+      importedHistoryCount: 0,
       weeklySessionDay: null,
       fixedConstraints: [],
     });
@@ -245,3 +251,23 @@ describe('SettingsPage', () => {
     expect(getUiPrefs).toHaveBeenCalledWith('user_abc');
   });
 });
+
+describe('the history upload in Settings (garmin-integration/03)', () => {
+  it('hands the lock and the count of imported sessions to the view', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads', email: 'mads@example.com' } });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      communicationStyle: null,
+      hoursPerWeek: 8,
+      profile: { historyImportedAt: '2026-09-20T10:00:00.000Z' },
+    });
+    getLinkForAthlete.mockResolvedValue(undefined);
+    countImportedHistory.mockResolvedValue(42);
+
+    const element = await render('en');
+    const props = (element as unknown as { props: { profile: Record<string, unknown> } }).props;
+    expect(props.profile).toMatchObject({ historyImportedAt: '2026-09-20T10:00:00.000Z', importedHistoryCount: 42 });
+    expect(countImportedHistory).toHaveBeenCalledWith('athlete_1');
+  });
+});
+

@@ -51,6 +51,12 @@ describe('answerText renders a line for every step', () => {
     ).toBe('Ironman Copenhagen');
   });
 
+  it('joins the history answers, and says so when the step was skipped', () => {
+    expect(answerText({ step: 'history', yearsTraining: '3-6', recentWeeklyVolume: '6-10h' })).toBe('3-6 · 6-10h');
+    expect(answerText({ step: 'history', recentWeeklyVolume: '0-3h' })).toBe('0-3h');
+    expect(answerText({ step: 'history' })).toBe('—');
+  });
+
   it('joins the adaptive answers, and says so when there were none', () => {
     expect(
       answerText({ step: 'adaptive', sportBackground: ['Runner'], motivation: 'Performance' }),
