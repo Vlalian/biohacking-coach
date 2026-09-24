@@ -1,9 +1,9 @@
 import { logCoachFailure } from '@/lib/coach-log';
-import { weekStartOf } from '@/lib/date';
+import { addDays, weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
-import { getArithmeticSessionsForWeek, getSessionsForWeek } from '@/features/session/session-repository';
+import { getArithmeticSessionsForWeek, getSessionsForWeek, getSessionsInRange } from '@/features/session/session-repository';
 import { capacityFor } from '@/features/health/health-repository';
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { openAiEmbedder } from '@/features/knowledge-oracle/embedder';
@@ -25,6 +25,8 @@ import {
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   validateProposedPlan,
   weekFeedbackFrom,
+  fourWeekSummary,
+  RECENT_WEEKS,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -441,7 +443,10 @@ async function gatherContext(
   unavailableDates: string[],
 ): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult }> {
   const weekStart = weekStartOf(today);
-  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races, presenceStage] =
+  // The drafted week, not this one: the history the draft reads counts back
+  // from the week it is writing (`training-architecture/44`).
+  const draftedWeek = weekStartOf(window.start);
+  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races, presenceStage, pastSessions] =
     await Promise.all([
       getAthleteById(athleteId),
       getSessionsForWeek(athleteId, weekStart),
@@ -456,6 +461,8 @@ async function gatherContext(
       getRaces(athleteId),
       // How much the Coach actually has on this athlete (`training-architecture/21`).
       getPresenceStage(athleteId),
+      // What the athlete actually did in the four weeks before the drafted one.
+      getSessionsInRange(athleteId, addDays(draftedWeek, -7 * RECENT_WEEKS), draftedWeek),
     ]);
   if (!athlete) throw new Error('athlete row missing');
 
@@ -478,7 +485,7 @@ async function gatherContext(
   // The week the structure already wrote, if it wrote one
   // (`training-architecture/34`): the Coach adjusts what the athlete has seen
   // rather than inventing a week from a skeleton of roles.
-  const baseline = await getArithmeticSessionsForWeek(athleteId, weekStartOf(window.start));
+  const baseline = await getArithmeticSessionsForWeek(athleteId, draftedWeek);
   const grounding = await ground(athleteId, groundingFacts(athlete, horizon.blocks, today));
 
   const ctx = {
@@ -486,6 +493,7 @@ async function gatherContext(
     window,
     skeleton,
     baseline,
+    recentWeeks: fourWeekSummary(pastSessions, draftedWeek),
     passages: grounding.passages,
     citations: grounding.citations,
   };

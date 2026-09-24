@@ -270,3 +270,25 @@ describe('the baseline week — what the structure already wrote (training-archi
     }
   });
 });
+
+describe('the four weeks before the drafted one (training-architecture/44)', () => {
+  const SUMMARY = [
+    { weekStart: '2026-08-24', plannedMinutes: 0, doneMinutes: 0, completed: 0, skipped: 0, byType: [] },
+    { weekStart: '2026-08-31', plannedMinutes: 300, doneMinutes: 240, completed: 4, skipped: 1, byType: [{ type: 'Endurance', completed: 3, doneMinutes: 180 }, { type: 'Intensity', completed: 1, doneMinutes: 60 }] },
+    { weekStart: '2026-09-07', plannedMinutes: 280, doneMinutes: 0, completed: 0, skipped: 4, byType: [] },
+    { weekStart: '2026-09-14', plannedMinutes: 90, doneMinutes: 90, completed: 1, skipped: 0, byType: [{ type: 'Endurance', completed: 1, doneMinutes: 90 }] },
+  ];
+
+  it('carries the last four weeks', () => {
+    expect(renderWeekDraftPrompt(ctx({ recentWeeks: SUMMARY }))).toMatchSnapshot();
+  });
+
+  it('adds nothing when there is no history to read', () => {
+    expect(renderWeekDraftPrompt(ctx({ recentWeeks: [] }))).toBe(renderWeekDraftPrompt(ctx()));
+  });
+
+  it('refuses a summary carrying a direct identifier, like every other input', () => {
+    const leaked = [{ ...SUMMARY[3], byType: [{ type: 'anna@example.com', completed: 1, doneMinutes: 90 }] }];
+    expect(() => renderWeekDraftPrompt(ctx({ recentWeeks: leaked }))).toThrow();
+  });
+});

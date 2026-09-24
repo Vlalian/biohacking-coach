@@ -8,6 +8,8 @@ const getUnavailableDates = vi.fn();
 const getSessionsForWeek = vi.fn();
 type ArithmeticRow = { date: string; sport: string; type: string; durationMinutes: number | null; zone: string | null; title: string };
 const getArithmeticSessionsForWeek = vi.fn<() => Promise<ArithmeticRow[]>>(async () => []);
+// The four weeks before the drafted one (`training-architecture/44`). None by default.
+const getSessionsInRange = vi.fn<(athleteId: string, from: string, to: string) => Promise<unknown[]>>(async () => []);
 const capacityFor = vi.fn();
 const assertAiCoachingConsent = vi.fn();
 const openAiEmbedder = vi.fn();
@@ -31,7 +33,7 @@ const getRoster = vi.fn();
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
-vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek, getArithmeticSessionsForWeek }));
+vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek, getArithmeticSessionsForWeek, getSessionsInRange }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('@/features/consent/consent-gate', () => ({ assertAiCoachingConsent }));
 vi.mock('@/features/knowledge-oracle/embedder', () => ({ openAiEmbedder }));
@@ -83,6 +85,7 @@ beforeEach(() => {
   getEquipmentItems.mockResolvedValue([]);
   getUnavailableDates.mockResolvedValue([]);
   getArithmeticSessionsForWeek.mockResolvedValue([]);
+  getSessionsInRange.mockResolvedValue([]);
   // One coach-planned session in the current week by default: the cycle rule
   // (next week) is what most of these tests are about. The this-week rule
   // (training-architecture/24) has its own block below and clears this.
@@ -633,5 +636,44 @@ describe('the draft is seeded with the week the structure already wrote (trainin
     getArithmeticSessionsForWeek.mockResolvedValue([]);
     await ensureWeekDrafted(ATHLETE, TODAY);
     expect(callCoach.mock.calls[0][0].system).toContain('WEEK SKELETON');
+  });
+});
+
+describe('the draft reads the four weeks before the drafted one (training-architecture/44)', () => {
+  const past = (date: string, status: string, origin: string, duration: number | null = 60) => ({
+    id: `s-${date}`, date, type: 'Endurance', status, parked: false, dayOrder: 0, version: 1, title: null,
+    duration, zone: null, note: null, feedbackBody: null, feedbackMind: null, feedbackComment: null, origin, isTraining: true,
+  });
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+  });
+
+  it('counts back from the drafted week, not from today', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    // Drafting 2026-09-21 on 2026-09-16: the four weeks are 08-24 up to (not including) 09-21.
+    expect(getSessionsInRange).toHaveBeenCalledWith(ATHLETE, '2026-08-24', NEXT_MON);
+  });
+
+  it('puts a skipped week and an imported week in front of the Coach, and states an empty one', async () => {
+    getSessionsInRange.mockResolvedValue([
+      // The week of 09-07 was skipped whole.
+      past('2026-09-08', 'skipped', 'coach', 60),
+      past('2026-09-10', 'skipped', 'coach', 45),
+      // The week of 09-14 is imported history: the importer writes origin 'athlete'.
+      past('2026-09-15', 'completed', 'athlete', 90),
+    ]);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const system: string = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('RECENT WEEKS:');
+    expect(system).toContain('- Week of 2026-08-24: empty — nothing planned, nothing done');
+    expect(system).toContain('- Week of 2026-09-07: 0.0h done of 1.8h planned; 0 completed, 2 skipped');
+    expect(system).toContain('- Week of 2026-09-14: 1.5h done of 1.5h planned; 1 completed, 0 skipped; done by type: Endurance 1 (1.5h)');
+  });
+
+  it('carries no block when the four weeks hold nothing', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('RECENT WEEKS');
   });
 });

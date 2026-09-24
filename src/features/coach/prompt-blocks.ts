@@ -1,5 +1,6 @@
 import type { EquipmentCategory, EquipmentItem } from '@/features/equipment/equipment';
 import type { Onboarding } from './check-in';
+import type { WeekSummary } from './weekly-session';
 
 /**
  * How a Coach system prompt is put together.
@@ -126,6 +127,31 @@ export function groundingBlock(): PromptBlock {
     'Never write citations, footnotes or source names in your reply — the app lists your sources beneath it.'
   );
 }
+
+/**
+ * The four weeks before the drafted one (`training-architecture/44`), one line
+ * each, oldest first — so the draft knows what the athlete actually trained,
+ * skipped or uploaded. A week with nothing in it is stated, not dropped; four
+ * of them are no history at all, and the block is absent.
+ */
+export function recentWeeksBlock(weeks: WeekSummary[]): PromptBlock {
+  if (weeks.every(isEmptyWeek)) return null;
+  return block(
+    'RECENT WEEKS: what the athlete actually did in the four weeks before this one, oldest first. Weigh what was skipped as well as what was done.',
+    weeks.map(recentWeekLine),
+  );
+}
+
+const isEmptyWeek = (w: WeekSummary): boolean => w.plannedMinutes === 0 && w.completed === 0 && w.skipped === 0;
+
+function recentWeekLine(week: WeekSummary): string {
+  if (isEmptyWeek(week)) return `- Week of ${week.weekStart}: empty — nothing planned, nothing done`;
+  const counts = `${week.completed} completed, ${week.skipped} skipped`;
+  const types = week.byType.map((t) => `${t.type} ${t.completed} (${hours(t.doneMinutes)})`).join(', ');
+  return `- Week of ${week.weekStart}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}`;
+}
+
+const hours = (minutes: number): string => `${(minutes / 60).toFixed(1)}h`;
 
 export function equipmentBlock(equipmentLines: string[]): PromptBlock {
   return block('EQUIPMENT:', equipmentLines);

@@ -8,6 +8,7 @@ import {
   skippedFrom,
   validateProposedPlan,
   weekFeedbackFrom,
+  fourWeekSummary,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   PROPOSE_WEEK_PLAN_TOOL,
   type Readiness,
@@ -172,6 +173,72 @@ describe('weekFeedbackFrom', () => {
         session({ id: 'mind-only', feedbackBody: null, feedbackMind: 4 }),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('fourWeekSummary', () => {
+  it('returns four weeks ending at the target, including the ones with nothing in them', () => {
+    const summary = fourWeekSummary([session({ date: '2026-09-07', status: 'completed', duration: 60 })], '2026-09-28');
+    expect(summary.map((w) => w.weekStart)).toEqual(['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21']);
+    expect(summary[1].completed).toBe(1);
+    expect(summary[2]).toMatchObject({ plannedMinutes: 0, doneMinutes: 0, completed: 0, skipped: 0, byType: [] });
+  });
+
+  it('separates what was planned from what was done', () => {
+    const week = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', duration: 60 }),
+        session({ date: '2026-09-22', status: 'skipped', duration: 90 }),
+        session({ date: '2026-09-23', status: 'planned', duration: 45 }),
+      ],
+      '2026-09-28',
+    )[3];
+    expect(week).toMatchObject({ plannedMinutes: 195, doneMinutes: 60, completed: 1, skipped: 1 });
+  });
+
+  it('counts a session with no duration without inventing minutes for it', () => {
+    const week = fourWeekSummary([session({ date: '2026-09-21', status: 'completed', duration: null })], '2026-09-28')[3];
+    expect(week).toMatchObject({ completed: 1, doneMinutes: 0, plannedMinutes: 0 });
+  });
+
+  it('counts an imported session as done — the importer writes origin "athlete", not "garmin"', () => {
+    // `origin: 'garmin'` is legal in the schema and written nowhere in production
+    // (detected-activity.ts writes 'athlete'). Filtering on it would find nothing.
+    const week = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', duration: 60, origin: 'athlete' }),
+        session({ date: '2026-09-22', status: 'completed', duration: 30, origin: 'garmin' }),
+      ],
+      '2026-09-28',
+    )[3];
+    expect(week).toMatchObject({ completed: 2, doneMinutes: 90 });
+  });
+
+  it('splits the week by Session Type, listing only the types that happened', () => {
+    const week = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', type: 'Endurance', status: 'completed', duration: 60 }),
+        session({ date: '2026-09-22', type: 'Endurance', status: 'completed', duration: 90 }),
+        session({ date: '2026-09-23', type: 'Intensity', status: 'skipped', duration: 45 }),
+      ],
+      '2026-09-28',
+    )[3];
+    expect(week.byType).toEqual([{ type: 'Endurance', completed: 2, doneMinutes: 150 }]);
+  });
+
+  it('keeps each type to its own sessions when more than one type was done', () => {
+    const week = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', type: 'Endurance', status: 'completed', duration: 60 }),
+        session({ date: '2026-09-23', type: 'Intensity', status: 'completed', duration: 45 }),
+        session({ date: '2026-09-24', type: 'Endurance', status: 'completed', duration: 90 }),
+      ],
+      '2026-09-28',
+    )[3];
+    expect(week.byType).toEqual([
+      { type: 'Endurance', completed: 2, doneMinutes: 150 },
+      { type: 'Intensity', completed: 1, doneMinutes: 45 },
+    ]);
   });
 });
 

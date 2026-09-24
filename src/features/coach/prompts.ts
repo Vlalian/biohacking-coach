@@ -8,11 +8,12 @@ import {
   openingBlock,
   preferredNameBlock,
   buildEquipmentLines,
+  recentWeeksBlock,
   type PromptBlock,
 } from './prompt-blocks';
 import type { PlanningWindow } from './planning-window';
 import type { SkeletonDay } from './week-draft';
-import type { ProposedSession } from './weekly-session';
+import type { ProposedSession, WeekSummary } from './weekly-session';
 import type { RetrievedPassage } from '@/features/knowledge-oracle/retrieval';
 import type { Citation } from '@/lib/citation';
 import { ADJUST_TRAINING_BLOCKS_TOOL_NAME, type BlockAdjustmentContext } from './block-adjustment';
@@ -853,6 +854,12 @@ export interface WeekDraftContext extends WeeklyContext {
    * filling roles into an empty week.
    */
   baseline?: BaselineSession[] | null;
+  /**
+   * The four weeks before the drafted one, oldest first
+   * (`training-architecture/44`) — what the athlete actually did, so the draft
+   * is not written blind to a skipped or uploaded week. Absent or empty: no block.
+   */
+  recentWeeks?: WeekSummary[];
   passages: RetrievedPassage[];
   citations: Citation[];
 }
@@ -980,8 +987,9 @@ ${lines.join('\n')}`;
  */
 export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
   assertNoDirectIdentifier(ctx.checkIn);
+  assertNoDirectIdentifier(ctx.recentWeeks);
 
-  const { feedbackSummary, unavailableDates, today, window, skeleton, baseline, passages, citations } = ctx;
+  const { feedbackSummary, unavailableDates, today, window, skeleton, baseline, recentWeeks, passages, citations } = ctx;
   const {
     readiness,
     phase,
@@ -1018,6 +1026,8 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
     stateBlock({ phase, presenceStage, experienceLevel, readiness }),
 
     lastWeekFeedbackBlock(feedbackSummary, readiness),
+
+    recentWeeksBlock(recentWeeks ?? []),
 
     unavailableBlock(unavailableDates),
 
