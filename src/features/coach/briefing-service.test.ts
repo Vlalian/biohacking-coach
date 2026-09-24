@@ -483,7 +483,7 @@ describe('startBriefing — the prompt material the rest of the suite does not r
 
     const call = callCoach.mock.calls[0][0];
     expect(call.messages).toEqual([{ role: 'user', content: "Brief me on this athlete." }]);
-    expect(call.maxTokens).toBe(1400);
+    expect(call.maxTokens).toBe(2000);
     expect(call.system).toContain('Danish');
   });
 });
@@ -518,7 +518,7 @@ describe('continueBriefing — the failure log', () => {
 
     const call = callCoach.mock.calls[0][0];
     expect((call.messages as { role: string; content: string }[]).at(-1)).toEqual({ role: 'user', content: 'how is her sleep?' });
-    expect(call.maxTokens).toBe(1400);
+    expect(call.maxTokens).toBe(2000);
     expect(appendBriefingMessages).toHaveBeenCalledWith('coach_1', 'b1', [
       { role: 'head_coach', content: 'how is her sleep?' },
       { role: 'coach_ai', content: 'my read' },

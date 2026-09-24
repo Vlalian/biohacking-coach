@@ -60,7 +60,13 @@ import {
  * ever assembled into the prompt.
  */
 
-export const BRIEFING_MAX_TOKENS = 1400;
+/**
+ * The output cap. Raised from 1400 on 2026-09-24 (Mads, showable-version/19):
+ * the API counted 1318 output tokens for a 335-word briefing, 82 under the old
+ * cap, and `callCoach` does not surface `stop_reason`, so a cut would show
+ * only as a briefing ending mid-sentence.
+ */
+export const BRIEFING_MAX_TOKENS = 2000;
 
 /**
  * Renders the briefing system prompt from exactly the material the link permits.
