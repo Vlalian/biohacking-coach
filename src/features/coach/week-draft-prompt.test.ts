@@ -299,3 +299,35 @@ describe('the four weeks before the drafted one (training-architecture/44)', () 
     expect(() => renderWeekDraftPrompt(ctx({ recentWeeks: leaked }))).toThrow();
   });
 });
+
+describe('a re-draft after a decline (training-architecture/30)', () => {
+  const DECLINED_SESSIONS = [
+    { date: '2026-09-22', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: 'easy spin' },
+    { date: '2026-09-23', type: 'Intensity' as const, durationMinutes: 45, zone: 'Z4', note: null },
+    { date: '2026-09-27', type: 'Endurance' as const, durationMinutes: 150, zone: 'Z2', note: 'long ride' },
+  ];
+
+  it('shows the Coach what it proposed and was turned down, and asks for a different shape', () => {
+    const rendered = renderWeekDraftPrompt(ctx({ declined: { sessions: DECLINED_SESSIONS, reason: null } }));
+    expect(rendered).toContain('DECLINED');
+    expect(rendered).toContain('2026-09-27: Endurance 150min Z2 — long ride');
+    expect(rendered).toContain('different shape');
+    expect(rendered).toContain('whatChanged');
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it.each(['too-much', 'too-little', 'wrong-days', 'other'] as const)('renders the %s reason', (reason) => {
+    expect(renderWeekDraftPrompt(ctx({ declined: { sessions: DECLINED_SESSIONS, reason } }))).toMatchSnapshot();
+  });
+
+  it('refuses a declined session whose note carries an identifier, like the staged week in chat', () => {
+    const leaked = [{ ...DECLINED_SESSIONS[0], note: 'call +45 12345678' }];
+    expect(() => renderWeekDraftPrompt(ctx({ declined: { sessions: leaked, reason: null } }))).toThrow();
+  });
+
+  it('adds nothing to a first draft', () => {
+    for (const declined of [undefined, null]) {
+      expect(renderWeekDraftPrompt(ctx({ declined }))).not.toContain('DECLINED');
+    }
+  });
+});

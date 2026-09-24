@@ -105,6 +105,47 @@ describe('ProposalCard — a week the structure had already filled (training-arc
   });
 });
 
+describe('ProposalCard — declining asks one optional question (training-architecture/30)', () => {
+  const asking = renderToStaticMarkup(
+    <CoachOverlayContext.Provider value={overlay}>
+      <ProposalCard draft={DRAFT} initialOutcome={{ kind: 'asking' }} />
+    </CoachOverlayContext.Provider>,
+  );
+
+  it('asks one optional question before declining: four reasons and Skip', () => {
+    expect(asking).toContain('declineAsk()');
+    expect(asking.match(/data-decline-reason=/g)).toHaveLength(4);
+    for (const reason of ['too-much', 'too-little', 'wrong-days', 'other']) {
+      expect(asking).toContain(`data-decline-reason="${reason}"`);
+    }
+    expect(asking).toContain('declineSkip()');
+    // The question replaces the three decisions rather than sitting beside them.
+    expect(asking).not.toContain('data-decision="accept"');
+    expect(asking).not.toContain('data-decision="decline"');
+  });
+
+  it('points "Something else" at Discuss rather than a text box', () => {
+    expect(asking).toContain('data-decision="discuss"');
+    expect(asking).toContain('declineDiscuss()');
+    expect(asking).not.toContain('<textarea');
+  });
+
+  it('does not ask before Decline is tapped', () => {
+    const idle = renderToStaticMarkup(
+      <CoachOverlayContext.Provider value={overlay}>
+        <ProposalCard draft={DRAFT} />
+      </CoachOverlayContext.Provider>,
+    );
+    expect(idle).not.toContain('data-decline-reason');
+    expect(idle).not.toContain('declineAsk()');
+  });
+
+  it('is not a decided state and says nothing in the outcome line', () => {
+    expect(isDecided({ kind: 'asking' })).toBe(false);
+    expect(outcomeKey({ kind: 'asking' })).toBeNull();
+  });
+});
+
 describe('isDecided — when the card’s buttons go', () => {
   it('is decided after accept, decline, and a replaced draft — a stale card must not keep submitting', () => {
     // `replaced` means the server said not-found: the draft this card shows is

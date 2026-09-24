@@ -37,11 +37,13 @@ import {
   weekWindow,
   HEAD_COACH_LEAD_DAYS,
   WEEK_DRAFT_OPENER,
+  type DeclinedDraft,
   type SkeletonDay,
 } from './week-draft';
 import { getCoachByUserId, getLinkForAthlete, getRoster } from './coach-repository';
 import {
   getCalendarProposalState,
+  getLastDeclinedDraft,
   getWeekDraftHistory,
   recordWeekDraft,
   type CalendarProposalState,
@@ -225,9 +227,9 @@ export async function redraftWeek(
   const facts = await guarded(athleteId, () => redraftFacts(athleteId, weekStart, today));
   if (facts === 'coach-failed') return facts;
   if ('refused' in facts) return facts.refused;
-  const { window, unavailableDates } = facts;
+  const { window, unavailableDates, declined } = facts;
 
-  const asked = await askCoach(athleteId, today, window, unavailableDates);
+  const asked = await askCoach(athleteId, today, window, unavailableDates, declined);
   if (typeof asked === 'string') return asked;
 
   const outcome = await guarded(athleteId, () =>
@@ -251,19 +253,25 @@ async function redraftFacts(
   athleteId: string,
   weekStart: string,
   today: string,
-): Promise<{ refused: DraftOutcome | RedraftRefusal } | { window: PlanningWindow; unavailableDates: string[] }> {
-  const [athlete, consent, history, sessions, unavailableDates] = await Promise.all([
+): Promise<
+  | { refused: DraftOutcome | RedraftRefusal }
+  | { window: PlanningWindow; unavailableDates: string[]; declined: DeclinedDraft | null }
+> {
+  const [athlete, consent, history, sessions, unavailableDates, declined] = await Promise.all([
     getAthleteById(athleteId),
     assertAiCoachingConsent(athleteId),
     getWeekDraftHistory(athleteId, weekStart),
     getSessionsForWeek(athleteId, weekStart),
     getUnavailableDates(athleteId),
+    // What was turned down, so the second answer is not the first one again
+    // (`training-architecture/30`). Null for a week declined in chat.
+    getLastDeclinedDraft(athleteId, weekStart),
   ]);
   const refused = redraftGate({ consented: consent.ok, history, planned: hasCoachPlannedSession(sessions) });
   if (refused) return { refused };
   const window = weekWindow(weekStart, today, profileFacts(athlete).fixedConstraints, unavailableDates);
   if (!window) return { refused: 'no-window' };
-  return { window, unavailableDates };
+  return { window, unavailableDates, declined };
 }
 
 /** Pure: the reason a re-draft is refused, or null when it may go ahead — the window is asked after. */
@@ -387,10 +395,12 @@ async function askCoach(
   today: string,
   window: PlanningWindow,
   unavailableDates: string[],
+  /** Only a re-draft passes it: the week the athlete turned down (`training-architecture/30`). */
+  declined: DeclinedDraft | null = null,
 ): Promise<Drafted | AskFailure> {
   // Gathering and rendering sit inside the boundary with the call: rendering
   // asserts on the athlete's free text and throws, as the Weekly Session keeps it.
-  const gathered = await guarded(athleteId, () => gatherContext(athleteId, today, window, unavailableDates));
+  const gathered = await guarded(athleteId, () => gatherContext(athleteId, today, window, unavailableDates, declined));
   if (gathered === 'coach-failed') return gathered;
 
   const reply = await guarded(athleteId, () =>
@@ -458,6 +468,7 @@ async function gatherContext(
   today: string,
   window: PlanningWindow,
   unavailableDates: string[],
+  declined: DeclinedDraft | null,
 ): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; adjusted: boolean }> {
   const weekStart = weekStartOf(today);
   // The drafted week, not this one: the history the draft reads counts back
@@ -511,6 +522,7 @@ async function gatherContext(
     skeleton,
     baseline,
     recentWeeks: fourWeekSummary(pastSessions, draftedWeek),
+    declined,
     passages: grounding.passages,
     citations: grounding.citations,
   };

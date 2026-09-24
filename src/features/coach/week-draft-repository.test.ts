@@ -66,6 +66,7 @@ const {
   recordWeekDraftDiscussed,
   getDiscussedWeek,
   getWeekDraftHistory,
+  getLastDeclinedDraft,
 } = await import('./week-draft-repository');
 
 function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
@@ -435,6 +436,13 @@ describe('the athlete’s own writes on a draft', () => {
     ]);
   });
 
+  it('recordWeekDraftDecision carries the athlete’s reason on a decline (training-architecture/30)', async () => {
+    await recordWeekDraftDecision({ athleteId: ATHLETE, type: 'week_plan_declined', weekStart: WEEK, draftId: 'd1', sessions: [], reason: 'wrong-days' });
+    expect(insertValues).toEqual([
+      { athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'week_plan_declined', payload: { weekStart: WEEK, draftId: 'd1', sessions: [], reason: 'wrong-days' } },
+    ]);
+  });
+
   it('recordWeekDraftDiscussed stages the proposal and withdraws the draft in one batch — the conversation owns the week, or nothing changed', async () => {
     // Two statements used to go separately; a failure between them left the
     // proposal pending with the calendar draft still actionable (CodeRabbit,
@@ -445,5 +453,18 @@ describe('the athlete’s own writes on a draft', () => {
       { athleteId: ATHLETE, actorType: 'coach_ai', type: 'week_plan_proposed', payload: { conversationId: 'c1', sessions: [SESSION] } },
       { athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'week_draft_withdrawn', payload: { weekStart: WEEK, draftId: 'd1', reason: 'discussed', conversationId: 'c1' } },
     ]);
+  });
+});
+
+describe('getLastDeclinedDraft — the declined draft a re-draft reads (training-architecture/30)', () => {
+  it('reads the week’s events for this athlete and pairs the declined draft with its reason', async () => {
+    rowsQueue.push([
+      { id: 'd1', type: 'week_drafted', payload: { weekStart: WEEK, sessions: [SESSION] }, createdAt: new Date('2026-09-16T08:00:00Z') },
+      { id: 'r', type: 'week_plan_declined', payload: { weekStart: WEEK, sessions: [], reason: 'too-little' }, createdAt: new Date('2026-09-16T09:00:00Z') },
+    ]);
+    expect(await getLastDeclinedDraft(ATHLETE, WEEK)).toEqual({ sessions: [SESSION], reason: 'too-little' });
+    const bound = boundValues(whereArgs.at(-1));
+    expect(bound).toContain(ATHLETE);
+    expect(bound).toContain(WEEK);
   });
 });

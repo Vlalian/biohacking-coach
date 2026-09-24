@@ -4,10 +4,13 @@ import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import {
   hasCoachPlannedSession,
+  lastDeclinedDraft,
   pendingWeekDraft,
   visibleTo,
   weekDraftHistory,
   WEEK_DRAFT_EVENT,
+  type DeclinedDraft,
+  type DeclineReason,
   type SkeletonDay,
   type WeekDraft,
   type WeekDraftEvent,
@@ -98,6 +101,15 @@ export async function getWeekDraftHistory(athleteId: string, weekStart: string):
   if (history.kind !== 'discussed') return history;
   const decided = await latestPlanDecision(athleteId, history.conversationId, history.handedAt);
   return decided ? { kind: decided } : { kind: 'discussing', conversationId: history.conversationId };
+}
+
+/**
+ * The draft the athlete last declined for this week, and why, or null — what
+ * a re-draft shows the Coach so it does not propose the same week again
+ * (`training-architecture/30`). The decision is the pure {@link lastDeclinedDraft}.
+ */
+export async function getLastDeclinedDraft(athleteId: string, weekStart: string): Promise<DeclinedDraft | null> {
+  return lastDeclinedDraft(await readWeekDraftEvents(athleteId, weekStart), weekStart);
 }
 
 export interface NewWeekDraft {
@@ -344,14 +356,18 @@ export async function recordWeekDraftDecision(decision: {
   weekStart: string;
   draftId: string;
   sessions: ProposedSession[];
+  /** Why a decline, when the athlete said (`training-architecture/30`). */
+  reason?: DeclineReason;
 }): Promise<void> {
-  const { athleteId, type, weekStart, draftId, sessions } = decision;
+  const { athleteId, type, weekStart, draftId, sessions, reason } = decision;
   await getDb().insert(events).values({
     athleteId,
     actorType: 'athlete',
     actorId: athleteId,
     type,
-    payload: { weekStart, draftId, sessions },
+    // An absent reason stays out of the JSON: the payload a skipped question
+    // writes is the one every decline wrote before.
+    payload: { weekStart, draftId, sessions, reason },
   });
 }
 

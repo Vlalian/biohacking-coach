@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { useRouter } from '@/i18n/navigation';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
-import type { WeekDraft } from '@/features/coach/week-draft';
+import type { DeclineReason, WeekDraft } from '@/features/coach/week-draft';
 import { acceptWeekDraftAction, declineWeekDraftAction, discussWeekDraftAction } from './week-draft-actions';
 
 /**
@@ -30,6 +30,8 @@ import { acceptWeekDraftAction, declineWeekDraftAction, discussWeekDraftAction }
 /** What the card is showing after a decision, or nothing yet. */
 export type CardOutcome =
   | { kind: 'idle' }
+  /** Decline was tapped: the card asks why, once, optionally (`training-architecture/30`). */
+  | { kind: 'asking' }
   | { kind: 'accepted'; pastDays: number }
   | { kind: 'declined' }
   | { kind: 'replaced' }
@@ -51,6 +53,7 @@ export function isDecided(outcome: CardOutcome): boolean {
 export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record<string, string | number> } | null {
   switch (outcome.kind) {
     case 'idle':
+    case 'asking':
       return null;
     case 'accepted':
       return outcome.pastDays > 0 ? { key: 'acceptedPast', values: { count: outcome.pastDays } } : { key: 'accepted' };
@@ -65,14 +68,30 @@ export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record
   }
 }
 
-export function ProposalCard({ draft }: { draft: WeekDraft }) {
+/** The four answers to "why not this week", in the order the card shows them. */
+const DECLINE_CHIPS: { reason: DeclineReason; key: string }[] = [
+  { reason: 'too-much', key: 'declineTooMuch' },
+  { reason: 'too-little', key: 'declineTooLittle' },
+  { reason: 'wrong-days', key: 'declineWrongDays' },
+  { reason: 'other', key: 'declineOther' },
+];
+
+export function ProposalCard({
+  draft,
+  initialOutcome = { kind: 'idle' },
+}: {
+  draft: WeekDraft;
+  /** Where the card starts. Always idle in the app; a test renders a later state without a click. */
+  initialOutcome?: CardOutcome;
+}) {
   const t = useTranslations('ProposalCard');
   const tWeekly = useTranslations('WeeklySession');
   const format = useFormatter();
   const router = useRouter();
   const { setOpen, setChatSeed } = useCoachOverlay();
   const [pending, startTransition] = useTransition();
-  const [outcome, setOutcome] = useState<CardOutcome>({ kind: 'idle' });
+  const [outcome, setOutcome] = useState<CardOutcome>(initialOutcome);
+  const asking = outcome.kind === 'asking';
   const decided = isDecided(outcome);
   // The structure had already filled this week and the Coach adjusted it
   // (`training-architecture/40`): "drafted" would claim an empty week.
@@ -95,9 +114,10 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
       settle(result, () => ({ kind: 'accepted', pastDays: result.ok ? result.pastDays : 0 }));
     });
 
-  const decline = () =>
+  // One tap to ask, one more to decline — with a reason or, on Skip, without.
+  const decline = (reason?: DeclineReason) =>
     startTransition(async () => {
-      settle(await declineWeekDraftAction(draft.id), () => ({ kind: 'declined' }));
+      settle(await declineWeekDraftAction(draft.id, reason), () => ({ kind: 'declined' }));
     });
 
   const discuss = () =>
@@ -154,7 +174,44 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
           </li>
         ))}
       </ul>
-      {!decided && (
+      {asking && (
+        <div className="mt-3" data-decline-question="">
+          <p className="font-body text-sm text-foreground">{t('declineAsk')}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {DECLINE_CHIPS.map(({ reason, key }) => (
+              <button
+                key={reason}
+                type="button"
+                onClick={() => decline(reason)}
+                disabled={pending}
+                data-decline-reason={reason}
+                className="inline-flex h-10 items-center justify-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
+              >
+                {t(key)}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => decline()}
+              disabled={pending}
+              data-decline-skip=""
+              className="inline-flex h-10 items-center justify-center px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              {t('declineSkip')}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={discuss}
+            disabled={pending}
+            data-decision="discuss"
+            className="mt-2 font-body text-sm text-muted-foreground underline underline-offset-2 transition-colors hover:text-signal disabled:opacity-50"
+          >
+            {t('declineDiscuss')}
+          </button>
+        </div>
+      )}
+      {!decided && !asking && (
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
@@ -176,7 +233,7 @@ export function ProposalCard({ draft }: { draft: WeekDraft }) {
           </button>
           <button
             type="button"
-            onClick={decline}
+            onClick={() => setOutcome({ kind: 'asking' })}
             disabled={pending}
             data-decision="decline"
             className="inline-flex h-10 items-center justify-center border border-border px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"

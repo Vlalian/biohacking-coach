@@ -24,6 +24,8 @@ const getResolvedBlocks = vi.fn();
 const getRaces = vi.fn(async () => []);
 const getWeekDraftHistory = vi.fn();
 const getCalendarProposalState = vi.fn();
+// The draft declined for the week (`training-architecture/30`). None by default.
+const getLastDeclinedDraft = vi.fn(async (): Promise<unknown> => null);
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
 const getLinkForAthlete = vi.fn();
@@ -45,7 +47,7 @@ vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('./presence-repository', () => ({ getPresenceStage }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
-vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState }));
+vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState, getLastDeclinedDraft }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 
@@ -109,6 +111,7 @@ beforeEach(() => {
   recordWeekDraft.mockResolvedValue('drafted');
   getLinkForAthlete.mockResolvedValue(undefined);
   getCalendarProposalState.mockResolvedValue(null);
+  getLastDeclinedDraft.mockResolvedValue(null);
 });
 
 describe('draftGate — a week is drafted once (training-architecture/24)', () => {
@@ -323,6 +326,30 @@ describe('redraftWeek — the athlete asks once more after a decline (24)', () =
     expect(getWeekDraftHistory).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
     expect(callCoach).toHaveBeenCalledTimes(1);
     expect(recordWeekDraft).toHaveBeenCalledWith(expect.objectContaining({ weekStart: NEXT_MON, visibleFrom: TODAY }));
+  });
+
+  it('shows the Coach the week it declined, and the reason, so it proposes something else (training-architecture/30)', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    getLastDeclinedDraft.mockResolvedValue({ sessions: PROPOSED, reason: 'too-much' });
+    await redraftWeek(ATHLETE, NEXT_MON, TODAY);
+    expect(getLastDeclinedDraft).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    const system: string = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('DECLINED DRAFT');
+    expect(system).toContain('2026-09-27: Endurance 150min Z2 — long ride');
+    expect(system).toContain('They said it was too much.');
+  });
+
+  it('re-drafts without the block when the declined draft cannot be found — a week declined in chat', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    await redraftWeek(ATHLETE, NEXT_MON, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('DECLINED');
+  });
+
+  it('never shows a first draft a declined week', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(getLastDeclinedDraft).not.toHaveBeenCalled();
+    expect(callCoach.mock.calls[0][0].system).not.toContain('DECLINED');
   });
 
   it('refuses not-declined for a never-drafted, written or discussing week; draft-pending while one is on the table', async () => {

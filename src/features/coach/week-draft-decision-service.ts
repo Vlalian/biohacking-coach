@@ -4,7 +4,7 @@ import { replaceCoachPlanForDateRange } from '@/features/session/session-reposit
 import { fixedConstraintsOf, proposedToNewSessionRows, validateProposedPlan, type ProposedSession } from './weekly-session';
 import { createConversation, getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { wholeWeekWindow } from './week-draft';
+import { declineReasonOf, wholeWeekWindow } from './week-draft';
 import {
   getCalendarProposalState,
   recordWeekDraftDecision,
@@ -84,10 +84,28 @@ export function pastDaysOf(sessions: ProposedSession[], today: string): number {
 
 export type DeclineResult = { ok: true } | { ok: false; reason: 'not-found' };
 
-export async function declineWeekDraft(athlete: Athlete, draftId: string, today: string): Promise<DeclineResult> {
+/**
+ * Leaves the week as it is. `reason` is the athlete's one optional answer to
+ * why (`training-architecture/30`); it reaches the re-draft's prompt. Anything
+ * not on the list is recorded as no reason rather than refused — the decline
+ * itself is what the athlete asked for.
+ */
+export async function declineWeekDraft(
+  athlete: Athlete,
+  draftId: string,
+  today: string,
+  reason?: string,
+): Promise<DeclineResult> {
   const draft = await visibleDraft(athlete, draftId, today);
   if (!draft) return { ok: false, reason: 'not-found' };
-  await recordWeekDraftDecision({ athleteId: athlete.id, type: 'week_plan_declined', weekStart: draft.weekStart, draftId, sessions: [] });
+  await recordWeekDraftDecision({
+    athleteId: athlete.id,
+    type: 'week_plan_declined',
+    weekStart: draft.weekStart,
+    draftId,
+    sessions: [],
+    reason: declineReasonOf(reason),
+  });
   return { ok: true };
 }
 

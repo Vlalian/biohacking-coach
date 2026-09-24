@@ -31,6 +31,19 @@ export const WEEK_DRAFT_EVENT = {
   withdrawn: 'week_draft_withdrawn',
 } as const;
 
+/**
+ * Why the athlete turned a drafted week down (`training-architecture/30`,
+ * Mads 2026-09-24): one optional tap, four answers. `other` points the athlete
+ * at Discuss; there is no free-text reason, because Discuss is that.
+ */
+export const DECLINE_REASONS = ['too-much', 'too-little', 'wrong-days', 'other'] as const;
+export type DeclineReason = (typeof DECLINE_REASONS)[number];
+
+/** A reason off the list, or undefined — the client names it, so the server checks it. */
+export function declineReasonOf(value: unknown): DeclineReason | undefined {
+  return DECLINE_REASONS.find((r) => r === value);
+}
+
 /** A drafted week, as staged — or as a Head Coach approved it (`/17`). */
 export interface WeekDraft {
   id: string;
@@ -168,6 +181,35 @@ function withdrawnOutcome(event: WeekDraftEvent): WeekDraftHistory {
   const rec = event.payload as Record<string, unknown>;
   if (rec.reason !== 'discussed' || typeof rec.conversationId !== 'string') return { kind: 'never' };
   return { kind: 'discussed', conversationId: rec.conversationId, handedAt: event.createdAt };
+}
+
+/** The draft the athlete turned down, as the re-draft's prompt shows it (`training-architecture/30`). */
+export interface DeclinedDraft {
+  sessions: ProposedSession[];
+  reason: DeclineReason | null;
+}
+
+/**
+ * The last draft declined for this week, with the reason the athlete gave, or
+ * null. The sessions are on the draft's own event — a `week_plan_declined`
+ * carries none — so the walk keeps the latest offered draft and pairs it with
+ * the decline that follows it. Pure, like {@link weekDraftHistory}.
+ */
+export function lastDeclinedDraft(events: WeekDraftEvent[], weekStart: string): DeclinedDraft | null {
+  let offered: WeekDraft | null = null;
+  let declined: DeclinedDraft | null = null;
+  for (const event of events.filter((e) => weekStartOfPayload(e.payload) === weekStart)) {
+    if (DRAFT_CARRYING_TYPES.includes(event.type)) offered = draftOf(event, weekStart);
+    else if (event.type === PLAN_EVENT.declined) declined = declinedAs(offered, event) ?? declined;
+  }
+  return declined;
+}
+
+/** The offered draft as declined by `event`, or null when nothing was on offer. */
+function declinedAs(offered: WeekDraft | null, event: WeekDraftEvent): DeclinedDraft | null {
+  if (!offered) return null;
+  const reason = (event.payload as Record<string, unknown>).reason;
+  return { sessions: offered.sessions, reason: declineReasonOf(reason) ?? null };
 }
 
 /** The draft a week is still waiting on, or null — the pending branch of {@link weekDraftHistory}. */

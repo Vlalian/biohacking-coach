@@ -12,7 +12,7 @@ import {
   type PromptBlock,
 } from './prompt-blocks';
 import type { PlanningWindow } from './planning-window';
-import type { SkeletonDay } from './week-draft';
+import type { DeclinedDraft, DeclineReason, SkeletonDay } from './week-draft';
 import type { ProposedSession, WeekSummary } from './weekly-session';
 import type { RetrievedPassage } from '@/features/knowledge-oracle/retrieval';
 import type { Citation } from '@/lib/citation';
@@ -860,6 +860,12 @@ export interface WeekDraftContext extends WeeklyContext {
    * is not written blind to a skipped or uploaded week. Absent or empty: no block.
    */
   recentWeeks?: WeekSummary[];
+  /**
+   * The draft the athlete declined for this week, and why — set only on a
+   * re-draft (`training-architecture/30`), so the Coach proposes something
+   * other than the week it was just told no to. Absent on a first draft.
+   */
+  declined?: DeclinedDraft | null;
   passages: RetrievedPassage[];
   citations: Citation[];
 }
@@ -949,6 +955,29 @@ Adjust it for this athlete and this week. Keep the rest day and the long/hard sp
 The athlete can already see this week: say in one sentence, in whatChanged, what you changed.`;
 }
 
+/** What the athlete said was wrong, as the Coach reads it; null is a skipped question. */
+const DECLINE_REASON_LINE: Record<DeclineReason, string> = {
+  'too-much': 'They said it was too much.',
+  'too-little': 'They said it was too little.',
+  'wrong-days': 'They said the days were wrong.',
+  other: 'They said something else was wrong, without saying what.',
+};
+
+/**
+ * The week the athlete just turned down (`training-architecture/30`), so a
+ * re-draft is not the same inputs giving the same answer. The instruction asks
+ * for a different shape and one sentence on what changed, which lands in the
+ * tool's `whatChanged` (`/40`).
+ */
+function declinedDraftBlock(declined: DeclinedDraft | null | undefined): PromptBlock {
+  if (!declined) return null;
+  const reason = declined.reason ? DECLINE_REASON_LINE[declined.reason] : 'They gave no reason.';
+  return `DECLINED DRAFT (you proposed this for the week and the athlete declined it):
+${declined.sessions.map(stagedSessionLine).join('\n')}
+${reason}
+Propose a different shape — change the days, the mix or the load — and say in one sentence, in whatChanged, what you changed.`;
+}
+
 /**
  * The skeleton as one dated line per day, with the instruction that makes it a
  * default rather than a diktat (Mads, 2026-09-09: the structure is the
@@ -989,8 +1018,10 @@ ${lines.join('\n')}`;
 export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
   assertNoDirectIdentifier(ctx.checkIn);
   assertNoDirectIdentifier(ctx.recentWeeks);
+  assertNoDirectIdentifier(ctx.declined);
 
-  const { feedbackSummary, unavailableDates, today, window, skeleton, baseline, recentWeeks, passages, citations } = ctx;
+  const { feedbackSummary, unavailableDates, today, window, skeleton, baseline, recentWeeks, declined, passages, citations } =
+    ctx;
   const {
     readiness,
     phase,
@@ -1033,6 +1064,8 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
     unavailableBlock(unavailableDates),
 
     baseline && baseline.length > 0 ? baselineBlock(baseline) : skeletonBlock(skeleton),
+
+    declinedDraftBlock(declined),
 
     trainingScienceBlock(passages, citations),
 
