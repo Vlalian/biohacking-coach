@@ -296,6 +296,8 @@ function raceLines(p: BriefingProfile): string[] {
   const targetDate = p.races.find((r) => r.isTarget)?.date ?? null;
   const roleOf = (r: BriefingRace): string => {
     if (r.isTarget) return 'target';
+    // Stryker disable next-line ConditionalExpression — equivalent: with `targetDate` null, `r.date < null` is
+    // false for any date string, so dropping the null guard still answers 'later race'. The guard is for the type.
     return targetDate !== null && r.date < targetDate ? 'tune-up' : 'later race';
   };
   return ['Races:', ...p.races.map((r) => `- ${r.date} · ${r.name} (${r.distance}) — ${roleOf(r)}`)];
