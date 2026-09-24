@@ -112,10 +112,13 @@ if (-not (Test-Path (Join-Path $Docs ".scratch"))) {
 # From $Docs: the things that CHANGE and are authoritative - the tracker, and
 # the agent conventions that govern it. These must never be copied.
 #
-# From $Main: per-checkout tooling and static reference. .agents/ is deliberately
-# NOT shared - the skills CLI mirrors it into .claude/skills/ as symlinks holding
-# absolute paths into whichever checkout ran the install, so one shared copy
-# would point every session at one checkout's paths.
+# From $Main: per-checkout tooling and static reference. .agents/ is reached
+# through $Main rather than $Docs on purpose - the skills CLI mirrors it into
+# .claude/skills/ as symlinks holding absolute paths into whichever checkout ran
+# the install, so the path a session sees must be its own checkout's.
+# Since 2026-09-22 $Main\.agents is ITSELF a junction into $Docs\.agents, so the
+# skills are versioned with the tracker; this link resolves through to it and
+# the indirection is deliberate. Do not "fix" it to point at $Docs directly.
 $Links = [ordered]@{
   ".scratch"    = (Join-Path $Docs ".scratch")
   "docs\agents" = (Join-Path $Docs "docs\agents")
