@@ -86,11 +86,12 @@ describe('the processors the disclosure names', () => {
   });
 
   // preferred-name/02, in the same bump: the one name that IS sent is the one
-  // the athlete chose for the Coach, and the disclosure says so.
+  // the athlete chose for Momentum to use, and the disclosure says so. The role
+  // name in it changed with showable-version/47.
   it.each(['en', 'da'])('names the Preferred Name as the one name that is sent, in %s', (locale) => {
     const { controller } = disclosureCopy(locale);
     expect(controller).toContain(
-      locale === 'da' ? 'det navn, du selv vælger' : 'the name you choose for the Coach to call you',
+      locale === 'da' ? 'det navn, du selv vælger' : 'the name you choose for Momentum to call you',
     );
   });
 
@@ -105,6 +106,47 @@ describe('the processors the disclosure names', () => {
   );
 });
 
+/**
+ * `showable-version/47` (2026-09-24). PR #106 renamed the roles in everything
+ * the user reads — the AI is Momentum, the human a coach / træner — and left
+ * this artifact alone because every grant is stamped against its version. The
+ * names change here; the legal meaning of each purpose does not.
+ */
+describe('the roles the disclosure names', () => {
+  it.each(['en', 'da'])('names no Coach, AI Coach or Head Coach as a role, in %s', (locale) => {
+    const text = JSON.stringify(disclosureCopy(locale));
+    for (const role of ['AI Coach', 'AI-Coachen', 'Head Coach', 'Coachen', 'the Coach', 'to Coach']) {
+      expect(text).not.toContain(role);
+    }
+  });
+
+  it('says Momentum where the rulings put it, in English', () => {
+    const c = disclosureCopy('en');
+    expect(c.controller).toContain('Anthropic (Claude AI), which powers Momentum');
+    expect(c.requiredLabel).toBe('Required to use Momentum');
+    expect(c.withdrawRequiredWarning).toContain('pauses Momentum');
+    expect(c.purposes.head_coach_visibility.body).toContain('a human coach');
+  });
+
+  it('says Momentum and træner in Danish', () => {
+    const c = disclosureCopy('da');
+    expect(c.requiredLabel).toContain('Momentum');
+    expect(c.purposes.head_coach_visibility.body).toContain('træner');
+  });
+
+  // A guard, not a red test: the copy is mostly prose, and a blank field is the
+  // one wording failure the property checks above cannot see.
+  it.each(['en', 'da'])('has no empty string anywhere in the %s copy', (locale) => {
+    const strings: string[] = [];
+    (function walk(v: unknown) {
+      if (typeof v === 'string') strings.push(v);
+      else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    })(disclosureCopy(locale));
+    expect(strings.length).toBeGreaterThan(10);
+    expect(strings.filter((s) => s.trim() === '')).toEqual([]);
+  });
+});
+
 describe('DISCLOSURE_VERSION', () => {
   it('is a date, so a reader can tell which wording they consented to', () => {
     expect(DISCLOSURE_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -116,6 +158,11 @@ describe('DISCLOSURE_VERSION', () => {
   // make every future amendment a test edit nobody reads.
   it('was bumped past the version that carried the old identity claim', () => {
     expect(DISCLOSURE_VERSION > '2026-09-10').toBe(true);
+  });
+
+  // showable-version/47 renamed the roles, so grants stamped 2026-09-18 are stale.
+  it('is a later version than the last one grants were stamped with', () => {
+    expect(DISCLOSURE_VERSION > '2026-09-18').toBe(true);
   });
 });
 
