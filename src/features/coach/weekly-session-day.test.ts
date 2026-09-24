@@ -138,3 +138,26 @@ describe('commitDismissal — Got it only closes the instruction if the write la
     expect(await commitDismissal(write)).toEqual({ dismissed: false, error: 'not-authenticated' });
   });
 });
+
+describe('a write that throws is a refusal, not a crash', () => {
+  // A server action that rejects — the session gone, the database unreachable —
+  // used to escape the transition and reach an error boundary, which replaces
+  // the page rather than telling the coach the day did not change
+  // (CodeRabbit, PR #102).
+  it('keeps the current day and reports a failure when the day write throws', async () => {
+    const write = vi.fn(async () => {
+      throw new Error('network');
+    });
+    expect(await commitDayChoice({ current: 'Wednesday', proposed: 'Thursday', write: null }, write)).toEqual({
+      state: { current: 'Wednesday', proposed: null, write: null },
+      error: 'failed',
+    });
+  });
+
+  it('keeps the instruction on screen and reports a failure when the dismissal write throws', async () => {
+    const write = vi.fn(async () => {
+      throw new Error('network');
+    });
+    expect(await commitDismissal(write)).toEqual({ dismissed: false, error: 'failed' });
+  });
+});
