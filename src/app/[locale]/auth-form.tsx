@@ -151,7 +151,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         <button
           type="submit"
           disabled={pending}
-          className="group mt-7 inline-flex h-12 w-full items-center justify-center gap-2 bg-auth-foreground font-body text-[13px] font-bold uppercase tracking-[0.16em] text-auth-canvas transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
+          className="group mt-7 inline-flex h-11 w-full items-center justify-center gap-2 bg-auth-foreground font-body text-base font-bold uppercase tracking-[0.12em] text-auth-canvas transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
         >
           {isSignUp ? t('signUpButton') : t('signInButton')}
           <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

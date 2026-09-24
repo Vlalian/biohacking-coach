@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, CornerDownLeft, MessageSquareWarning } from 'lucide-react';
+import { AlertTriangle, Check, CornerDownLeft, MessageSquareWarning } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import type { FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
@@ -99,7 +99,10 @@ export function FeedbackInterview({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10 sm:px-6">
       <header className="flex flex-col gap-2">
-        <span className="inline-flex items-center gap-2 font-body text-sm uppercase tracking-[0.22em] text-muted-foreground">
+        <span
+          aria-hidden="true"
+          className="inline-flex items-center gap-2 font-body text-sm uppercase tracking-[0.22em] text-muted-foreground"
+        >
           <MessageSquareWarning className="h-4 w-4" aria-hidden="true" />
           {t('title')}
         </span>
@@ -112,7 +115,7 @@ export function FeedbackInterview({
       </header>
 
       <section className="flex flex-col border border-border bg-panel">
-        <div className="flex flex-col gap-5 px-4 py-5">
+        <div className="flex max-h-[46vh] min-h-56 flex-col gap-5 overflow-y-auto px-4 py-5">
           {messages.length === 0 && !pending ? (
             <div className="flex flex-col items-center gap-2 border border-dashed border-border px-5 py-8 text-center">
               <p className="font-display text-2xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
@@ -249,9 +252,11 @@ function FallbackBox({
               role="status"
               className={[
                 'font-body text-sm',
-                state === 'sent' ? 'text-muted-foreground' : 'text-destructive',
+                'inline-flex items-center gap-1.5',
+                state === 'sent' ? 'text-signal' : 'text-destructive',
               ].join(' ')}
             >
+              {state === 'sent' && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
               {state === 'sent' ? t('fallbackSent') : t('fallbackError')}
             </span>
           )}

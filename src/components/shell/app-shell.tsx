@@ -176,7 +176,7 @@ export function AppShell({
         </button>
 
         <div className="flex min-w-0 items-baseline gap-3">
-          <Wordmark name={t.appName} className="text-2xl" />
+          <Wordmark name={t.appName} size="bar" />
           <span className="hidden truncate font-body text-sm font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/70 sm:inline">
             {t.views[currentView]}
           </span>
@@ -248,7 +248,7 @@ export function AppShell({
           ].join(' ')}
         >
           <div className="flex items-center justify-between border-b border-sidebar-border px-5 py-5">
-            <Wordmark name={t.appName} className="text-3xl" />
+            <Wordmark name={t.appName} size="drawer" />
             <button
               type="button"
               onClick={onToggleNavDrawer}
@@ -325,8 +325,13 @@ const MARK_PATH =
   'M2 19V9h3v1.25A4.1 4.1 0 0 1 8.25 8.7c1.55 0 2.75.62 3.5 1.82A4.55 4.55 0 0 1 15.4 8.7c3 0 4.6 1.85 4.6 5.05V19h-3.2v-4.85c0-1.68-.68-2.5-2.03-2.5-1.38 0-2.22.98-2.22 2.72V19H9.3v-4.85c0-1.68-.67-2.5-2.02-2.5-1.4 0-2.23.98-2.23 2.72V19H2Z';
 const MARK_TONES = ['text-sidebar-foreground/20', 'text-sidebar-foreground/45', 'text-sidebar-primary'];
 
-function Wordmark({ name, className }: { name: string; className: string }) {
-  const large = className.includes('3xl');
+const WORDMARK_SIZE = {
+  bar: { glyph: 'h-6 w-6', text: 'text-2xl' },
+  drawer: { glyph: 'h-7 w-7', text: 'text-3xl' },
+} as const;
+
+function Wordmark({ name, size }: { name: string; size: keyof typeof WORDMARK_SIZE }) {
+  const { glyph, text } = WORDMARK_SIZE[size];
   return (
     <span className="group/brand flex items-center" aria-label={name}>
       <span aria-hidden="true" className="flex items-end -space-x-2">
@@ -336,7 +341,7 @@ function Wordmark({ name, className }: { name: string; className: string }) {
             viewBox="0 0 24 24"
             className={[
               'momentum-mark-part shrink-0 fill-current transition-transform duration-300 group-hover/brand:translate-x-0.5',
-              large ? 'h-7 w-7' : 'h-6 w-6',
+              glyph,
               tone,
             ].join(' ')}
           >
@@ -345,7 +350,7 @@ function Wordmark({ name, className }: { name: string; className: string }) {
         ))}
       </span>
       <span
-        className={`ml-3 font-display font-bold uppercase italic leading-none text-sidebar-foreground ${className}`}
+        className={`momentum-wordmark ml-3 font-bold uppercase italic leading-none text-sidebar-foreground ${text}`}
       >
         {name}
       </span>

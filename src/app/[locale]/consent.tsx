@@ -147,7 +147,7 @@ export function ConsentScreen({
                   <span
                     className={
                       isGranted
-                        ? 'text-[15px] font-medium text-session-recovery'
+                        ? 'text-[15px] font-medium text-foreground'
                         : 'text-[15px] text-muted-foreground'
                     }
                   >

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { NextIntlClientProvider, hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { setRequestLocale, getTranslations } from 'next-intl/server';
-import { Inter, Barlow, Bebas_Neue, JetBrains_Mono, Oswald } from 'next/font/google';
+import { Inter, Barlow, Bebas_Neue, JetBrains_Mono, Oswald, Outfit } from 'next/font/google';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from '@/components/theme-provider';
 import '../globals.css';
@@ -24,6 +24,12 @@ const oswald = Oswald({
   weight: ['500', '600', '700'],
   style: ['normal'],
   variable: '--font-oswald',
+});
+// Outfit sets only the wordmark's name, as in the Lovable export.
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['700'],
+  variable: '--font-outfit',
 });
 const bebasNeue = Bebas_Neue({
   subsets: ['latin'],
@@ -83,7 +89,7 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       suppressHydrationWarning
-      className={`${inter.variable} ${barlow.variable} ${oswald.variable} ${bebasNeue.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${barlow.variable} ${oswald.variable} ${outfit.variable} ${bebasNeue.variable} ${jetbrainsMono.variable}`}
     >
       <body>
         <ThemeProvider

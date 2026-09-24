@@ -22,7 +22,7 @@ export default async function SignInPage({
           signing in. It also gives the baseline a real surface to verify light
           and dark against. */}
       <div className="fixed right-4 top-4 z-20">
-        <ThemeToggle />
+        <ThemeToggle className="h-11 w-11 rounded-none border-auth-line bg-auth-surface/70 text-auth-foreground backdrop-blur-md hover:bg-auth-surface hover:text-auth-foreground" />
       </div>
       <AuthForm mode="sign-in" />
     </>

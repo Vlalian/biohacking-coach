@@ -236,17 +236,27 @@
   transform-origin: 50% 70%;
 }
 
+/* The glyphs roll in one after another, and follow each other on hover. */
 .momentum-mark-part:nth-child(2) {
   animation-delay: 90ms;
+  transition-delay: 35ms;
 }
 
 .momentum-mark-part:nth-child(3) {
   animation-delay: 180ms;
+  transition-delay: 70ms;
+}
+
+/* The name beside the mark is set in Outfit, as in the export. */
+.momentum-wordmark {
+  font-family: var(--font-outfit), var(--font-oswald), sans-serif;
+  letter-spacing: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .momentum-mark-part {
     animation: none;
+    transition: none;
   }
 }
 
