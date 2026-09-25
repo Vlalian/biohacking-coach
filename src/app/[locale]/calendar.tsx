@@ -68,6 +68,11 @@ type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked'
  * fix, and naming it leaks the shape of the system without helping. Every other
  * reason is something the person can act on, so every other reason is named.
  */
+/** What either door answers to a move: the athlete's own or the Head Coach's. */
+type MoveAnswer =
+  | { ok: true; version: number }
+  | { ok: false; reason: MoveRefusal; conflict?: SessionConflict };
+
 type MoveRefusal =
   | Extract<MoveResult, { ok: false }>['reason']
   // The Head Coach's door refuses two more ways than the athlete's
@@ -283,9 +288,7 @@ export function Calendar({
     sessionId: string,
     targetDate: string,
     expectedVersion: number,
-  ) => Promise<
-    { ok: true; version: number } | { ok: false; reason: MoveRefusal; conflict?: SessionConflict }
-  >;
+  ) => Promise<MoveAnswer>;
   /**
    * The athlete this calendar belongs to, when the Head Coach is the one
    * looking at it. Opens the Session Drawer on their behalf.
@@ -406,7 +409,9 @@ export function Calendar({
         // a race is refused rather than silently winning. `onMove` is the Head
         // Coach's path (it acts on someone else's calendar and needs the
         // athlete id), the default is the athlete's own.
-        const result = await answerOf(() =>
+        // The answer type is named: inferred, it would be taken from the athlete's
+        // `moveSessionAction` alone and refuse the Head Coach's wider refusals.
+        const result = await answerOf<MoveAnswer>(() =>
           onMove ? onMove(id, target, version) : moveSessionAction(id, target, version),
         );
         // A refusal puts the chip back — or, on a conflict, where the winner put it.
