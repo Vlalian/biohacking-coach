@@ -1,4 +1,6 @@
+import ts from 'typescript';
 import { describe, it, expect } from 'vitest';
+import { measureComplexity, rangeOf } from './complexity';
 import {
   changedRanges,
   emptyMeansMissed,
@@ -7,7 +9,9 @@ import {
   splitByChange,
   untouchedFiles,
   untrackedChange,
+  widenToFunctions,
   type ChangedFile,
+  type LineRange,
 } from './scope';
 
 /**
@@ -262,8 +266,8 @@ describe('parseArgs — what the run was asked to grade, and against what', () =
 
 describe('mutateEntries — what Stryker is told to mutate', () => {
   it('names each changed range as path:start-end, and nothing else', () => {
-    // Stryker includes a mutant only when its whole location sits inside a
-    // range, so a survivor can only ever come from a line the change wrote.
+    // The ranges arrive already widened to whole functions (widenToFunctions);
+    // this only spells them the way Stryker reads them.
     const changed = [
       {
         file: 'src/a.ts',
@@ -465,5 +469,176 @@ describe('untouchedFiles — the named files this run leaves ungraded', () => {
 
   it('names none when the run grades whole files', () => {
     expect(untouchedFiles(['src/a.ts'], null)).toEqual([]);
+  });
+});
+
+describe('widenToFunctions — Stryker is handed whole functions, not bare lines', () => {
+  // Stryker keeps a mutant only when its whole node lies inside a range. A
+  // range of one line drops every mutant whose node spans more than that line,
+  // so the change is widened to each function it touched (GATE-SCOPE's unit).
+  const spansOf = (source: string, file = 'src/a.ts') => measureComplexity(file, source);
+  const widen = (source: string, ranges: LineRange[], file = 'src/a.ts') =>
+    widenToFunctions([{ file, ranges }], spansOf(source, file));
+
+  const MULTI_LINE_IF = [
+    'export function allowed(a: number, b: number) {', // 1
+    '  if (', // 2
+    '    a > 1 &&', // 3
+    '    b > 2', // 4
+    '  ) {', // 5
+    '    return true;', // 6
+    '  }', // 7
+    '  return false;', // 8
+    '}', // 9
+    '', // 10
+    'export const LIMIT = 3;', // 11
+  ].join('\n');
+
+  it('widens one changed line of a multi-line condition to its whole function', () => {
+    expect(widen(MULTI_LINE_IF, [[4, 4]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 9]] }]);
+  });
+
+  it('widens an added bare statement so the block holding it can be mutated', () => {
+    const source = [
+      'export async function save(revalidate: () => Promise<void>) {', // 1
+      '  const x = 1;', // 2
+      '  await revalidate();', // 3
+      '  return x;', // 4
+      '}', // 5
+    ].join('\n');
+    const [{ ranges }] = widen(source, [[3, 3]]);
+
+    // The one mutant that tests `await revalidate();` is the BlockStatement
+    // mutant emptying the body it sits in. It is kept only if the range holds
+    // that block's whole location — which a line range of [3, 3] never did.
+    const tree = ts.createSourceFile('a.ts', source, ts.ScriptTarget.Latest, true);
+    const fn = tree.statements[0] as ts.FunctionDeclaration;
+    const block = rangeOf(fn.body!, tree);
+    const statement = rangeOf(fn.body!.statements[1], tree);
+    const holds = (lines: { startLine: number; endLine: number }) =>
+      ranges.some(([start, end]) => start <= lines.startLine && lines.endLine <= end);
+
+    expect(holds(statement)).toBe(true);
+    expect(holds(block)).toBe(true);
+  });
+
+  it('widens to arrow functions assigned to consts, and to class methods', () => {
+    const source = [
+      'export const double = (n: number) => {', // 1
+      '  return n * 2;', // 2
+      '};', // 3
+      'export class Box {', // 4
+      '  size = 1;', // 5
+      '  grow(by: number) {', // 6
+      '    this.size += by;', // 7
+      '    return this.size;', // 8
+      '  }', // 9
+      '}', // 10
+    ].join('\n');
+
+    expect(widen(source, [[2, 2]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 3]] }]);
+    expect(widen(source, [[8, 8]])).toEqual([{ file: 'src/a.ts', ranges: [[6, 9]] }]);
+  });
+
+  const NESTED = [
+    'export function outer(xs: number[]) {', // 1
+    '  const total = xs.length;', // 2
+    '  return xs.map((x) => {', // 3
+    '    const y = x * 2;', // 4
+    '    return y + total;', // 5
+    '  });', // 6
+    '}', // 7
+  ].join('\n');
+
+  it('widens a line inside a nested function to that function only', () => {
+    expect(widen(NESTED, [[5, 5]])).toEqual([{ file: 'src/a.ts', ranges: [[3, 6]] }]);
+  });
+
+  it("widens a line of the outer function's own code to the outer function", () => {
+    expect(widen(NESTED, [[2, 2]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 7]] }]);
+  });
+
+  it('counts a line the nested function shares with its parent as touching both', () => {
+    // Line 3 holds `xs.map(` as well as the callback's head: the change may be
+    // the parent's, so the parent is widened too.
+    expect(widen(NESTED, [[3, 3]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 7]] }]);
+    expect(widen(NESTED, [[6, 6]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 7]] }]);
+  });
+
+  it('widens a range that crosses two sibling functions to both, merged', () => {
+    const source = [
+      'export function a() {', // 1
+      '  return 1;', // 2
+      '}', // 3
+      'export function b() {', // 4
+      '  return 2;', // 5
+      '}', // 6
+      'export function c() {', // 7
+      '  return 3;', // 8
+      '}', // 9
+    ].join('\n');
+
+    expect(widen(source, [[2, 5]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 6]] }]);
+    expect(
+      widen(source, [
+        [2, 2],
+        [8, 8],
+      ]),
+    ).toEqual([
+      {
+        file: 'src/a.ts',
+        ranges: [
+          [1, 3],
+          [7, 9],
+        ],
+      },
+    ]);
+  });
+
+  it("widens a function's first and last lines to the function", () => {
+    expect(widen(MULTI_LINE_IF, [[1, 1]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 9]] }]);
+    expect(widen(MULTI_LINE_IF, [[9, 9]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 9]] }]);
+  });
+
+  it('widens a change running out of a nested function into its parent to the parent', () => {
+    // Line 5 widens to the callback, line 6 to both: the parent's span wins,
+    // whatever order the pieces came in.
+    expect(widen(NESTED, [[5, 6]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 7]] }]);
+  });
+
+  it('keeps a top-level change outside any function to its own lines', () => {
+    expect(widen(MULTI_LINE_IF, [[11, 11]])).toEqual([{ file: 'src/a.ts', ranges: [[11, 11]] }]);
+  });
+
+  it('keeps top-level lines apart from a function they do not touch', () => {
+    const source = [
+      'export const A = 1;', // 1
+      'export const B = 2;', // 2
+      '', // 3
+      'export function f() {', // 4
+      '  return A;', // 5
+      '}', // 6
+    ].join('\n');
+
+    expect(widen(source, [[1, 2]])).toEqual([{ file: 'src/a.ts', ranges: [[1, 2]] }]);
+    expect(widen(source, [[2, 5]])).toEqual([{ file: 'src/a.ts', ranges: [[2, 6]] }]);
+  });
+
+  it('widens only against the functions of the same file', () => {
+    expect(
+      widenToFunctions([{ file: 'src/b.ts', ranges: [[4, 4]] }], spansOf(MULTI_LINE_IF)),
+    ).toEqual([{ file: 'src/b.ts', ranges: [[4, 4]] }]);
+  });
+
+  it('still grades nothing for a change that only deleted lines', () => {
+    const deletionOnly = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -6 +5,0 @@',
+      '-    extra();',
+    ].join('\n');
+
+    expect(widenToFunctions(changedRanges(deletionOnly), spansOf(MULTI_LINE_IF))).toEqual([]);
   });
 });

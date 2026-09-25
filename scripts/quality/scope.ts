@@ -10,7 +10,9 @@
  * big file it touched and then sorted old debt from new by hand.
  *
  * "Touched" is read off `git diff -U0 <base>`: the lines the change added or
- * modified, on the new side. `cli.ts` runs git and hands the text here; every
+ * modified, on the new side. Stryker is then handed each function those lines
+ * touch, whole (`widenToFunctions`) — never the bare lines, which silently
+ * drop every mutant whose node spans more than them. `cli.ts` runs git and hands the text here; every
  * decision about it is made in this module, where it can be mutation-tested.
  */
 
@@ -80,6 +82,75 @@ export function changedRanges(diffU0: string): ChangedFile[] {
     .filter((f): f is ChangedFile => f !== null && f.ranges.length > 0);
 }
 
+type Span = { file: string; startLine: number; endLine: number };
+
+function contains(fn: Span, line: number): boolean {
+  return fn.startLine <= line && line <= fn.endLine;
+}
+
+function shorter(a: Span, b: Span): boolean {
+  return a.endLine - a.startLine < b.endLine - b.startLine;
+}
+
+/**
+ * Whether `line` is `fn`'s own code: inside it, and not strictly between the
+ * first and last lines of a function nested in it. A nested function's first
+ * and last lines are shared — `xs.map((x) => {` is the parent's code as well.
+ *
+ * Functions nest or sit apart, so a shorter function holding a line of `fn`
+ * strictly inside it can only be one nested in `fn`.
+ */
+function owns(fn: Span, line: number, spans: Span[]): boolean {
+  return (
+    contains(fn, line) &&
+    !spans.some((g) => shorter(g, fn) && g.startLine < line && line < g.endLine)
+  );
+}
+
+/** One changed line, as the spans of the functions whose code it is, or itself. */
+function widenLine(line: number, spans: Span[]): LineRange[] {
+  const owners = spans.filter((fn) => owns(fn, line, spans));
+  if (owners.length === 0) return [[line, line]];
+  return owners.map((fn): LineRange => [fn.startLine, fn.endLine]);
+}
+
+/** Sorted, with overlapping and adjacent ranges joined into one. */
+function merge(ranges: LineRange[]): LineRange[] {
+  const merged: LineRange[] = [];
+  for (const [start, end] of [...ranges].sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last !== undefined && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
+/**
+ * Each changed range widened to the full span of every function it touched —
+ * what Stryker is handed, so the mutants of the touched function all survive
+ * its range filter (Mads, 2026-09-25, code-health/28).
+ *
+ * Stryker keeps a mutant only when its **whole node** lies inside a range. Fed
+ * bare changed lines, an edit to one line of a multi-line condition dropped
+ * that condition's mutants, and an added `await revalidate();` got none at
+ * all: the only mutant that tests it empties the enclosing block, which no
+ * one-line range holds. The gate then passed code nothing tested.
+ *
+ * A line is widened to the innermost function(s) whose own code it is; a line
+ * a nested function shares with its parent widens to both. A changed line
+ * outside every function keeps its own line. `spans` are every function of
+ * the files, nested ones included, as `measureComplexity` reports them.
+ */
+export function widenToFunctions(changed: ChangedFile[], spans: Span[]): ChangedFile[] {
+  return changed.map(({ file, ranges }) => {
+    const own = spans.filter((fn) => fn.file === file);
+    const lines = ranges.flatMap(([start, end]) =>
+      Array.from({ length: end - start + 1 }, (_, i) => start + i),
+    );
+    return { file, ranges: merge(lines.flatMap((line) => widenLine(line, own))) };
+  });
+}
+
 export type GateArgs = {
   /** The files named on the command line, as given. */
   paths: string[];
@@ -136,12 +207,13 @@ function asMutateGlob(path: string): string {
 }
 
 /**
- * Stryker's `mutate` list: each changed range as `path:start-end`, or, with
- * `changed` null, each whole file.
+ * Stryker's `mutate` list: each range as `path:start-end`, or, with `changed`
+ * null, each whole file.
  *
  * Stryker keeps a mutant only when its whole location sits inside a range, so
- * a survivor can only come from a line the change wrote. A file with no
- * changed lines is absent, and is not mutated at all.
+ * the ranges handed here are the touched functions' spans from
+ * `widenToFunctions`, not the raw changed lines. A file with no changed lines
+ * is absent, and is not mutated at all.
  */
 export function mutateEntries(files: string[], changed: ChangedFile[] | null): string[] {
   if (changed === null) return files.map(asMutateGlob);
@@ -151,8 +223,6 @@ export function mutateEntries(files: string[], changed: ChangedFile[] | null): s
       ranges.map(([start, end]) => `${asMutateGlob(file)}:${start}-${end}`),
     );
 }
-
-type Span = { file: string; startLine: number; endLine: number };
 
 function touches(fn: Span, changed: ChangedFile[]): boolean {
   return changed.some(

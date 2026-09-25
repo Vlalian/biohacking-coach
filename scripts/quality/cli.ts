@@ -14,6 +14,7 @@ import {
   splitByChange,
   untouchedFiles,
   untrackedChange,
+  widenToFunctions,
   type ChangedFile,
 } from './scope';
 
@@ -27,8 +28,9 @@ import {
  *
  * Scope is **the files one ticket touched**, and within them **the lines the
  * change touched** (`.scratch/onkel/GATE-SCOPE.md`; code-health/28): Stryker
- * mutates only the changed ranges, and only functions overlapping one can fail
- * the run. The rest are measured and reported as left standing. `--whole-file`
+ * mutates each function a changed line touched, whole, and a changed line
+ * outside any function on its own; only functions overlapping a changed line
+ * can fail the run. The rest are measured and reported as left standing. `--whole-file`
  * grades every function, for the post-test sweep; `--base <ref>` sets what the
  * change is measured against (default: the merge-base with `origin/main`).
  *
@@ -376,11 +378,10 @@ function grade(files: string[], argv: string[]): number {
     );
   else if (untouched.length > 0) console.log(`Unchanged, not graded: ${untouched.join(', ')}\n`);
 
+  const complexity = graded.map(({ file, source }) => measureComplexity(file, source));
   const coverage = collectCoverage();
   const { touched: crap, standing } = splitByChange(
-    graded.flatMap(({ file, source }) =>
-      scoreCrap(measureComplexity(file, source), coverage[file]),
-    ),
+    complexity.flatMap((fns, i) => scoreCrap(fns, coverage[files[i]])),
     changed,
   );
   const { touched: cognitive } = splitByChange(
@@ -389,9 +390,11 @@ function grade(files: string[], argv: string[]): number {
   );
   // The exemption is applied here rather than by dropping the file from
   // `files`, so it still gets a CRAP score and still appears in the report.
+  // Stryker is handed each touched function whole, never bare changed lines:
+  // it drops any mutant whose node reaches outside a range (`widenToFunctions`).
   const mutate = mutateEntries(
     files.filter((f) => !MUTATION_EXEMPT.includes(f)),
-    changed,
+    changed && widenToFunctions(changed, complexity.flat()),
   );
   const { mutants, log } = mutate.length > 0 ? collectMutants(mutate) : { mutants: [], log: '' };
 
