@@ -64,6 +64,7 @@ vi.mock('@/db', () => ({
         },
       }),
     }),
+    execute: (query: SQL) => ({ kind: 'guard', query }),
     delete: (table: unknown) => ({
       where: (where: SQL) => {
         const stmt: Stmt = { kind: 'delete', table, where };
@@ -93,8 +94,8 @@ const {
   './history-import-service'
 );
 
-/** The progress write every chunk carries — a stand-in, since the batch only has to include it. */
-const PROGRESS = { progress: true } as unknown as Parameters<typeof importTrainingHistory>[2];
+/** The guarded progress write every chunk carries — stand-ins, since the batch only has to lead with them. */
+const PROGRESS = [{ guard: true }, { progress: true }] as unknown as Parameters<typeof importTrainingHistory>[2];
 
 function parsed(over: Partial<ParsedSession> = {}): ParsedSession {
   return {
@@ -156,8 +157,8 @@ describe('importTrainingHistory', () => {
     ]);
     expect(batch).toHaveBeenCalledTimes(1);
     const written = batch.mock.calls[0][0];
-    expect(written).toHaveLength(3);
-    expect(written[0]).toBe(PROGRESS);
+    expect(written).toHaveLength(4);
+    expect(written.slice(0, 2)).toEqual([...PROGRESS]);
   });
 
   it('no longer takes the lock — that happens when Import is pressed', async () => {
@@ -227,12 +228,12 @@ describe('importTrainingHistory', () => {
   it('writes only the progress when everything was already on file', async () => {
     selects.set(sessions, [{ externalId: 'garmin:T1' }]);
     expect(await importTrainingHistory('a1', [parsed({ startTime: 'T1' })], PROGRESS)).toEqual({ imported: 0, proposed: 0 });
-    expect(batch.mock.calls[0][0]).toEqual([PROGRESS]);
+    expect(batch.mock.calls[0][0]).toEqual([...PROGRESS]);
   });
 
   it('writes only the progress, reading nothing, when the chunk held no activity', async () => {
     expect(await importTrainingHistory('a1', [], PROGRESS)).toEqual({ imported: 0, proposed: 0 });
-    expect(batch.mock.calls[0][0]).toEqual([PROGRESS]);
+    expect(batch.mock.calls[0][0]).toEqual([...PROGRESS]);
     expect(reads).toEqual([]);
     expect(getSessionsOnDates).not.toHaveBeenCalled();
   });
@@ -245,8 +246,30 @@ describe('importTrainingHistory', () => {
 });
 
 describe('importProgressWrite', () => {
+  const NEXT = {
+    blobUrls: ['u2'],
+    cursor: 0,
+    total: 60,
+    done: 60,
+    skippedOld: 3,
+    failed: 1,
+    status: 'importing',
+  } as const;
+
+  it('leads with a guard that locks the import as it was read and fails the batch when that finds no row', () => {
+    const [guard] = importProgressWrite('imp1', { status: 'unpacking', cursor: 25 }, { ...NEXT, blobUrls: [...NEXT.blobUrls] }) as unknown as [
+      { kind: string; query: SQL },
+    ];
+    expect(guard.kind).toBe('guard');
+    const { sql, params } = new PgDialect().sqlToQuery(guard.query);
+    expect(sql).toBe(
+      'select 1 / count(*) from (select 1 from "history_import" where ("history_import"."id" = $1 and "history_import"."status" = $2 and "history_import"."cursor" = $3) for update) as held',
+    );
+    expect(params).toEqual(['imp1', 'unpacking', 25]);
+  });
+
   it('writes the next counters to this import, only if no other worker moved it — phase or place — first', () => {
-    const stmt = importProgressWrite('imp1', { status: 'unpacking', cursor: 25 }, {
+    const [, stmt] = importProgressWrite('imp1', { status: 'unpacking', cursor: 25 }, {
       blobUrls: ['u2'],
       cursor: 0,
       total: 60,
@@ -254,7 +277,7 @@ describe('importProgressWrite', () => {
       skippedOld: 3,
       failed: 1,
       status: 'importing',
-    }) as unknown as Stmt;
+    }) as unknown as [unknown, Stmt];
     expect(stmt.kind).toBe('update');
     expect(stmt.table).toBe(historyImport);
     expect(stmt.values).toEqual({

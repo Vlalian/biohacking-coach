@@ -215,6 +215,14 @@ function openZip(bytes: Uint8Array, filter: UnzipFileFilter): Unzipped | null {
 }
 
 /**
+ * The most one activity file inside an export may inflate to. A `.fit` is
+ * kilobytes and a day of one-second GPX tens of MB; past this it is not an
+ * activity, and the unpacker, which holds each file whole, fails it rather
+ * than run out of memory on it.
+ */
+export const MAX_ACTIVITY_BYTES = 64 * 1024 * 1024;
+
+/**
  * How many files one import step reads, and how many extracted files the
  * unpacking saves at a time. Small enough that a step — parse, plan, one
  * batched write — fits well inside a function's time, and a crash costs at

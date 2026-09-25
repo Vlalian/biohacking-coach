@@ -30,18 +30,21 @@ const ZIP_FILE = /\.zip$/i;
  * Streams `stream` through the unpacker and awaits `onEntry` for every entry
  * numbered `from` or later, in order. `shouldStop` is asked before each read;
  * when it says stop, the download is cancelled and the result is `false`.
- * `true` means the archive was read to its end.
+ * `true` means the archive was read to its end. An activity file that inflates
+ * past `maxFileBytes` fails, and nothing more of it is kept: gathering it whole
+ * is how a small zip would exhaust the function's memory.
  */
 export async function unpackZipStream(
   stream: ReadableStream<Uint8Array>,
   from: number,
   onEntry: (entry: UnpackedEntry, index: number) => Promise<void>,
   shouldStop: () => boolean,
+  maxFileBytes: number,
 ): Promise<boolean> {
   const queue: [number, UnpackedEntry][] = [];
   const archive = openArchive(new Numbering(), (index, entry) => {
     if (index >= from) queue.push([index, entry]);
-  }, true);
+  }, true, maxFileBytes);
   const reader = stream.getReader();
 
   for (;;) {
@@ -74,10 +77,10 @@ const ZIP_SIGNATURES = new Set([0x04034b50, 0x06054b50]);
  * failure of its own.
  * `outer` zips open the zips inside them; nested ones do not.
  */
-function openArchive(numbering: Numbering, emit: Emit, outer: boolean) {
+function openArchive(numbering: Numbering, emit: Emit, outer: boolean, maxFileBytes: number) {
   let failed = false;
   const opensAsZip = signatureCheck();
-  const unzip = new Unzip((file) => readEntry(file, numbering, emit, outer));
+  const unzip = new Unzip((file) => readEntry(file, numbering, emit, outer, maxFileBytes));
   unzip.register(UnzipInflate);
 
   const fail = () => {
@@ -120,20 +123,26 @@ function signatureCheck(): (chunk: Uint8Array, final: boolean) => boolean {
  * fflate buffers the data of an entry nobody started, which over a whole
  * export would be most of it.
  */
-function readEntry(file: UnzipFile, numbering: Numbering, emit: Emit, outer: boolean): void {
-  if (ACTIVITY_FILE.test(file.name)) readActivity(file, numbering.take(), emit);
-  else if (outer && ZIP_FILE.test(file.name)) readNestedZip(file, openArchive(numbering, emit, false));
+function readEntry(file: UnzipFile, numbering: Numbering, emit: Emit, outer: boolean, maxFileBytes: number): void {
+  if (ACTIVITY_FILE.test(file.name)) readActivity(file, numbering.take(), emit, maxFileBytes);
+  else if (outer && ZIP_FILE.test(file.name)) readNestedZip(file, openArchive(numbering, emit, false, maxFileBytes));
   else file.ondata = () => {};
   file.start();
 }
 
-/** An activity file, gathered whole and handed on once its last byte is in; one bad chunk fails it once. */
-function readActivity(file: UnzipFile, index: number, emit: Emit): void {
+/**
+ * An activity file, gathered whole and handed on once its last byte is in. One
+ * bad chunk, or growing past `maxFileBytes`, fails it once, and nothing more of
+ * it is kept.
+ */
+function readActivity(file: UnzipFile, index: number, emit: Emit, maxFileBytes: number): void {
   const chunks: Uint8Array[] = [];
+  let size = 0;
   let settled = false;
   file.ondata = (error, data, final) => {
     if (settled) return;
-    if (error) {
+    size += error ? 0 : data.length;
+    if (error || size > maxFileBytes) {
       settled = true;
       return emit(index, { kind: 'failed' });
     }

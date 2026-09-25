@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { uploadPolicy, MAX_UPLOAD_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
+import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_ACTIVITY_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**
  * `garmin-integration/04` — the pure half of the Blob upload: who may upload
@@ -20,6 +20,10 @@ describe('uploadPolicy', () => {
     const p = uploadPolicy('detection', { athleteId: 'a1', historyLocked: true });
     expect(p).toMatchObject({ ok: true, maximumSizeInBytes: 500 * 1024 * 1024, pathPrefix: 'garmin/detection/a1/' });
     expect(MAX_UPLOAD_BYTES).toBe(500 * 1024 * 1024);
+  });
+
+  it('caps one activity file inside an export at 64 MB inflated', () => {
+    expect(MAX_ACTIVITY_BYTES).toBe(64 * 1024 * 1024);
   });
 
   it('allows an open history upload under its own prefix, for the three file types only', () => {

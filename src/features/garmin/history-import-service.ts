@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, inArray, isNotNull, lt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import { getDb } from '@/db';
 import { detectedActivities, historyImport, sessions, sessionStreams, type HistoryImportRow, type HistoryImportStatus } from '@/db/schema';
@@ -39,16 +39,19 @@ import { deleteAthleteBlobs } from './blob-store';
  */
 export type HistoryChunkResult = { imported: number; proposed: number };
 
-/** One statement a batch can carry — what {@link importProgressWrite} returns. */
+/** One statement a batch can carry. */
 type BatchStatement = BatchItem<'pg'>;
+
+/** A step's progress as {@link importProgressWrite} builds it: the guard, then the update. */
+export type ProgressWrite = readonly [BatchStatement, BatchStatement];
 
 export async function importTrainingHistory(
   athleteId: string,
   parsed: readonly ParsedSession[],
-  progress: BatchStatement,
+  progress: ProgressWrite,
 ): Promise<HistoryChunkResult> {
   if (parsed.length === 0) {
-    await getDb().batch([progress]);
+    await getDb().batch(progress);
     return { imported: 0, proposed: 0 };
   }
 
@@ -56,9 +59,10 @@ export async function importTrainingHistory(
   const [planned, knownIds] = await Promise.all([getSessionsOnDates(athleteId, days), knownExternalIds(athleteId)]);
   const plan = planHistoryImport(parsed, { planned, knownIds });
 
-  // The progress write goes first: it is always there, which is what gives the
-  // batch the non-empty tuple type it asks for.
-  await getDb().batch([progress, ...historyWrites(athleteId, plan.history), ...proposalWrites(athleteId, plan.proposals, planned)]);
+  // The progress write goes first: its guard has to run before anything else
+  // is written, and it is always there, which gives the batch the non-empty
+  // tuple type it asks for.
+  await getDb().batch([...progress, ...historyWrites(athleteId, plan.history), ...proposalWrites(athleteId, plan.proposals, planned)]);
 
   return { imported: plan.history.length, proposed: plan.proposals.length };
 }
@@ -73,16 +77,28 @@ export type ImportProgressChange = Pick<
 export type ImportReadAt = { status: HistoryImportStatus; cursor: number };
 
 /**
- * The write that records a step's progress, conditional on the status and
- * cursor it was read at: if another worker — the cron and the post-Import run
- * can overlap — moved the import first, this matches no row and changes
- * nothing. The status is part of it because both phases start at cursor 0.
+ * The writes that record a step's progress, conditional on the status and
+ * cursor it was read at. The status is part of it because both phases start at
+ * cursor 0.
+ *
+ * Two statements, for the front of the step's batch. The guard locks the
+ * import row as it was read and divides by how many rows that found. When
+ * another worker moved the import first (the cron and the post-Import run can
+ * overlap), or the bulk remove or an erasure deleted it, that is zero, and the
+ * division fails the whole batch. So the step's history and proposals never
+ * land without its progress, and the worker stops. Without the guard the
+ * update would match no row and the inserts beside it would still run.
  */
-export function importProgressWrite(importId: string, readAt: ImportReadAt, next: ImportProgressChange) {
-  return getDb()
-    .update(historyImport)
-    .set({ ...next, updatedAt: new Date() })
-    .where(and(eq(historyImport.id, importId), eq(historyImport.status, readAt.status), eq(historyImport.cursor, readAt.cursor)));
+export function importProgressWrite(importId: string, readAt: ImportReadAt, next: ImportProgressChange): ProgressWrite {
+  const db = getDb();
+  const asRead = and(eq(historyImport.id, importId), eq(historyImport.status, readAt.status), eq(historyImport.cursor, readAt.cursor));
+  return [
+    db.execute(sql`select 1 / count(*) from (select 1 from ${historyImport} where ${asRead} for update) as held`),
+    db
+      .update(historyImport)
+      .set({ ...next, updatedAt: new Date() })
+      .where(asRead),
+  ];
 }
 
 export type StartImportResult = { ok: true; importId: string } | { ok: false; reason: 'locked' };
@@ -176,8 +192,9 @@ async function knownExternalIds(athleteId: string): Promise<Set<string>> {
  * goes, and the import opens again. Proposals it made are left to the athlete,
  * who decides each one on the calendar as with any Detected Activity.
  *
- * The import rows go in the same batch — a worker still running finds its row
- * gone and stops — and then whatever history uploads are left in Blob.
+ * The import rows go in the same batch. A worker still running fails its next
+ * save on the missing row ({@link importProgressWrite}) and stops, writing
+ * nothing more. Then whatever history uploads are left in Blob go too.
  */
 export async function removeImportedHistory(athleteId: string): Promise<void> {
   const db = getDb();

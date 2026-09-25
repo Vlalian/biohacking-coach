@@ -7,6 +7,7 @@ import {
   extractedPathname,
   HISTORY_WINDOW_WEEKS,
   IMPORT_CHUNK_FILES,
+  MAX_ACTIVITY_BYTES,
   importRunning,
   nextZip,
   withinWindow,
@@ -70,7 +71,7 @@ async function unpackNextZip(row: HistoryImportRow, deps: WorkerDeps, timeUp: ()
   const unpack = new UnpackRun(row, zip, deps);
   // No zip left, or one that is gone: nothing to stream, and the zip (if any) is one failed file.
   if (!stream) return unpack.save({ extracted: [], failed: zip ? 1 : 0, complete: true });
-  const complete = await unpackZipStream(stream, row.cursor, (entry, index) => unpack.take(entry, index), timeUp);
+  const complete = await unpackZipStream(stream, row.cursor, (entry, index) => unpack.take(entry, index), timeUp, MAX_ACTIVITY_BYTES);
   return unpack.save({ ...unpack.pending, complete });
 }
 

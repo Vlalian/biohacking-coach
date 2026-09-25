@@ -25,7 +25,13 @@ function streamOf(bytes: Uint8Array, size = 97): ReadableStream<Uint8Array> {
 
 type Seen = { index: number; entry: UnpackedEntry };
 
-async function unpack(bytes: Uint8Array, from = 0, stop: (seen: Seen[]) => boolean = () => false, chunkSize = 97) {
+async function unpack(
+  bytes: Uint8Array,
+  from = 0,
+  stop: (seen: Seen[]) => boolean = () => false,
+  chunkSize = 97,
+  maxFileBytes = 1024 * 1024,
+) {
   const seen: Seen[] = [];
   const complete = await unpackZipStream(
     streamOf(bytes, chunkSize),
@@ -34,6 +40,7 @@ async function unpack(bytes: Uint8Array, from = 0, stop: (seen: Seen[]) => boole
       seen.push({ index, entry });
     },
     () => stop(seen),
+    maxFileBytes,
   );
   return { complete, seen };
 }
@@ -62,6 +69,20 @@ describe('unpackZipStream', () => {
       { kind: 'file', name: 'b.FIT', bytes: FIT },
       { kind: 'file', name: 'last.fit', bytes: FIT },
     ]);
+  });
+
+  it('fails an activity file that inflates past the cap once, a zip deep too, and carries on', async () => {
+    const huge = new Uint8Array(100_001);
+    const bytes = zipSync({ 'bomb.fit': huge, 'inner.zip': zipSync({ 'deep.gpx': huge, 'ok.gpx': GPX }), 'next.fit': FIT });
+    const { complete, seen } = await unpack(bytes, 0, () => false, 97, 100_000);
+    expect(complete).toBe(true);
+    expect(names(seen)).toEqual(['0:failed', '1:failed', '2:ok.gpx', '3:next.fit']);
+  });
+
+  it('keeps an activity file of exactly the cap, whole', async () => {
+    const atCap = new Uint8Array(100_000).fill(7);
+    const { seen } = await unpack(zipSync({ 'long-ride.fit': atCap }), 0, () => false, 97, 100_000);
+    expect(seen.map((s) => s.entry)).toEqual([{ kind: 'file', name: 'long-ride.fit', bytes: atCap }]);
   });
 
   it('reads a zip whose entries are stored rather than deflated', async () => {
