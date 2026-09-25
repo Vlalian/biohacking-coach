@@ -51,6 +51,7 @@ import {
   type ResolvedWeekDraftHistory,
 } from './week-draft-repository';
 import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
+import { getLanguageForAthlete } from '@/features/user-prefs/user-prefs-repository';
 
 /**
  * The Coach drafts next week on its own (`training-architecture/16`) — the
@@ -479,7 +480,7 @@ async function gatherContext(
   // The drafted week, not this one: the history the draft reads counts back
   // from the week it is writing (`training-architecture/44`).
   const draftedWeek = weekStartOf(window.start);
-  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races, presenceStage, pastSessions] =
+  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races, presenceStage, pastSessions, language] =
     await Promise.all([
       getAthleteById(athleteId),
       getSessionsForWeek(athleteId, weekStart),
@@ -496,6 +497,9 @@ async function gatherContext(
       getPresenceStage(athleteId),
       // What the athlete actually did in the four weeks before the drafted one.
       getSessionsInRange(athleteId, addDays(draftedWeek, -7 * RECENT_WEEKS), draftedWeek),
+      // The Athlete Language, by this athlete's id: a Head Coach's app-open
+      // drafts too, so it cannot be whoever is signed in (showable-version/46).
+      getLanguageForAthlete(athleteId),
     ]);
   if (!athlete) throw new Error('athlete row missing');
 
@@ -504,7 +508,7 @@ async function gatherContext(
     today,
     readinessFrom(checkInRow),
     presenceStage,
-    undefined,
+    language ?? undefined,
     equipmentItems,
     horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
     capacity,

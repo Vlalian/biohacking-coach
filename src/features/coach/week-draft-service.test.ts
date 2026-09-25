@@ -31,6 +31,8 @@ const logCoachFailure = vi.fn();
 const getLinkForAthlete = vi.fn();
 const getCoachByUserId = vi.fn();
 const getRoster = vi.fn();
+// The Athlete Language, read by athlete id from the user seam (showable-version/46). None by default.
+const getLanguageForAthlete = vi.fn(async (_athleteId: string): Promise<string | null> => null);
 
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
@@ -50,6 +52,7 @@ vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState, getLastDeclinedDraft }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getLanguageForAthlete }));
 
 const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState, draftLanded } =
   await import(
@@ -112,6 +115,7 @@ beforeEach(() => {
   getLinkForAthlete.mockResolvedValue(undefined);
   getCalendarProposalState.mockResolvedValue(null);
   getLastDeclinedDraft.mockResolvedValue(null);
+  getLanguageForAthlete.mockResolvedValue(null);
 });
 
 describe('draftGate — a week is drafted once (training-architecture/24)', () => {
@@ -745,5 +749,50 @@ describe('the draft reads the four weeks before the drafted one (training-archit
   it('carries no block when the four weeks hold nothing', async () => {
     await ensureWeekDrafted(ATHLETE, TODAY);
     expect(callCoach.mock.calls[0][0].system).not.toContain('RECENT WEEKS');
+  });
+});
+
+describe("the draft is written in the athlete's own language (showable-version/46)", () => {
+  const DANISH = 'LANGUAGE: Respond in Danish.';
+
+  it("a Danish athlete's draft prompt carries the Danish directive, read by their own id", async () => {
+    getLanguageForAthlete.mockResolvedValue('da');
+
+    expect(await ensureWeekDrafted(ATHLETE, TODAY)).toBe('drafted');
+
+    expect(getLanguageForAthlete).toHaveBeenCalledWith(ATHLETE);
+    expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
+  });
+
+  it('an English athlete, and one whose language was never set, get no language line', async () => {
+    getLanguageForAthlete.mockResolvedValueOnce('en');
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    getLanguageForAthlete.mockResolvedValueOnce(null);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+
+    expect(callCoach).toHaveBeenCalledTimes(2);
+    for (const [call] of callCoach.mock.calls) expect(call.system).not.toContain('LANGUAGE:');
+  });
+
+  it('the re-draft after a decline is Danish too', async () => {
+    getLanguageForAthlete.mockResolvedValue('da');
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    getSessionsForWeek.mockResolvedValue([]);
+
+    expect(await redraftWeek(ATHLETE, NEXT_MON, TODAY)).toBe('drafted');
+
+    expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
+  });
+
+  it("a Head Coach's app-open drafts each athlete in that athlete's language, not the coach's", async () => {
+    getCoachByUserId.mockResolvedValue({ id: 'coach-1' });
+    getRoster.mockResolvedValue([{ athleteId: 'a-da' }, { athleteId: 'a-en' }]);
+    getLanguageForAthlete.mockImplementation(async (id: string) => (id === 'a-da' ? 'da' : 'en'));
+
+    await ensureRosterDrafted('user_coach', TODAY);
+
+    expect(callCoach).toHaveBeenCalledTimes(2);
+    expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
+    expect(callCoach.mock.calls[1][0].system).not.toContain('LANGUAGE:');
   });
 });

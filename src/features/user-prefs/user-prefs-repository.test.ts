@@ -27,7 +27,7 @@ const update = vi.fn(() => ({ set }));
 
 vi.mock('@/db', () => ({ getDb: () => ({ select, update }) }));
 
-const { getUiPrefs, setUiLanguage, setPreferredName, setWeekCycleInstructed, getPreferredNameForAthlete } = await import(
+const { getUiPrefs, setUiLanguage, setPreferredName, setWeekCycleInstructed, getPreferredNameForAthlete, getLanguageForAthlete } = await import(
   './user-prefs-repository',
 );
 
@@ -128,6 +128,25 @@ describe('getPreferredNameForAthlete', () => {
     expect(await getPreferredNameForAthlete('athlete_1')).toBeNull();
     selectRows = [];
     expect(await getPreferredNameForAthlete('synthetic_1')).toBeNull();
+  });
+});
+
+describe('getLanguageForAthlete (showable-version/46)', () => {
+  it("reads the Athlete Language through the user seam, keyed by the opaque athlete id", async () => {
+    selectRows = [{ uiPrefs: { language: 'da', preferredName: 'Mads' } }];
+    expect(await getLanguageForAthlete('athlete_1')).toBe('da');
+    expect(select).toHaveBeenCalledWith({ uiPrefs: user.uiPrefs });
+    expect(innerJoin).toHaveBeenCalledWith(user, expect.anything());
+    expect(eq).toHaveBeenCalledWith(athlete.id, 'athlete_1');
+  });
+
+  it('is null for an athlete who set none, for empty prefs, and for one with no user at all', async () => {
+    selectRows = [{ uiPrefs: { preferredName: 'Mads' } }];
+    expect(await getLanguageForAthlete('athlete_1')).toBeNull();
+    selectRows = [{ uiPrefs: null }];
+    expect(await getLanguageForAthlete('athlete_1')).toBeNull();
+    selectRows = [];
+    expect(await getLanguageForAthlete('synthetic_1')).toBeNull();
   });
 });
 
