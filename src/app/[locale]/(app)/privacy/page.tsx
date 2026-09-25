@@ -1,12 +1,10 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { getActiveConsents } from '@/features/consent/consent-repository';
 import { currentlyConsentedPurposes } from '@/features/consent/consent';
 import { ConsentScreen } from '../../consent';
@@ -33,14 +31,14 @@ export default async function PrivacyPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
 
   // The athlete's own consents only — scoped to their id by the repository, so
   // no shape of this reads another athlete's grants (ADR 0006).
-  const athlete = await getAthleteByUserId(session!.user.id);
+  const athlete = await getCurrentAthlete();
   const granted = athlete
     ? currentlyConsentedPurposes(await getActiveConsents(athlete.id))
     : [];

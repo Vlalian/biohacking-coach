@@ -84,7 +84,7 @@ export interface OnboardingAnswers {
   /** The races the athlete has finished — zero or more; `[]` is an answer. */
   pastRaces?: PastRace[];
   /**
-   * Hours a week the athlete can realistically train, 1–30, asked and never
+   * Hours a week the athlete can realistically train, 1–50, asked and never
    * suggested (Mads, 2026-09-19: "A and only A"). The ceiling 34's arithmetic
    * sizes every week from.
    */
@@ -365,7 +365,7 @@ export type StepAnswer =
   /** Zero or more finished races; each entry is checked by `parsePastRace`. */
   | { step: 'pastRaces'; pastRaces: unknown[] }
   | { step: 'distance'; raceDistance: string }
-  /** Hours a week, an integer 1–30. */
+  /** Hours a week, an integer 1–50. */
   | { step: 'hours'; hoursPerWeek: number }
   | { step: 'firstDay'; firstDay: FirstDayChoice }
   | { step: 'race'; raceTarget: string; raceDate: string }
@@ -570,7 +570,9 @@ function parsePastRaces(value: unknown, today: string): PastRace[] | null {
 }
 
 export const HOURS_PER_WEEK_MIN = 1;
-export const HOURS_PER_WEEK_MAX = 30;
+// 50, not the 30 first built (Mads, 2026-09-25): some athletes train more than
+// 30 hours a week, and the ceiling leaves room above a professional's peak week.
+export const HOURS_PER_WEEK_MAX = 50;
 
 /** A whole number of hours inside the band; anything else is refused. */
 function isHoursPerWeek(value: unknown): value is number {

@@ -3,15 +3,13 @@ import { getDb } from '@/db';
 import { events, sessions } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import { getActiveLink } from './coach-repository';
-import {
-  canHeadCoachEditContent,
-  canHeadCoachMove,
-  HEAD_COACH_ORIGIN,
-} from './head-coach-authority';
+import { canHeadCoachEditContent, canHeadCoachMove } from './head-coach-authority';
 import { applyMove, type MoveResult } from '@/features/session/session-move';
 import { isFrozen } from '@/features/session/move-rules';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
 import type { SessionConflict } from '@/features/session/conflict';
+import { prescribedSessionOf, prescriptionColumns, type PrescriptionInput } from './prescription';
+import type { Session } from '@/features/session/session';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -50,7 +48,10 @@ import type { SessionConflict } from '@/features/session/conflict';
  */
 
 export type HeadCoachActionResult =
-  | { ok: true; sessionId: string }
+  // What the write left, so the calendar shows it without a reload
+  // (showable-version/44): an add returns the session, an edit its version, and
+  // a delete has nothing to report.
+  | { ok: true; sessionId: string; version?: number; session?: Session }
   | {
       ok: false;
       reason:
@@ -67,16 +68,7 @@ export type HeadCoachActionResult =
   // carries what won, because the Head Coach has no other way to find out.
   | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 
-/** The mutable fields of a session the Head Coach may set. */
-export type PrescriptionInput = {
-  date: string;
-  type: string;
-  duration?: number | null;
-  zone?: string | null;
-  title?: string | null;
-  note?: string | null;
-  isTraining?: boolean;
-};
+export type { PrescriptionInput };
 
 function isValidPrescription(input: PrescriptionInput): boolean {
   return (
@@ -165,19 +157,6 @@ function landsInAClosedWeek(date: string, today: string): boolean {
   return isFrozen({ date, status: 'planned' }, today);
 }
 
-/** Normalises the optional fields into the column set, shared by add and edit. */
-function contentColumns(input: PrescriptionInput) {
-  return {
-    date: input.date,
-    type: input.type.trim(),
-    duration: input.duration ?? null,
-    zone: input.zone ?? null,
-    title: input.title ?? null,
-    note: input.note ?? null,
-    isTraining: input.isTraining ?? true,
-  };
-}
-
 /**
  * Adds a Prescribed Session (`origin: 'head_coach'`) to a linked athlete's plan.
  *
@@ -205,25 +184,22 @@ export async function prescribeSession(params: {
 
   const db = getDb();
   const id = crypto.randomUUID();
+  // The row written and the session returned are one value, so the calendar's
+  // instant copy (prescribedSessionOf) and the database cannot differ.
+  // Version 1 is the column's default: a new row has never been rewritten.
+  const session = prescribedSessionOf(id, input, 1);
   await db.batch([
-    db.insert(sessions).values({
-      id,
-      athleteId,
-      origin: HEAD_COACH_ORIGIN,
-      status: 'planned',
-      dayOrder: 0,
-      ...contentColumns(input),
-    }),
+    db.insert(sessions).values({ athleteId, ...session }),
     db.insert(events).values({
       athleteId,
       actorType: 'head_coach',
       actorId: headCoachId,
       type: 'session_prescribed',
-      payload: { sessionId: id, ...contentColumns(input) },
+      payload: { sessionId: id, ...prescriptionColumns(input) },
     }),
   ]);
 
-  return { ok: true, sessionId: id };
+  return { ok: true, sessionId: id, session };
 }
 
 /**
@@ -264,7 +240,7 @@ export async function editPrescribedSession(params: {
   // over the ceiling, which is moving a number rather than improving anything.
   if (landsInAClosedWeek(input.date, today)) return { ok: false, reason: 'frozen' };
 
-  const columns = contentColumns(input);
+  const columns = prescriptionColumns(input);
   const written = await casUpdateSession({
     athleteId,
     sessionId,
@@ -286,7 +262,7 @@ export async function editPrescribedSession(params: {
     },
   });
 
-  return written.ok ? { ok: true, sessionId } : written;
+  return written.ok ? { ok: true, sessionId, version: written.version } : written;
 }
 
 /**

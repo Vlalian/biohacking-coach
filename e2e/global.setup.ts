@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { neon as neonSql } from '@neondatabase/serverless';
 import { resetBranchToParent } from '../scripts/neon-reset-branch';
 import { PINNED_TODAY } from './pinned-today';
 
@@ -20,7 +21,7 @@ function neon(args: string[]): string {
  * an Athlete Session or a check-in would carry into the next run's pictures.
  * The parent's name is printed so a wrong parent is visible in the run log.
  */
-export default function globalSetup(): void {
+export default async function globalSetup(): Promise<void> {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error('E2E_DATABASE_URL is not set');
 
@@ -36,4 +37,11 @@ export default function globalSetup(): void {
     // The seed reads the app's clock (frontend-quality/09), so it gets the same pin as the server.
     env: { ...process.env, DATABASE_URL: url, COACH_TODAY: PINNED_TODAY },
   });
+
+  // The reset keeps whatever `seed-template` holds, personas included, and the
+  // seed only adds to it (frontend-quality/10). Said out loud, so a Roster
+  // picture that moved because the template changed is explained in the log.
+  const [{ links }] = await neonSql(url)`
+    SELECT count(*)::int AS links FROM coaching_link WHERE status = 'active'`;
+  console.warn(`[e2e] Active Coaching Links after the seed: ${links}.`);
 }

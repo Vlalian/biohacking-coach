@@ -583,7 +583,7 @@ const FIRST_DAY_MESSAGE_KEY: Record<FirstDayChoice, string> = {
 /**
  * "How many hours a week can you realistically train?" — asked, never
  * suggested: no default, no placeholder number (Mads, 2026-09-19: "A and only
- * A"). An integer 1–30; the flow refuses anything else.
+ * A"). An integer 1–50; the flow refuses anything else.
  */
 function HoursPanel({ answers, pending, t, submit }: PanelProps) {
   const [hours, setHours] = useState(answers.hoursPerWeek === undefined ? '' : String(answers.hoursPerWeek));

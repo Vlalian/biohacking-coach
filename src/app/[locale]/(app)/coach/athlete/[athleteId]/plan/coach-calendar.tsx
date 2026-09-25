@@ -4,6 +4,7 @@ import { Calendar } from '@/app/[locale]/calendar';
 import type { Session } from '@/features/session/session';
 import type { HealthSpan } from '@/features/health/health-layer';
 import { moveSessionAsCoachAction } from '../prescribe-actions';
+import { PrescribePanel } from '../prescribe-panel';
 
 /**
  * The athlete's calendar as the Head Coach sees it: read-only in every respect
@@ -43,6 +44,9 @@ export function CoachCalendar({
       onMove={(sessionId, targetDate, expectedVersion) =>
         moveSessionAsCoachAction(athleteId, sessionId, targetDate, expectedVersion)
       }
+      // Beneath the grid and sharing its writes, so an add lands at once
+      // (showable-version/44).
+      addPanel={(writer) => <PrescribePanel athleteId={athleteId} writer={writer} />}
     />
   );
 }

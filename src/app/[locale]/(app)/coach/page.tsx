@@ -1,11 +1,10 @@
 import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { Link, redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
+import { getCurrentSession } from '../current-user';
 import { getCoachByUserId } from '@/features/coach/coach-repository';
 import { getRosterWithReviews } from '@/features/coach/roster-service';
 import { getResolvedBlocks } from '@/features/coach/training-block-service';
@@ -27,7 +26,7 @@ export default async function CoachRosterPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }

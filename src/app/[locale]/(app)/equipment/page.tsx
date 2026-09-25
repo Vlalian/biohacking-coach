@@ -1,11 +1,9 @@
 import { setRequestLocale } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { EquipmentView } from './equipment-view';
 
@@ -24,14 +22,14 @@ export default async function EquipmentPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
 
   // The signed-in athlete's own gear only — scoped to their id by the
   // repository (ADR 0006).
-  const athlete = await getAthleteByUserId(session!.user.id);
+  const athlete = await getCurrentAthlete();
   const items = athlete ? await getEquipmentItems(athlete.id) : [];
 
   return (
