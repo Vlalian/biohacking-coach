@@ -28,7 +28,7 @@ import {
   applyVisibilityToSessions,
   canSeeAthleteReports,
 } from './link-visibility';
-import { getHealthHistory } from '@/features/health/health-repository';
+import { getHealthHistory, getOpenIllnesses, getOpenInjuries } from '@/features/health/health-repository';
 import { spansFrom, type HealthSpan } from '@/features/health/health-layer';
 
 /**
@@ -125,6 +125,8 @@ export type CoachAthleteView = {
    * statement behind.
    */
   health: HealthSpan[] | null;
+  /** What is open right now, for the header badge; null when withheld, like `health`. */
+  openHealth: OpenHealth | null;
   dataset: InfoDataset;
   /** The Training Blocks — always visible; null when the athlete has no Target Race. */
   blocks: CoachBlocksView | null;
@@ -206,6 +208,9 @@ export async function getCoachAthleteView(
     planSessions,
     sharedTranscripts,
     health,
+    // Derived from the spans already fetched — one read, two surfaces. Null
+    // travels straight through: withheld is withheld everywhere.
+    openHealth: health && openHealthFromSpans(health),
     dataset,
     blocks: blocksViewOf(horizon, todayKey),
     weeklySessionDay,
@@ -255,8 +260,26 @@ async function coachPreview(
   return { pendingDraft: await getPendingWeekDraft(athleteId, previewWeek), draftInFlight: null };
 }
 
+/**
+ * The athlete's open Injuries and Illness, as a coach surface names them.
+ *
+ * **Null when the athlete withholds their reports** — never an empty shape. A
+ * coach who could tell "no open injuries" from "not shared" would read health
+ * from absence, which is the inference the whole Link Visibility gate exists to
+ * prevent (`showable-version/28b`). The records are not fetched at all when
+ * withheld, the same discipline {@link getCoachAthleteView} applies.
+ */
+export type OpenHealth = {
+  /** One entry per open Injury, its name or `null` when the athlete never gave one. */
+  injuries: (string | null)[];
+  ill: boolean;
+};
+
 /** A Roster row, plus whether a drafted week is waiting for this coach's eye. */
-export type RosterEntryWithReview = RosterEntry & { awaitingReview: boolean };
+export type RosterEntryWithReview = RosterEntry & {
+  awaitingReview: boolean;
+  openHealth: OpenHealth | null;
+};
 
 /**
  * The Roster with the one thing waiting for the coach that `training-architecture/17`
@@ -269,9 +292,44 @@ export async function getRosterWithReviews(coachId: string, todayKey: string): P
     roster.map(async (entry) => {
       const athlete = await getAthleteById(entry.athleteId);
       const pending = await getPendingWeekDraft(entry.athleteId, previewWeekOf(athlete, todayKey));
-      return { ...entry, awaitingReview: awaitsReview(pending) };
+      return {
+        ...entry,
+        awaitingReview: awaitsReview(pending),
+        openHealth: await openHealthFor(entry.athleteId, entry.link.visibility),
+      };
     }),
   );
+}
+
+/**
+ * What is open for this athlete right now, or null when they withhold reports.
+ *
+ * An unnamed injury still counts: `injury.name` is optional (migration 0028),
+ * and "something is open" is the fact the badge carries — the name only makes
+ * it specific. The `null` travels as `null`; naming it is the surface's job,
+ * because the word is a translation and this module renders none.
+ */
+async function openHealthFor(athleteId: string, visibility: LinkVisibility): Promise<OpenHealth | null> {
+  if (!canSeeAthleteReports(visibility)) return null;
+  const [injuries, illnesses] = await Promise.all([
+    getOpenInjuries(athleteId),
+    getOpenIllnesses(athleteId),
+  ]);
+  return { injuries: injuries.map((injury) => injury.name), ill: illnesses.length > 0 };
+}
+
+/**
+ * The same shape {@link openHealthFor} builds, read off spans already in hand.
+ *
+ * A span is open when it has no end (`to === null`) — the same rule
+ * `marksFor` draws the signal-coloured icon by.
+ */
+function openHealthFromSpans(spans: HealthSpan[]): OpenHealth {
+  const open = spans.filter((span) => span.to === null);
+  return {
+    injuries: open.filter((span) => span.kind === 'injury').map((span) => span.name),
+    ill: open.some((span) => span.kind === 'illness'),
+  };
 }
 
 /**

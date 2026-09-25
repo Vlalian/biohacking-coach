@@ -1,6 +1,12 @@
 import { addDays, weekStartOf } from '@/lib/date';
 import type { Citation } from '@/lib/citation';
-import { excludedBetween, hasAPlannableDay, planningWindow, type PlanningWindow } from './planning-window';
+import {
+  excludedBetween,
+  hasAPlannableDay,
+  notBefore,
+  planningWindow,
+  type PlanningWindow,
+} from './planning-window';
 import type { ProposedSession } from './weekly-session';
 import { PLAN_EVENT } from './plan-proposal';
 import { effectiveWeeklySessionDay, WEEKDAYS } from './weekly-offer';
@@ -266,9 +272,14 @@ export function weekWindow(
   today: string,
   fixedConstraints: string[] = [],
   unavailableDates: string[] = [],
+  /**
+   * The athlete's chosen first training day (`training-architecture/36`). The
+   * window never opens before it, so the Coach's draft cannot write into days
+   * the athlete said were not theirs yet. A day already past changes nothing.
+   */
+  firstDay?: string,
 ): PlanningWindow | null {
-  // Stryker disable next-line EqualityOperator: equivalent — on the Monday itself both branches are that Monday.
-  const start = today > weekStart ? today : weekStart;
+  const start = notBefore(weekStart, notBefore(today, firstDay));
   const end = addDays(weekStart, 6);
   if (!hasAPlannableDay(start, end, fixedConstraints, unavailableDates)) return null;
   return {
@@ -285,17 +296,27 @@ export function weekWindow(
  * whole, as drafted). Excluded days are still excluded: a session on a day the
  * athlete ruled out was never valid. Never null — an all-excluded week simply
  * validates to nothing, which the caller refuses.
+ *
+ * `firstDay` is the one thing that shortens it (`training-architecture/36`;
+ * Mads, 2026-09-24). The two rulings look like they collide here and do not:
+ * the chosen day expires as soon as it is past, so this bound can only ever
+ * reach an athlete's first week, and the whole-week ruling exists to protect a
+ * settled athlete's mid-week conversation. A chosen day beyond the week leaves
+ * an empty range, which validates to nothing and the caller refuses — the same
+ * answer an all-excluded week already gave.
  */
 export function wholeWeekWindow(
   weekStart: string,
   fixedConstraints: string[] = [],
   unavailableDates: string[] = [],
+  firstDay?: string,
 ): PlanningWindow {
+  const start = notBefore(weekStart, firstDay);
   const end = addDays(weekStart, 6);
   return {
-    start: weekStart,
+    start,
     end,
-    excludedDates: excludedBetween(weekStart, end, fixedConstraints, unavailableDates),
+    excludedDates: excludedBetween(start, end, fixedConstraints, unavailableDates),
     fellThrough: false,
   };
 }
@@ -315,18 +336,23 @@ export function wholeWeekWindow(
  * rather than honoured: Coach Chat is the resting conversation and lives for
  * months, so "the week it once discussed" must stop being its window once that
  * week is no longer current.
+ *
+ * `firstDay` bounds both branches, so "no session before the chosen day, from
+ * anyone" holds here by construction rather than by the accident that a week
+ * beginning before the chosen day happens to produce no draft to discuss.
  */
 export function conversationWindow(
   today: string,
   discussedWeekStart: string | null,
   fixedConstraints: string[],
   unavailableDates: string[],
+  firstDay?: string,
 ): PlanningWindow {
   const thisWeek = weekStartOf(today);
   const current = discussedWeekStart === thisWeek || discussedWeekStart === addDays(thisWeek, 7);
   return current
-    ? wholeWeekWindow(discussedWeekStart, fixedConstraints, unavailableDates)
-    : planningWindow(today, fixedConstraints, unavailableDates);
+    ? wholeWeekWindow(discussedWeekStart, fixedConstraints, unavailableDates, firstDay)
+    : planningWindow(today, fixedConstraints, unavailableDates, firstDay);
 }
 
 /** The week after today's, as a window — the common case for a draft. */

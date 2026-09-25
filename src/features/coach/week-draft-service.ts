@@ -17,6 +17,7 @@ import { getPresenceStage } from './presence-repository';
 import { readinessFrom, notableSignalFrom } from './check-in';
 import { getResolvedBlocks } from './training-block-service';
 import { getRaces } from '@/features/race/race-repository';
+import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
 import type { Athlete } from '@/features/athlete/athlete';
 import {
@@ -254,7 +255,8 @@ async function redraftFacts(
   ]);
   const refused = redraftGate({ consented: consent.ok, history, planned: hasCoachPlannedSession(sessions) });
   if (refused) return { refused };
-  const window = weekWindow(weekStart, today, profileFacts(athlete).fixedConstraints, unavailableDates);
+  const facts = profileFacts(athlete, today);
+  const window = weekWindow(weekStart, today, facts.fixedConstraints, unavailableDates, facts.firstDay);
   if (!window) return { refused: 'no-window' };
   return { window, unavailableDates };
 }
@@ -319,7 +321,7 @@ async function gateFacts(
     getSessionsForWeek(athleteId, thisWeek),
     getWeekDraftHistory(athleteId, thisWeek),
   ]);
-  const { weeklySessionDay, fixedConstraints } = profileFacts(athlete);
+  const { weeklySessionDay, fixedConstraints, firstDay } = profileFacts(athlete, today);
   // A linked Head Coach sees the draft one day before the athlete (`/17`), so
   // the cycle is due a day early — and the athlete's own day is stamped on the
   // draft as the first day they may see it, whoever triggered it. An empty,
@@ -331,7 +333,7 @@ async function gateFacts(
     leadDays: link ? HEAD_COACH_LEAD_DAYS : 0,
     thisWeekHasCoachPlan: hasCoachPlannedSession(thisWeekSessions),
     thisWeekDrafted: thisWeekHistory.kind !== 'never',
-    thisWeekWindow: weekWindow(thisWeek, today, fixedConstraints, unavailableDates),
+    thisWeekWindow: weekWindow(thisWeek, today, fixedConstraints, unavailableDates, firstDay),
   });
 
   // Read again for the due week rather than reused when it is this week: one
@@ -340,7 +342,7 @@ async function gateFacts(
     assertAiCoachingConsent(athleteId),
     getWeekDraftHistory(athleteId, dueWeek),
   ]);
-  const window = weekWindow(dueWeek, today, fixedConstraints, unavailableDates);
+  const window = weekWindow(dueWeek, today, fixedConstraints, unavailableDates, firstDay);
   const gated = draftGate({ consented: consent.ok, history, window });
   // The gate's last exit is a null window, so past it the window is real.
   if (gated || !window) return { gated: gated ?? 'no-window' };
@@ -348,14 +350,17 @@ async function gateFacts(
 }
 
 /** The two profile fields the gate reads, with a missing row or profile read as "nothing set". */
-function profileFacts(athlete: Awaited<ReturnType<typeof getAthleteById>>): {
+function profileFacts(athlete: Awaited<ReturnType<typeof getAthleteById>>, todayKey: string): {
   weeklySessionDay: string | undefined;
   fixedConstraints: string[];
+  /** The athlete's chosen first training day, resolved against today (`/36`). */
+  firstDay: string | undefined;
 } {
   const profile = athlete?.profile;
   return {
     weeklySessionDay: profile?.weeklySessionDay,
     fixedConstraints: profile?.fixedConstraints ?? [],
+    firstDay: chosenFirstDay(profile, todayKey),
   };
 }
 

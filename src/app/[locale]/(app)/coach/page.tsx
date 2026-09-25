@@ -10,6 +10,7 @@ import { getRosterWithReviews } from '@/features/coach/roster-service';
 import { getResolvedBlocks } from '@/features/coach/training-block-service';
 import { initialsOf, rosterCardOf } from '@/features/coach/roster-card';
 import { today } from '@/lib/date';
+import { HealthBadge } from './health-badge';
 
 // Per-request: the page depends on who is signed in, so it is never prerendered.
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,9 @@ export default async function CoachRosterPage({
   }
 
   const t = await getTranslations('Roster');
+  // The words for an open record are the Health Drawer's — one vocabulary for
+  // an injury and an illness, wherever they are named (`showable-version/28b`).
+  const tHealth = await getTranslations('HealthDrawer');
   const coach = await getCoachByUserId(session!.user.id);
 
   // A user with no coach row is not a coach — the Roster is not their page.
@@ -128,6 +132,17 @@ export default async function CoachRosterPage({
                       {t('blockLine', { block: block.name, week: block.week, weeks: block.weeks })}
                     </span>
                   )}
+
+                  {/* Open injuries and illness (showable-version/28b). Nothing for a
+                      healthy athlete or one whose reports are withheld; the line
+                      collapses when the badge renders nothing. */}
+                  <span className="mt-2 flex font-body text-[13px] empty:hidden">
+                    <HealthBadge
+                      openHealth={entry.openHealth}
+                      injuryLabel={tHealth('injuryLabel')}
+                      illLabel={tHealth('illnessLabel')}
+                    />
+                  </span>
 
                   {(entry.awaitingReview ||
                     !entry.link.visibility.shareAthleteReports ||

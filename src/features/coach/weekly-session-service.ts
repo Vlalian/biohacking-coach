@@ -3,6 +3,7 @@ import { getUnavailableDates } from '@/features/availability/availability-reposi
 import { replaceCoachPlanForDateRange } from '@/features/session/session-repository';
 import { planningWindow, type PlanningWindow } from './planning-window';
 import { conversationWindow } from './week-draft';
+import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { getDiscussedWeek } from './week-draft-repository';
 import type { ConversationKind } from '@/lib/conversation-kinds';
 import { endConversation, getOwnedConversation } from './conversation-repository';
@@ -44,13 +45,23 @@ import {
  * Derived here rather than passed in, so a proposal that has drifted out of
  * its window between being staged and being confirmed comes back `stale`
  * rather than being written (`showable-version/11`).
+ *
+ * It opens no earlier than the first day the athlete chose at onboarding
+ * (`training-architecture/36`; Mads, 2026-09-23: no session before it, from
+ * anyone). Read here rather than taken as an argument because every caller
+ * already has the athlete and none of them has the answer.
  */
 function planningWindowFor(
   athlete: Athlete,
   today: string,
   unavailableDates: string[],
 ): PlanningWindow {
-  return planningWindow(today, fixedConstraintsOf(athlete), unavailableDates);
+  return planningWindow(
+    today,
+    fixedConstraintsOf(athlete),
+    unavailableDates,
+    chosenFirstDay(athlete.profile, today),
+  );
 }
 
 export type CommitResult =
@@ -76,6 +87,7 @@ async function windowForCommit(
     await getDiscussedWeek(athlete.id, conversation.id),
     fixedConstraintsOf(athlete),
     unavailableDates,
+    chosenFirstDay(athlete.profile, today),
   );
 }
 

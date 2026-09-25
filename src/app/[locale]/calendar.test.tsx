@@ -457,6 +457,20 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(chip).toMatch(/aria-label="[^"]*bounceParked[^"]*"/);
   });
 
+  it('renders no status area and no marks when health is withheld, so absence cannot read as healthy', () => {
+    // `null` is "not shared", `[]` is "nothing recorded" — and the coach must
+    // not be able to tell the second from the first. `roster-service.ts` takes
+    // care never to fetch a withheld athlete's records; the calendar has to
+    // honour that rather than draw a clean week (showable-version/28b).
+    const withheld = render({ sessions: [session({ date: '2026-08-19' })], health: null });
+    expect(withheld).not.toContain('data-health-status');
+    expect(withheld).not.toContain('data-mark');
+
+    const clean = render({ sessions: [session({ date: '2026-08-19' })], health: [] });
+    expect(clean).toContain('data-health-status');
+    expect(clean).toContain('statusUninjured');
+  });
+
   it('shows the two statuses on every week — healthy/uninjured on a clean week — and the band and chip are gone', () => {
     const clean = render({});
     expect(clean).toContain('data-health-status');
