@@ -368,6 +368,11 @@ describe('Calendar — every week expanded, sessions as cards (showable-version/
     // Then the refusal a completed session carries.
     expect(html).toContain('aria-label="Core · Strength · completed · 30minutes · bounceFrozen"');
   });
+
+  it('says an untitled card’s type once, not as title and type both', () => {
+    const html = render({ sessions: [session({ type: 'Strength', title: null, status: 'completed', duration: null, zone: null })] });
+    expect(html).toContain('aria-label="Strength · completed · bounceFrozen"');
+  });
 });
 
 describe('Calendar — the drafted week the athlete has not decided on (training-architecture/18)', () => {

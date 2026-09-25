@@ -984,7 +984,9 @@ function SessionCard({
   // "type · status" phrase — e2e/coach.visual.ts finds a session by it — then
   // the meta and any refusal (CodeRabbit, PR #86: an explicit label replaces
   // the children-derived name, so it must carry the refusal too).
-  const label = [lines.title, session.type, session.status, meta, refusalText].filter(Boolean).join(' · ');
+  // The session's own title, not `lines.title`: an untitled card's title is its
+  // type, and a screen reader should hear it once.
+  const label = [session.title, session.type, session.status, meta, refusalText].filter(Boolean).join(' · ');
   // The hover tooltip carries the refusal; unset when there is nothing to say.
   const title = refusalText;
   const style = { borderLeftColor: withAlpha(typeColor(session.type), treatment.stripeOpacity) };
