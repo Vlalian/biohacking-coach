@@ -27,6 +27,19 @@ describe('EquipmentForm — the name hint (showable-version/49)', () => {
     expect(formFor(category)).toContain(`placeholder="namePlaceholder_${category}"`);
   });
 
+  it('has a hint in the catalogue for every category, in both languages', async () => {
+    // `t` above returns the key, so the tests above pass whether or not the
+    // message exists. A category added without its hint would show the raw key.
+    for (const locale of ['en', 'da'] as const) {
+      const catalogue = (await import(`@/messages/${locale}.json`)).default.Equipment;
+      for (const category of EQUIPMENT_CATEGORIES) {
+        expect(Object.keys(catalogue), `${locale}: namePlaceholder_${category}`).toContain(
+          `namePlaceholder_${category}`,
+        );
+      }
+    }
+  });
+
   it('never shows the bike example for another category', () => {
     for (const category of EQUIPMENT_CATEGORIES.filter((c) => c !== 'bike')) {
       expect(formFor(category)).not.toContain('namePlaceholder_bike');
