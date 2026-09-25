@@ -11,6 +11,7 @@ import type { MoveResult } from '@/features/session/session-move';
 import type { SessionConflict } from '@/features/session/conflict';
 import {
   NO_WRITES,
+  answerOf,
   beginMove,
   inFlightIds,
   settle,
@@ -74,7 +75,9 @@ type MoveRefusal =
   // they hold no coach row at all. Both were invisible before this — the coach
   // dragged, and the chip went back.
   | 'not-linked'
-  | 'not-a-coach';
+  | 'not-a-coach'
+  // The call itself failed — network or server — so there is no answer to read.
+  | 'unreachable';
 
 /**
  * Why this session cannot be picked up at all, or null when it can.
@@ -139,6 +142,7 @@ export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
   // is not a coach, is a state the person cannot resolve from this drag.
   'not-linked': 'bounceError',
   'not-a-coach': 'bounceError',
+  unreachable: 'bounceError',
 };
 
 type Day = {
@@ -402,9 +406,9 @@ export function Calendar({
         // a race is refused rather than silently winning. `onMove` is the Head
         // Coach's path (it acts on someone else's calendar and needs the
         // athlete id), the default is the athlete's own.
-        const result = onMove
-          ? await onMove(id, target, version)
-          : await moveSessionAction(id, target, version);
+        const result = await answerOf(() =>
+          onMove ? onMove(id, target, version) : moveSessionAction(id, target, version),
+        );
         // A refusal puts the chip back — or, on a conflict, where the winner put it.
         settleWrite(id, result.ok ? result : { ok: false, conflict: 'conflict' in result ? result.conflict : undefined });
         // A refused move used to look identical to a successful one, because

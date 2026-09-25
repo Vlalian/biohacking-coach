@@ -160,6 +160,9 @@ describe('MOVE_REFUSAL_KEY', () => {
     // record exists for working before anyone shipped it.
     'not-linked',
     'not-a-coach',
+    // Not the server's: the call itself failed, so no answer came back
+    // (`answerOf`, CodeRabbit on PR #107). The chip still has to go back and say so.
+    'unreachable',
   ] as const;
 
   it('maps every reason the server can refuse with', () => {
@@ -188,6 +191,7 @@ describe('MOVE_REFUSAL_KEY', () => {
     // the athlete's to fix, and naming it would leak the shape of the system
     // without helping.
     expect(MOVE_REFUSAL_KEY['not-found']).toBe(MOVE_REFUSAL_KEY['not-authenticated']);
+    expect(MOVE_REFUSAL_KEY.unreachable).toBe(MOVE_REFUSAL_KEY['not-found']);
   });
 });
 

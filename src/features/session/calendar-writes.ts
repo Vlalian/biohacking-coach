@@ -172,3 +172,19 @@ export function beginDelete(writes: Writes, id: string): Writes {
   if (id in writes.inFlight) return writes;
   return { ...writes, inFlight: { ...writes.inFlight, [id]: null } };
 }
+
+/**
+ * A write's answer — or `unreachable` when the call itself failed: the network
+ * dropped, or the server threw instead of answering. Without this a thrown call
+ * skips the settle, and the write stays in flight for good: the chip frozen as
+ * "saving", showing a change the server never made (CodeRabbit, PR #107).
+ */
+export async function answerOf<T>(
+  action: () => Promise<T>,
+): Promise<T | { ok: false; reason: 'unreachable' }> {
+  try {
+    return await action();
+  } catch {
+    return { ok: false, reason: 'unreachable' };
+  }
+}

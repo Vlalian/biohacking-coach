@@ -9,6 +9,7 @@ import {
   beginEdit,
   beginDelete,
   beginAdd,
+  answerOf,
   settle,
   inFlightIds,
 } from './calendar-writes';
@@ -328,5 +329,18 @@ describe('an add built elsewhere — the Head Coach’s prescription', () => {
     const adding = beginAdd(NO_WRITES, s('tmp:1', '2026-09-24'));
 
     expect(shownSessions([], settle(adding, 'tmp:1', { ok: false }))).toEqual([]);
+  });
+});
+
+describe('answerOf — a write whose call fails still gets an answer (CodeRabbit, PR #107)', () => {
+  it('passes the server’s answer through', async () => {
+    expect(await answerOf(async () => ({ ok: true as const, version: 4 }))).toEqual({ ok: true, version: 4 });
+  });
+
+  it('turns a call that throws into a refusal, so the write settles and the chip comes back', async () => {
+    expect(await answerOf(async () => { throw new Error('network down'); })).toEqual({
+      ok: false,
+      reason: 'unreachable',
+    });
   });
 });

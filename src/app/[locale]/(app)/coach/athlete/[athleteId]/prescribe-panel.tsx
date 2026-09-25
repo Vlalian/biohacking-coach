@@ -6,7 +6,7 @@ import { useRouter } from '@/i18n/navigation';
 import { PRESCRIBABLE_TYPES } from '@/features/session/type-colors';
 import { prescribeSessionAction } from './prescribe-actions';
 import type { CalendarWriter } from '@/app/[locale]/calendar';
-import { beginAdd } from '@/features/session/calendar-writes';
+import { answerOf, beginAdd } from '@/features/session/calendar-writes';
 import { prescribedSessionOf } from '@/features/coach/prescription';
 
 /**
@@ -78,7 +78,7 @@ export function PrescribePanel({
     setError(null);
     writer.begin((writes) => beginAdd(writes, prescribedSessionOf(key, input, 0)));
     startTransition(async () => {
-      const result = await prescribeSessionAction(athleteId, input);
+      const result = await answerOf(() => prescribeSessionAction(athleteId, input));
       if (!result.ok) {
         writer.settle(key, { ok: false });
         setError(t('error', { reason: result.reason }));

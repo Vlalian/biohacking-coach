@@ -19,6 +19,7 @@ import type { Session } from '@/features/session/session';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
 import {
+  answerOf,
   beginCreate,
   beginDelete,
   beginEdit,
@@ -70,6 +71,8 @@ const ATHLETE_SESSION_TYPES = ['Mobility', 'Strength', 'Other'] as const;
  * would leak the shape of the system without helping.
  */
 export type ActionRefusal =
+  // The call itself failed — network or server — so there is no answer to read.
+  | 'unreachable'
   | 'not-found'
   | 'not-owner'
   | 'not-athlete-authored'
@@ -96,6 +99,7 @@ export const REFUSAL_KEY: Record<ActionRefusal, string> = {
   future: 'errorFuture',
   frozen: 'errorFrozen',
   conflict: 'errorConflict',
+  unreachable: 'error',
   'not-found': 'error',
   'not-owner': 'error',
   'not-athlete-authored': 'error',
@@ -262,13 +266,13 @@ export function SessionDrawer({
     setError(null);
     onBeginWrite(start);
     startTransition(async () => {
-      const result = await action();
+      const result = await answerOf(action);
       if (result.ok) {
         onSettleWrite(key, result);
         after?.();
         return;
       }
-      onSettleWrite(key, { ok: false, conflict: result.conflict });
+      onSettleWrite(key, { ok: false, conflict: 'conflict' in result ? result.conflict : undefined });
       setError(result.reason);
     });
   }
