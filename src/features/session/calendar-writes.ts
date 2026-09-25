@@ -27,6 +27,8 @@ export type Writes = {
   added: string[];
 };
 
+// An id in `added` with no in-flight or landed row behind it shows nothing.
+// Stryker disable next-line ArrayDeclaration — equivalent: a seeded id is invisible, per the line above.
 export const NO_WRITES: Writes = { inFlight: {}, landed: {}, added: [] };
 
 export function shownSessions(props: Session[], writes: Writes): Session[] {
@@ -132,7 +134,20 @@ export function beginCreate(
     origin: 'athlete',
     version: 0,
   };
-  return { ...writes, inFlight: { ...writes.inFlight, [key]: row }, added: [...writes.added, key] };
+  return beginAdd(writes, row);
+}
+
+/**
+ * Adds a session built elsewhere at once, under its own id as the key, pending
+ * the server's row — the Head Coach's prescription, whose placeholder is built
+ * by the same rule the server writes (`prescribedSessionOf`).
+ */
+export function beginAdd(writes: Writes, row: Session): Writes {
+  return {
+    ...writes,
+    inFlight: { ...writes.inFlight, [row.id]: row },
+    added: [...writes.added, row.id],
+  };
 }
 
 /** Moves a session to `date` at once, pending the server's answer. */

@@ -8,6 +8,7 @@ import {
   beginCreate,
   beginEdit,
   beginDelete,
+  beginAdd,
   settle,
   inFlightIds,
 } from './calendar-writes';
@@ -309,5 +310,23 @@ describe('a second write to a session that is still saving', () => {
     const writes = settle(beginDelete(moving, 'a'), 'a', { ok: true, version: 4 });
 
     expect(find(shownSessions(props, writes), 'a')).toMatchObject({ date: '2026-09-24', version: 4 });
+  });
+});
+
+describe('an add built elsewhere — the Head Coach’s prescription', () => {
+  it('appears at once under its key, and gives way to the server’s row', () => {
+    const placeholder = s('tmp:1', '2026-09-24', { origin: 'head_coach', version: 0 });
+    const adding = beginAdd(NO_WRITES, placeholder);
+    expect(shownSessions([], adding)).toEqual([placeholder]);
+    expect(inFlightIds(adding)).toEqual(['tmp:1']);
+
+    const written = s('p_1', '2026-09-24', { origin: 'head_coach' });
+    expect(shownSessions([], settle(adding, 'tmp:1', { ok: true, session: written }))).toEqual([written]);
+  });
+
+  it('disappears when refused', () => {
+    const adding = beginAdd(NO_WRITES, s('tmp:1', '2026-09-24'));
+
+    expect(shownSessions([], settle(adding, 'tmp:1', { ok: false }))).toEqual([]);
   });
 });

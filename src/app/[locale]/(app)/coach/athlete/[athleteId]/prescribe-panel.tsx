@@ -4,7 +4,10 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { PRESCRIBABLE_TYPES } from '@/features/session/type-colors';
-import { prescribeSessionAction, type PrescribeActionResult } from './prescribe-actions';
+import { prescribeSessionAction } from './prescribe-actions';
+import type { CalendarWriter } from '@/app/[locale]/calendar';
+import { beginAdd } from '@/features/session/calendar-writes';
+import { prescribedSessionOf } from '@/features/coach/prescription';
 
 /**
  * The Head Coach's form for prescribing a session (ticket 12: full rules, lean
@@ -21,6 +24,11 @@ import { prescribeSessionAction, type PrescribeActionResult } from './prescribe-
  * The server is still the authority: this component sends what to change, never
  * who is changing it, and every action re-resolves the Head Coach from the
  * session. A failed action surfaces its reason rather than pretending success.
+ *
+ * Rendered by the calendar beneath its grid and handed its writes
+ * (showable-version/44): the new session shows on the calendar the moment it is
+ * added, built by the same rule the server writes, and the server's answer
+ * replaces it — or removes it, with the reason here.
  */
 
 
@@ -47,31 +55,46 @@ function toInput(form: FormState) {
   };
 }
 
-export function PrescribePanel({ athleteId }: { athleteId: string }) {
+export function PrescribePanel({
+  athleteId,
+  writer,
+}: {
+  athleteId: string;
+  writer: CalendarWriter;
+}) {
   const t = useTranslations('Prescribe');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [error, setError] = useState<string | null>(null);
 
-  const run = (action: () => Promise<PrescribeActionResult>) =>
-    startTransition(async () => {
-      setError(null);
-      const result = await action();
-      if (result.ok) {
-        setForm(EMPTY);
-        router.refresh();
-      } else {
-        setError(t('error', { reason: result.reason }));
-      }
-    });
-
   const submit = () => {
     if (!form.date || !form.type) {
       setError(t('error', { reason: 'invalid' }));
       return;
     }
-    run(() => prescribeSessionAction(athleteId, toInput(form)));
+    const input = toInput(form);
+    const key = `tmp:${crypto.randomUUID()}`;
+    setError(null);
+    writer.begin((writes) => beginAdd(writes, prescribedSessionOf(key, input, 0)));
+    startTransition(async () => {
+      const result = await prescribeSessionAction(athleteId, input);
+      if (!result.ok) {
+        writer.settle(key, { ok: false });
+        setError(t('error', { reason: result.reason }));
+        return;
+      }
+      setForm(EMPTY);
+      if (result.session) {
+        writer.settle(key, { ok: true, session: result.session });
+      } else {
+        // The result type is shared with edit and delete, so `session` is
+        // optional there; prescribe always sets it. Should it ever be missing,
+        // drop the placeholder and read the page again rather than show a guess.
+        writer.settle(key, { ok: false });
+        router.refresh();
+      }
+    });
   };
 
   const field = (key: keyof FormState) => ({

@@ -68,6 +68,27 @@ beforeEach(() => {
 });
 
 describe('prescribeSession — the Head Coach adds a Prescribed Session', () => {
+  it('returns the session it wrote, so the calendar shows the add without a reload (showable-version/44)', async () => {
+    getActiveLink.mockResolvedValue(LINK);
+
+    const result = await prescribeSession({ headCoachId: COACH, athleteId: ATHLETE, input: VALID, today: TODAY });
+
+    if (!result.ok) throw new Error('expected the prescription to land');
+    const written = insertValues.mock.calls[0][0] as { id: string };
+    expect(result).toEqual({
+      ok: true,
+      sessionId: written.id,
+      session: expect.objectContaining({
+        id: written.id,
+        date: VALID.date,
+        origin: 'head_coach',
+        status: 'planned',
+        dayOrder: 0,
+        version: 1,
+      }),
+    });
+  });
+
   it('persists origin head_coach and records a head_coach event in one batch', async () => {
     getActiveLink.mockResolvedValue(LINK);
 

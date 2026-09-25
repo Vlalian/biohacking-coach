@@ -231,6 +231,7 @@ export function Calendar({
   proposal = null,
   health = [],
   phase = null,
+  addPanel,
 }: {
   sessions: Session[];
   /**
@@ -291,6 +292,13 @@ export function Calendar({
    * panel (17). Absent, the calendar renders exactly as it did before 18.
    */
   proposal?: CalendarSlotState | null;
+  /**
+   * The Head Coach's add form, rendered beneath the calendar and handed its
+   * writes, so a prescription shows on the calendar the moment it is added and
+   * the server's answer settles it (showable-version/44). A form outside the
+   * calendar could only refresh the page.
+   */
+  addPanel?: (writer: CalendarWriter) => React.ReactNode;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -416,184 +424,194 @@ export function Calendar({
   }
 
   return (
-    <div className="w-full max-w-[1500px]" aria-busy={pending}>
-      {/* The export's header (iron-insight-grid, 2026-09-23): the View name as a
-          kicker, the month as the display headline with the year in signal. */}
-      <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-foreground pb-5">
-        <div>
-          <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
-            {format.dateTime(viewedMonth, { month: 'long' })}{' '}
-            <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
-          </h1>
-          {phase && (
-            <div className="mt-3 flex flex-col gap-1 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground" data-phase-line="">
-              <span>{t('phaseLine', { block: phase.blockName, week: phase.week, weeks: phase.weeks })}</span>
-              <span>
-                {phase.raceName} ·{' '}
-                <span className="text-signal">
-                  {t('raceLine', { days: phase.daysToRace })}
+    <>
+      <div className="w-full max-w-[1500px]" aria-busy={pending}>
+        {/* The export's header (iron-insight-grid, 2026-09-23): the View name as a
+            kicker, the month as the display headline with the year in signal. */}
+        <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-foreground pb-5">
+          <div>
+            <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
+              {format.dateTime(viewedMonth, { month: 'long' })}{' '}
+              <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
+            </h1>
+            {phase && (
+              <div className="mt-3 flex flex-col gap-1 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground" data-phase-line="">
+                <span>{t('phaseLine', { block: phase.blockName, week: phase.week, weeks: phase.weeks })}</span>
+                <span>
+                  {phase.raceName} ·{' '}
+                  <span className="text-signal">
+                    {t('raceLine', { days: phase.daysToRace })}
+                  </span>
                 </span>
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <GhostButton
-            onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
-          >
-            {t('prevMonth')}
-          </GhostButton>
-          <GhostButton
-            onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-          >
-            {t('nextMonth')}
-          </GhostButton>
-          <GhostButton onClick={toggleAllWeeks} icon={ChevronsUpDown}>
-            {allExpanded ? t('collapseAll') : t('expandAll')}
-          </GhostButton>
-          {!readOnly && (
-            // "How's your body?" — always there for the athlete, healthy or
-            // not: it is how the first injury gets declared when nothing on the
-            // calendar can be clicked yet, and where "I'm back" lives too. The
-            // Head Coach never sees it. (Mads, 2026-09-11: a good start, may
-            // move — one button, easy to move.)
-            <GhostButton onClick={() => setHealthDrawer({ open: true })}>
-              {t('healthButton')}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <GhostButton
+              onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+            >
+              {t('prevMonth')}
             </GhostButton>
-          )}
-        </div>
-      </header>
+            <GhostButton
+              onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            >
+              {t('nextMonth')}
+            </GhostButton>
+            <GhostButton onClick={toggleAllWeeks} icon={ChevronsUpDown}>
+              {allExpanded ? t('collapseAll') : t('expandAll')}
+            </GhostButton>
+            {!readOnly && (
+              // "How's your body?" — always there for the athlete, healthy or
+              // not: it is how the first injury gets declared when nothing on the
+              // calendar can be clicked yet, and where "I'm back" lives too. The
+              // Head Coach never sees it. (Mads, 2026-09-11: a good start, may
+              // move — one button, easy to move.)
+              <GhostButton onClick={() => setHealthDrawer({ open: true })}>
+                {t('healthButton')}
+              </GhostButton>
+            )}
+          </div>
+        </header>
 
-      {proposal?.kind === 'proposal' && (
-        <div className="mt-5">
-          <ProposalCard draft={proposal.draft} />
-        </div>
-      )}
-      {proposal?.kind === 'drafting' && (
-        // The draft is being written this very request, by the shell's
-        // after(); the slot says so and re-reads until it lands (29).
-        <div className="mt-5">
-          <DraftingCard weekStart={proposal.weekStart} waiter={{ side: 'athlete' }} />
-        </div>
-      )}
-      {proposal?.kind === 'redraft-offer' && (
-        // A declined week with no plan: the one offer to draft it again
-        // (training-architecture/24). The card's place, not the calendar's.
-        <div className="mt-5">
-          <RedraftCard weekStart={proposal.weekStart} />
-        </div>
-      )}
-      {proposal?.kind === 'discussing' && (
-        // Not a second proposal: the week is in the conversation now, and this
-        // says where it went (decided 2026-09-15).
-        <p
-          className="mt-5 border border-dashed border-signal/40 bg-signal/5 px-4 py-2 font-body text-sm text-muted-foreground"
-          data-discussing={proposal.conversationId}
-        >
-          {t('discussing')}
-        </p>
-      )}
-
-      {!hasAnySession && (
-        // A note, not a replacement for the grid: the grid stays reachable
-        // (expanded on the current week by default) so the athlete can still
-        // add their own first Athlete Session via "+" — Progressive
-        // Disclosure grows the plan, it never blocks the one action that
-        // would grow it.
-        <div className="mt-6 border border-dashed border-border bg-panel px-8 py-10 text-center">
-          <h2 className="font-display text-3xl font-bold uppercase italic tracking-[0.02em] text-foreground">
-            {t('emptyTitle')}
-          </h2>
-          <p className="mx-auto mt-2 max-w-sm font-body text-base text-muted-foreground">
-            {t('emptyBody')}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-6 hidden grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-border pb-2 md:grid">
-        <span />
-        {HEADER_DAYS.map((day, i) => (
-          <span
-            key={i}
-            className="px-2.5 font-body text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+        {proposal?.kind === 'proposal' && (
+          <div className="mt-5">
+            <ProposalCard draft={proposal.draft} />
+          </div>
+        )}
+        {proposal?.kind === 'drafting' && (
+          // The draft is being written this very request, by the shell's
+          // after(); the slot says so and re-reads until it lands (29).
+          <div className="mt-5">
+            <DraftingCard weekStart={proposal.weekStart} waiter={{ side: 'athlete' }} />
+          </div>
+        )}
+        {proposal?.kind === 'redraft-offer' && (
+          // A declined week with no plan: the one offer to draft it again
+          // (training-architecture/24). The card's place, not the calendar's.
+          <div className="mt-5">
+            <RedraftCard weekStart={proposal.weekStart} />
+          </div>
+        )}
+        {proposal?.kind === 'discussing' && (
+          // Not a second proposal: the week is in the conversation now, and this
+          // says where it went (decided 2026-09-15).
+          <p
+            className="mt-5 border border-dashed border-signal/40 bg-signal/5 px-4 py-2 font-body text-sm text-muted-foreground"
+            data-discussing={proposal.conversationId}
           >
-            {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
-          </span>
-        ))}
-      </div>
+            {t('discussing')}
+          </p>
+        )}
 
-      <div className="mt-6 divide-y divide-border border-b border-border md:mt-0">
-        {weeks.map((week) => (
-          <WeekRow
-            key={week.isoWeekStart}
-            week={week}
-            expanded={expanded.includes(week.isoWeekStart)}
-            readOnly={readOnly}
-            canOpenSession={!readOnly || Boolean(coachAthleteId)}
-            canDrag={canDrag}
+        {!hasAnySession && (
+          // A note, not a replacement for the grid: the grid stays reachable
+          // (expanded on the current week by default) so the athlete can still
+          // add their own first Athlete Session via "+" — Progressive
+          // Disclosure grows the plan, it never blocks the one action that
+          // would grow it.
+          <div className="mt-6 border border-dashed border-border bg-panel px-8 py-10 text-center">
+            <h2 className="font-display text-3xl font-bold uppercase italic tracking-[0.02em] text-foreground">
+              {t('emptyTitle')}
+            </h2>
+            <p className="mx-auto mt-2 max-w-sm font-body text-base text-muted-foreground">
+              {t('emptyBody')}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-6 hidden grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-border pb-2 md:grid">
+          <span />
+          {HEADER_DAYS.map((day, i) => (
+            <span
+              key={i}
+              className="px-2.5 font-body text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+            >
+              {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-6 divide-y divide-border border-b border-border md:mt-0">
+          {weeks.map((week) => (
+            <WeekRow
+              key={week.isoWeekStart}
+              week={week}
+              expanded={expanded.includes(week.isoWeekStart)}
+              readOnly={readOnly}
+              canOpenSession={!readOnly || Boolean(coachAthleteId)}
+              canDrag={canDrag}
+              todayKey={todayKey}
+              dragging={dragging}
+              hoverDate={hoverDate}
+              bounce={bounce}
+              pending={pending}
+              inFlight={inFlight}
+              t={t}
+              rejectionFor={rejectionFor}
+              onToggleWeek={() => toggleWeek(week.isoWeekStart)}
+              onOpenSession={(s) => setDrawer({ open: true, mode: 'view', sessionId: s.id })}
+              onOpenCreate={(date) => setDrawer({ open: true, mode: 'create', date })}
+              onDragStart={(s) => setDragging({ session: s, week: week.isoWeekStart })}
+              onDragEnd={() => {
+                setDragging(null);
+                setHoverDate(null);
+              }}
+              onDragOverDay={setHoverDate}
+              onDropDay={handleDrop}
+              onToggleAvailability={toggleAvailability}
+              health={health}
+              onOpenHealth={(kind) => setHealthDrawer({ open: true, kind })}
+            />
+          ))}
+        </div>
+
+        <Legend t={t} />
+
+        {(!readOnly || coachAthleteId) && (
+          <SessionDrawer
+            coachAthleteId={coachAthleteId}
+            state={drawer}
+            sessions={shown}
+            onBeginWrite={beginWrite}
+            onSettleWrite={settleWrite}
+            inFlightIds={[...inFlight]}
+            importedSessionIds={importedSessionIds}
+            locale={locale}
             todayKey={todayKey}
-            dragging={dragging}
-            hoverDate={hoverDate}
-            bounce={bounce}
-            pending={pending}
-            inFlight={inFlight}
-            t={t}
-            rejectionFor={rejectionFor}
-            onToggleWeek={() => toggleWeek(week.isoWeekStart)}
-            onOpenSession={(s) => setDrawer({ open: true, mode: 'view', sessionId: s.id })}
-            onOpenCreate={(date) => setDrawer({ open: true, mode: 'create', date })}
-            onDragStart={(s) => setDragging({ session: s, week: week.isoWeekStart })}
-            onDragEnd={() => {
-              setDragging(null);
-              setHoverDate(null);
+            onClose={() => setDrawer({ open: false })}
+            onRate={(s) => {
+              setDrawer({ open: false });
+              setRatingSession(s);
             }}
-            onDragOverDay={setHoverDate}
-            onDropDay={handleDrop}
-            onToggleAvailability={toggleAvailability}
-            health={health}
-            onOpenHealth={(kind) => setHealthDrawer({ open: true, kind })}
+            onEditRequest={(s) => setDrawer({ open: true, mode: 'edit', sessionId: s.id })}
           />
-        ))}
+        )}
+
+        {ratingSession && (
+          <RatingModal session={ratingSession} onClose={() => setRatingSession(null)} />
+        )}
+
+        {healthDrawer.open && (
+          <HealthDrawer
+            state={healthDrawer}
+            spans={health}
+            locale={locale}
+            coachAthleteId={coachAthleteId}
+            onClose={() => setHealthDrawer({ open: false })}
+          />
+        )}
       </div>
-
-      <Legend t={t} />
-
-      {(!readOnly || coachAthleteId) && (
-        <SessionDrawer
-          coachAthleteId={coachAthleteId}
-          state={drawer}
-          sessions={shown}
-          onBeginWrite={beginWrite}
-          onSettleWrite={settleWrite}
-          inFlightIds={[...inFlight]}
-          importedSessionIds={importedSessionIds}
-          locale={locale}
-          todayKey={todayKey}
-          onClose={() => setDrawer({ open: false })}
-          onRate={(s) => {
-            setDrawer({ open: false });
-            setRatingSession(s);
-          }}
-          onEditRequest={(s) => setDrawer({ open: true, mode: 'edit', sessionId: s.id })}
-        />
-      )}
-
-      {ratingSession && (
-        <RatingModal session={ratingSession} onClose={() => setRatingSession(null)} />
-      )}
-
-      {healthDrawer.open && (
-        <HealthDrawer
-          state={healthDrawer}
-          spans={health}
-          locale={locale}
-          coachAthleteId={coachAthleteId}
-          onClose={() => setHealthDrawer({ open: false })}
-        />
-      )}
-    </div>
+      {/* A sibling of the grid, not inside it, so the page lays it out as before. */}
+      {addPanel?.({ begin: beginWrite, settle: settleWrite })}
+    </>
   );
 }
+
+/** A calendar's writes, lent to a form beside it: start one, then settle it with the server's answer. */
+export type CalendarWriter = {
+  begin: (start: (writes: Writes, shown: Session[]) => Writes) => void;
+  settle: (key: string, outcome: WriteOutcome) => void;
+};
 
 function WeekRow({
   week,

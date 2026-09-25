@@ -1,3 +1,6 @@
+import type { Session } from '@/features/session/session';
+import { HEAD_COACH_ORIGIN } from './head-coach-authority';
+
 /** The mutable fields of a session the Head Coach may set. */
 export type PrescriptionInput = {
   date: string;
@@ -26,5 +29,26 @@ export function prescriptionColumns(input: PrescriptionInput) {
     title: input.title ?? null,
     note: input.note ?? null,
     isTraining: input.isTraining ?? true,
+  };
+}
+
+/**
+ * The session a prescription writes: its columns, planned, first in its day,
+ * the Head Coach's. The server returns this as what it wrote, and the calendar
+ * shows it the moment the coach adds it (showable-version/44), so the chip
+ * does not change when the answer comes back.
+ */
+export function prescribedSessionOf(id: string, input: PrescriptionInput, version: number): Session {
+  return {
+    id,
+    ...prescriptionColumns(input),
+    status: 'planned',
+    parked: false,
+    dayOrder: 0,
+    origin: HEAD_COACH_ORIGIN,
+    feedbackBody: null,
+    feedbackMind: null,
+    feedbackComment: null,
+    version,
   };
 }

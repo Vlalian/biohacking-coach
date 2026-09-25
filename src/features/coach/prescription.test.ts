@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { prescriptionColumns } from './prescription';
+import { prescribedSessionOf, prescriptionColumns } from './prescription';
 
 /**
  * What a Head Coach's add or edit writes to a session's columns. One rule, read
@@ -38,6 +38,29 @@ describe('prescriptionColumns', () => {
       title: null,
       note: null,
       isTraining: true,
+    });
+  });
+});
+
+describe('prescribedSessionOf', () => {
+  it('is the session a prescription writes: planned, first in its day, the Head Coach’s', () => {
+    expect(prescribedSessionOf('s1', { date: '2026-09-24', type: ' Tempo ', duration: 40 }, 1)).toEqual({
+      id: 's1',
+      date: '2026-09-24',
+      type: 'Tempo',
+      duration: 40,
+      zone: null,
+      title: null,
+      note: null,
+      isTraining: true,
+      status: 'planned',
+      parked: false,
+      dayOrder: 0,
+      origin: 'head_coach',
+      feedbackBody: null,
+      feedbackMind: null,
+      feedbackComment: null,
+      version: 1,
     });
   });
 });

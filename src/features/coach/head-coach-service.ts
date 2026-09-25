@@ -3,16 +3,13 @@ import { getDb } from '@/db';
 import { events, sessions } from '@/db/schema';
 import { isValidDateKey } from '@/lib/date';
 import { getActiveLink } from './coach-repository';
-import {
-  canHeadCoachEditContent,
-  canHeadCoachMove,
-  HEAD_COACH_ORIGIN,
-} from './head-coach-authority';
+import { canHeadCoachEditContent, canHeadCoachMove } from './head-coach-authority';
 import { applyMove, type MoveResult } from '@/features/session/session-move';
 import { isFrozen } from '@/features/session/move-rules';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
 import type { SessionConflict } from '@/features/session/conflict';
-import { prescriptionColumns, type PrescriptionInput } from './prescription';
+import { prescribedSessionOf, prescriptionColumns, type PrescriptionInput } from './prescription';
+import type { Session } from '@/features/session/session';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -51,9 +48,10 @@ import { prescriptionColumns, type PrescriptionInput } from './prescription';
  */
 
 export type HeadCoachActionResult =
-  // `version` is what an edit wrote, so the calendar keeps the session current
-  // without a reload (showable-version/44); prescribe and delete have none to report.
-  | { ok: true; sessionId: string; version?: number }
+  // What the write left, so the calendar shows it without a reload
+  // (showable-version/44): an add returns the session, an edit its version, and
+  // a delete has nothing to report.
+  | { ok: true; sessionId: string; version?: number; session?: Session }
   | {
       ok: false;
       reason:
@@ -186,15 +184,12 @@ export async function prescribeSession(params: {
 
   const db = getDb();
   const id = crypto.randomUUID();
+  // The row written and the session returned are one value, so the calendar's
+  // instant copy (prescribedSessionOf) and the database cannot differ.
+  // Version 1 is the column's default: a new row has never been rewritten.
+  const session = prescribedSessionOf(id, input, 1);
   await db.batch([
-    db.insert(sessions).values({
-      id,
-      athleteId,
-      origin: HEAD_COACH_ORIGIN,
-      status: 'planned',
-      dayOrder: 0,
-      ...prescriptionColumns(input),
-    }),
+    db.insert(sessions).values({ athleteId, ...session }),
     db.insert(events).values({
       athleteId,
       actorType: 'head_coach',
@@ -204,7 +199,7 @@ export async function prescribeSession(params: {
     }),
   ]);
 
-  return { ok: true, sessionId: id };
+  return { ok: true, sessionId: id, session };
 }
 
 /**
