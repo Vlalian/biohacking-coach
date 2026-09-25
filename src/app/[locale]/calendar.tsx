@@ -68,11 +68,6 @@ type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked'
  * fix, and naming it leaks the shape of the system without helping. Every other
  * reason is something the person can act on, so every other reason is named.
  */
-/** What either door answers to a move: the athlete's own or the Head Coach's. */
-type MoveAnswer =
-  | { ok: true; version: number }
-  | { ok: false; reason: MoveRefusal; conflict?: SessionConflict };
-
 type MoveRefusal =
   | Extract<MoveResult, { ok: false }>['reason']
   // The Head Coach's door refuses two more ways than the athlete's
@@ -83,6 +78,11 @@ type MoveRefusal =
   | 'not-a-coach'
   // The call itself failed — network or server — so there is no answer to read.
   | 'unreachable';
+
+/** What either door answers to a move: the athlete's own or the Head Coach's. */
+type MoveAnswer =
+  | { ok: true; version: number }
+  | { ok: false; reason: MoveRefusal; conflict?: SessionConflict };
 
 /**
  * Why this session cannot be picked up at all, or null when it can.
