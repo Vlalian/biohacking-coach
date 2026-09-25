@@ -443,6 +443,7 @@
     "error": "Det virkede ikke. Intet blev ændret. Prøv igen.",
     "uploaded": "{count, plural, one {# fil uploadet} other {# filer uploadet}}. Importér for at føje den til din historik.",
     "import": "Importér",
+    "unpacking": "Pakker din eksport ud…",
     "importing": "Importerer {done} af {total} filer…",
     "imported": "{done, plural, one {# fil læst} other {# filer læst}}.",
     "skippedOld": "{count, plural, one {# aktivitet} other {# aktiviteter}} ældre end {weeks} uger sprunget over",

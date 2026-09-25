@@ -4,10 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * `garmin-integration/04` — the adapter over Vercel Blob. Blob itself is
  * mocked: no store exists in tests, and no real key is ever used.
  */
-const { get, del, list } = vi.hoisted(() => ({ get: vi.fn(), del: vi.fn(), list: vi.fn() }));
-vi.mock('@vercel/blob', () => ({ get, del, list }));
+const { get, del, list, put } = vi.hoisted(() => ({ get: vi.fn(), del: vi.fn(), list: vi.fn(), put: vi.fn() }));
+vi.mock('@vercel/blob', () => ({ get, del, list, put }));
 
-const { fetchBlob, deleteBlob, deleteAthleteBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
+const { fetchBlob, openBlob, putBlob, deleteBlob, deleteAthleteBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
 const { today } = await import('@/lib/date');
 
 const URL1 = 'https://s.private.blob.vercel-storage.com/garmin/history/a1/x.zip';
@@ -41,6 +41,35 @@ describe('fetchBlob', () => {
   it('is null when Blob answers without a body', async () => {
     get.mockResolvedValue({ statusCode: 304, stream: null });
     expect(await fetchBlob(URL1)).toBeNull();
+  });
+});
+
+describe('openBlob', () => {
+  it('hands on the download as it arrives, uncached, without reading it first', async () => {
+    const stream = streamOf([1, 2], [3]);
+    get.mockResolvedValue({ statusCode: 200, stream });
+    expect(await openBlob(URL1)).toBe(stream);
+    expect(get).toHaveBeenCalledWith(URL1, { access: 'private', useCache: false });
+  });
+
+  it('is null when the blob is gone, or Blob answers without a body', async () => {
+    get.mockResolvedValueOnce(null).mockResolvedValueOnce({ statusCode: 304, stream: null });
+    expect(await openBlob(URL1)).toBeNull();
+    expect(await openBlob(URL1)).toBeNull();
+  });
+});
+
+describe('putBlob', () => {
+  it('stores one file as a private blob at exactly that path, overwriting a copy an earlier run left', async () => {
+    put.mockResolvedValue({ url: 'https://s.private.blob.vercel-storage.com/garmin/history/a1/imp1/0.fit' });
+    const bytes = new Uint8Array([9, 8, 7, 6]).subarray(1, 3);
+
+    expect(await putBlob('garmin/history/a1/imp1/0.fit', bytes)).toBe('https://s.private.blob.vercel-storage.com/garmin/history/a1/imp1/0.fit');
+
+    const [pathname, body, options] = put.mock.calls[0];
+    expect(pathname).toBe('garmin/history/a1/imp1/0.fit');
+    expect([...body]).toEqual([8, 7]);
+    expect(options).toEqual({ access: 'private', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/octet-stream' });
   });
 });
 
@@ -95,6 +124,6 @@ describe('sweepOldBlobs', () => {
 
 describe('blobWorkerDeps', () => {
   it('is this adapter and the app clock, as the import worker wants them', () => {
-    expect(blobWorkerDeps).toEqual({ fetchBlob, deleteBlob, today });
+    expect(blobWorkerDeps).toEqual({ fetchBlob, openBlob, putBlob, deleteBlob, today });
   });
 });

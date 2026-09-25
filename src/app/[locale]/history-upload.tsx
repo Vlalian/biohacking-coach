@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
-import { HISTORY_WINDOW_WEEKS, type ImportSummary } from '@/features/garmin/blob-upload';
+import { HISTORY_WINDOW_WEEKS, importRunning, type ImportSummary } from '@/features/garmin/blob-upload';
 import { historyImportStatusAction, removeImportedHistoryAction, startHistoryImportAction } from './garmin-actions';
 import { uploadToBlob, type BlobUploadResult } from './garmin-blob-upload';
 import { ERROR_KEY } from './garmin-upload';
@@ -67,7 +67,7 @@ export function HistoryUpload({
   const [lockedNow, setLockedNow] = useState(locked);
   const [progress, setProgress] = useState<ImportSummary | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const importing = progress?.status === 'importing';
+  const importing = progress !== null && importRunning(progress.status);
 
   // A locked history asks once where its import stands — the athlete may have
   // left while it ran, and this is how the progress comes back.
@@ -91,7 +91,7 @@ export function HistoryUpload({
       const result = await historyImportStatusAction().catch(() => null);
       if (!result?.ok || !result.summary) return;
       setProgress(result.summary);
-      if (result.summary.status !== 'importing') router.refresh();
+      if (!importRunning(result.summary.status)) router.refresh();
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [importing, router]);
@@ -117,7 +117,7 @@ export function HistoryUpload({
           return;
         }
         setStatus({ kind: 'idle' });
-        setProgress({ status: 'importing', total: 0, done: 0, skippedOld: 0, failed: 0 });
+        setProgress({ status: 'unpacking', total: 0, done: 0, skippedOld: 0, failed: 0 });
         setLockedNow(true);
         onImported?.();
       } catch {
@@ -241,18 +241,23 @@ export function HistoryUpload({
 }
 
 /**
- * How far an import has got: "Importing 340 of 1 200", then how many
- * activities were older than the window and how many files would not read.
+ * How far an import has got: "Unpacking…" while the export is opened, then
+ * "Importing 340 of 1 200", then how many activities were older than the
+ * window and how many files would not read.
  * A live region, so a screen reader hears it move.
  */
 export function HistoryImportProgress({ status }: { status: ImportSummary }) {
   const t = useTranslations('History');
-  const running = status.status === 'importing';
+  const running = importRunning(status.status);
   return (
     <div role="status" className="space-y-1 font-body text-sm">
       <p className={running ? 'text-foreground' : 'text-session-recovery'}>
         {running && <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />}
-        {running ? t('importing', { done: status.done, total: status.total }) : t('imported', { done: status.done })}
+        {status.status === 'unpacking'
+          ? t('unpacking')
+          : running
+            ? t('importing', { done: status.done, total: status.total })
+            : t('imported', { done: status.done })}
       </p>
       {status.skippedOld > 0 && (
         <p className="text-muted-foreground">{t('skippedOld', { count: status.skippedOld, weeks: HISTORY_WINDOW_WEEKS })}</p>

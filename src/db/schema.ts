@@ -356,27 +356,32 @@ export type DetectedActivityRow = typeof detectedActivities.$inferSelect;
 export type NewDetectedActivityRow = typeof detectedActivities.$inferInsert;
 
 /** Where a history import stands (`garmin-integration/04`). */
-export const HISTORY_IMPORT_STATUSES = ['uploading', 'importing', 'done', 'failed'] as const;
+export const HISTORY_IMPORT_STATUSES = ['uploading', 'unpacking', 'importing', 'done', 'failed'] as const;
 export type HistoryImportStatus = (typeof HISTORY_IMPORT_STATUSES)[number];
 /** The statuses of an import still running — at most one per athlete. */
-export const RUNNING_IMPORT_STATUSES = ['uploading', 'importing'] as const satisfies readonly HistoryImportStatus[];
+export const RUNNING_IMPORT_STATUSES = ['uploading', 'unpacking', 'importing'] as const satisfies readonly HistoryImportStatus[];
 
 /**
  * One history import (`garmin-integration/04`): the files the athlete uploaded
  * to Vercel Blob, and how far the background worker has read them.
  *
- * `blob_urls` holds the blobs still to read, in order; a blob leaves the list
- * when all its files are read, and is deleted from Blob at the same moment.
- * `cursor` is how many files of the first blob are already read — a Garmin
- * export is one zip holding hundreds of files, read 25 at a time. `total` grows
- * as each blob is first opened, because a zip's file count is only known then.
- * `done` and `failed` count files; `skipped_old` counts activities older than
- * the history window.
+ * The status is the phase: `unpacking → importing → done | failed`. While
+ * **unpacking**, each uploaded zip is streamed once and every `.fit`/`.gpx`
+ * inside it (one nested zip deep) becomes its own private blob under
+ * `garmin/history/<athleteId>/<importId>/`; `cursor` is how many entries of the
+ * zip at hand are already extracted, so a run cut off part-way resumes at the
+ * next one, and `blob_urls` gains each extracted URL as it is saved. A zip
+ * leaves the list, and is deleted from Blob, once it is read to its end. While
+ * **importing**, `blob_urls` holds only single-file blobs still to read, 25 per
+ * step, each deleted once written, and `cursor` counts the files read.
+ * `total` counts files (and archives that would not open) found so far and is
+ * settled when unpacking ends. `done` and `failed` count files; `skipped_old`
+ * counts activities older than the history window.
  *
  * The partial unique index keeps at most one running import per athlete; the
  * lock itself stays `historyImportedAt` on the profile, taken in the same batch
  * that inserts the row. Cascades with its athlete, like every training table
- * (ADR 0006). The URLs carry the opaque athlete id and the file's own name.
+ * (ADR 0006). The URLs carry the opaque athlete id and nothing of the athlete's.
  */
 export const historyImport = pgTable(
   'history_import',

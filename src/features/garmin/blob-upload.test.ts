@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { uploadPolicy, MAX_UPLOAD_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
+import { uploadPolicy, MAX_UPLOAD_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**
  * `garmin-integration/04` — the pure half of the Blob upload: who may upload
@@ -159,22 +159,15 @@ describe('expandUpload', () => {
   });
 
   it('passes a plain .fit or .gpx through untouched', () => {
-    expect(expandUpload('x.fit', FIT)).toEqual({ total: 1, files: [{ name: 'x.fit', bytes: FIT }], failed: 0 });
-    expect(expandUpload('x.GPX', GPX)).toEqual({ total: 1, files: [{ name: 'x.GPX', bytes: GPX }], failed: 0 });
+    expect(expandUpload('x.fit', FIT)).toEqual({ files: [{ name: 'x.fit', bytes: FIT }], failed: 0 });
+    expect(expandUpload('x.GPX', GPX)).toEqual({ files: [{ name: 'x.GPX', bytes: GPX }], failed: 0 });
   });
 
-  it('counts every activity file but opens only the range asked for, in a stable order', () => {
+  it('opens one nested zip deep and no deeper', () => {
     const inner = zipSync({ 'f1.fit': FIT, 'f2.fit': FIT, 'deeper.zip': zipSync({ 'no.fit': FIT }) });
     const outer = zipSync({ 'top.gpx': GPX, 'p1.zip': inner, 'dir/f3.FIT': FIT });
-    expect(expandUpload('e.zip', outer)).toMatchObject({ total: 4, failed: 0 });
-    const all = expandUpload('e.zip', outer).files.map((f) => f.name);
-    expect(expandUpload('e.zip', outer, { from: 1, to: 3 })).toEqual({
-      total: 4,
-      failed: 0,
-      files: all.slice(1, 3).map((name) => ({ name, bytes: expect.any(Uint8Array) })),
-    });
-    expect(expandUpload('e.zip', outer, { from: 4, to: 29 }).files).toEqual([]);
-    expect(expandUpload('x.fit', FIT, { from: 1, to: 25 })).toEqual({ total: 1, files: [], failed: 0 });
+    expect(expandUpload('e.zip', outer).files.map((f) => f.name).sort()).toEqual(['f1.fit', 'f2.fit', 'f3.FIT', 'top.gpx']);
+    expect(expandUpload('e.zip', outer).failed).toBe(0);
   });
 
   it('keeps the bytes of each file, not the zip’s', () => {
@@ -183,14 +176,23 @@ describe('expandUpload', () => {
   });
 
   it('counts an archive it cannot open as failed rather than throwing', () => {
-    expect(expandUpload('broken.zip', strToU8('not a zip'))).toEqual({ total: 0, files: [], failed: 1 });
+    expect(expandUpload('broken.zip', strToU8('not a zip'))).toEqual({ files: [], failed: 1 });
     const outer = zipSync({ 'bad.zip': strToU8('nope'), 'a.fit': FIT });
-    expect(expandUpload('e.zip', outer)).toEqual({ total: 1, files: [{ name: 'a.fit', bytes: FIT }], failed: 1 });
+    expect(expandUpload('e.zip', outer)).toEqual({ files: [{ name: 'a.fit', bytes: FIT }], failed: 1 });
+  });
+
+  it('reads the activities of a zip whose other entries would not inflate', () => {
+    const zip = zipSync({ 'a.fit': FIT, 'summary.json': strToU8('{"sessions": []}'.repeat(50)) });
+    const at = indexOfName(zip, 'summary.json') + 'summary.json'.length;
+    const broken = zip.slice();
+    // 0xff opens a deflate block of reserved type 3, which no inflater accepts.
+    broken.fill(0xff, at, at + 8);
+    expect(expandUpload('e.zip', broken)).toEqual({ files: [{ name: 'a.fit', bytes: FIT }], failed: 0 });
   });
 
   it('holds nothing for a file of another type', () => {
     for (const name of ['notes.txt', 'x.fit.txt', 'xfit', 'xzip', 'x.zip.txt']) {
-      expect(expandUpload(name, zipSync({ 'a.fit': FIT }))).toEqual({ total: 0, files: [], failed: 0 });
+      expect(expandUpload(name, zipSync({ 'a.fit': FIT }))).toEqual({ files: [], failed: 0 });
     }
   });
 
@@ -206,7 +208,6 @@ describe('expandUpload', () => {
       'b.zip.txt': inner,
     });
     expect(expandUpload('e.zip', outer)).toEqual({
-      total: 2,
       failed: 0,
       files: [
         { name: 'a.fit', bytes: FIT },
@@ -215,61 +216,142 @@ describe('expandUpload', () => {
     });
   });
 
-  it('keeps counting after a nested zip that will not open', () => {
+  it('keeps reading after a nested zip that will not open', () => {
     const outer = zipSync({ 'a.fit': FIT, 'bad.zip': strToU8('nope'), 'good.zip': zipSync({ 'b.fit': FIT, 'c.fit': FIT }) });
-    expect(expandUpload('e.zip', outer, { from: 1, to: 2 })).toEqual({ total: 3, failed: 1, files: [{ name: 'b.fit', bytes: FIT }] });
+    expect(expandUpload('e.zip', outer)).toEqual({ failed: 1, files: ['a.fit', 'b.fit', 'c.fit'].map((name) => ({ name, bytes: FIT })) });
+  });
+});
+
+describe('nextZip', () => {
+  const HOST = 'https://s.private.blob.vercel-storage.com/garmin/history/a1/';
+
+  it('is the first upload that is a zip, whatever else is in the list', () => {
+    expect(nextZip([`${HOST}ride.fit`, `${HOST}export-Ab1.ZIP`, `${HOST}second.zip`])).toBe(`${HOST}export-Ab1.ZIP`);
+  });
+
+  it('is null once only single files are left', () => {
+    expect(nextZip([`${HOST}ride.fit`, `${HOST}imp1/0.gpx`, `${HOST}notes.zip.txt`])).toBeNull();
+    expect(nextZip([])).toBeNull();
+  });
+});
+
+describe('extractedPathname', () => {
+  it('puts each extracted file under the import, by its number and lower-case extension', () => {
+    expect(extractedPathname('a1', 'imp1', 7, 'Morning Ride.FIT')).toBe('garmin/history/a1/imp1/7.fit');
+    expect(extractedPathname('a1', 'imp1', 0, 'x.gpx')).toBe('garmin/history/a1/imp1/0.gpx');
+  });
+
+  it('sits under the athlete’s history prefix, so the bulk remove and erasure find it', () => {
+    expect(extractedPathname('a1', 'imp1', 3, 'a.fit').startsWith(blobPrefix('history', 'a1'))).toBe(true);
+  });
+});
+
+describe('advanceUnpack', () => {
+  const START = { blobUrls: ['z1.zip', 'r.fit'], cursor: 0, total: 0, done: 0, skippedOld: 0, failed: 0 };
+
+  it('appends what was extracted, moves the cursor past it, and counts failures as read files', () => {
+    expect(advanceUnpack(START, 'z1.zip', { extracted: ['e0', 'e2'], failed: 1, complete: false })).toEqual({
+      blobUrls: ['z1.zip', 'r.fit', 'e0', 'e2'],
+      cursor: 3,
+      total: 3,
+      done: 1,
+      skippedOld: 0,
+      failed: 1,
+      status: 'unpacking',
+      finishedZip: null,
+    });
+  });
+
+  it('carries on from where the last save left the zip', () => {
+    const later = advanceUnpack({ ...START, blobUrls: ['z1.zip', 'e0'], cursor: 25, total: 25 }, 'z1.zip', { extracted: ['e25'], failed: 0, complete: false });
+    expect(later).toMatchObject({ blobUrls: ['z1.zip', 'e0', 'e25'], cursor: 26, total: 26, done: 0 });
+  });
+
+  it('drops a zip read to its end and names it for deletion, starting the next zip from the top', () => {
+    const row = { ...START, blobUrls: ['z1.zip', 'z2.zip', 'e0'], cursor: 4, total: 4 };
+    expect(advanceUnpack(row, 'z1.zip', { extracted: ['e4'], failed: 0, complete: true })).toMatchObject({
+      blobUrls: ['z2.zip', 'e0', 'e4'],
+      cursor: 0,
+      total: 5,
+      status: 'unpacking',
+      finishedZip: 'z1.zip',
+    });
+  });
+
+  it('turns to importing once no zip is left, with every file left to read in the total', () => {
+    const row = { ...START, blobUrls: ['r.fit', 'z1.zip', 'e0'], cursor: 2, total: 2, done: 1, failed: 1 };
+    expect(advanceUnpack(row, 'z1.zip', { extracted: ['e2'], failed: 0, complete: true })).toEqual({
+      blobUrls: ['r.fit', 'e0', 'e2'],
+      cursor: 0,
+      total: 4,
+      done: 1,
+      skippedOld: 0,
+      failed: 1,
+      status: 'importing',
+      finishedZip: 'z1.zip',
+    });
+  });
+
+  it('turns to importing at once when the upload held no zip', () => {
+    expect(advanceUnpack({ ...START, blobUrls: ['r.fit', 's.gpx'] }, null, { extracted: [], failed: 0, complete: true })).toMatchObject({
+      blobUrls: ['r.fit', 's.gpx'],
+      total: 2,
+      status: 'importing',
+      finishedZip: null,
+    });
+  });
+
+  it('counts a zip that is gone as one failed file and drops it', () => {
+    expect(advanceUnpack({ ...START, blobUrls: ['z1.zip'] }, 'z1.zip', { extracted: [], failed: 1, complete: true })).toMatchObject({
+      blobUrls: [],
+      total: 1,
+      done: 1,
+      failed: 1,
+      status: 'importing',
+      finishedZip: 'z1.zip',
+    });
   });
 });
 
 describe('advanceImport', () => {
-  const START = { blobUrls: ['u1', 'u2'], cursor: 0, total: 0, done: 0, skippedOld: 0, failed: 0 };
-  const chunk = { blobTotal: 60, blobFailed: 0, read: 25, failed: 0, skippedOld: 0 };
+  const START = { blobUrls: ['f1', 'f2', 'f3'], cursor: 0, total: 3, done: 0, skippedOld: 0, failed: 0 };
 
   it('reads 25 files at a time', () => {
     expect(IMPORT_CHUNK_FILES).toBe(25);
   });
 
-  it('counts a blob’s files when it is first opened, and moves the cursor through it', () => {
-    expect(advanceImport(START, { ...chunk, failed: 2, skippedOld: 7 })).toEqual({
-      blobUrls: ['u1', 'u2'],
-      finishedBlob: null,
-      cursor: 25,
-      total: 60,
-      done: 25,
-      skippedOld: 7,
-      failed: 2,
+  it('drops the files read, moves the cursor, and adds up what became of them', () => {
+    expect(advanceImport(START, { read: 2, failed: 1, skippedOld: 4 })).toEqual({
+      blobUrls: ['f3'],
+      cursor: 2,
+      total: 3,
+      done: 2,
+      skippedOld: 4,
+      failed: 1,
       status: 'importing',
     });
   });
 
-  it('does not count the blob again on a later chunk', () => {
-    const later = advanceImport({ ...START, cursor: 25, total: 60, done: 25 }, chunk);
-    expect(later).toMatchObject({ cursor: 50, total: 60, done: 50, blobUrls: ['u1', 'u2'], finishedBlob: null });
-  });
-
-  it('drops a blob once its last file is read, and starts the next from the top', () => {
-    const last = advanceImport({ ...START, cursor: 50, total: 60, done: 50 }, { ...chunk, read: 10 });
-    expect(last).toMatchObject({ cursor: 0, done: 60, blobUrls: ['u2'], finishedBlob: 'u1', status: 'importing' });
-  });
-
-  it('is done when the last blob is dropped', () => {
-    const end = advanceImport({ ...START, blobUrls: ['u2'] }, { ...chunk, blobTotal: 3, read: 3 });
-    expect(end).toMatchObject({ blobUrls: [], finishedBlob: 'u2', status: 'done', total: 3, done: 3 });
-  });
-
-  it('counts an archive that would not open as one failed file, on first opening only', () => {
-    const broken = { blobTotal: 0, blobFailed: 1, read: 0, failed: 0, skippedOld: 0 };
-    expect(advanceImport(START, broken)).toMatchObject({ total: 1, done: 1, failed: 1, blobUrls: ['u2'], finishedBlob: 'u1' });
-    const partly = { blobTotal: 40, blobFailed: 1, read: 15, failed: 0, skippedOld: 0 };
-    expect(advanceImport({ ...START, cursor: 25, total: 41, done: 26, failed: 1 }, partly)).toMatchObject({ total: 41, done: 41, failed: 1, cursor: 0 });
-  });
-
-  it('is done at once when there is nothing left to read', () => {
-    expect(advanceImport({ ...START, blobUrls: [] }, { blobTotal: 0, blobFailed: 0, read: 0, failed: 0, skippedOld: 0 })).toMatchObject({
-      status: 'done',
+  it('is done once no file is left', () => {
+    const row = { ...START, blobUrls: ['f3'], cursor: 2, done: 2, failed: 1, skippedOld: 4 };
+    expect(advanceImport(row, { read: 1, failed: 0, skippedOld: 1 })).toEqual({
       blobUrls: [],
-      finishedBlob: null,
+      cursor: 3,
+      total: 3,
+      done: 3,
+      skippedOld: 5,
+      failed: 1,
+      status: 'done',
     });
+  });
+});
+
+describe('importRunning', () => {
+  it('is true while the import unpacks or imports, and false once it has stopped', () => {
+    expect(importRunning('unpacking')).toBe(true);
+    expect(importRunning('importing')).toBe(true);
+    expect(importRunning('done')).toBe(false);
+    expect(importRunning('failed')).toBe(false);
   });
 });
 
@@ -279,3 +361,12 @@ describe('importSummary', () => {
     expect(importSummary(row)).toEqual({ status: 'importing', total: 1200, done: 340, skippedOld: 2100, failed: 1 });
   });
 });
+
+function indexOfName(bytes: Uint8Array, name: string): number {
+  const needle = strToU8(name);
+  outer: for (let i = 0; i < bytes.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (bytes[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}

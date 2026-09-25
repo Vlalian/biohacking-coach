@@ -23,6 +23,14 @@ describe('HistoryImportProgress', () => {
     expect(html).not.toContain('failedFiles');
   });
 
+  it('says it is unpacking while the export is opened, with no count yet', () => {
+    const html = renderToStaticMarkup(<HistoryImportProgress status={{ total: 40, done: 0, skippedOld: 0, failed: 0, status: 'unpacking' }} />);
+    expect(html).toContain('unpacking()');
+    expect(html).toContain('animate-spin');
+    expect(html).not.toContain('importing(');
+    expect(html).not.toContain('imported(');
+  });
+
   it('says how many files were read once it is done, and how many would not read', () => {
     const html = renderToStaticMarkup(<HistoryImportProgress status={{ total: 12, done: 12, skippedOld: 0, failed: 2, status: 'done' }} />);
     expect(html).toContain('imported(done=12)');

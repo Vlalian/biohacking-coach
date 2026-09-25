@@ -245,8 +245,8 @@ describe('importTrainingHistory', () => {
 });
 
 describe('importProgressWrite', () => {
-  it('writes the next counters to this import, only if no other worker moved it first', () => {
-    const stmt = importProgressWrite('imp1', 25, {
+  it('writes the next counters to this import, only if no other worker moved it — phase or place — first', () => {
+    const stmt = importProgressWrite('imp1', { status: 'unpacking', cursor: 25 }, {
       blobUrls: ['u2'],
       cursor: 0,
       total: 60,
@@ -268,20 +268,20 @@ describe('importProgressWrite', () => {
       updatedAt: expect.any(Date),
     });
     const { sql, params } = new PgDialect().sqlToQuery(stmt.where!);
-    expect(sql).toBe('("history_import"."id" = $1 and "history_import"."cursor" = $2)');
-    expect(params).toEqual(['imp1', 25]);
+    expect(sql).toBe('("history_import"."id" = $1 and "history_import"."status" = $2 and "history_import"."cursor" = $3)');
+    expect(params).toEqual(['imp1', 'unpacking', 25]);
   });
 });
 
 describe('startHistoryImport', () => {
-  it('sets historyImportedAt and inserts an importing row in one batch', async () => {
+  it('sets historyImportedAt and inserts an unpacking row in one batch', async () => {
     const result = await startHistoryImport('a1', ['u1', 'u2']);
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch.mock.calls[0][0]).toHaveLength(2);
     expect(profileWrite()).toEqual({ historyImportedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) });
     expect(athleteProfileMerge).toHaveBeenCalledWith('a1', expect.anything());
     const [row] = inserted(historyImport);
-    expect(row).toEqual({ id: expect.any(String), athleteId: 'a1', status: 'importing', blobUrls: ['u1', 'u2'] });
+    expect(row).toEqual({ id: expect.any(String), athleteId: 'a1', status: 'unpacking', blobUrls: ['u1', 'u2'] });
     expect(result).toEqual({ ok: true, importId: row.id });
   });
 
@@ -365,14 +365,14 @@ describe('reading imports', () => {
     expect(await latestHistoryImport('a1')).toBeNull();
   });
 
-  it('importsToResume lists the running imports untouched since the cutoff, oldest first, up to the limit', async () => {
+  it('importsToResume lists the imports unpacking or importing untouched since the cutoff, oldest first, up to the limit', async () => {
     selects.set(historyImport, [{ id: 'imp1' }, { id: 'imp2' }]);
     const cutoff = new Date('2026-09-25T11:59:00Z');
     expect(await importsToResume(cutoff, 5)).toEqual(['imp1', 'imp2']);
     expect(Object.keys(reads[0].fields!)).toEqual(['id']);
     const { sql, params } = new PgDialect().sqlToQuery(reads[0].where);
-    expect(sql).toBe('("history_import"."status" = $1 and "history_import"."updated_at" < $2)');
-    expect(params).toEqual(['importing', cutoff.toISOString()]);
+    expect(sql).toBe('("history_import"."status" in ($1, $2) and "history_import"."updated_at" < $3)');
+    expect(params).toEqual(['unpacking', 'importing', cutoff.toISOString()]);
     expect(new PgDialect().sqlToQuery(orders[0][0] as SQL)).toMatchObject({ sql: '"history_import"."updated_at" asc' });
     expect(limits).toEqual([5]);
   });

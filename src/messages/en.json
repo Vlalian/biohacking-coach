@@ -443,6 +443,7 @@
     "error": "That didn’t work. Nothing was changed. Try again.",
     "uploaded": "{count, plural, one {# file uploaded} other {# files uploaded}}. Import it to add it to your history.",
     "import": "Import",
+    "unpacking": "Unpacking your export…",
     "importing": "Importing {done} of {total} files…",
     "imported": "{done, plural, one {# file read} other {# files read}}.",
     "skippedOld": "{count, plural, one {# activity} other {# activities}} older than {weeks} weeks skipped",

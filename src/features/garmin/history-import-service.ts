@@ -1,10 +1,10 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, isNotNull, lt } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, lt } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import { getDb } from '@/db';
-import { detectedActivities, historyImport, sessions, sessionStreams, type HistoryImportRow } from '@/db/schema';
+import { detectedActivities, historyImport, sessions, sessionStreams, type HistoryImportRow, type HistoryImportStatus } from '@/db/schema';
 import { athleteProfileMerge, getAthleteById } from '@/features/athlete/athlete-repository';
 import { getSessionsOnDates } from '@/features/session/session-repository';
 import type { ParsedSession } from './garmin';
@@ -28,7 +28,8 @@ import { deleteAthleteBlobs } from './blob-store';
  * Since `04` the upload is read in chunks by a background worker, and this is
  * the per-chunk writer: each chunk's history, proposals and the import's
  * progress land in one `db.batch`, so a failure leaves no half-written chunk
- * and no counter ahead of what was written. **The lock** —
+ * and no counter ahead of what was written. The unpacking phase saves its
+ * place through it too, with no activities. **The lock** —
  * `historyImportedAt` on the profile — is no longer taken here but when the
  * athlete presses *Import* ({@link startHistoryImport}).
  *
@@ -62,22 +63,26 @@ export async function importTrainingHistory(
   return { imported: plan.history.length, proposed: plan.proposals.length };
 }
 
-/** An import's next counters, as `advanceImport` computes them. */
+/** An import's next counters, as `advanceUnpack` or `advanceImport` computes them. */
 export type ImportProgressChange = Pick<
   HistoryImportRow,
   'blobUrls' | 'cursor' | 'total' | 'done' | 'skippedOld' | 'failed' | 'status'
 >;
 
+/** Where a worker read an import: its phase and its cursor in that phase. */
+export type ImportReadAt = { status: HistoryImportStatus; cursor: number };
+
 /**
- * The write that records a chunk's progress, conditional on the cursor it was
- * read at: if another worker — the cron and the post-Import run can overlap —
- * moved the import first, this matches no row and changes nothing.
+ * The write that records a step's progress, conditional on the status and
+ * cursor it was read at: if another worker — the cron and the post-Import run
+ * can overlap — moved the import first, this matches no row and changes
+ * nothing. The status is part of it because both phases start at cursor 0.
  */
-export function importProgressWrite(importId: string, readAtCursor: number, next: ImportProgressChange) {
+export function importProgressWrite(importId: string, readAt: ImportReadAt, next: ImportProgressChange) {
   return getDb()
     .update(historyImport)
     .set({ ...next, updatedAt: new Date() })
-    .where(and(eq(historyImport.id, importId), eq(historyImport.cursor, readAtCursor)));
+    .where(and(eq(historyImport.id, importId), eq(historyImport.status, readAt.status), eq(historyImport.cursor, readAt.cursor)));
 }
 
 export type StartImportResult = { ok: true; importId: string } | { ok: false; reason: 'locked' };
@@ -96,7 +101,7 @@ export async function startHistoryImport(athleteId: string, blobUrls: readonly s
   const importId = randomUUID();
   await db.batch([
     athleteProfileMerge(athleteId, { historyImportedAt: new Date().toISOString() }),
-    db.insert(historyImport).values({ id: importId, athleteId, status: 'importing', blobUrls: [...blobUrls] }),
+    db.insert(historyImport).values({ id: importId, athleteId, status: 'unpacking', blobUrls: [...blobUrls] }),
   ]);
   return { ok: true, importId };
 }
@@ -210,6 +215,9 @@ export async function latestHistoryImport(athleteId: string): Promise<HistoryImp
   return row ?? null;
 }
 
+/** The phases the worker drives — the cron resumes an import in either. */
+const WORKER_STATUSES: HistoryImportStatus[] = ['unpacking', 'importing'];
+
 /**
  * Running imports nothing has advanced since `untouchedSince`, oldest first —
  * the ones the cron takes over. A run started by *Import* touches its row every
@@ -219,7 +227,7 @@ export async function importsToResume(untouchedSince: Date, limit: number): Prom
   const rows = await getDb()
     .select({ id: historyImport.id })
     .from(historyImport)
-    .where(and(eq(historyImport.status, 'importing'), lt(historyImport.updatedAt, untouchedSince)))
+    .where(and(inArray(historyImport.status, WORKER_STATUSES), lt(historyImport.updatedAt, untouchedSince)))
     .orderBy(asc(historyImport.updatedAt))
     .limit(limit);
   return rows.map((r) => r.id);

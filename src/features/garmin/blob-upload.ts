@@ -162,66 +162,40 @@ export function isOwnBlobUrl(url: string, prefix: string): boolean {
 /** One activity file found in an upload, by its own name without folders. */
 export type UploadedFile = { name: string; bytes: Uint8Array };
 
-/**
- * What an upload holds: `total` activity files in all, the `files` of the range
- * asked for, and how many archives inside it could not be opened.
- */
-export type ExpandedUpload = { total: number; files: UploadedFile[]; failed: number };
+/** What an upload holds: its activity files, and how many archives inside it could not be opened. */
+export type ExpandedUpload = { files: UploadedFile[]; failed: number };
 
 const ACTIVITY_FILE = /\.(fit|gpx)$/i;
 const ZIP_FILE = /\.zip$/i;
 
-/** Files by position, `from` inclusive, `to` exclusive. */
-type FileRange = { from: number; to: number };
-
-const EVERY_FILE: FileRange = { from: 0, to: Infinity };
-
-function inRange(range: FileRange, position: number): boolean {
-  return position >= range.from && position < range.to;
-}
-
 /**
- * Opens one upload into its activity files. A `.fit` or `.gpx` is itself; a
- * `.zip` is opened, and so is every zip inside it — Garmin's full export
- * nests the originals in `UploadedFiles_*.zip` — but no deeper. Anything that
- * is not a `.fit` or `.gpx` is ignored.
- *
- * `range` picks files by their position, which is stable for the same bytes:
- * the zip's own activity files first, in archive order, then each nested zip's
- * in turn. Every file is counted, only those in range are decompressed, so the
- * import can read a large export 25 files at a time without holding all of it
- * inflated at once. An archive that will not open counts once in `failed` and
- * the rest carries on; nothing here throws on a bad file.
+ * Opens one detection upload into its activity files. A `.fit` or `.gpx` is
+ * itself; a `.zip` is opened, and so is every zip inside it, but no deeper.
+ * Anything that is not a `.fit` or `.gpx` is ignored. An archive that will not
+ * open counts once in `failed` and the rest carries on; nothing here throws on
+ * a bad file. A detection upload is one activity or a small zip, so it is
+ * opened in memory; the history import streams its zips instead
+ * (`export-unpacker.ts`).
  */
-export function expandUpload(name: string, bytes: Uint8Array, range: FileRange = EVERY_FILE): ExpandedUpload {
-  if (ACTIVITY_FILE.test(name)) return { total: 1, files: inRange(range, 0) ? [{ name, bytes }] : [], failed: 0 };
-  if (!ZIP_FILE.test(name)) return { total: 0, files: [], failed: 0 };
-  return openExport(bytes, range);
+export function expandUpload(name: string, bytes: Uint8Array): ExpandedUpload {
+  if (ACTIVITY_FILE.test(name)) return { files: [{ name, bytes }], failed: 0 };
+  if (!ZIP_FILE.test(name)) return { files: [], failed: 0 };
+  return openExport(bytes);
 }
 
 /** A zip's own activity files, then each nested zip's; an outer zip that will not open is one failure. */
-function openExport(bytes: Uint8Array, range: FileRange): ExpandedUpload {
-  let total = 0;
-  const outer = openZip(bytes, (entry) => (ACTIVITY_FILE.test(entry.name) ? inRange(range, total++) : ZIP_FILE.test(entry.name)));
-  if (outer === null) return { total: 0, files: [], failed: 1 };
+function openExport(bytes: Uint8Array): ExpandedUpload {
+  const outer = openZip(bytes, (entry) => ACTIVITY_FILE.test(entry.name) || ZIP_FILE.test(entry.name));
+  if (outer === null) return { files: [], failed: 1 };
 
-  const found: ExpandedUpload = { total, files: activityFiles(outer), failed: 0 };
+  const found: ExpandedUpload = { files: activityFiles(outer), failed: 0 };
   for (const [entry, data] of Object.entries(outer)) {
-    if (ZIP_FILE.test(entry)) addNested(found, data, range);
+    if (!ZIP_FILE.test(entry)) continue;
+    const inner = openZip(data, (file) => ACTIVITY_FILE.test(file.name));
+    if (inner === null) found.failed++;
+    else found.files.push(...activityFiles(inner));
   }
   return found;
-}
-
-/** Adds a nested zip's activity files, numbered after everything before them; one that will not open is one failure. */
-function addNested(found: ExpandedUpload, data: Uint8Array, range: FileRange): void {
-  let count = 0;
-  const inner = openZip(data, (file) => ACTIVITY_FILE.test(file.name) && inRange(range, found.total + count++));
-  if (inner === null) {
-    found.failed++;
-  } else {
-    found.total += count;
-    found.files.push(...activityFiles(inner));
-  }
 }
 
 /** The activity files of an opened zip, named without their folders. */
@@ -241,17 +215,18 @@ function openZip(bytes: Uint8Array, filter: UnzipFileFilter): Unzipped | null {
 }
 
 /**
- * How many files one step of the import worker reads. Small enough that a step
- * — parse, plan, one batched write — fits well inside a function's time, and a
- * crash costs at most this many files' work.
+ * How many files one import step reads, and how many extracted files the
+ * unpacking saves at a time. Small enough that a step — parse, plan, one
+ * batched write — fits well inside a function's time, and a crash costs at
+ * most this many files' work.
  */
 export const IMPORT_CHUNK_FILES = 25;
 
 /** Where a history import stands, as the worker reads and writes it. */
 export type ImportProgress = {
-  /** The blobs still to read, in order. */
+  /** Uploads still to unpack, then the single-file blobs still to import, in order. */
   blobUrls: string[];
-  /** Files of the first blob already read. */
+  /** Unpacking: entries of the zip at hand already extracted. Importing: files already read. */
   cursor: number;
   total: number;
   done: number;
@@ -259,56 +234,88 @@ export type ImportProgress = {
   failed: number;
 };
 
-/** What one step found in the first blob, and what became of the files it read. */
-export type ChunkOutcome = {
-  /** Activity files in the whole blob (`expandUpload`'s `total`). */
-  blobTotal: number;
-  /** Archives in the blob that would not open (`expandUpload`'s `failed`). */
-  blobFailed: number;
-  /** Files read in this step. */
-  read: number;
-  /** Of those, files that could not be parsed. */
+/** The first upload still to unpack — a zip — or null once only single files are left. */
+export function nextZip(blobUrls: readonly string[]): string | null {
+  return blobUrls.find((url) => ZIP_FILE.test(url)) ?? null;
+}
+
+/**
+ * Where an activity file extracted from an upload is kept until it is
+ * imported: a private blob under the import, named by its number. The number
+ * is stable for the same zip, so a run that resumes part-way overwrites what an
+ * earlier run may have left, never duplicates it. Under the athlete's history
+ * prefix, so the bulk remove, erasure and the sweep reach it.
+ */
+export function extractedPathname(athleteId: string, importId: string, n: number, name: string): string {
+  const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
+  return `${blobPrefix('history', athleteId)}${importId}/${n}.${ext}`;
+}
+
+/** What a stretch of unpacking did with the zip at hand. */
+export type UnpackOutcome = {
+  /** The URLs of the files extracted, in order. */
+  extracted: string[];
+  /** Entries that failed: an archive that would not open, a file that would not inflate, a zip that is gone. */
   failed: number;
-  /** Activities dropped for being older than the window. */
-  skippedOld: number;
+  /** Whether the zip was read to its end. */
+  complete: boolean;
 };
 
 /**
- * The import after one step. A blob's files are added to `total` when it is
- * first opened — a zip's count is only known then — and an archive inside it
- * that would not open counts once as a failed file. Once the cursor passes the
- * blob's last file the blob leaves the list and is named in `finishedBlob`, for
- * the caller to delete; with no blob left the import is done.
+ * The import after a stretch of unpacking `zipUrl`. Extracted files join the
+ * list; every entry read moves the cursor and counts in `total`, a failed one
+ * also as done and failed. A zip read to its end leaves the list and is named
+ * in `finishedZip`, for the caller to delete. With no zip left the import turns
+ * to importing, and `total` settles on what is known then: the files that
+ * failed plus every file left to read.
  */
-export function advanceImport(
+export function advanceUnpack(
   row: ImportProgress,
-  chunk: ChunkOutcome,
-): ImportProgress & { finishedBlob: string | null; status: 'importing' | 'done' } {
-  const position = moveCursor(row.blobUrls, row.cursor + chunk.read, chunk.blobTotal);
+  zipUrl: string | null,
+  outcome: UnpackOutcome,
+): ImportProgress & { status: 'unpacking' | 'importing'; finishedZip: string | null } {
+  const appended = [...row.blobUrls, ...outcome.extracted];
+  const blobUrls = outcome.complete ? appended.filter((url) => url !== zipUrl) : appended;
+  const read = outcome.extracted.length + outcome.failed;
+  const counts = { done: row.done + outcome.failed, skippedOld: row.skippedOld, failed: row.failed + outcome.failed };
+  if (!outcome.complete) {
+    return { blobUrls, cursor: row.cursor + read, total: row.total + read, ...counts, status: 'unpacking', finishedZip: null };
+  }
+  const unpacked = nextZip(blobUrls) === null;
   return {
-    ...position,
-    ...countsAfter(row, chunk),
-    status: position.blobUrls.length === 0 ? 'done' : 'importing',
+    blobUrls,
+    cursor: 0,
+    total: unpacked ? counts.done + blobUrls.length : row.total + read,
+    ...counts,
+    status: unpacked ? 'importing' : 'unpacking',
+    finishedZip: zipUrl,
   };
 }
 
-/** The cursor after a step: still inside the first blob, or past it and on to the next. */
-function moveCursor(blobUrls: string[], cursor: number, blobTotal: number) {
-  if (cursor < blobTotal) return { blobUrls, finishedBlob: null, cursor };
-  const [head, ...rest] = blobUrls;
-  return { blobUrls: rest, finishedBlob: head ?? null, cursor: 0 };
+/** What became of the files one import step read. */
+export type ImportOutcome = { read: number; failed: number; skippedOld: number };
+
+/**
+ * The import after one step over its single-file blobs: the files read leave
+ * the list — the caller deletes each once the step is written — and with none
+ * left the import is done.
+ */
+export function advanceImport(row: ImportProgress, outcome: ImportOutcome): ImportProgress & { status: 'importing' | 'done' } {
+  const blobUrls = row.blobUrls.slice(outcome.read);
+  return {
+    blobUrls,
+    cursor: row.cursor + outcome.read,
+    total: row.total,
+    done: row.done + outcome.read,
+    skippedOld: row.skippedOld + outcome.skippedOld,
+    failed: row.failed + outcome.failed,
+    status: blobUrls.length === 0 ? 'done' : 'importing',
+  };
 }
 
-/** The counters after a step; a blob's size and its unreadable archives count once, when it is first opened. */
-function countsAfter(row: ImportProgress, chunk: ChunkOutcome) {
-  const firstOpen = row.cursor === 0;
-  const archivesFailed = firstOpen ? chunk.blobFailed : 0;
-  return {
-    total: row.total + (firstOpen ? chunk.blobTotal + chunk.blobFailed : 0),
-    done: row.done + chunk.read + archivesFailed,
-    skippedOld: row.skippedOld + chunk.skippedOld,
-    failed: row.failed + chunk.failed + archivesFailed,
-  };
+/** Whether an import is still going — unpacking or importing — so the screen keeps polling. */
+export function importRunning(status: string): boolean {
+  return status === 'unpacking' || status === 'importing';
 }
 
 /** What the athlete's screen is told about an import: counts and status, never the blob URLs. */

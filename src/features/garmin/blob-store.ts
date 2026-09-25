@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { del, get, list } from '@vercel/blob';
+import { del, get, list, put } from '@vercel/blob';
 import { today } from '@/lib/date';
 import { BLOB_MAX_AGE_MS, GARMIN_BLOB_ROOT, blobPrefix, type UploadKind } from './blob-upload';
 
@@ -17,9 +17,35 @@ import { BLOB_MAX_AGE_MS, GARMIN_BLOB_ROOT, blobPrefix, type UploadKind } from '
 
 /** A private blob's bytes, or null when it is gone. */
 export async function fetchBlob(url: string): Promise<Uint8Array | null> {
+  const stream = await openBlob(url);
+  return stream && new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * A private blob as it downloads, or null when it is gone. The body is the
+ * fetch's own pull stream, so a reader that is slow to take the next chunk
+ * slows the download instead of piling it up in memory — how a 500 MB export
+ * is unpacked in tens of MB.
+ */
+export async function openBlob(url: string): Promise<ReadableStream<Uint8Array> | null> {
   const blob = await get(url, { access: 'private', useCache: false });
-  if (!blob?.stream) return null;
-  return new Uint8Array(await new Response(blob.stream).arrayBuffer());
+  return blob?.stream ?? null;
+}
+
+/**
+ * Stores one file as a private blob at exactly `pathname` and returns its URL.
+ * No random suffix and overwrite allowed, so a run that repeats an extraction
+ * replaces the earlier copy instead of leaving a second one.
+ */
+export async function putBlob(pathname: string, bytes: Uint8Array): Promise<string> {
+  const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const blob = await put(pathname, body, {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/octet-stream',
+  });
+  return blob.url;
 }
 
 export async function deleteBlob(url: string): Promise<void> {
@@ -60,4 +86,4 @@ async function forEachPage(prefix: string, pick: (blobs: ListedBlob[]) => string
 }
 
 /** The import worker's deps as production wires them: this adapter and the app clock. */
-export const blobWorkerDeps = { fetchBlob, deleteBlob, today };
+export const blobWorkerDeps = { fetchBlob, openBlob, putBlob, deleteBlob, today };

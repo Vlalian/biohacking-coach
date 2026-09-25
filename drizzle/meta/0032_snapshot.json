@@ -1,5 +1,5 @@
 {
-  "id": "51fd16d9-165b-4485-a6e6-9936763ec788",
+  "id": "3bafc2d7-636c-44d4-91c4-cc8a9a0bca0f",
   "prevId": "293fd54e-dea4-4db5-b161-24ce8ca184a3",
   "version": "7",
   "dialect": "postgresql",
@@ -1400,7 +1400,7 @@
             }
           ],
           "isUnique": true,
-          "where": "status IN ('uploading', 'importing')",
+          "where": "status IN ('uploading', 'unpacking', 'importing')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1427,7 +1427,7 @@
       "checkConstraints": {
         "history_import_status_known": {
           "name": "history_import_status_known",
-          "value": "status IN ('uploading', 'importing', 'done', 'failed')"
+          "value": "status IN ('uploading', 'unpacking', 'importing', 'done', 'failed')"
         }
       },
       "isRLSEnabled": false
