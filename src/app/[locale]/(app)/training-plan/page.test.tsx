@@ -11,7 +11,9 @@ const {
   after,
   ensureBlocksAdjusted,
   getResolvedBlocks,
+  getUiPrefs,
 } = vi.hoisted(() => ({
+    getUiPrefs: vi.fn((): Promise<{ language?: string }> => Promise.resolve({})),
     after: vi.fn((task: () => Promise<void>) => task()),
     ensureBlocksAdjusted: vi.fn(() => Promise.resolve('drafted')),
     getResolvedBlocks: vi.fn(() => Promise.resolve({ race: null, set: null, blocks: [] })),
@@ -34,6 +36,7 @@ vi.mock('next-intl/server', () => ({
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('next/server', () => ({ after }));
 vi.mock('@/features/coach/training-block-service', () => ({ ensureBlocksAdjusted, getResolvedBlocks }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getUiPrefs }));
 // The drafted week the athlete has not decided on (training-architecture/18):
 // read here with today as `asOf`, passed to the calendar, never fetched by it.
 // Since training-architecture/29 the read is the service's slot state, which
@@ -134,7 +137,21 @@ describe('TrainingPlanPage — the Training Block adjustment trigger (training-a
     await render();
 
     expect(after).toHaveBeenCalledTimes(1);
-    expect(ensureBlocksAdjusted).toHaveBeenCalledWith('a1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    // No language stored: none is passed, and the service stays English.
+    expect(ensureBlocksAdjusted).toHaveBeenCalledWith(
+      'a1',
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      undefined,
+    );
+  });
+
+  it("passes the signed-in athlete's language, so a Danish athlete's blocks are shaped in Danish (showable-version/46)", async () => {
+    getUiPrefs.mockResolvedValueOnce({ language: 'da' });
+
+    await render();
+
+    expect(getUiPrefs).toHaveBeenCalledWith('u1');
+    expect(ensureBlocksAdjusted).toHaveBeenCalledWith('a1', expect.any(String), 'da');
   });
 
   it('reads the resolved blocks for the strip, scoped to the athlete', async () => {

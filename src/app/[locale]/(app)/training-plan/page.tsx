@@ -16,6 +16,7 @@ import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/traini
 import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
 import { getLinkForAthlete } from '@/features/coach/coach-repository';
+import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
 import { Calendar } from '../../calendar';
@@ -139,11 +140,17 @@ export default async function TrainingPlanPage({
   // nothing), so hanging it off the default View costs the athlete no wait and
   // covers every tester who already has a race. Never on a render path, never
   // thrown: a failure here is logged and the athlete stays on the draft.
-  if (athlete) {
+  // An athlete row implies a session; the check is for the compiler, which
+  // cannot see through next-intl's redirect.
+  if (athlete && session) {
     const athleteId = athlete.id;
+    const userId = session.user.id;
     after(async () => {
       try {
-        await ensureBlocksAdjusted(athleteId, todayKey);
+        // The Athlete Language lives on the user, not the athlete (ui_prefs):
+        // read here, off the render path, so the blocks are named in it.
+        const { language } = await getUiPrefs(userId);
+        await ensureBlocksAdjusted(athleteId, todayKey, language);
       } catch (error) {
         logBlockAdjustmentFailure(athleteId, error);
       }

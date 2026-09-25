@@ -37,8 +37,7 @@ export interface BlockAdjustmentContext {
   reflections: WeekFeedbackEntry[];
   /**
    * The Athlete Language, for the shared identity's directive
-   * (showable-version/46). Optional: nothing passes it yet, so block shaping
-   * still writes in English until the service reads the language.
+   * (showable-version/46). Absent means English.
    */
   language?: string;
 }
