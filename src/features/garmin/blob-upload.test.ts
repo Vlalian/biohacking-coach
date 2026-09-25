@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { uploadPolicy, MAX_UPLOAD_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor } from './blob-upload';
+import { uploadPolicy, MAX_UPLOAD_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**
  * `garmin-integration/04` — the pure half of the Blob upload: who may upload
@@ -44,6 +44,25 @@ describe('blobPrefix', () => {
   it('is one folder per kind and athlete', () => {
     expect(blobPrefix('history', 'a1')).toBe('garmin/history/a1/');
     expect(blobPrefix('detection', 'a1')).toBe('garmin/detection/a1/');
+  });
+});
+
+describe('uploadKindOf', () => {
+  it('reads the kind from the client payload', () => {
+    expect(uploadKindOf(JSON.stringify({ kind: 'history' }))).toBe('history');
+    expect(uploadKindOf(JSON.stringify({ kind: 'detection', athleteId: 'a2' }))).toBe('detection');
+  });
+
+  it('is null for anything else — no payload, not JSON, not an object, an unknown kind', () => {
+    for (const payload of [null, '', 'not json', '"history"', 'null', '[]', JSON.stringify({ kind: 'other' }), JSON.stringify({})]) {
+      expect(uploadKindOf(payload)).toBeNull();
+    }
+  });
+});
+
+describe('TOKEN_VALID_MS', () => {
+  it('lets a token live an hour — long enough for 500 MB on a slow line, and no longer', () => {
+    expect(TOKEN_VALID_MS).toBe(60 * 60 * 1000);
   });
 });
 

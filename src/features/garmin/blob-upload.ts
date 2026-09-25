@@ -43,6 +43,25 @@ export function uploadState(athlete: PolicyAthlete | null): { athleteId: string 
   return { athleteId: athlete?.id ?? null, historyLocked: Boolean(athlete?.profile?.historyImportedAt) };
 }
 
+/** How long an upload token lives: 500 MB on a slow line takes a while, and no longer is needed. */
+export const TOKEN_VALID_MS = 60 * 60 * 1000;
+
+/**
+ * The upload kind the client asked for, from `upload()`'s `clientPayload`, or
+ * null when it named none the policy knows. Anything else in the payload — an
+ * athlete id, say — is ignored: who is uploading comes from the session.
+ */
+export function uploadKindOf(clientPayload: string | null): UploadKind | null {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(clientPayload ?? '');
+  } catch {
+    return null;
+  }
+  const kind = (payload as { kind?: unknown } | null)?.kind;
+  return kind === 'history' || kind === 'detection' ? kind : null;
+}
+
 /**
  * The content type the client sends for a file, from its extension — a `.fit`
  * has none in the browser and a `.zip` has a different one per platform.

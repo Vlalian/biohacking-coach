@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getSession, getAthleteByUserId, getCoachByUserId, eraseAccount } = vi.hoisted(
+const { getSession, getAthleteByUserId, getCoachByUserId, eraseAccount, deleteAthleteBlobs } = vi.hoisted(
   () => ({
     getSession: vi.fn(),
     getAthleteByUserId: vi.fn(),
     getCoachByUserId: vi.fn(),
     eraseAccount: vi.fn(() => Promise.resolve()),
+    deleteAthleteBlobs: vi.fn(async (_a: string, _k: string) => {}),
   }),
 );
 
@@ -15,6 +16,7 @@ vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }))
 vi.mock('@/features/coach/coach-repository', () => ({ getCoachByUserId }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getUiPrefs: vi.fn() }));
 vi.mock('@/features/erasure/erasure-repository', () => ({ eraseAccount }));
+vi.mock('@/features/garmin/blob-store', () => ({ deleteAthleteBlobs }));
 
 const { deleteMyAccountAction } = await import('./erasure-actions');
 
@@ -28,6 +30,31 @@ beforeEach(() => {
 });
 
 describe('deleteMyAccountAction', () => {
+  it('deletes the athlete’s Garmin uploads from Blob once the rows are erased (garmin-integration/04)', async () => {
+    eraseAccount.mockImplementationOnce(async () => {
+      expect(deleteAthleteBlobs).not.toHaveBeenCalled();
+    });
+    await deleteMyAccountAction('athlete@example.com');
+    expect(deleteAthleteBlobs.mock.calls).toEqual([
+      ['a1', 'history'],
+      ['a1', 'detection'],
+    ]);
+  });
+
+  it('still reports the erasure when Blob fails — the 24 h sweep deletes what is left', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    deleteAthleteBlobs.mockRejectedValueOnce(new Error('blob down'));
+    expect(await deleteMyAccountAction('athlete@example.com')).toEqual({ ok: true });
+    expect(errors).toHaveBeenCalledWith('erasure: Garmin uploads left for the sweep');
+    errors.mockRestore();
+  });
+
+  it('touches no Blob when it erases nothing', async () => {
+    getSession.mockResolvedValue(null);
+    await deleteMyAccountAction('athlete@example.com');
+    expect(deleteAthleteBlobs).not.toHaveBeenCalled();
+  });
+
   it('erases the account the session resolves to', async () => {
     const result = await deleteMyAccountAction('athlete@example.com');
 
