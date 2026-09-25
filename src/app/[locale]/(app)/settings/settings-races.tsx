@@ -60,10 +60,10 @@ export function RacesSection({
 
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('racesLabel')}
       </p>
-      <p className="mt-1 font-body text-xs text-muted-foreground">{t('racesNote')}</p>
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('racesNote')}</p>
 
       {current.length === 0 ? (
         <p className="mt-2 font-body text-sm text-muted-foreground">{t('racesNone')}</p>
@@ -77,12 +77,12 @@ export function RacesSection({
                   <p className="truncate font-body text-sm text-foreground">
                     {race.name}
                     {race.isTarget && (
-                      <span className="ml-2 border border-signal px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-signal">
+                      <span className="ml-2 border border-signal px-1.5 py-0.5 font-body text-[13px] uppercase tracking-[0.16em] text-signal">
                         {t('racesTargetBadge')}
                       </span>
                     )}
                   </p>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                     {race.date} · {race.distance}
                   </p>
                 </div>
@@ -128,7 +128,7 @@ export function RacesSection({
         disabled={pending}
       />
       {error && (
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-destructive">
+        <p className="mt-1 font-body text-sm uppercase tracking-[0.16em] text-destructive">
           {t('error')}
         </p>
       )}
@@ -158,7 +158,7 @@ function AddRaceForm({
 
   return (
     <div className="mt-3">
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('racesAddLabel')}
       </p>
       <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
@@ -169,20 +169,20 @@ function AddRaceForm({
           placeholder={t('raceTargetPlaceholder')}
           maxLength={120}
           aria-label={t('raceTargetLabel')}
-          className="w-full border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
+          className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
           aria-label={t('raceDateLabel')}
-          className="border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
+          className="border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
         />
         <select
           value={distance}
           onChange={(e) => setDistance(e.target.value)}
           aria-label={t('raceDistanceLabel')}
-          className="border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
+          className="border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
         >
           {RACE_DISTANCES.map((d) => (
             <option key={d} value={d}>
@@ -220,7 +220,7 @@ export function ActionButton({
       onClick={onClick}
       disabled={disabled}
       className={[
-        'inline-flex items-center gap-2 border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent',
+        'inline-flex items-center gap-2 border h-10 px-4 font-body text-[15px] font-medium transition-colors disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent',
         quiet
           ? 'border-border text-muted-foreground hover:text-foreground'
           : 'border-signal text-signal hover:bg-signal hover:text-signal-foreground',

@@ -101,7 +101,7 @@ export function PreferredNameField({
               type="button"
               disabled={disabled}
               onClick={() => onCommit(warning)}
-              className="inline-flex items-center border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-40"
+              className="inline-flex items-center border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-40"
             >
               {t('useAnyway')}
             </button>
@@ -109,7 +109,7 @@ export function PreferredNameField({
               type="button"
               disabled={disabled}
               onClick={pickAnother}
-              className="inline-flex items-center border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:border-muted-foreground hover:text-foreground disabled:opacity-40"
+              className="inline-flex items-center border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground hover:text-foreground disabled:opacity-40"
             >
               {t('pickAnother')}
             </button>

@@ -11,9 +11,10 @@ import { getSessionsForAthlete } from '@/features/session/session-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { getHealthHistory } from '@/features/health/health-repository';
 import { spansFrom } from '@/features/health/health-layer';
-import { today } from '@/lib/date';
+import { daysBetween, today } from '@/lib/date';
 import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
+import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
@@ -77,6 +78,19 @@ export default async function TrainingPlanPage({
   // Coach's own prompts read, so the strip and the Coach never disagree.
   const horizon = athlete ? await getResolvedBlocks(athlete.id, todayKey) : { race: null, blocks: [] };
 
+  // The two lines under the month: the block and the race, from the same
+  // resolved horizon the strip and the Coach read, so none of them disagree.
+  const block = horizon.race ? currentBlock(todayKey, horizon.blocks) : null;
+  const phase =
+    horizon.race && block
+      ? {
+          blockName: block.name,
+          ...blockPosition(todayKey, block),
+          raceName: horizon.race.name,
+          daysToRace: Math.max(0, daysBetween(todayKey, horizon.race.date)),
+        }
+      : null;
+
   // The week the Coach drafted, if one is waiting for the athlete's decision —
   // or a pointer to the conversation it moved into (training-architecture/18),
   // or that the draft is being written right now, by the shell's after() this
@@ -108,7 +122,7 @@ export default async function TrainingPlanPage({
     : [];
 
   return (
-    <div className="flex flex-col items-center gap-6 p-8">
+    <div className="mx-auto flex w-full max-w-[1500px] flex-col items-center gap-6 px-4 py-6 lg:px-8 lg:py-8">
       <BlockStrip
         todayKey={todayKey}
         race={horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null}
@@ -123,6 +137,7 @@ export default async function TrainingPlanPage({
         todayKey={todayKey}
         proposal={proposal}
         health={health}
+        phase={phase}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />
       <GarminUpload />

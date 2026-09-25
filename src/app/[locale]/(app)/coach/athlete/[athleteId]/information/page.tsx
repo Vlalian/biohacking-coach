@@ -31,6 +31,9 @@ export default async function CoachAthleteInformationPage({
       dataset={context.view.dataset}
       initialLayout={layout}
       saveLayout={saveCoachLayoutAction}
+      // The headline names the athlete as they named themselves to the app
+      // (Mads, 2026-09-24: "Information" twice over was "slightly sad").
+      athleteName={context.view.athleteName}
     />
   );
 }

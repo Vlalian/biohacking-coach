@@ -10,10 +10,14 @@ import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { PreferredNameField } from '@/components/preferred-name-field';
+import { ChangePasswordForm } from '@/components/change-password-form';
 import type { AddPastRaceResult, AddRaceResult, SettingsActionResult } from './settings-actions';
 import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './settings-past-races';
 import { RacesSection, type SettingsRace } from './settings-races';
 import type { DeleteAccountResult } from './erasure-actions';
+
+/** Communication Style is hidden until the post-test discussion (Mads, 2026-09-24). */
+const SHOW_COMMUNICATION_STYLE = false;
 
 /** The profile fields Settings reads and edits — a narrower shape than the
  *  stored {@link import('@/features/athlete/athlete').Athlete}, resolved by
@@ -118,10 +122,7 @@ export function SettingsView({
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
         <header className="border-b border-border pb-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
-            {t('eyebrow')}
-          </p>
-          <h1 className="mt-2 font-display text-5xl tracking-[0.04em] text-foreground">
+          <h1 className="font-display text-5xl font-bold uppercase italic tracking-[0.03em] text-foreground">
             {t('title')}
           </h1>
           <p className="mt-2 max-w-md font-body text-sm text-muted-foreground">
@@ -186,7 +187,7 @@ function Section({
 }) {
   return (
     <section className="mt-10">
-      <h2 className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+      <h2 className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
         {label}
       </h2>
       <div className="mt-4 space-y-6 border border-border bg-panel p-5">{children}</div>
@@ -200,12 +201,15 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
     <Section label={t('sectionProfile')}>
       <ReadOnlyField label={t('nameLabel')} value={name} />
       <ReadOnlyField label={t('emailLabel')} value={email} />
+      {/* A tester's first password arrives by email (showable-version/04);
+       *  this is where it becomes their own. */}
+      <ChangePasswordForm email={email} name={name} />
       {/* Second home for sign-out. The Navigation Drawer carries the primary
        *  one; Settings is where a user instinctively looks for account
        *  actions, so it is reachable from both rather than only the drawer. */}
       <div className="border-t border-rule pt-4">
         <SignOutButton
-          className="inline-flex items-center gap-2 border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground no-underline transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
+          className="inline-flex items-center gap-2 border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground no-underline transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
           icon={<LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
         />
       </div>
@@ -216,7 +220,7 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </p>
       <p className="mt-1 font-body text-sm text-foreground">{value}</p>
@@ -265,7 +269,7 @@ function PreferencesSection({
   return (
     <Section label={t('sectionPreferences')}>
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('themeLabel')}
         </p>
         <div className="mt-2 flex gap-2">
@@ -291,10 +295,10 @@ function PreferencesSection({
       </div>
 
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('languageLabel')}
         </p>
-        <p className="mt-1 font-body text-xs text-muted-foreground">{t('languageNote')}</p>
+        <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('languageNote')}</p>
         <div className="mt-2 flex items-center gap-2">
           {ONBOARDING_OPTIONS.language.map((code) => (
             <DayTile
@@ -349,10 +353,10 @@ function PreferredNameSetting({
 
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('preferredNameLabel')}
       </p>
-      <p className="mb-2 mt-1 font-body text-xs text-muted-foreground">{t('preferredNameNote')}</p>
+      <p className="mb-2 mt-1 font-body text-[13px] text-muted-foreground">{t('preferredNameNote')}</p>
       <PreferredNameField
         accountName={accountName}
         initialValue={value}
@@ -396,7 +400,7 @@ function ThemeTile({
       aria-pressed={active}
       title={label}
       className={[
-        'inline-flex items-center gap-2 border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors',
+        'inline-flex items-center gap-2 border h-11 px-4 font-body text-base font-semibold transition-colors',
         active
           ? 'border-signal text-signal'
           : 'border-border text-muted-foreground hover:text-foreground',
@@ -453,10 +457,12 @@ function TrainingSection({
       <RaceDistanceField value={raceDistance} onSave={onUpdateRaceDistance} />
       <RacesSection races={races} onAdd={onAddRace} onSetTarget={onSetTargetRace} onRemove={onRemoveRace} />
       <PastRacesSection pastRaces={pastRaces} onAdd={onAddPastRace} onRemove={onRemovePastRace} />
-      <CommunicationStyleField
-        value={communicationStyle}
-        onSave={onUpdateCommunicationStyle}
-      />
+      {/* Communication Style is hidden until it is discussed after the test
+          round (Mads, 2026-09-24). The stored value, the action and the field
+          below all stay, so bringing it back is one line. */}
+      {SHOW_COMMUNICATION_STYLE && (
+        <CommunicationStyleField value={communicationStyle} onSave={onUpdateCommunicationStyle} />
+      )}
       <WeeklySessionDayField value={weeklySessionDay} linked={weeklySessionDayLinked} onSave={onUpdateWeeklySessionDay} />
       <FixedConstraintsField
         value={fixedConstraints}
@@ -497,10 +503,10 @@ function RaceDistanceField({
 
   return (
     <div>
-      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('raceDistanceLabel')}
       </span>
-      <p className="mt-1 font-body text-xs text-muted-foreground">{t('raceDistanceNote')}</p>
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('raceDistanceNote')}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {RACE_DISTANCES.map((distance) => (
           <button
@@ -547,10 +553,10 @@ function CommunicationStyleField({
   return (
     <div>
       <label className="block">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('communicationStyleLabel')}
         </span>
-        <p className="mt-1 font-body text-xs text-muted-foreground">
+        <p className="mt-1 font-body text-[13px] text-muted-foreground">
           {t('communicationStyleNote')}
         </p>
         <textarea
@@ -562,7 +568,7 @@ function CommunicationStyleField({
           placeholder={t('communicationStylePlaceholder')}
           rows={3}
           maxLength={300}
-          className="mt-2 w-full resize-none border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
+          className="mt-2 w-full resize-none border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
         />
       </label>
       <div className="mt-2 flex items-center gap-3">
@@ -600,10 +606,10 @@ export function WeeklySessionDayField({
 
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('weeklySessionDayLabel')}
       </p>
-      <p className="mt-1 font-body text-xs text-muted-foreground">
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">
         {linked ? t('weeklySessionDayLinked') : t('weeklySessionDayNote')}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -643,10 +649,10 @@ function FixedConstraintsField({
 
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('fixedConstraintsLabel')}
       </p>
-      <p className="mt-1 font-body text-xs text-muted-foreground">
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">
         {t('fixedConstraintsNote')}
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -695,10 +701,10 @@ function SharingSection({
       </p>
 
       <div className="border border-border bg-background/60 px-4 py-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('sharingAlwaysOnTitle')}
         </p>
-        <p className="mt-1 font-body text-xs text-muted-foreground">
+        <p className="mt-1 font-body text-[13px] text-muted-foreground">
           {t('sharingAlwaysOnNote')}
         </p>
       </div>
@@ -756,7 +762,7 @@ function VisibilityToggle({
     <div className="flex items-start justify-between gap-4">
       <div>
         <p className="font-body text-sm text-foreground">{label}</p>
-        <p className="mt-0.5 font-body text-xs text-muted-foreground">{note}</p>
+        <p className="mt-0.5 font-body text-[13px] text-muted-foreground">{note}</p>
         {error && <FieldError message={t('error')} />}
       </div>
       <button
@@ -805,7 +811,7 @@ function SeverControl({
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="font-mono text-[10px] uppercase tracking-[0.16em] text-destructive transition-opacity hover:opacity-80"
+          className="font-body text-sm uppercase tracking-[0.16em] text-destructive transition-opacity hover:opacity-80"
         >
           {t('severLink')}
         </button>
@@ -818,7 +824,7 @@ function SeverControl({
       <p className="font-body text-sm text-foreground">
         {t('severConfirmTitle', { name: headCoachName })}
       </p>
-      <p className="mt-1 font-body text-xs text-muted-foreground">
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">
         {t('severConfirmBody', { name: headCoachName })}
       </p>
       {error && <FieldError message={t('error')} />}
@@ -827,7 +833,7 @@ function SeverControl({
           type="button"
           onClick={confirmSever}
           disabled={pending}
-          className="inline-flex items-center gap-2 border border-destructive px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-50"
+          className="inline-flex items-center gap-2 border border-destructive h-11 px-4 font-body text-base font-semibold text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-50"
         >
           {pending && <Loader2 className="h-3 w-3 animate-spin" />}
           {t('severConfirmButton')}
@@ -836,7 +842,7 @@ function SeverControl({
           type="button"
           onClick={() => setConfirming(false)}
           disabled={pending}
-          className="border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+          className="border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"
         >
           {t('severCancel')}
         </button>
@@ -870,7 +876,7 @@ function YourDataSection({
     <Section label={t('sectionYourData')}>
       <div>
         <p className="font-body text-sm text-foreground">{t('exportLabel')}</p>
-        <p className="mt-1 font-body text-xs text-muted-foreground">{t('exportNote')}</p>
+        <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('exportNote')}</p>
         {/*
           A plain anchor, not the i18n Link: the route lives outside the
           `[locale]` segment and must not be locale-prefixed. `download` asks the
@@ -880,7 +886,7 @@ function YourDataSection({
         <a
           href="/api/export"
           download
-          className="mt-3 inline-flex items-center gap-2 border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-foreground transition-colors hover:border-signal hover:text-signal"
+          className="mt-3 inline-flex items-center gap-2 border border-border h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:border-signal hover:text-signal"
         >
           <Download className="h-3 w-3" />
           {t('exportButton')}
@@ -889,7 +895,7 @@ function YourDataSection({
 
       <div className="border-t border-rule pt-5">
         <p className="font-body text-sm text-foreground">{t('deleteLabel')}</p>
-        <p className="mt-1 font-body text-xs text-muted-foreground">{t('deleteNote')}</p>
+        <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('deleteNote')}</p>
         <DeleteAccountControl email={email} onDeleteAccount={onDeleteAccount} />
       </div>
     </Section>
@@ -946,7 +952,7 @@ function DeleteAccountControl({
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="font-mono text-[10px] uppercase tracking-[0.16em] text-destructive transition-opacity hover:opacity-80"
+          className="font-body text-sm uppercase tracking-[0.16em] text-destructive transition-opacity hover:opacity-80"
         >
           {t('deleteButton')}
         </button>
@@ -957,17 +963,17 @@ function DeleteAccountControl({
   return (
     <div className="mt-3 border border-destructive/40 bg-destructive/5 p-4">
       <p className="font-body text-sm text-foreground">{t('deleteConfirmTitle')}</p>
-      <p className="mt-1 font-body text-xs text-muted-foreground">
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">
         {t('deleteConfirmBody')}
       </p>
-      <p className="mt-2 font-body text-xs text-destructive">
+      <p className="mt-2 font-body text-[13px] text-destructive">
         {t('deleteConfirmIrreversible')}
       </p>
 
       <a
         href="/api/export"
         download
-        className="mt-3 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-foreground underline transition-colors hover:text-signal"
+        className="mt-3 inline-flex items-center gap-2 font-body text-sm uppercase tracking-[0.16em] text-foreground underline transition-colors hover:text-signal"
       >
         <Download className="h-3 w-3" />
         {t('deleteConfirmDownloadFirst')}
@@ -975,7 +981,7 @@ function DeleteAccountControl({
 
       <label
         htmlFor="delete-confirm"
-        className="mt-4 block font-body text-xs text-muted-foreground"
+        className="mt-4 block font-body text-[13px] text-muted-foreground"
       >
         {t('deleteConfirmTypePrompt', { email })}
       </label>
@@ -987,7 +993,7 @@ function DeleteAccountControl({
         disabled={pending}
         autoComplete="off"
         placeholder={t('deleteConfirmPlaceholder')}
-        className="mt-1 w-full max-w-sm border border-border bg-panel px-3 py-2 font-body text-sm text-foreground outline-none focus:border-destructive"
+        className="mt-1 w-full max-w-sm border border-border bg-panel px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-destructive"
       />
 
       {error && <FieldError message={t('deleteError')} />}
@@ -997,7 +1003,7 @@ function DeleteAccountControl({
           type="button"
           onClick={confirmDelete}
           disabled={pending || !matches}
-          className="inline-flex items-center gap-2 border border-destructive px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-40"
+          className="inline-flex items-center gap-2 border border-destructive h-11 px-4 font-body text-base font-semibold text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground disabled:opacity-40"
         >
           {pending && <Loader2 className="h-3 w-3 animate-spin" />}
           {t('deleteConfirmButton')}
@@ -1009,7 +1015,7 @@ function DeleteAccountControl({
             setTyped('');
           }}
           disabled={pending}
-          className="border border-border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+          className="border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"
         >
           {t('deleteCancel')}
         </button>
@@ -1068,7 +1074,7 @@ function SaveButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 border border-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
+      className="inline-flex items-center gap-2 border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
     >
       {pending && <Loader2 className="h-3 w-3 animate-spin" />}
       {label}
@@ -1084,10 +1090,10 @@ function SaveStatus({
   t: ReturnType<typeof useTranslations>;
 }) {
   if (status === 'saving') {
-    return <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t('saving')}</span>;
+    return <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">{t('saving')}</span>;
   }
   if (status === 'saved') {
-    return <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-signal">{t('saved')}</span>;
+    return <span className="font-body text-sm uppercase tracking-[0.16em] text-signal">{t('saved')}</span>;
   }
   if (status === 'error') {
     return <FieldError message={t('error')} />;
@@ -1097,7 +1103,7 @@ function SaveStatus({
 
 function FieldError({ message }: { message: string }) {
   return (
-    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-destructive">
+    <p className="mt-1 font-body text-sm uppercase tracking-[0.16em] text-destructive">
       {message}
     </p>
   );

@@ -85,10 +85,10 @@ function DetectedActivityCard({ activity, locale }: { activity: PendingActivity;
   return (
     <article className="flex flex-col gap-4 border border-signal/40 bg-panel p-4">
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
+        <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">
           {t('label')}
         </p>
-        <h3 className="mt-1 font-display text-xl tracking-[0.04em] text-foreground">
+        <h3 className="mt-1 font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">
           {activity.sport ?? activity.type}
           {/* `duration` is already minutes — `garmin.ts` divides the file's
               elapsed seconds by 60 at parse time, as `sessions.duration` is
@@ -107,7 +107,7 @@ function DetectedActivityCard({ activity, locale }: { activity: PendingActivity;
           displaced sessions are offered too: the athlete is allowed to say
           they did it after all, and the file is their evidence. */}
       <fieldset className="flex flex-col gap-1.5">
-        <legend className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <legend className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('whichSession')}
         </legend>
         {activity.options.map((option) => (
@@ -139,14 +139,14 @@ function DetectedActivityCard({ activity, locale }: { activity: PendingActivity;
       <ScoreRow label={t('mind')} value={mind} onPick={setMind} />
 
       <label className="flex flex-col gap-1.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {t('comment')}
         </span>
         <textarea
           rows={2}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          className="resize-none border border-border bg-background p-2 font-body text-sm text-foreground outline-none focus:border-signal"
+          className="resize-none border border-border bg-background p-3 font-body text-base text-foreground outline-none focus:border-signal"
         />
       </label>
 
@@ -170,7 +170,7 @@ function DetectedActivityCard({ activity, locale }: { activity: PendingActivity;
               }),
             )
           }
-          className="flex-1 border border-signal bg-signal px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-background disabled:opacity-40"
+          className="flex-1 border border-signal bg-signal h-11 px-4 font-body text-base font-semibold text-background disabled:opacity-40"
         >
           {t('accept')}
         </button>
@@ -178,7 +178,7 @@ function DetectedActivityCard({ activity, locale }: { activity: PendingActivity;
           type="button"
           disabled={pending}
           onClick={() => run(() => declineDetectedActivityAction(activity.id))}
-          className="border border-border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground disabled:opacity-40"
+          className="border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground disabled:opacity-40"
         >
           {t('discard')}
         </button>
@@ -206,7 +206,7 @@ function TargetChoice({
       <input type="radio" name={name} checked={checked} onChange={onPick} className="accent-signal" />
       <span>{label}</span>
       {note && (
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
           {note}
         </span>
       )}

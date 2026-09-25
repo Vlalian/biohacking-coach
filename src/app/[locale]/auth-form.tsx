@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import Image from 'next/image';
+import { ArrowRight } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/navigation';
 import { signIn, signUp } from '@/lib/auth-client';
 
@@ -13,8 +15,32 @@ import { signIn, signUp } from '@/lib/auth-client';
  * Errors are shown as one generic localized message rather than better-auth's
  * raw text: it keeps the UI translatable and avoids telling a stranger whether
  * an email is already registered.
+ *
+ * The look is the Lovable sign-in export (2026-09-24): a night-ride photo
+ * under a dark canvas in both themes, the form on a red-edged surface, the
+ * Momentum name with its full stop in signal red. The `auth-*` tokens live in
+ * globals.css and hold the same contrast bar as the rest of the palette.
+ *
+ * On success it pushes to '/', the gate page, which sends a returning athlete
+ * on in the language they stored (showable-version/34).
+ *
+ * `allowSignUp` is the deployment's `DISABLE_SIGNUP`, read on the server and
+ * passed in: while registration is closed the sign-in page offers no way to a
+ * form better-auth would refuse (showable-version/04). It defaults to open, so
+ * a local dev server behaves as it always has.
  */
-export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+
+const INPUT =
+  'mt-2 h-12 w-full border border-auth-line bg-auth-input px-4 text-base text-auth-foreground outline-none transition-colors placeholder:text-auth-muted focus:border-sidebar-primary focus:ring-1 focus:ring-sidebar-primary';
+const LABEL = 'block font-body text-[13px] font-semibold uppercase tracking-[0.16em] text-auth-muted';
+
+export function AuthForm({
+  mode,
+  allowSignUp = true,
+}: {
+  mode: 'sign-in' | 'sign-up';
+  allowSignUp?: boolean;
+}) {
   const t = useTranslations('Auth');
   const router = useRouter();
   const [name, setName] = useState('');
@@ -54,52 +80,84 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-12">
-      <form onSubmit={onSubmit} className="flex w-full max-w-sm flex-col gap-4">
-        <h1 className="text-2xl font-semibold">
-          {isSignUp ? t('signUpTitle') : t('signInTitle')}
-        </h1>
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-auth-canvas px-4 py-16">
+      <Image
+        src="/momentum-signin-cyclist.jpg"
+        alt=""
+        aria-hidden="true"
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover object-[58%_center] opacity-70"
+      />
+      <div className="auth-backdrop absolute inset-0" aria-hidden="true" />
+      <div className="auth-speed-lines absolute inset-0 opacity-30" aria-hidden="true" />
 
-        {isSignUp && (
-          <label className="flex flex-col gap-1 text-sm">
-            {t('nameLabel')}
+      <form
+        onSubmit={onSubmit}
+        className="relative z-10 w-full max-w-md border-l-4 border-signal bg-auth-surface/90 p-7 text-auth-foreground shadow-2xl backdrop-blur-xl sm:p-10"
+      >
+        <header className="mb-9">
+          <p className="font-display text-5xl font-bold uppercase italic leading-none text-auth-foreground">
+            Momentum<span className="text-sidebar-primary">.</span>
+          </p>
+          <div className="mt-3 h-1 w-12 bg-signal" aria-hidden="true" />
+          <h1 className="mt-4 font-body text-[13px] font-semibold uppercase tracking-[0.16em] text-auth-muted">
+            {isSignUp ? t('signUpTitle') : t('signInTitle')}
+          </h1>
+        </header>
+
+        <div className="space-y-5">
+          {isSignUp && (
+            <div>
+              <label className={LABEL} htmlFor="auth-name">
+                {t('nameLabel')}
+              </label>
+              <input
+                id="auth-name"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={INPUT}
+              />
+            </div>
+          )}
+
+          <div>
+            <label className={LABEL} htmlFor="auth-email">
+              {t('emailLabel')}
+            </label>
             <input
-              type="text"
-              autoComplete="name"
+              id="auth-email"
+              type="email"
+              autoComplete="email"
               required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded border border-neutral-300 px-3 py-2 text-base"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={INPUT}
             />
-          </label>
-        )}
+          </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          {t('emailLabel')}
-          <input
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded border border-neutral-300 px-3 py-2 text-base"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm">
-          {t('passwordLabel')}
-          <input
-            type="password"
-            autoComplete={isSignUp ? 'new-password' : 'current-password'}
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded border border-neutral-300 px-3 py-2 text-base"
-          />
-        </label>
+          <div>
+            <label className={LABEL} htmlFor="auth-password">
+              {t('passwordLabel')}
+            </label>
+            <input
+              id="auth-password"
+              type="password"
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={INPUT}
+            />
+          </div>
+        </div>
 
         {failed && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="mt-4 font-body text-[15px] text-sidebar-primary">
             {t('error')}
           </p>
         )}
@@ -107,22 +165,31 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         <button
           type="submit"
           disabled={pending}
-          className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
+          className="group mt-7 inline-flex h-11 w-full items-center justify-center gap-2 bg-auth-foreground font-body text-base font-bold uppercase tracking-[0.12em] text-auth-canvas transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
         >
           {isSignUp ? t('signUpButton') : t('signInButton')}
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
         </button>
 
-        <p className="text-center text-sm text-neutral-500">
-          {isSignUp ? (
-            <Link href="/sign-in" className="underline">
-              {t('toSignIn')}
-            </Link>
-          ) : (
-            <Link href="/sign-up" className="underline">
-              {t('toSignUp')}
-            </Link>
-          )}
-        </p>
+        {(isSignUp || allowSignUp) && (
+          <p className="mt-5 text-center font-body text-sm text-auth-muted">
+            {isSignUp ? (
+              <Link
+                href="/sign-in"
+                className="underline decoration-sidebar-primary underline-offset-4 transition-colors hover:text-auth-foreground"
+              >
+                {t('toSignIn')}
+              </Link>
+            ) : (
+              <Link
+                href="/sign-up"
+                className="underline decoration-sidebar-primary underline-offset-4 transition-colors hover:text-auth-foreground"
+              >
+                {t('toSignUp')}
+              </Link>
+            )}
+          </p>
+        )}
       </form>
     </main>
   );

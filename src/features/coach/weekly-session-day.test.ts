@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { coachSeesDay, commitDayChoice, dayChoice, dayMessageKey, displayNameFor, nextDraftDates, raceFacts } from './weekly-session-day';
+import { coachSeesDay, commitDayChoice, commitDismissal, dayChoice, dayMessageKey, displayNameFor, nextDraftDates, raceFacts } from './weekly-session-day';
 import { HEAD_COACH_LEAD_DAYS } from './week-draft';
 import { trainingBlocks } from './training-blocks';
 
@@ -120,5 +120,44 @@ describe('commitDayChoice — the card’s glue between the reducer and the acti
     const write = vi.fn(async () => ({ ok: true as const }));
     expect(await commitDayChoice({ current: 'Wednesday', proposed: null, write: null }, write)).toEqual({ state: { current: 'Wednesday', proposed: null, write: null }, error: null });
     expect(write).not.toHaveBeenCalled();
+  });
+});
+
+describe('commitDismissal — Got it only closes the instruction if the write landed', () => {
+  it('reports dismissed when the write succeeded', async () => {
+    const write = vi.fn(async () => ({ ok: true as const }));
+    expect(await commitDismissal(write)).toEqual({ dismissed: true, error: null });
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the instruction on screen and returns the reason when the write was refused', async () => {
+    // A session that expired in an open tab: closing the fold would tell the
+    // coach they had been instructed while nothing was stored, and the whole
+    // explanation would return on the next load with no word about why.
+    const write = vi.fn(async () => ({ ok: false as const, reason: 'not-authenticated' as const }));
+    expect(await commitDismissal(write)).toEqual({ dismissed: false, error: 'not-authenticated' });
+  });
+});
+
+describe('a write that throws is a refusal, not a crash', () => {
+  // A server action that rejects — the session gone, the database unreachable —
+  // used to escape the transition and reach an error boundary, which replaces
+  // the page rather than telling the coach the day did not change
+  // (CodeRabbit, PR #102).
+  it('keeps the current day and reports a failure when the day write throws', async () => {
+    const write = vi.fn(async () => {
+      throw new Error('network');
+    });
+    expect(await commitDayChoice({ current: 'Wednesday', proposed: 'Thursday', write: null }, write)).toEqual({
+      state: { current: 'Wednesday', proposed: null, write: null },
+      error: 'failed',
+    });
+  });
+
+  it('keeps the instruction on screen and reports a failure when the dismissal write throws', async () => {
+    const write = vi.fn(async () => {
+      throw new Error('network');
+    });
+    expect(await commitDismissal(write)).toEqual({ dismissed: false, error: 'failed' });
   });
 });

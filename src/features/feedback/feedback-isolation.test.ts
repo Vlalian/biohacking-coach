@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { join, sep } from 'node:path';
+import { filesMatchingRaw } from '@/test/source-sweep';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { athleteFeedback } from '@/db/schema';
 import type { Conversation } from '@/features/coach/conversation';
@@ -141,28 +139,8 @@ describe('selectOpenConversations', () => {
 });
 
 describe('the feedback store is not readable from any Head Coach surface', () => {
-  /** Every `.ts`/`.tsx` under `src/`, so a new reader cannot be added unnoticed. */
-  function sourceFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) return sourceFiles(full);
-      return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [full] : [];
-    });
-  }
-
-  // Resolved from this file, never from `process.cwd()`: the mutation gate runs
-  // the suite from a sandbox copy with a different working directory, where a
-  // cwd-relative path silently finds nothing and the assertion below passes
-  // while proving nothing.
-  const SRC = fileURLToPath(new URL('../..', import.meta.url));
-
-  /** Files mentioning a store, as repo-relative paths. */
-  function readersOf(pattern: RegExp): string[] {
-    return sourceFiles(SRC)
-      .filter((file) => pattern.test(readFileSync(file, 'utf8')))
-      .map((file) => file.slice(SRC.length).split(sep).join('/'))
-      .sort();
-  }
+  /** Files mentioning a store, as `src/`-relative paths; production only. */
+  const readersOf = (pattern: RegExp) => filesMatchingRaw(pattern, { includeTests: false });
 
   // Two separate stores, matched separately on purpose: `message-feedback-repository`
   // contains the substring `feedback-repository`, so one loose pattern would

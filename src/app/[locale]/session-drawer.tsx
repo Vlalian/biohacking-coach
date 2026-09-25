@@ -238,7 +238,7 @@ export function SessionDrawer({
         className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-panel shadow-2xl outline-none"
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+          <span className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
             {mode === 'create' ? t('createTitle') : mode === 'edit' ? t('edit') : t('title')}
           </span>
           <button
@@ -416,12 +416,12 @@ export function ViewBody({
       <div>
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5" style={{ backgroundColor: color }} />
-          <span className="font-display text-3xl leading-none tracking-[0.06em]" style={{ color }}>
+          <span className="font-display text-3xl font-bold uppercase italic leading-none tracking-[0.03em]" style={{ color }}>
             {session.type}
           </span>
         </div>
         <div className="mt-2 flex items-center gap-3">
-          <span className="border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="border border-border px-1.5 py-0.5 font-body text-[13px] uppercase tracking-[0.16em] text-muted-foreground">
             {t(STATUS_KEY[session.status] ?? 'statusPlanned')}
           </span>
           <span className="font-body text-sm text-muted-foreground">
@@ -451,7 +451,7 @@ export function ViewBody({
             {session.note}
           </p>
           {!policy.content && (
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="mt-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('readOnlyNote')}
             </p>
           )}
@@ -475,7 +475,7 @@ export function ViewBody({
               <button
                 type="button"
                 onClick={onRate}
-                className="font-mono text-[10px] uppercase tracking-[0.18em] text-signal hover:underline"
+                className="font-body text-sm uppercase tracking-[0.16em] text-signal hover:underline"
               >
                 {t('editRating')}
               </button>
@@ -488,7 +488,7 @@ export function ViewBody({
               <button
                 type="button"
                 onClick={onRate}
-                className="font-mono text-[10px] uppercase tracking-[0.18em] text-signal hover:underline"
+                className="font-body text-sm uppercase tracking-[0.16em] text-signal hover:underline"
               >
                 {t('rate')}
               </button>
@@ -664,7 +664,7 @@ function HeadCoachSessionForm({
       <button
         type="submit"
         disabled={pending}
-        className="w-full border border-signal px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-signal disabled:opacity-50"
+        className="w-full border border-signal h-11 px-4 font-body text-base font-semibold text-signal disabled:opacity-50"
       >
         {t('save')}
       </button>
@@ -721,7 +721,7 @@ function AthleteSessionForm({
       }}
     >
       <div>
-        <span className="font-display text-3xl tracking-[0.06em] text-foreground">
+        <span className="font-display text-3xl font-bold uppercase italic tracking-[0.03em] text-foreground">
           {t('createLabel')}
         </span>
         <p className="mt-1 font-body text-sm text-muted-foreground">
@@ -743,7 +743,7 @@ function AthleteSessionForm({
               type="button"
               onClick={() => setType(k)}
               className={[
-                'border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors',
+                'border h-10 px-4 font-body text-[15px] font-medium transition-colors',
                 k === type
                   ? 'border-signal text-signal'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -771,7 +771,7 @@ function AthleteSessionForm({
             const parsed = Number(raw);
             setDurationMin(raw === '' || !Number.isFinite(parsed) ? null : parsed);
           }}
-          className="mt-2 w-full border border-border bg-background px-3 py-2 font-mono text-sm text-foreground outline-none focus:border-signal"
+          className="mt-2 w-full border border-border bg-background h-11 px-3 font-mono text-base text-foreground outline-none focus:border-signal"
         />
       </label>
 
@@ -791,14 +791,14 @@ function AthleteSessionForm({
           rows={3}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="mt-2 w-full resize-none border border-border bg-background px-3 py-2 font-body text-sm text-foreground outline-none focus:border-signal"
+          className="mt-2 w-full resize-none border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
         />
       </label>
 
       <button
         type="submit"
         disabled={pending}
-        className="flex w-full items-center justify-center gap-2 bg-signal px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.2em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+        className="flex w-full items-center justify-center gap-2 bg-signal h-11 px-4 font-body text-base font-semibold text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
       >
         {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         {initial ? t('saveChanges') : t('createSubmit')}
@@ -809,7 +809,7 @@ function AthleteSessionForm({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+    <span className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
       {children}
     </span>
   );
@@ -818,10 +818,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function Param({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-panel px-3 py-2.5">
-      <dt className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground">
+      <dt className="font-body text-[13px] uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </dt>
-      <dd className="mt-1 font-display text-2xl tracking-[0.04em] text-foreground">{value}</dd>
+      <dd className="mt-1 font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">{value}</dd>
     </div>
   );
 }
@@ -830,7 +830,7 @@ function Param({ label, value }: { label: string; value: string }) {
 function Rpe({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-12 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="w-12 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </span>
       <div className="flex flex-1 gap-0.5">
@@ -838,7 +838,7 @@ function Rpe({ label, value }: { label: string; value: number }) {
           <span key={i} className={['h-2 flex-1', i < value ? 'bg-signal' : 'bg-border'].join(' ')} />
         ))}
       </div>
-      <span className="w-8 text-right font-mono text-xs text-foreground">{value}/5</span>
+      <span className="w-8 text-right font-mono text-sm text-foreground">{value}/5</span>
     </div>
   );
 }
@@ -864,7 +864,7 @@ function Action({
       onClick={onClick}
       disabled={disabled}
       className={[
-        'flex w-full items-center gap-3 border px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] transition-colors disabled:opacity-40',
+        'flex w-full items-center gap-3 border px-3 py-2.5 font-body text-sm uppercase tracking-[0.16em] transition-colors disabled:opacity-40',
         primary
           ? 'border-signal bg-signal text-signal-foreground hover:opacity-90'
           : destructive

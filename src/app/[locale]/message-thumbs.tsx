@@ -94,13 +94,13 @@ export function MessageThumbs({
             maxLength={280}
             placeholder={labels.commentPlaceholder}
             aria-label={labels.commentPlaceholder}
-            className="w-full max-w-[42ch] border border-border bg-panel px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground"
+            className="w-full max-w-[42ch] border border-border bg-panel px-2 py-1 text-[13px] text-foreground placeholder:text-muted-foreground"
           />
           <button
             type="button"
             onClick={saveComment}
             disabled={pending}
-            className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground disabled:opacity-40"
+            className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground disabled:opacity-40"
           >
             {labels.save}
           </button>

@@ -42,7 +42,7 @@ function EmptyState({
       <div className="flex flex-col gap-1">
         <div
           data-slot="empty-state-title"
-          className="font-display text-xl leading-none tracking-[0.03em] text-foreground"
+          className="font-display text-xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground"
         >
           {title}
         </div>

@@ -4,6 +4,8 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
+import { localeAfterSignIn } from '@/i18n/locale-after-sign-in';
+import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import { auth } from '@/lib/auth';
 import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
 import { provisionAthlete } from '@/features/athlete/athlete-provisioning';
@@ -46,6 +48,18 @@ export default async function AthletePage({
       // Provisioning is idempotent, so heal it on read and re-fetch once.
       await provisionAthlete(session.user.id);
       athlete = await getAthleteByUserId(session.user.id);
+    }
+
+    // The language the athlete stored, applied before anything renders
+    // (showable-version/34): locale detection is off, so a bookmark, a live
+    // session and the sign-in form all arrive here in the URL's locale. An
+    // unfinished athlete has already chosen a language in onboarding's first
+    // step, so the consent and onboarding gates must not render in the URL's
+    // language either; the redirect lands back here, in theirs.
+    const { language } = await getUiPrefs(session.user.id);
+    const stored = localeAfterSignIn(language, locale, routing.locales);
+    if (stored !== locale) {
+      redirect({ href: '/', locale: stored });
     }
 
     // The consent gate: before any of the athlete's data is processed, the
@@ -101,7 +115,8 @@ export default async function AthletePage({
 
     // Every gate passed: Training Plan is the default View (ADR 0007), and it
     // — like every View — lives inside the shared Navigation Drawer / Coach
-    // Overlay shell, not inline on this gate page.
+    // Overlay shell, not inline on this gate page. `locale` is the stored
+    // language by now, or the URL's when none is stored.
     if (athlete) {
       redirect({ href: '/training-plan', locale });
     }
@@ -112,7 +127,7 @@ export default async function AthletePage({
     const t = await getTranslations('AthletePage');
     return (
       <main className="flex min-h-screen flex-col items-center gap-6 p-8">
-        <p className="text-neutral-500">{t('noAthlete')}</p>
+        <p className="text-muted-foreground">{t('noAthlete')}</p>
         <SignOutButton />
       </main>
     );

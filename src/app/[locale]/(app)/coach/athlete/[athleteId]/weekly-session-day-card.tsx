@@ -8,13 +8,14 @@ import { effectiveWeeklySessionDay } from '@/features/coach/weekly-offer';
 import {
   coachSeesDay,
   commitDayChoice,
+  commitDismissal,
   dayChoice,
   dayMessageKey,
   nextDraftDates,
   type DayChoice,
   type RaceFacts,
 } from '@/features/coach/weekly-session-day';
-import { setWeeklySessionDayAction } from './day-actions';
+import { dismissWeekCycleAction, setWeeklySessionDayAction } from './day-actions';
 
 /**
  * The athlete's Weekly Session Day, stated as a fact and explained
@@ -23,21 +24,27 @@ import { setWeeklySessionDayAction } from './day-actions';
  * day does.
  *
  * Always visible: whose day it is and which, the next two draft dates (the
- * coach's first, `HEAD_COACH_LEAD_DAYS` before the athlete's), the seven tiles,
- * and a fold that walks the weekly cycle in four steps. Every date and every
+ * coach's first, `HEAD_COACH_LEAD_DAYS` before the athlete's), a control for
+ * changing the day, and a fold that walks the weekly cycle in four steps. The
+ * copy carries no markup and names the AI coach as such: a Head Coach reading
+ * this for the first time is not helped by bold words, and "the Coach" means
+ * nothing to someone outside the project (Mads on the PR #102 preview). Every date and every
  * race fact is computed from the same arithmetic the draft runs on — never
  * typed into copy — so the card cannot disagree with the draft it describes.
  *
- * Changing the day is a deliberate step: a tile proposes, a confirm line
- * appears, and only Confirm calls the action (`dayChoice` holds that rule as a
- * pure function). The write is the existing `weekly_session_day_set`, narrated
- * once as before.
+ * Changing the day is a deliberate step: the tiles sit behind a Change day
+ * control, a tile proposes, a confirm line appears, and only Confirm calls the
+ * action (`dayChoice` holds that rule as a pure function). The write is the
+ * existing `weekly_session_day_set`, narrated once as before.
+ *
+ * `training-architecture/41`: a Head Coach who has never been instructed gets
+ * the fold open with a Got it button — the cycle is the least intuitive thing
+ * on the site and nobody had a reason to click a closed summary. It is taught
+ * once per coach (the flag is on the user), and the fold stays as the permanent
+ * reference afterwards.
  */
 
 const DAYS: readonly string[] = ONBOARDING_OPTIONS.days;
-
-/** The ruled card bolds the day, "you" and the name; the strings carry `<b>` tags for `t.rich`. */
-const bold = { b: (chunks: React.ReactNode) => <b>{chunks}</b> };
 
 /** `Tue 22 Sep` / `tir. 22. sep.` — the short form the calendar header uses. */
 function shortDate(key: string, locale: string): string {
@@ -53,7 +60,9 @@ export function WeeklySessionDayCard({
   athleteName,
   race,
   locale,
+  instructed,
   initialProposed = null,
+  initialChanging = false,
 }: {
   athleteId: string;
   value: string | null;
@@ -62,8 +71,12 @@ export function WeeklySessionDayCard({
   athleteName: string | null;
   race: RaceFacts | null;
   locale: string;
+  /** Whether this coach has already been shown the weekly cycle and dismissed it. */
+  instructed: boolean;
   /** Test seam only: render the card mid-choice. Never passed by the page. */
   initialProposed?: string | null;
+  /** Test seam only: render the card with the day picker already open. Never passed by the page. */
+  initialChanging?: boolean;
 }) {
   const t = useTranslations('CoachDay');
   const tDays = useTranslations('Settings');
@@ -71,6 +84,8 @@ export function WeeklySessionDayCard({
   const [pending, startTransition] = useTransition();
   const [choice, setChoice] = useState<DayChoice>({ current: value, proposed: initialProposed, write: null });
   const [notice, setNotice] = useState<string | null>(null);
+  const [changing, setChanging] = useState(initialChanging);
+  const [dismissed, setDismissed] = useState(false);
 
   const name = athleteName ?? t('theAthlete');
   const dates = nextDraftDates(todayKey, choice.current);
@@ -83,12 +98,26 @@ export function WeeklySessionDayCard({
       const { state, error } = await commitDayChoice(choice, (day) => setWeeklySessionDayAction(athleteId, day));
       setChoice(state);
       if (error) setNotice(t('error', { reason: error }));
-      else router.refresh();
+      else {
+        // The day is a fact again: the tiles fold away the moment one lands.
+        setChanging(false);
+        router.refresh();
+      }
+    });
+  };
+
+  const teaching = !instructed && !dismissed;
+
+  const dismiss = () => {
+    startTransition(async () => {
+      setNotice(null);
+      const { dismissed: done, error } = await commitDismissal(() => dismissWeekCycleAction(athleteId));
+      setDismissed(done);
+      if (error) setNotice(t('error', { reason: error }));
     });
   };
 
   const stepArgs = {
-    ...bold,
     name,
     coachDay,
     day: dayName,
@@ -97,18 +126,27 @@ export function WeeklySessionDayCard({
   };
 
   return (
-    <section className="w-full max-w-3xl rounded-lg border p-4" data-weekly-session-day-card="">
-      <h2 className="font-display text-lg leading-tight text-foreground">{t.rich('headline', { ...bold, name, day: dayName })}</h2>
-      <p className="mt-1 font-body text-sm text-foreground">{t.rich('intro', { ...bold, name, day: dayName })}</p>
+    <section className="w-full max-w-3xl border border-border bg-panel p-5 shadow-sm sm:p-6" data-weekly-session-day-card="">
+      <h2 className="font-display text-2xl font-bold uppercase italic leading-tight tracking-[0.03em] text-foreground">{t('headline', { name, day: dayName })}</h2>
+      <p className="mt-2 font-body text-base text-foreground">{t('intro', { name, day: dayName })}</p>
       <p className="mt-2 font-body text-sm text-muted-foreground">
-        {t.rich('nextDraft', {
-          ...bold,
+        {t('nextDraft', {
           name,
           coachDate: shortDate(dates.coachSees, locale),
           athleteDate: shortDate(dates.athleteSees, locale),
         })}
       </p>
 
+      {!changing ? (
+        <button
+          type="button"
+          data-action="change-day"
+          onClick={() => setChanging(true)}
+          className="mt-3 rounded border border-border px-3 py-1 font-body text-sm text-foreground"
+        >
+          {t('changeDay')}
+        </button>
+      ) : (
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t('pickerLabel')}>
         {DAYS.map((day) => {
           const isCurrent = choice.current === day;
@@ -120,9 +158,9 @@ export function WeeklySessionDayCard({
               onClick={() => setChoice(dayChoice(choice, { type: 'tap', day }))}
               disabled={pending}
               aria-pressed={isCurrent}
-              className={`rounded border px-3 py-1 text-sm disabled:opacity-50 ${
+              className={`inline-flex h-10 items-center border px-4 font-body text-[15px] font-medium transition-colors disabled:opacity-50 ${
                 isCurrent
-                  ? 'border-signal bg-signal/10 text-foreground'
+                  ? 'border-signal bg-signal text-signal-foreground'
                   : isProposed
                     ? 'border-foreground text-foreground'
                     : 'border-border text-muted-foreground'
@@ -133,6 +171,7 @@ export function WeeklySessionDayCard({
           );
         })}
       </div>
+      )}
 
       {choice.proposed && (
         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3" data-day-confirm="">
@@ -142,7 +181,7 @@ export function WeeklySessionDayCard({
             data-action="confirm-day"
             onClick={confirm}
             disabled={pending}
-            className="rounded border border-signal bg-signal px-3 py-1 text-sm text-signal-foreground disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50"
           >
             {t('confirm')}
           </button>
@@ -151,7 +190,7 @@ export function WeeklySessionDayCard({
             data-action="cancel-day"
             onClick={() => setChoice(dayChoice(choice, { type: 'cancel' }))}
             disabled={pending}
-            className="rounded border border-border px-3 py-1 text-sm text-foreground disabled:opacity-50"
+            className="inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
           >
             {t('cancel')}
           </button>
@@ -159,19 +198,30 @@ export function WeeklySessionDayCard({
       )}
       {notice && <p className="mt-2 text-sm text-signal">{notice}</p>}
 
-      <details className="mt-4">
+      <details className="mt-4" open={teaching}>
         <summary className="cursor-pointer font-body text-sm text-foreground underline">{t('howTitle')}</summary>
         <ol className="mt-2 list-decimal space-y-2 pl-5 font-body text-sm text-foreground">
           <li>
             {race
-              ? t.rich('step1', { ...stepArgs, race: race.name, weeks: race.weeksOut, block: race.blockName ?? t('noBlock') })
-              : t.rich('step1NoRace', stepArgs)}
+              ? t('step1', { ...stepArgs, race: race.name, weeks: race.weeksOut, block: race.blockName ?? t('noBlock') })
+              : t('step1NoRace', stepArgs)}
           </li>
-          <li>{t.rich('step2', stepArgs)}</li>
-          <li>{t.rich('step3', stepArgs)}</li>
-          <li>{t.rich('step4', stepArgs)}</li>
+          <li>{t('step2', stepArgs)}</li>
+          <li>{t('step3', stepArgs)}</li>
+          <li>{t('step4', stepArgs)}</li>
         </ol>
         <p className="mt-2 font-body text-sm text-muted-foreground">{t('changing')}</p>
+        {teaching && (
+          <button
+            type="button"
+            data-action="dismiss-week-cycle"
+            onClick={dismiss}
+            disabled={pending}
+            className="mt-3 rounded border border-signal bg-signal px-3 py-1 text-sm text-signal-foreground disabled:opacity-50"
+          >
+            {t('gotIt')}
+          </button>
+        )}
       </details>
     </section>
   );

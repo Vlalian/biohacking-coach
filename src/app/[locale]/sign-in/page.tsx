@@ -21,10 +21,12 @@ export default async function SignInPage({
           system's own control and the natural place to set a preference before
           signing in. It also gives the baseline a real surface to verify light
           and dark against. */}
-      <div className="fixed top-4 right-4 z-10">
-        <ThemeToggle />
+      <div className="fixed right-4 top-4 z-20">
+        <ThemeToggle className="h-11 w-11 rounded-none border-auth-line bg-auth-surface/70 text-auth-foreground backdrop-blur-md hover:bg-auth-surface hover:text-auth-foreground" />
       </div>
-      <AuthForm mode="sign-in" />
+      {/* The flag better-auth itself reads (`src/lib/auth.ts`): while it is set,
+          there is no link to a sign-up form the server would refuse. */}
+      <AuthForm mode="sign-in" allowSignUp={process.env.DISABLE_SIGNUP !== 'true'} />
     </>
   );
 }

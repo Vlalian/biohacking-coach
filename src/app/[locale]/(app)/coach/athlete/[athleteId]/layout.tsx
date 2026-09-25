@@ -33,14 +33,16 @@ export default async function CoachAthleteLayout({
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-6 p-6 sm:p-8">
-      <header className="flex w-full flex-col items-center gap-1">
-        <h1 className="text-2xl font-semibold">{context.view.athleteName}</h1>
+      <header className="flex w-full flex-col items-center gap-3">
+        <h1 className="font-display text-4xl font-bold uppercase italic leading-none tracking-[0.03em] text-foreground">
+          {context.view.athleteName}
+        </h1>
         <HealthBadge
           openHealth={context.view.openHealth}
           injuryLabel={tHealth('injuryLabel')}
           illLabel={tHealth('illnessLabel')}
         />
-        <Link href="/coach" className="text-sm text-blue-500 underline">
+        <Link href="/coach" className={"inline-flex h-10 items-center gap-2 border border-border px-4 font-body text-[15px] font-medium text-foreground no-underline transition-colors hover:border-signal hover:text-signal"}>
           {t('backToRoster')}
         </Link>
       </header>

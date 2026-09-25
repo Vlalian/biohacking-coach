@@ -69,7 +69,7 @@ export function PanelBody({ id, dataset }: { id: string; dataset: InfoDataset })
 }
 
 const Note = ({ children }: { children: React.ReactNode }) => (
-  <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+  <div className="mt-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
     {children}
   </div>
 );
@@ -86,13 +86,13 @@ function FfNow({ D }: { D: InfoDataset }) {
       {tiles.map(([label, value, color]) => (
         <div
           key={label}
-          className="flex-1 rounded-md border p-3 text-center"
+          className="flex-1 border p-3 text-center"
           style={{ borderColor: color }}
         >
           <div className="text-2xl font-semibold" style={{ color }}>
             {value ?? '—'}
           </div>
-          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="text-[13px] text-muted-foreground">{label}</div>
         </div>
       ))}
     </div>
@@ -106,7 +106,7 @@ function Race({ D }: { D: InfoDataset }) {
       <div className="font-display text-3xl leading-none tracking-[0.02em] text-signal">
         {D.weeksToRace}
       </div>
-      <div className="text-xs text-muted-foreground">
+      <div className="text-[13px] text-muted-foreground">
         {t('weeksUntil')}
         <br />
         {D.raceName}
@@ -120,7 +120,7 @@ function Load({ D }: { D: InfoDataset }) {
   return (
     <>
       <ChartSvg w={300} h={110}>
-        <Bars vals={D.weekly.map((w) => w.tss ?? 0)} w={300} h={110} color="rgba(107,107,107,0.25)" />
+        <Bars vals={D.weekly.map((w) => w.tss ?? 0)} w={300} h={110} color="color-mix(in oklab, var(--foreground) 18%, transparent)" />
         {(['fitness', 'fatigue', 'form'] as const).map((k) => (
           <Line key={k} vals={D.weekly.map((w) => w[k] ?? 0)} w={300} h={110} color={FF_COLORS[k]} />
         ))}
@@ -130,7 +130,7 @@ function Load({ D }: { D: InfoDataset }) {
           ['Fitness', FF_COLORS.fitness],
           ['Fatigue', FF_COLORS.fatigue],
           ['Form', FF_COLORS.form],
-          [t('weeklyTss'), 'rgba(107,107,107,0.5)'],
+          [t('weeklyTss'), 'color-mix(in oklab, var(--foreground) 40%, transparent)'],
         ]}
       />
     </>
@@ -146,11 +146,11 @@ function Ramp({ D }: { D: InfoDataset }) {
           tl.delta == null || tl.delta === 0 ? 'var(--muted-foreground)' : tl.delta > 0 ? '#6db36d' : '#e05555';
         const text = tl.delta == null ? '—' : `${tl.delta > 0 ? '+' : ''}${tl.delta}`;
         return (
-          <div key={tl.label} className="flex-1 rounded-md border p-2 text-center">
+          <div key={tl.label} className="flex-1 border border-border p-2 text-center">
             <div className="text-xl font-semibold" style={{ color }}>
               {text}
             </div>
-            <div className="text-xs text-muted-foreground">{tl.label}</div>
+            <div className="text-[13px] text-muted-foreground">{tl.label}</div>
             {tl.spark.length > 1 && (
               <ChartSvg w={90} h={22}>
                 <Line vals={tl.spark} w={90} h={22} color={color} />
@@ -192,7 +192,7 @@ function Consistency({ D }: { D: InfoDataset }) {
                   width={Math.max(1, bw - 3).toFixed(1)}
                   height={hSkip.toFixed(1)}
                   rx={1.5}
-                  fill="rgba(224,85,85,0.55)"
+                  fill="color-mix(in oklab, var(--signal) 55%, transparent)"
                 />
               )}
             </g>
@@ -202,7 +202,7 @@ function Consistency({ D }: { D: InfoDataset }) {
       <Legend
         items={[
           [t('completed'), BODY_COLOR],
-          [t('skipped'), 'rgba(224,85,85,0.7)'],
+          [t('skipped'), 'color-mix(in oklab, var(--signal) 70%, transparent)'],
         ]}
       />
       <Note>{t('consistencyNote', { done: totDone, all: totAll })}</Note>
@@ -243,7 +243,7 @@ function Checkin({ D }: { D: InfoDataset }) {
         const vals = D.checkins.map((x) => x[key]);
         return (
           <div key={key}>
-            <div className="flex items-baseline justify-between text-xs">
+            <div className="flex items-baseline justify-between font-body text-[13px]">
               <span className="text-muted-foreground">{label}</span>
               <b style={{ color }}>{vals[vals.length - 1]}</b>
             </div>
@@ -262,7 +262,7 @@ function Sleep({ D }: { D: InfoDataset }) {
   return (
     <>
       <ChartSvg w={300} h={100}>
-        <Bars vals={D.sleep.map((x) => x.hours)} w={300} h={100} color="rgba(154,123,208,0.45)" />
+        <Bars vals={D.sleep.map((x) => x.hours)} w={300} h={100} color="color-mix(in oklab, var(--foreground) 22%, transparent)" />
         <Line vals={D.sleep.map((x) => x.feeling * 2)} w={300} h={100} color="#c9a96e" />
       </ChartSvg>
       <Legend
@@ -292,7 +292,7 @@ function Period({ D }: { D: InfoDataset }) {
     <>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-xs text-muted-foreground">
+          <tr className="text-left text-[13px] text-muted-foreground">
             <th />
             <th className="py-1 font-normal">{t('periodThis')}</th>
             <th className="py-1 font-normal">{t('periodLast')}</th>
@@ -420,7 +420,7 @@ function Bests({ D }: { D: InfoDataset }) {
     <div className="flex flex-col gap-1.5">
       {D.bests.slice(0, 6).map((b, i) => (
         <div key={`${b.metricKey}-${i}`} className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">{b.date}</span>
+          <span className="text-[13px] text-muted-foreground">{b.date}</span>
           <i
             className="inline-block h-2 w-2 rounded-full"
             style={{ background: SPORT_COLOR[b.sport] || SPORT_COLOR.other }}
@@ -437,7 +437,7 @@ function PeaksTable({ rows }: { rows: PeaksRow[] }) {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-xs text-muted-foreground">
+        <tr className="text-left text-[13px] text-muted-foreground">
           <th />
           {PEAK_WINDOW_LABELS.map((c) => (
             <th key={c} className="py-1 font-normal">

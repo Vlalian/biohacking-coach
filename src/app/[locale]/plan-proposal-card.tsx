@@ -104,7 +104,7 @@ export function PlanProposalCard({
         className="flex max-h-[80%] w-full max-w-sm flex-col border border-border bg-panel shadow-2xl outline-none"
       >
         <div className="border-b border-rule px-5 py-4">
-          <h3 id="plan-proposal-title" className="font-display text-xl tracking-[0.03em] text-foreground">
+          <h3 id="plan-proposal-title" className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">
             {t('proposalTitle')}
           </h3>
           <p className="mt-1 font-body text-sm text-muted-foreground">{t('proposalIntro')}</p>
@@ -119,7 +119,7 @@ export function PlanProposalCard({
                 <div className="min-w-0 flex-1">
                   <div className="font-body text-sm text-foreground">{planLine(s)}</div>
                   {s.note && (
-                    <div className="mt-0.5 font-body text-xs text-muted-foreground">{s.note}</div>
+                    <div className="mt-0.5 font-body text-[13px] text-muted-foreground">{s.note}</div>
                   )}
                 </div>
               </li>
@@ -157,7 +157,7 @@ export function GhostButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-40"
+      className="border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:border-signal hover:text-signal disabled:opacity-40"
     >
       {children}
     </button>
@@ -178,7 +178,7 @@ export function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="bg-signal px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+      className="bg-signal h-10 px-4 font-body text-[15px] font-medium text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
     >
       {children}
     </button>

@@ -5,6 +5,7 @@ import { useTheme } from 'next-themes';
 import { useTranslations } from 'next-intl';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 // A no-op store whose client snapshot (`true`) differs from its server snapshot
 // (`false`): it reads false during SSR and the first client render, then true
@@ -29,7 +30,7 @@ const ORDER = ['system', 'light', 'dark'] as const;
  * it reads the client-only `theme` behind a mounted guard; before hydration it
  * renders the system icon, which matches both the server and the default.
  */
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string } = {}) {
   const t = useTranslations('ThemeToggle');
   const { theme, setTheme } = useTheme();
   const mounted = useMounted();
@@ -44,6 +45,7 @@ export function ThemeToggle() {
     <Button
       variant="outline"
       size="icon"
+      className={cn(className)}
       onClick={() => setTheme(next)}
       aria-label={t('switch')}
     >

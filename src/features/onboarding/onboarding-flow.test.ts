@@ -28,47 +28,43 @@ const TODAY = '2026-09-21';
 const half = { distance: 'Half' as const, date: '2025-08-16', finishSeconds: 18720, note: null };
 const oly = { distance: 'Olympic' as const, date: '2024-06-01', finishSeconds: null, note: 'first one' };
 
-// ── coachGreeting — the POC's completion contract, carried across ─────────────
+// ── coachGreeting — the POC's completion contract, in the athlete's language ──
 
-describe('coachGreeting — name and race present', () => {
-  it('greets by name', () => {
-    expect(coachGreeting('Mads', 'Ironman Copenhagen').intro).toBe(
-      "Hello Mads. I'm your Coach.",
-    );
-  });
-  it('states race target', () => {
-    expect(coachGreeting('Mads', 'Ironman Copenhagen').body).toBe(
-      "Ironman Copenhagen is your target. Let's get to work.",
-    );
-  });
-});
+/** A translator over one catalogue's Onboarding block, with `{x}` substitution. */
+const tFrom =
+  (cat: { Onboarding: Record<string, string> }) =>
+  (key: string, values: Record<string, string> = {}) =>
+    cat.Onboarding[key].replace(/\{(\w+)\}/g, (_, k: string) => values[k] ?? '');
 
-describe('coachGreeting — name missing', () => {
-  it('uses generic intro', () => {
-    expect(coachGreeting('', 'Ironman Copenhagen').intro).toBe("I'm your Coach.");
-  });
-  it('still states race in body', () => {
-    expect(coachGreeting('', 'Ironman Copenhagen').body).toBe(
-      "Ironman Copenhagen is your target. Let's get to work.",
-    );
-  });
-});
+describe('coachGreeting — in the athlete’s language', () => {
+  const tEn = tFrom(en);
+  const tDa = tFrom(da);
 
-describe('coachGreeting — race missing', () => {
-  it('still greets by name', () => {
-    expect(coachGreeting('Mads', '').intro).toBe("Hello Mads. I'm your Coach.");
+  it('names the athlete and the race in English', () => {
+    expect(coachGreeting('Mads', 'Ironman Copenhagen', tEn)).toEqual({
+      intro: "Hello Mads. I'm Momentum.",
+      body: "Ironman Copenhagen is your target. Let's get to work.",
+    });
   });
-  it('uses generic body', () => {
-    expect(coachGreeting('Mads', '').body).toBe("Let's get to work.");
-  });
-});
 
-describe('coachGreeting — neither name nor race', () => {
-  it('generic intro', () => {
-    expect(coachGreeting('', '').intro).toBe("I'm your Coach.");
+  it('drops the name and the race when absent', () => {
+    expect(coachGreeting('', '', tEn)).toEqual({ intro: "I'm Momentum.", body: "Let's get to work." });
+    expect(coachGreeting(null, 'Kalmar', tEn)).toEqual({
+      intro: "I'm Momentum.",
+      body: "Kalmar is your target. Let's get to work.",
+    });
+    expect(coachGreeting('Mads', '', tEn)).toEqual({
+      intro: "Hello Mads. I'm Momentum.",
+      body: "Let's get to work.",
+    });
   });
-  it('generic body', () => {
-    expect(coachGreeting('', '').body).toBe("Let's get to work.");
+
+  it('speaks Danish when handed the Danish catalogue', () => {
+    expect(coachGreeting('Johny', 'Ironman Frankfurt', tDa)).toEqual({
+      intro: 'Hej Johny. Jeg er Momentum.',
+      body: 'Ironman Frankfurt er dit mål. Lad os komme i gang.',
+    });
+    expect(coachGreeting('', '', tDa)).toEqual({ intro: 'Jeg er Momentum.', body: 'Lad os komme i gang.' });
   });
 });
 

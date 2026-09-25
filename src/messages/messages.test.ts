@@ -64,8 +64,11 @@ describe('message catalogues', () => {
     // athlete/Head Coach/AI thread (avoiding "chat/DM/thread"), and inside it
     // names the AI party "AI Coach" specifically to distinguish it from the
     // Head Coach — both fixed names, not translated phrases.
+    // "Momentum" (2026-09-24) is the same case as "Coach" was: the AI took the
+    // product's name in what the athlete reads, and a proper name is not
+    // translated — "Momentum tænker…" is correct Danish.
     const technicalTerms =
-      /\b(RPE|FTP|CSS|Zone|Z\d|Ironman|HRV|Pace|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W|Coach|Coaching Channel|AI Coach)\b/g;
+      /\b(RPE|FTP|CSS|Zone|Z\d|Ironman|HRV|Pace|TSS|Fitness|Fatigue|Form|Peak Power|kJ|bpm|W|Coach|Coaching Channel|AI Coach|Momentum)\b/g;
     // Danish cognates — words whose correct Danish spelling IS the English one
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.

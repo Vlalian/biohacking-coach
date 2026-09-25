@@ -183,17 +183,17 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
       <header className="shrink-0 border-b border-border bg-panel">
         <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-baseline gap-3">
-            <span className="border border-signal px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.22em] text-signal">
+            <span className="border border-signal px-2 py-0.5 font-body text-sm uppercase tracking-[0.24em] text-signal">
               {t('coachLabel')}
             </span>
             {!isDone && (
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
                 {t(STEP_LABEL_KEY[state.step as OnboardingStepId])}
               </span>
             )}
           </div>
           {!isDone && (
-            <span className="font-mono text-[10px] tracking-[0.18em] text-muted-foreground">
+            <span className="font-body text-sm tracking-[0.18em] text-muted-foreground">
               {t('stepOf', { step: stepIndex + 1, total: STEPS.length })}
             </span>
           )}
@@ -230,7 +230,7 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
               data-action="back"
               onClick={goBack}
               disabled={pending}
-              className="mb-6 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              className="mb-6 inline-flex items-center gap-1.5 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
             >
               <ArrowLeft className="h-3 w-3" />
               {t('back')}
@@ -364,7 +364,7 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
         onChange={(e) => setRace(e.target.value)}
         placeholder={t('racePlaceholder')}
         disabled={pending}
-        className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+        className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
       />
       <label htmlFor="onboarding-race-date" className="sr-only">
         {t('qRaceDate')}
@@ -375,7 +375,7 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
         value={raceDate}
         onChange={(e) => setRaceDate(e.target.value)}
         disabled={pending}
-        className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors focus:border-signal"
+        className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors focus:border-signal"
       />
       <PrimaryButton
         type="submit"
@@ -456,7 +456,7 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
               onChange={(e) => setBestTime(e.target.value)}
               placeholder={t('bestTimePlaceholder')}
               disabled={pending}
-              className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+              className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
             />
           </div>
           <FieldGroup label={t('weakest')} note={t('optionalMulti')}>
@@ -487,7 +487,7 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
               onChange={(e) => setTargetTime(e.target.value)}
               placeholder={t('targetTimePlaceholder')}
               disabled={pending}
-              className="w-full border border-border bg-background px-3 py-2.5 font-body text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
+              className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-signal"
             />
           </div>
           <FieldGroup label={t('metrics')} note={t('optionalMulti')}>
@@ -805,7 +805,7 @@ function ConstraintsPanel({ answers, pending, t, submit }: PanelProps) {
 function StepHeading({ title, help }: { title: string; help?: string }) {
   return (
     <div>
-      <h2 className="font-display text-3xl tracking-[0.03em] text-foreground">{title}</h2>
+      <h2 className="font-display text-3xl font-bold uppercase italic tracking-[0.03em] text-foreground">{title}</h2>
       {help && <p className="mt-2 font-body text-sm text-muted-foreground">{help}</p>}
     </div>
   );
@@ -831,7 +831,7 @@ function FieldGroup({
       ) : (
         <p className="font-body text-sm text-foreground">
           {label}
-          {note && <span className="ml-2 font-body text-xs text-muted-foreground">{note}</span>}
+          {note && <span className="ml-2 font-body text-[13px] text-muted-foreground">{note}</span>}
         </p>
       )}
       <div className="grid gap-2 sm:grid-cols-2">{children}</div>
@@ -860,7 +860,7 @@ function OptionTile({
           : 'border-border bg-panel hover:border-muted-foreground',
       ].join(' ')}
     >
-      <span className="font-body text-sm text-foreground">{label}</span>
+      <span className="font-body text-base text-foreground">{label}</span>
       {selected && <Check className="h-4 w-4 shrink-0 text-signal" />}
     </button>
   );
@@ -887,11 +887,11 @@ function PrimaryButton({
       data-action={dataAction}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-2 bg-signal px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+      className="inline-flex h-11 min-w-[160px] items-center justify-center gap-2 bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-40"
     >
-      {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
       {children}
-      {!pending && <ArrowRight className="h-3 w-3" />}
+      {!pending && <ArrowRight className="h-4 w-4" />}
     </button>
   );
 }
@@ -909,7 +909,7 @@ function Handoff({
 
   return (
     <div className="space-y-6">
-      <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-signal">
+      <p className="font-body text-sm uppercase tracking-[0.24em] text-signal">
         {t('coachLabel')}
       </p>
       {greeting?.intro && (
@@ -924,13 +924,13 @@ function Handoff({
       </div>
       <dl className="grid gap-px border border-border bg-border sm:grid-cols-2">
         <div className="bg-panel px-4 py-3">
-          <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <dt className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
             {t('raceTargetLabel')}
           </dt>
           <dd className="mt-1 font-body text-sm text-foreground">{raceTarget}</dd>
         </div>
         <div className="bg-panel px-4 py-3">
-          <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <dt className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
             {t('nextLabel')}
           </dt>
           <dd className="mt-1 font-body text-sm text-foreground">{t('nextValue')}</dd>

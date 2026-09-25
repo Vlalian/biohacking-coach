@@ -18,7 +18,7 @@ export interface UiBriefingMessage {
 }
 
 const primaryBtn =
-  'rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200';
+  'inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50';
 
 export interface BriefingInitial {
   conversationId: string;
@@ -102,8 +102,8 @@ export function Briefing({
   return (
     <section className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">{t('title')}</h2>
-        <p className="text-sm text-neutral-500">{t('subtitle')}</p>
+        <h2 className="font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
+        <p className="font-body text-base text-muted-foreground">{t('subtitle')}</p>
       </header>
 
       {!conversationId ? (
@@ -116,8 +116,8 @@ export function Briefing({
                 key={m.id}
                 className={
                   m.role === 'head_coach'
-                    ? 'self-end rounded-lg bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-white dark:text-neutral-900'
-                    : 'self-start rounded-lg bg-neutral-100 px-3 py-2 text-sm whitespace-pre-wrap dark:bg-neutral-800'
+                    ? 'max-w-[85%] self-end bg-sidebar px-4 py-3 font-body text-base text-sidebar-foreground'
+                    : 'max-w-[62ch] self-start whitespace-pre-wrap border-l-2 border-signal bg-panel px-4 py-3 font-body text-base leading-[1.7] text-foreground'
                 }
               >
                 {m.content}
@@ -140,7 +140,7 @@ export function Briefing({
               onChange={(e) => setDraft(e.target.value)}
               disabled={pending}
               placeholder={t('placeholder')}
-              className="flex-1 rounded border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-950"
+              className="h-11 flex-1 border border-border bg-background px-3 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
             />
             <button
               type="submit"
@@ -154,7 +154,7 @@ export function Briefing({
       )}
 
       {error !== 'none' && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="font-body text-sm text-destructive">
           {error === 'unsafeContent' ? t('unsafeContent') : t('error')}
         </p>
       )}
@@ -175,8 +175,8 @@ export function BriefingOpener({ pending, onStart }: { pending: boolean; onStart
   // Said once: the button goes quiet ("Opening…") and the status line under it
   // carries the sentence with the estimate (Mads, PR #78 smoke run, S23).
   return (
-    <div className="flex flex-col items-center gap-3 rounded border border-neutral-200 p-6 dark:border-neutral-800">
-      <p className="text-sm text-neutral-500">{t('intro')}</p>
+    <div className="flex flex-col items-center gap-4 border border-dashed border-border bg-panel p-8">
+      <p className="max-w-md text-center font-body text-base text-muted-foreground">{t('intro')}</p>
       <button type="button" onClick={onStart} disabled={pending} className={primaryBtn}>
         {pending ? t('opening') : t('start')}
       </button>

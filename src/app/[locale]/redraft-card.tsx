@@ -82,11 +82,11 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
 
   return (
     <section
-      className="mb-5 rounded-lg border border-dashed border-signal/40 bg-signal/5 px-5 py-4"
+      className="mb-5 border border-dashed border-signal/60 border-l-4 border-l-signal bg-panel px-5 py-4"
       data-redraft-card={weekStart}
       aria-live="polite"
     >
-      <h2 className="font-display text-xl tracking-[0.04em] text-foreground">{t('title')}</h2>
+      <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('title')}</h2>
       <p className="mt-1 font-body text-sm text-muted-foreground">{t('lead', { week: weekStart })}</p>
       {!pending && (
         <div className="mt-3">
@@ -95,7 +95,7 @@ export function RedraftCard({ weekStart }: { weekStart: string }) {
             onClick={redraft}
             disabled={pending}
             data-action="redraft"
-            className="rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center bg-signal px-5 font-body text-base font-semibold text-signal-foreground transition-colors hover:bg-signal/85 disabled:opacity-50"
           >
             {t('redraft')}
           </button>

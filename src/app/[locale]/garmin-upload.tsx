@@ -70,7 +70,7 @@ export function GarminUpload() {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <label className="cursor-pointer rounded border border-neutral-300 px-3 py-2 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900">
+      <label className="inline-flex h-10 cursor-pointer items-center gap-2 border border-signal px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground">
         {pending ? t('uploading') : t('upload')}
         <input
           ref={inputRef}
@@ -85,12 +85,12 @@ export function GarminUpload() {
       </label>
 
       {status.kind === 'done' && (
-        <p className="text-sm text-green-700 dark:text-green-500">
+        <p className="font-body text-sm text-session-recovery">
           {t('imported', { count: status.count })}
         </p>
       )}
       {status.kind === 'error' && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="font-body text-sm text-destructive">
           {t(ERROR_KEY[status.reason])}
         </p>
       )}
