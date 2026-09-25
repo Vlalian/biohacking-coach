@@ -4,10 +4,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * `garmin-integration/04` — the adapter over Vercel Blob. Blob itself is
  * mocked: no store exists in tests, and no real key is ever used.
  */
-const { get, del, list, put } = vi.hoisted(() => ({ get: vi.fn(), del: vi.fn(), list: vi.fn(), put: vi.fn() }));
-vi.mock('@vercel/blob', () => ({ get, del, list, put }));
+const { get, del, list, put, head, BlobNotFoundError } = vi.hoisted(() => ({
+  get: vi.fn(),
+  del: vi.fn(),
+  list: vi.fn(),
+  put: vi.fn(),
+  head: vi.fn(),
+  BlobNotFoundError: class BlobNotFoundError extends Error {},
+}));
+vi.mock('@vercel/blob', () => ({ get, del, list, put, head, BlobNotFoundError }));
 
-const { fetchBlob, openBlob, putBlob, deleteBlob, deleteAthleteBlobs, deleteHistoryBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
+const { fetchBlob, openBlob, putBlob, deleteBlob, blobSize, deleteAthleteBlobs, deleteHistoryBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
 const { today } = await import('@/lib/date');
 
 const URL1 = 'https://s.private.blob.vercel-storage.com/garmin/history/a1/x.zip';
@@ -77,6 +84,25 @@ describe('deleteBlob', () => {
   it('deletes by URL', async () => {
     await deleteBlob(URL1);
     expect(del).toHaveBeenCalledWith(URL1);
+  });
+});
+
+describe('blobSize', () => {
+  it('reads the size from the blob’s metadata, downloading nothing', async () => {
+    head.mockResolvedValue({ size: 1234 });
+    expect(await blobSize(URL1)).toBe(1234);
+    expect(head).toHaveBeenCalledWith(URL1);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('is null for a blob that is gone', async () => {
+    head.mockRejectedValue(new BlobNotFoundError('gone'));
+    expect(await blobSize(URL1)).toBeNull();
+  });
+
+  it('lets any other failure through', async () => {
+    head.mockRejectedValue(new Error('blob down'));
+    await expect(blobSize(URL1)).rejects.toThrow('blob down');
   });
 });
 

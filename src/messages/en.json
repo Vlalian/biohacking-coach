@@ -463,7 +463,7 @@
     "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
     "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
     "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost.",
-    "errorTooLarge": "That file is over 500 MB. Pick a single activity's .fit or .gpx.",
+    "errorTooLarge": "That file is over 50 MB, the most the calendar upload takes. For a full Garmin export, use Settings → Training → Training history.",
     "errorUpload": "The upload didn’t finish. Nothing was changed. Try again."
   },
   "Detected": {

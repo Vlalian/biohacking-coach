@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { del, get, list, put } from '@vercel/blob';
+import { BlobNotFoundError, del, get, head, list, put } from '@vercel/blob';
 import { today } from '@/lib/date';
 import { BLOB_MAX_AGE_MS, GARMIN_BLOB_ROOT, blobPrefix, type UploadKind } from './blob-upload';
 
@@ -30,6 +30,19 @@ export async function fetchBlob(url: string): Promise<Uint8Array | null> {
 export async function openBlob(url: string): Promise<ReadableStream<Uint8Array> | null> {
   const blob = await get(url, { access: 'private', useCache: false });
   return blob?.stream ?? null;
+}
+
+/**
+ * A blob's size from its metadata, downloading nothing, or null when it is
+ * gone — how the detection action refuses a file over its cap before reading it.
+ */
+export async function blobSize(url: string): Promise<number | null> {
+  try {
+    return (await head(url)).size;
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return null;
+    throw error;
+  }
 }
 
 /**

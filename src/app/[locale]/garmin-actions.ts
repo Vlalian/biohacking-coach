@@ -6,11 +6,12 @@ import { resolveAthlete, resolveAthleteId, type AuthFailure } from './current-ac
 import { proposeDetectedUpload, type ImportResult, type ImportFailure } from '@/features/garmin/garmin-import';
 import { latestHistoryImport, removeImportedHistory, startHistoryImport } from '@/features/garmin/history-import-service';
 import { IMPORT_TIME_BUDGET_MS, runHistoryImport, timeBudget } from '@/features/garmin/history-import-worker';
-import { blobWorkerDeps, deleteBlob, fetchBlob } from '@/features/garmin/blob-store';
+import { blobSize, blobWorkerDeps, deleteBlob, fetchBlob } from '@/features/garmin/blob-store';
 import {
   blobPrefix,
   importSummary,
   isOwnBlobUrl,
+  MAX_DETECTION_UPLOAD_BYTES,
   uploadPolicy,
   uploadState,
   type ImportSummary,
@@ -30,8 +31,10 @@ import {
  * The failures these actions decide themselves, before the importer is
  * reached. `not-yours` is a blob URL outside the signed-in athlete's own
  * prefix — the client names the file, so it is checked, never trusted.
+ * `too-large` is a detection file over its cap, refused from its size before
+ * it is read (ruling 6a).
  */
-export type ActionFailure = 'not-authenticated' | 'empty' | 'not-yours';
+export type ActionFailure = 'not-authenticated' | 'empty' | 'not-yours' | 'too-large';
 
 /** Every way an upload can fail, including the ones above. */
 export type UploadFailure = ImportFailure | ActionFailure;
@@ -64,8 +67,11 @@ export async function prepareGarminUploadAction(
  * record — the athlete accepts each proposal on the calendar.
  *
  * The owning athlete is resolved here from the authenticated session, and the
- * URL must sit under that athlete's detection prefix. The blob is deleted
- * whatever the outcome; the bytes are never kept or logged.
+ * URL must sit under that athlete's detection prefix. The file is read whole,
+ * so its size is checked first, from Blob's metadata: one over
+ * {@link MAX_DETECTION_UPLOAD_BYTES} is refused without a byte downloaded — the
+ * token caps it too, but this is the one check the server holds itself. The
+ * blob is deleted whatever the outcome; the bytes are never kept or logged.
  */
 export async function importDetectedFromBlobAction(blobUrl: string): Promise<UploadResult> {
   const athleteId = await resolveAthleteId();
@@ -73,14 +79,25 @@ export async function importDetectedFromBlobAction(blobUrl: string): Promise<Upl
   if (!isOwnBlobUrl(blobUrl, blobPrefix('detection', athleteId))) return { ok: false, reason: 'not-yours' };
 
   try {
-    const bytes = await fetchBlob(blobUrl);
-    if (!bytes) return { ok: false, reason: 'unreadable' };
-    const result = await proposeDetectedUpload({ athleteId, name: fileNameOf(blobUrl), bytes });
+    const read = await readDetectionBlob(blobUrl);
+    if (!read.ok) return read;
+    const result = await proposeDetectedUpload({ athleteId, name: fileNameOf(blobUrl), bytes: read.bytes });
     if (result.ok) revalidatePath('/', 'layout');
     return result;
   } finally {
     await deleteQuietly(blobUrl);
   }
+}
+
+/** A detection upload's bytes, once its size is known to be under the cap; nothing is downloaded otherwise. */
+async function readDetectionBlob(
+  blobUrl: string,
+): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: 'unreadable' | 'too-large' }> {
+  const size = await blobSize(blobUrl);
+  if (size === null) return { ok: false, reason: 'unreadable' };
+  if (size > MAX_DETECTION_UPLOAD_BYTES) return { ok: false, reason: 'too-large' };
+  const bytes = await fetchBlob(blobUrl);
+  return bytes ? { ok: true, bytes } : { ok: false, reason: 'unreadable' };
 }
 
 /** A failed delete does not fail the upload: the 24 h sweep takes what is left. */

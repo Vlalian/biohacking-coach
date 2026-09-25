@@ -49,8 +49,8 @@ describe('uploadToBlob', () => {
   });
 
   it('uploads a large file in parts', async () => {
-    await uploadToBlob('detection', [file('big.zip', 60 * 1024 * 1024)], vi.fn());
-    expect(upload.mock.calls[0][2]).toMatchObject({ multipart: true, clientPayload: JSON.stringify({ kind: 'detection' }) });
+    await uploadToBlob('history', [file('big.zip', 60 * 1024 * 1024)], vi.fn());
+    expect(upload.mock.calls[0][2]).toMatchObject({ multipart: true, clientPayload: JSON.stringify({ kind: 'history' }) });
     await uploadToBlob('detection', [file('edge.zip', 50 * 1024 * 1024)], vi.fn());
     expect(upload.mock.calls[1][2]).toMatchObject({ multipart: false });
   });
@@ -59,6 +59,12 @@ describe('uploadToBlob', () => {
     expect(await uploadToBlob('history', [file('a.fit', 10), file('huge.zip', 500 * 1024 * 1024 + 1)], vi.fn())).toEqual({ ok: false, reason: 'too-large' });
     expect(await uploadToBlob('history', [file('max.zip', 500 * 1024 * 1024)], vi.fn())).toMatchObject({ ok: true });
     expect(prepareGarminUploadAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a detection file over 50 MB before asking for anything (ruling 6a)', async () => {
+    expect(await uploadToBlob('detection', [file('export.zip', 50 * 1024 * 1024 + 1)], vi.fn())).toEqual({ ok: false, reason: 'too-large' });
+    expect(prepareGarminUploadAction).not.toHaveBeenCalled();
+    expect(await uploadToBlob('detection', [file('max.zip', 50 * 1024 * 1024)], vi.fn())).toMatchObject({ ok: true });
   });
 
   it('ignores empty files, and is empty when nothing is left', async () => {

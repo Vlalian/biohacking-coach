@@ -14,8 +14,21 @@ import { unzipSync, type Unzipped, type UnzipFileFilter } from 'fflate';
 /** Which of the two Garmin buttons an upload came through. */
 export type UploadKind = 'history' | 'detection';
 
-/** The cap on one uploaded file (Mads, 2026-09-25: "500 MB, for now"). */
+/** The cap on one uploaded history file (Mads, 2026-09-25: "500 MB, for now"). */
 export const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+
+/**
+ * The cap on one detection upload (Mads, 2026-09-25, ruling 6a). The detection
+ * action reads its file whole and unzips it in memory, so a full Garmin export
+ * sent through the calendar would run a function out of memory; that belongs in
+ * the history upload, which streams. One activity, or a small zip of them.
+ */
+export const MAX_DETECTION_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/** The cap on one file of this kind of upload. */
+export function maxUploadBytes(kind: UploadKind): number {
+  return kind === 'detection' ? MAX_DETECTION_UPLOAD_BYTES : MAX_UPLOAD_BYTES;
+}
 
 /**
  * The content types the token allows. The browser gives a `.fit` no type and a
@@ -93,7 +106,7 @@ export function uploadPolicy(kind: UploadKind | null, state: { athleteId: string
   return {
     ok: true,
     pathPrefix: blobPrefix(kind, state.athleteId),
-    maximumSizeInBytes: MAX_UPLOAD_BYTES,
+    maximumSizeInBytes: maxUploadBytes(kind),
     allowedContentTypes: [...ALLOWED_CONTENT_TYPES],
   };
 }

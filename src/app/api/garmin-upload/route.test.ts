@@ -53,6 +53,13 @@ describe('POST /api/garmin-upload', () => {
     expect(handleUpload.mock.calls[0][0].onUploadCompleted).toBeUndefined();
   });
 
+  it('caps a detection token at 50 MB (ruling 6a)', async () => {
+    resolveAthlete.mockResolvedValue(OPEN);
+    const { response, issued } = await ask('garmin/detection/a1/ride.fit', { kind: 'detection' });
+    expect(response.status).toBe(200);
+    expect(issued).toMatchObject({ maximumSizeInBytes: 50 * 1024 * 1024 });
+  });
+
   it('ignores an athlete id in the payload: a path under another athlete is refused', async () => {
     resolveAthlete.mockResolvedValue(OPEN);
     const { response, issued } = await ask('garmin/history/a2/export.zip', { kind: 'history', athleteId: 'a2' });

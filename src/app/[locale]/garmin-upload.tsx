@@ -39,6 +39,8 @@ export const ERROR_KEY: Record<UploadFailure, string> = {
   // A URL outside the athlete's own prefix only comes from a hand-built
   // request; the honest answer to a real athlete is the generic one.
   'not-yours': 'error',
+  // The same words the browser shows when it refuses the file itself.
+  'too-large': 'errorTooLarge',
 };
 
 /** Why the file never reached Blob, to its message. */

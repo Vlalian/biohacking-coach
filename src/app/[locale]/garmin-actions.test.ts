@@ -15,6 +15,7 @@ const {
   runHistoryImport,
   fetchBlob,
   deleteBlob,
+  blobSize,
   blobWorkerDeps,
 } = vi.hoisted(() => {
   const fetchBlob = vi.fn();
@@ -34,6 +35,7 @@ const {
     runHistoryImport: vi.fn(),
     fetchBlob,
     deleteBlob,
+    blobSize: vi.fn(),
     blobWorkerDeps: { fetchBlob, deleteBlob, today: () => '2026-09-25' },
   };
 });
@@ -47,7 +49,7 @@ vi.mock('@/features/garmin/history-import-worker', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/garmin/history-import-worker')>()),
   runHistoryImport,
 }));
-vi.mock('@/features/garmin/blob-store', () => ({ fetchBlob, deleteBlob, blobWorkerDeps }));
+vi.mock('@/features/garmin/blob-store', () => ({ fetchBlob, deleteBlob, blobSize, blobWorkerDeps }));
 vi.mock('@/features/garmin/detected-activity', () => ({
   acceptDetectedActivity,
   declineDetectedActivity,
@@ -72,6 +74,7 @@ const historyUrl = (name: string, athlete = ATHLETE) => `${HOST}/garmin/history/
 
 beforeEach(() => {
   vi.resetAllMocks();
+  blobSize.mockResolvedValue(3);
 });
 
 /**
@@ -152,6 +155,31 @@ describe('importDetectedFromBlobAction', () => {
     await expect(importDetectedFromBlobAction(detectionUrl('f.fit'))).rejects.toThrow('db down');
     expect(deleteBlob).toHaveBeenCalledTimes(2);
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('refuses a blob over 50 MB from its size alone, without downloading it, and deletes it (ruling 6a)', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    blobSize.mockResolvedValue(51 * 1024 * 1024);
+    expect(await importDetectedFromBlobAction(detectionUrl('export.zip'))).toEqual({ ok: false, reason: 'too-large' });
+    expect(blobSize).toHaveBeenCalledWith(detectionUrl('export.zip'));
+    expect(fetchBlob).not.toHaveBeenCalled();
+    expect(proposeDetectedUpload).not.toHaveBeenCalled();
+    expect(deleteBlob).toHaveBeenCalledWith(detectionUrl('export.zip'));
+  });
+
+  it('reads a blob of exactly 50 MB', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    blobSize.mockResolvedValue(50 * 1024 * 1024);
+    fetchBlob.mockResolvedValue(BYTES);
+    proposeDetectedUpload.mockResolvedValue({ ok: true, count: 1 });
+    expect(await importDetectedFromBlobAction(detectionUrl('f.fit'))).toEqual({ ok: true, count: 1 });
+  });
+
+  it('answers unreadable, without downloading, when the blob has no size because it is gone', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    blobSize.mockResolvedValue(null);
+    expect(await importDetectedFromBlobAction(detectionUrl('f.fit'))).toEqual({ ok: false, reason: 'unreadable' });
+    expect(fetchBlob).not.toHaveBeenCalled();
   });
 
   it('still answers when the delete fails — the sweep takes what is left', async () => {

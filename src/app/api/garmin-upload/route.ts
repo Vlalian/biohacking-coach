@@ -17,8 +17,9 @@ import { resolveAthlete } from '../../[locale]/current-actor';
  * export is hundreds of MB. Before a token is issued: someone is signed in and
  * is an athlete, a history upload finds the lock untaken, the file is a `.fit`,
  * `.gpx` or `.zip` named directly under that athlete's own prefix, and the
- * token caps it at 500 MB. The athlete comes from the session; the client's
- * payload is read for `kind` and nothing else (ADR 0006).
+ * token caps it at 500 MB for history, 50 MB for detection (ruling 6a). The
+ * athlete comes from the session; the client's payload is read for `kind` and
+ * nothing else (ADR 0006).
  *
  * The consent checked is the one today's upload checked: none beyond being
  * signed in. `onUploadCompleted` is left out on purpose — Blob's callback does

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_ACTIVITY_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
+import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_DETECTION_UPLOAD_BYTES, maxUploadBytes, MAX_ACTIVITY_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**
  * `garmin-integration/04` — the pure half of the Blob upload: who may upload
@@ -16,10 +16,16 @@ describe('uploadPolicy', () => {
     expect(uploadPolicy(null, { athleteId: 'a1', historyLocked: false })).toEqual({ ok: false, reason: 'bad-kind' });
   });
 
-  it('allows a detection upload even when the history is locked, capped at 500 MB, under the athlete prefix', () => {
+  it('allows a detection upload even when the history is locked, capped at 50 MB, under the athlete prefix', () => {
     const p = uploadPolicy('detection', { athleteId: 'a1', historyLocked: true });
-    expect(p).toMatchObject({ ok: true, maximumSizeInBytes: 500 * 1024 * 1024, pathPrefix: 'garmin/detection/a1/' });
+    expect(p).toMatchObject({ ok: true, maximumSizeInBytes: 50 * 1024 * 1024, pathPrefix: 'garmin/detection/a1/' });
+  });
+
+  it('caps a history upload at 500 MB and a detection upload at 50 MB (ruling 6a)', () => {
     expect(MAX_UPLOAD_BYTES).toBe(500 * 1024 * 1024);
+    expect(MAX_DETECTION_UPLOAD_BYTES).toBe(50 * 1024 * 1024);
+    expect(maxUploadBytes('history')).toBe(MAX_UPLOAD_BYTES);
+    expect(maxUploadBytes('detection')).toBe(MAX_DETECTION_UPLOAD_BYTES);
   });
 
   it('caps one activity file inside an export at 64 MB inflated', () => {

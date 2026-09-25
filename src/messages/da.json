@@ -463,7 +463,7 @@
     "errorNoSessions": "Filen kunne læses, men indeholdt ingen aktivitet. Eksportér selve aktiviteten — ikke et resumé eller en rute.",
     "errorEmpty": "Den fil er tom. Vælg den .fit- eller .gpx-fil, du eksporterede fra Garmin Connect.",
     "errorNotAuthenticated": "Du er blevet logget ud. Log ind, og upload igen — intet gik tabt.",
-    "errorTooLarge": "Den fil er over 500 MB. Vælg en enkelt aktivitets .fit- eller .gpx-fil.",
+    "errorTooLarge": "Den fil er over 50 MB, det største kalender-uploadet tager. Til en fuld Garmin-eksport skal du bruge Indstillinger → Træning → Træningshistorik.",
     "errorUpload": "Uploadet blev ikke færdigt. Intet blev ændret. Prøv igen."
   },
   "Detected": {

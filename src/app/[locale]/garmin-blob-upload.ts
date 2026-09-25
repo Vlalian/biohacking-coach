@@ -1,5 +1,5 @@
 import { upload } from '@vercel/blob/client';
-import { contentTypeFor, MAX_UPLOAD_BYTES, type UploadKind, type UploadRefusal } from '@/features/garmin/blob-upload';
+import { contentTypeFor, maxUploadBytes, type UploadKind, type UploadRefusal } from '@/features/garmin/blob-upload';
 import { prepareGarminUploadAction } from './garmin-actions';
 
 /**
@@ -28,7 +28,7 @@ export async function uploadToBlob(
 ): Promise<BlobUploadResult> {
   const files = picked.filter((f) => f.size > 0);
   if (files.length === 0) return { ok: false, reason: 'empty' };
-  if (files.some((f) => f.size > MAX_UPLOAD_BYTES)) return { ok: false, reason: 'too-large' };
+  if (files.some((f) => f.size > maxUploadBytes(kind))) return { ok: false, reason: 'too-large' };
 
   const prepared = await prepareGarminUploadAction(kind);
   if (!prepared.ok) return prepared;
