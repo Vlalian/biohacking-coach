@@ -53,6 +53,7 @@ function session(overrides: Partial<Session> = {}): Session {
     // Slice 14 added `parked` to the Session domain type: a session on an
     // Unavailable Date is parked in place rather than moved.
     parked: false,
+    sport: null,
     dayOrder: 0,
     version: 1,
     title: null,

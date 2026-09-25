@@ -65,6 +65,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   feedbackComment: null,
   origin: 'coach',
   isTraining: true,
+  sport: null,
   ...over,
 });
 
@@ -275,8 +276,6 @@ describe('Calendar — a session that cannot be lifted says why', () => {
    * collapsed back into a boolean on the way.
    *
    * `t` is mocked to return its key, so the assertions below are message keys.
-   * The current week is expanded on first render, so a session dated in it is a
-   * real `SessionChip` here and not a collapsed dot.
    */
   it('explains a completed session instead of being silently inert', () => {
     const markup = render({ sessions: [session({ status: 'completed' })] });
@@ -306,45 +305,68 @@ describe('Calendar — a session that cannot be lifted says why', () => {
   });
 });
 
-describe('Calendar — the week row is the toggle', () => {
-  /**
-   * `CONTEXT.md`'s Expanded Week says "Tapping a week row toggles it." Only the
-   * 56-pixel date label was a button, so the row and the glossary disagreed.
-   *
-   * The click itself is not testable here — `renderToStaticMarkup` drops event
-   * handlers and this repo has no DOM renderer — so what is pinned is the
-   * precondition the handler depends on: every day cell is marked, so the row
-   * handler can tell "clicked the row" from "clicked a day" and let the day's
-   * own controls through. Remove the marker and the row would start swallowing
-   * drags and the ✕; that regression is what this test catches.
-   */
-  it('marks every day cell so the row handler can let them through', () => {
-    const markup = render();
-
-    // Seven days in the current week, plus the surrounding weeks the month grid
-    // renders. The exact count is not the point; the marker being present is.
-    expect(markup).toContain('data-day=');
-    expect((markup.match(/data-day=/g) ?? []).length).toBeGreaterThanOrEqual(7);
+describe('Calendar — every week expanded, sessions as cards (showable-version/37)', () => {
+  it('renders every week expanded, with no week toggle, no expand-all and no dots', () => {
+    // Two weeks before today's: it rendered as a collapsed row of dots until 37.
+    const html = render({ sessions: [session({ date: '2026-08-04' })] });
+    expect(html).not.toContain('data-week-toggle');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('expandAll');
+    expect(html).not.toContain('collapseAll');
+    expect(html).not.toContain('h-2.5 w-2.5');
+    expect(html).toMatch(/data-card-state="accepted"[^>]*>(?:(?!<\/button>)[\s\S])*Long ride/);
   });
 
-  it('keeps the date label a real button, for keyboard users', () => {
-    // The row click is a mouse convenience. A div with an onClick is not
-    // reachable by keyboard, so the button stays and remains the accessible
-    // path — widening the hit area must not narrow who can reach it.
-    const markup = render();
-
-    expect(markup).toMatch(/<button[^>]*aria-expanded=/);
+  it('offers the athlete’s + on every week, not only the expanded one', () => {
+    // One per day cell in the grid: August 2026 renders six Monday-first weeks.
+    const html = render({ sessions: [] });
+    expect(html.match(/aria-label="addSession"/g)).toHaveLength(42);
   });
 
-  it('keeps the date label out of the row handler, so it toggles once', () => {
-    // The button and the row both toggle. Without the marker the button's own
-    // click bubbles to the row, `toggleWeek` runs twice against a functional
-    // setState, and the week does not move at all — the failure is silent and
-    // it lands hardest on the keyboard user, whose Enter also fires a click.
-    // The marker is what the row handler's selector excludes.
-    const markup = render();
+  it('a card carries its state, icon, meta and note line', () => {
+    const html = render({
+      sessions: [session({ origin: 'arithmetic', sport: 'run', duration: 45, zone: 'Zone 2', note: 'Steady\nthen home' })],
+    });
+    expect(html).toMatch(/data-card-state="arithmetic"/);
+    expect(html).toMatch(/data-card-icon="Footprints"/);
+    expect(html).toContain('45minutes · Zone 2');
+    expect(html).toContain('Steady');
+    expect(html).not.toContain('then home');
+  });
 
-    expect(markup).toMatch(/<button[^>]*data-week-toggle=/);
+  it('omits a line the session has nothing for, and never writes a placeholder', () => {
+    const html = render({ sessions: [session({ duration: null, zone: null, note: null })] });
+    expect(html).not.toContain('data-card-meta');
+    expect(html).not.toContain('data-card-note');
+  });
+
+  it('draws the four states apart', () => {
+    const stateOf = (over: Partial<Session>) =>
+      render({ sessions: [session(over)] }).match(/data-card-state="(\w+)"[^>]*class="([^"]*)"/)?.slice(1) ?? [];
+    const [arithmetic, arithmeticClass] = stateOf({ origin: 'arithmetic' });
+    const [accepted, acceptedClass] = stateOf({ origin: 'coach' });
+    const [done, doneClass] = stateOf({ status: 'completed' });
+    const [missed, missedClass] = stateOf({ status: 'skipped' });
+    expect([arithmetic, accepted, done, missed]).toEqual(['arithmetic', 'accepted', 'done', 'missed']);
+    expect(new Set([arithmeticClass, acceptedClass, doneClass, missedClass]).size).toBe(4);
+    expect(arithmeticClass).toContain('border-dashed');
+    expect(acceptedClass).not.toContain('border-dashed');
+    expect(doneClass).toContain('bg-muted/60');
+    expect(missedClass).toContain('line-through');
+    expect(render({ sessions: [session({ status: 'completed' })] })).toContain('data-card-done');
+  });
+
+  it('a card with a drag permission stays draggable, and one without does not', () => {
+    expect(render()).toMatch(/<button[^>]*draggable="true"[^>]*data-card-state=/);
+    expect(render({ readOnly: true })).not.toContain('draggable="true"');
+  });
+
+  it('names the card for a screen reader by title, type and status, so the Head Coach’s e2e locator still finds it', () => {
+    // e2e/coach.visual.ts clicks `{ name: 'Strength · completed' }` — the old
+    // collapsed dot's name. The card keeps that phrase inside its own.
+    const html = render({ sessions: [session({ type: 'Strength', title: 'Core', status: 'completed', duration: 30, zone: null })] });
+    // Then the refusal a completed session carries.
+    expect(html).toContain('aria-label="Core · Strength · completed · 30minutes · bounceFrozen"');
   });
 });
 
@@ -447,12 +469,13 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(render({ sessions: [session({ date: '2026-08-17' })], health: [illness] })).not.toContain('data-mark=');
   });
 
-  it('marks the collapsed week’s dots too, tooltip included', () => {
-    // Session in the week of the 10th, collapsed (today is in the week of the 17th).
+  it('marks a past week’s card too, tooltip included', () => {
+    // Session in the week of the 10th — a collapsed row of dots until 37.
     const html = render({ sessions: [session({ date: '2026-08-12' })], health: [injury] });
     expect(html).toMatch(/data-mark="injury"/);
-    // The dot's title names the mark as the expanded chip's does (CodeRabbit, PR #86).
-    expect(html).toContain('title="Long ride · markInjury: left knee"');
+    // The card's title names the mark (CodeRabbit, PR #86), then why a past
+    // week's card will not lift.
+    expect(html).toContain('title="Long ride · markInjury: left knee · bounceFrozen"');
   });
 
   it('a marked chip that cannot be lifted still announces why (CodeRabbit, PR #86)', () => {
