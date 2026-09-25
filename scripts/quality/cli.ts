@@ -12,6 +12,7 @@ import {
   mutateEntries,
   parseArgs,
   splitByChange,
+  untouchedFiles,
   untrackedChange,
   type ChangedFile,
 } from './scope';
@@ -308,6 +309,10 @@ function readChange(
       'core.quotePath=false',
       'diff',
       '-U0',
+      // A user's `diff.noprefix` or `diff.mnemonicPrefix` would change the
+      // `b/` that `changedRanges` cuts off, and every path would miss.
+      '--src-prefix=a/',
+      '--dst-prefix=b/',
       '--relative',
       '--no-color',
       '--no-ext-diff',
@@ -326,7 +331,9 @@ function readChange(
         .map(({ file, source }) => untrackedChange(file, source)),
     ];
   } catch {
-    console.log('No merge-base to measure the change against — grading whole files instead.\n');
+    console.log(
+      `git could not diff against ${base ?? 'the merge-base with origin/main'} — grading whole files instead.\n`,
+    );
     return null;
   }
 }
@@ -361,8 +368,13 @@ function grade(files: string[], argv: string[]): number {
     source: readFileSync(file, 'utf8'),
   }));
   const changed = wholeFile ? null : readChange(graded, base);
-  if (changed?.length === 0)
-    console.log('No line of these files changed — nothing of this change to grade.\n');
+  const untouched = untouchedFiles(files, changed);
+  if (untouched.length === files.length)
+    console.log(
+      'No line of these files changed — nothing of this change to grade. ' +
+        'Pass --whole-file, or a --base from before the change.\n',
+    );
+  else if (untouched.length > 0) console.log(`Unchanged, not graded: ${untouched.join(', ')}\n`);
 
   const coverage = collectCoverage();
   const { touched: crap, standing } = splitByChange(
@@ -389,7 +401,7 @@ function grade(files: string[], argv: string[]): number {
     mutants,
     // Whether an empty result means the run missed the change, or only that
     // there was nothing to mutate — see `emptyMeansMissed`.
-    judge({ crap, mutants, ranMutation: emptyMeansMissed(mutate, changed, log) }),
+    judge({ crap, mutants, ranMutation: emptyMeansMissed(files, mutate, changed, log) }),
     standing,
   );
 }

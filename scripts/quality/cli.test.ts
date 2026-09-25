@@ -211,13 +211,34 @@ describe('main — the Stryker run', () => {
     expect(mutateList()).toEqual(['src/a.ts:1-1']);
   });
 
-  it('runs no mutation, and passes, when none of the files changed', () => {
+  it('runs no mutation, and escalates, when none of the files changed', () => {
+    // Graded nothing is not graded clean. The branch already in origin/main,
+    // or a --base that holds the change, would otherwise print PASS.
     const log = vi.spyOn(console, 'log');
     givenRun({ mutants: [], diff: '' });
 
-    expect(main(['src/a.ts'])).toBe(0);
+    expect(main(['src/a.ts'])).toBe(1);
     expect(mutateList()).toBeNull();
     expect(log.mock.calls.flat().join(' ')).toContain('No line of these files changed');
+  });
+
+  it('names a file it left ungraded because the change did not touch it', () => {
+    const log = vi.spyOn(console, 'log');
+    givenRun({ mutants: ['Killed'], diff: diffAdding(['src/a.ts']) });
+
+    expect(main(['src/a.ts', 'src/b.ts'])).toBe(0);
+    expect(log.mock.calls.flat().join(' ')).toContain('Unchanged, not graded: src/b.ts');
+  });
+
+  it('pins the diff prefixes, so a diff.noprefix config cannot hide every path', () => {
+    givenRun({ mutants: ['Killed'] });
+
+    main(['src/a.ts']);
+
+    const diffCall = execFileSync.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('diff'),
+    );
+    expect(diffCall?.[1]).toEqual(expect.arrayContaining(['--src-prefix=a/', '--dst-prefix=b/']));
   });
 
   it('grades a file git does not track yet from its first line to its last', () => {
@@ -267,7 +288,9 @@ describe('main — the Stryker run', () => {
     main(['src/a.ts']);
 
     expect(mutateList()).toEqual(['src/a.ts']);
-    expect(log.mock.calls.flat().join(' ')).toContain('grading whole files');
+    expect(log.mock.calls.flat().join(' ')).toContain(
+      'git could not diff against the merge-base with origin/main — grading whole files',
+    );
   });
 
   it('hands Stryker a [locale] path escaped, range and all', () => {

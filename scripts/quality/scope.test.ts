@@ -5,7 +5,9 @@ import {
   mutateEntries,
   parseArgs,
   splitByChange,
+  untouchedFiles,
   untrackedChange,
+  type ChangedFile,
 } from './scope';
 
 /**
@@ -389,32 +391,79 @@ describe('emptyMeansMissed — when a run with no mutants is a run that missed',
   const found = (n: number) =>
     `\u001b[32m14:58:39 (7737) INFO ProjectReader\u001b[39m Found ${n} of 765 file(s) to be mutated.`;
 
-  it('never, when nothing was handed to Stryker', () => {
-    expect(emptyMeansMissed([], [], '')).toBe(false);
+  const A = ['src/a.ts'];
+  const A_CHANGED: ChangedFile[] = [{ file: 'src/a.ts', ranges: [[1, 1]] }];
+
+  it('never, when nothing was handed to Stryker for a file that changed', () => {
+    // Every changed file exempt from mutation, like src/db/schema.ts.
+    const schema = 'src/db/schema.ts';
+    expect(emptyMeansMissed([schema], [], [{ file: schema, ranges: [[1, 1]] }], '')).toBe(false);
   });
 
   it('always, when whole files were handed over — the gate as it was', () => {
-    expect(emptyMeansMissed(['src/a.ts'], null, found(1))).toBe(true);
+    expect(emptyMeansMissed(A, ['src/a.ts'], null, found(1))).toBe(true);
+  });
+
+  it('never, in whole-file mode, when every file was exempt from mutation', () => {
+    expect(emptyMeansMissed(['src/db/schema.ts'], [], null, '')).toBe(false);
   });
 
   it('not when Stryker found every file: the changed lines held nothing to mutate', () => {
     // A change to a comment or a type alias has no mutant to offer, and that
     // is not the run failing to cover it.
+    const files = ['src/a.ts', 'src/app/[locale]/b.ts'];
+    const changed: ChangedFile[] = [
+      { file: 'src/a.ts', ranges: [[3, 4], [12, 140]] },
+      { file: 'src/app/[locale]/b.ts', ranges: [[1, 2]] },
+    ];
     const mutate = ['src/a.ts:3-4', 'src/a.ts:12-140', 'src/app/[[]locale]/b.ts:1-2'];
 
-    expect(emptyMeansMissed(mutate, [], found(2))).toBe(false);
+    expect(emptyMeansMissed(files, mutate, changed, found(2))).toBe(false);
   });
 
   it('reads a count of more than one digit', () => {
-    expect(emptyMeansMissed(['src/a.ts:1-1'], [], found(10))).toBe(false);
+    expect(emptyMeansMissed(A, ['src/a.ts:1-1'], A_CHANGED, found(10))).toBe(false);
   });
 
   it('when Stryker found fewer files than it was given', () => {
     // The [locale] failure: an entry that names no real file.
-    expect(emptyMeansMissed(['src/a.ts:1-1', 'src/b.ts:1-1'], [], found(1))).toBe(true);
+    const files = ['src/a.ts', 'src/b.ts'];
+    const changed: ChangedFile[] = [...A_CHANGED, { file: 'src/b.ts', ranges: [[1, 1]] }];
+    expect(emptyMeansMissed(files, ['src/a.ts:1-1', 'src/b.ts:1-1'], changed, found(1))).toBe(
+      true,
+    );
   });
 
   it('when the log does not say what Stryker found — fail closed', () => {
-    expect(emptyMeansMissed(['src/a.ts:1-1'], [], 'something else entirely')).toBe(true);
+    expect(emptyMeansMissed(A, ['src/a.ts:1-1'], A_CHANGED, 'something else entirely')).toBe(true);
+  });
+
+  it('when no named file changed at all — graded nothing is not graded clean', () => {
+    // The branch already in origin/main, or a --base holding the change.
+    expect(emptyMeansMissed(A, [], [], '')).toBe(true);
+  });
+
+  it('when the diff named only other files', () => {
+    // A path that does not match the one asked for, however it came about.
+    expect(emptyMeansMissed(A, [], [{ file: 'rc/a.ts', ranges: [[1, 1]] }], '')).toBe(true);
+  });
+
+  it('not when one named file changed and another did not', () => {
+    const files = ['src/a.ts', 'src/b.ts'];
+    expect(emptyMeansMissed(files, ['src/a.ts:1-1'], A_CHANGED, found(1))).toBe(false);
+  });
+});
+
+describe('untouchedFiles — the named files this run leaves ungraded', () => {
+  it('names each file the change did not touch, in the order given', () => {
+    const changed: ChangedFile[] = [{ file: 'src/b.ts', ranges: [[1, 1]] }];
+    expect(untouchedFiles(['src/c.ts', 'src/b.ts', 'src/a.ts'], changed)).toEqual([
+      'src/c.ts',
+      'src/a.ts',
+    ]);
+  });
+
+  it('names none when the run grades whole files', () => {
+    expect(untouchedFiles(['src/a.ts'], null)).toEqual([]);
   });
 });

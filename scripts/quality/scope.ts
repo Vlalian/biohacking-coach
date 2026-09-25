@@ -179,6 +179,15 @@ export function splitByChange<T extends Span>(
   };
 }
 
+/**
+ * The named files with no changed line: measured, reported by name, and not
+ * graded. With `changed` null the run grades whole files, and none is left out.
+ */
+export function untouchedFiles(files: string[], changed: ChangedFile[] | null): string[] {
+  if (changed === null) return [];
+  return files.filter((f) => !changed.some(({ file }) => file === f));
+}
+
 /** Stryker's log line saying how many files its `mutate` list resolved to. */
 const FOUND = /Found (\d+) of \d+ file\(s\) to be mutated/;
 
@@ -192,14 +201,22 @@ const FOUND = /Found (\d+) of \d+ file\(s\) to be mutated/;
  * scoped run is suspect only when Stryker's log shows it found fewer files
  * than it was handed — the `[locale]` failure, an entry naming no real file —
  * or does not say what it found, which fails closed.
+ *
+ * A scoped run in which **no** named file changed is always a miss. It
+ * graded nothing and would otherwise print PASS: the branch was already in
+ * `origin/main`, `--base` named the commit that holds the change, or the
+ * paths were not the change's. The fix is `--whole-file` or a `--base` that
+ * predates the change, and the run says so rather than passing.
  */
 export function emptyMeansMissed(
+  files: string[],
   mutate: string[],
   changed: ChangedFile[] | null,
   strykerLog: string,
 ): boolean {
+  if (changed === null) return mutate.length > 0;
+  if (untouchedFiles(files, changed).length === files.length) return true;
   if (mutate.length === 0) return false;
-  if (changed === null) return true;
   const found = FOUND.exec(strykerLog);
   // Each entry is `path:start-end`, and no path here holds a colon.
   const named = new Set(mutate.map((entry) => entry.split(':')[0])).size;
