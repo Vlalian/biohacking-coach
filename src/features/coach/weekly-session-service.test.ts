@@ -127,6 +127,46 @@ describe('commitWeeklyPlan and the planning window', () => {
     expect(recordPlanCommitted).not.toHaveBeenCalled();
   });
 
+  it('refuses a day before the first day the athlete chose at onboarding', async () => {
+    // Mads ruled 2026-09-23 that no session lands before the chosen day *from
+    // anyone* (`training-architecture/36`). The arithmetic honoured it and this
+    // path did not: the bound reached `planningWindow` but no caller here
+    // passed it, so a proposal confirmed in Coach Chat still wrote days the
+    // athlete had said were not theirs yet.
+    const chose = {
+      ...(ATHLETE as object),
+      profile: { onboardingAnswers: { firstDay: '2026-08-14' } },
+    } as typeof ATHLETE;
+    getPendingProposal.mockResolvedValue({
+      sessions: [{ ...INSIDE, date: '2026-08-13' }],
+    });
+
+    expect(await commitWeeklyPlan(chose, 'conv_1', TODAY)).toEqual({ ok: false, reason: 'stale' });
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+  });
+
+  it('opens the written range on the chosen day, not on today', async () => {
+    const chose = {
+      ...(ATHLETE as object),
+      profile: { onboardingAnswers: { firstDay: '2026-08-14' } },
+    } as typeof ATHLETE;
+    getPendingProposal.mockResolvedValue({ sessions: [INSIDE] });
+
+    expect(await commitWeeklyPlan(chose, 'conv_1', TODAY)).toMatchObject({
+      ok: true,
+      start: '2026-08-14',
+      end: '2026-08-16',
+    });
+    // The range that clears is the window, so Wednesday and Thursday are left
+    // alone rather than swept by a week that may not begin until Friday.
+    expect(replaceCoachPlanForDateRange).toHaveBeenCalledWith(
+      ATHLETE.id,
+      '2026-08-14',
+      '2026-08-16',
+      expect.any(Array),
+    );
+  });
+
   it('refuses when Unavailable Dates have emptied the week since staging', async () => {
     getPendingProposal.mockResolvedValue({ sessions: [INSIDE] });
     // Every remaining day of the week is now off, so the window falls through to

@@ -40,6 +40,11 @@ describe('answerText renders a line for every step', () => {
     expect(answerText({ step: 'pastRaces', pastRaces: [undefined] as never })).toBe('? ?');
     expect(answerText({ step: 'distance', raceDistance: 'Full' })).toBe('Full');
     expect(answerText({ step: 'hours', hoursPerWeek: 8 })).toBe('8 h/week');
+    // The choice, not the date it resolved to: the log records what the athlete
+    // said, and "next Monday" is what they said (`training-architecture/36`).
+    expect(answerText({ step: 'firstDay', firstDay: 'today' })).toBe('Starting today');
+    expect(answerText({ step: 'firstDay', firstDay: 'tomorrow' })).toBe('Starting tomorrow');
+    expect(answerText({ step: 'firstDay', firstDay: 'nextMonday' })).toBe('Starting next Monday');
   });
 
   it('records "no race" as something the athlete said, not as a blank', () => {

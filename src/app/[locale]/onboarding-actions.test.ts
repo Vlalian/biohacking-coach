@@ -169,6 +169,7 @@ describe('answerOnboardingAction', () => {
     ['race', { step: 'race', noRaceYet: true }, 'qRace', 'No race booked yet'],
     ['adaptive', { step: 'adaptive' }, 'qAdaptive', '—'],
     ['constraints', { step: 'constraints' }, 'qConstraints', '— · Sunday'],
+    ['firstDay', { step: 'firstDay', firstDay: 'nextMonday' }, 'qFirstDay', 'Starting next Monday'],
   ] as const)(
     'records the %s step in the transcript as the Coach asked it and the athlete answered it',
     async (_step, payload, questionKey, answer) => {

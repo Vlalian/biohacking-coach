@@ -1,6 +1,7 @@
 import type { Onboarding } from '@/features/coach/check-in';
 import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
 import { isCalendarDate } from '@/lib/calendar-date';
+import { addDays, weekStartOf } from '@/lib/date';
 import { deriveExperienceLevel, parsePastRace, type PastRace } from './past-races';
 import { parsePreferredName } from '@/features/user-prefs/preferred-name';
 
@@ -40,7 +41,8 @@ export type OnboardingStepId =
   | 'hours'
   | 'race'
   | 'adaptive'
-  | 'constraints';
+  | 'constraints'
+  | 'firstDay';
 
 export const ONBOARDING_STEPS: OnboardingStepId[] = [
   'language',
@@ -51,6 +53,10 @@ export const ONBOARDING_STEPS: OnboardingStepId[] = [
   'race',
   'adaptive',
   'constraints',
+  // Last, and deliberately: it is the one question about *when the plan starts*
+  // rather than about the athlete, and it reads as the closing handshake
+  // (`training-architecture/36`).
+  'firstDay',
 ];
 
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'veteran';
@@ -83,6 +89,15 @@ export interface OnboardingAnswers {
    * sizes every week from.
    */
   hoursPerWeek?: number;
+  /**
+   * The day the plan may start, as a date (`training-architecture/36`).
+   *
+   * Resolved when the athlete answers, not when it is read. Storing the *choice*
+   * looks tempting and is wrong: "next Monday" re-resolved a week later is a
+   * different Monday, so every weekly draft would push the start forward again
+   * and the athlete would never arrive at it.
+   */
+  firstDay?: string;
   /**
    * Asked of **every** athlete, always, and deliberately not a property of the
    * race: an athlete building toward an Ironman with nothing yet booked still
@@ -196,6 +211,72 @@ export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
   Sunday: 'daySunday',
 };
 
+/**
+ * When the athlete's plan starts (`training-architecture/36`).
+ *
+ * The friend who signed up at 23:00 and was handed a session for that same
+ * evening: "at least this should be asked." So it is asked, and these are the
+ * three answers.
+ */
+export const FIRST_DAY_CHOICES = ['today', 'tomorrow', 'nextMonday'] as const;
+
+export type FirstDayChoice = (typeof FIRST_DAY_CHOICES)[number];
+
+/**
+ * Which choice the question starts on, decided on the athlete's own clock.
+ *
+ * After 18:00 a plan starting "today" has a few hours left in it, so tomorrow
+ * is the honest default. Before, today still has a day in it.
+ *
+ * Pure over an injected `Date`, and called from the client — the device knows
+ * its own local time, and a native shell later hands over the same `Date`
+ * without the server ever growing a timezone seam. What the server stores is
+ * the choice, never the hour, so a wrong guess here moves the pre-selection and
+ * nothing else.
+ */
+export function defaultFirstDay(now: Date): FirstDayChoice {
+  return now.getHours() >= EVENING_CUTOFF_HOUR ? 'tomorrow' : 'today';
+}
+
+const EVENING_CUTOFF_HOUR = 18;
+
+/** The choice as a date key, against the day it was answered. */
+export function firstDayDate(choice: FirstDayChoice, today: string): string {
+  if (choice === 'today') return today;
+  if (choice === 'tomorrow') return addDays(today, 1);
+  // The Monday of next week — which is tomorrow when answered on a Sunday, and
+  // a full week away when answered on a Monday. Never today.
+  return addDays(weekStartOf(today), 7);
+}
+
+/**
+ * Which tile a stored first day came from, for a step re-entered with Back
+ * (`showable-version/32`). Falls back to the clock's own default when the
+ * stored date matches none of the three — a record from another day, which is
+ * exactly what Back after midnight would produce.
+ */
+export function firstDayChoiceOf(stored: string | undefined, today: string, now: Date): FirstDayChoice {
+  return FIRST_DAY_CHOICES.find((choice) => firstDayDate(choice, today) === stored) ?? defaultFirstDay(now);
+}
+
+/**
+ * The athlete's chosen first training day as a date, or `undefined` when there
+ * is nothing to honour — never asked, or already arrived.
+ *
+ * One rule in one place, because both the block arithmetic and the Coach's week
+ * draft need it and a rule written twice is a rule that drifts. "Already
+ * arrived" collapses into `undefined` deliberately: a day in the past is not a
+ * weaker constraint than no day at all, it is the same thing, and callers
+ * should not have to tell them apart.
+ */
+export function chosenFirstDay(
+  profile: { onboardingAnswers?: OnboardingAnswers } | null | undefined,
+  today: string,
+): string | undefined {
+  const chosen = profile?.onboardingAnswers?.firstDay;
+  return chosen && chosen > today ? chosen : undefined;
+}
+
 /** Which submission-tracked steps have been answered (an empty answer counts). */
 export interface OnboardingSubmitted {
   name?: boolean;
@@ -229,6 +310,8 @@ export function nextStep(
   if (!hasNamedRace(answers) && !answers.noRaceYet) return 'race';
   if (!submitted.adaptive) return 'adaptive';
   if (!submitted.constraints) return 'constraints';
+  // Last: when the plan starts. Asked of everyone, so its presence is the answer.
+  if (!answers.firstDay) return 'firstDay';
   return 'done';
 }
 
@@ -284,6 +367,7 @@ export type StepAnswer =
   | { step: 'distance'; raceDistance: string }
   /** Hours a week, an integer 1–30. */
   | { step: 'hours'; hoursPerWeek: number }
+  | { step: 'firstDay'; firstDay: FirstDayChoice }
   | { step: 'race'; raceTarget: string; raceDate: string }
   | { step: 'race'; noRaceYet: true }
   | {
@@ -379,6 +463,10 @@ export function applyAnswer(
     case 'hours': {
       if (!isHoursPerWeek(payload.hoursPerWeek)) return null;
       return { answers: { ...answers, hoursPerWeek: payload.hoursPerWeek }, submitted };
+    }
+    case 'firstDay': {
+      if (!inSet(payload.firstDay, FIRST_DAY_CHOICES)) return null;
+      return { answers: { ...answers, firstDay: firstDayDate(payload.firstDay, today) }, submitted };
     }
     case 'distance': {
       if (!inSet(payload.raceDistance, ONBOARDING_OPTIONS.raceDistance)) return null;

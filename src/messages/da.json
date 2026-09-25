@@ -552,7 +552,13 @@
     "optSprint": "Sprint",
     "optOlympic": "Olympisk",
     "optHalf": "Half",
-    "optFull": "Full"
+    "optFull": "Full",
+    "stepFirstDay": "Opstart",
+    "qFirstDay": "Hvornår starter vi?",
+    "qFirstDaySub": "Din første træningsdag. At melde sig til sent om aftenen er en dårlig grund til at træne i aften.",
+    "firstDayToday": "I dag",
+    "firstDayTomorrow": "I morgen",
+    "firstDayNextMonday": "På mandag"
   },
   "CoachThread": {
     "offerBody": "Det er din check-in-dag. Før jeg laver et udkast til næste uge — hvordan møder du den? Det tager et minut, og du må gerne springe over.",
