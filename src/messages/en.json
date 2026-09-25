@@ -447,6 +447,7 @@
     "unpacking": "Unpacking your export…",
     "importing": "Importing {done} of {total} files…",
     "imported": "{done, plural, one {# file read} other {# files read}}.",
+    "importFailed": "The import stopped after {done, plural, one {# file} other {# files}} and won’t finish. Remove it below and upload again.",
     "skippedOld": "{count, plural, one {# activity} other {# activities}} older than {weeks} weeks skipped",
     "failedFiles": "{count, plural, one {# file} other {# files}} could not be read",
     "tooLarge": "That file is over 500 MB, the most one upload takes. Nothing was uploaded.",

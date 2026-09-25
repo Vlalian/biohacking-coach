@@ -15,6 +15,8 @@ const selects = new Map<unknown, unknown[]>();
 /** Every read the service made: what it projected, from which table, under what filter. */
 const reads: { fields: Record<string, unknown> | undefined; table: unknown; where: SQL }[] = [];
 const limits: number[] = [];
+/** What each `update … returning` asked for. */
+const returned: Record<string, unknown>[] = [];
 const orders: unknown[][] = [];
 
 const { batch, getAthleteById, athleteProfileMerge, getSessionsOnDates, ensureBlockFilled, ensureWeekDrafted, deleteAthleteBlobs } = vi.hoisted(() => ({
@@ -60,7 +62,12 @@ vi.mock('@/db', () => ({
         where: (where: SQL) => {
           const stmt: Stmt = { kind: 'update', table, values, where };
           statements.push(stmt);
-          return stmt;
+          return Object.assign(stmt, {
+            returning: (fields: Record<string, unknown>) => {
+              returned.push(fields);
+              return Promise.resolve(selects.get(table) ?? []);
+            },
+          });
         },
       }),
     }),
@@ -90,6 +97,8 @@ const {
   getHistoryImport,
   latestHistoryImport,
   importsToResume,
+  recordImportError,
+  failStalledImports,
 } = await import(
   './history-import-service'
 );
@@ -128,6 +137,7 @@ beforeEach(() => {
   statements.length = 0;
   reads.length = 0;
   limits.length = 0;
+  returned.length = 0;
   orders.length = 0;
   selects.clear();
   getAthleteById.mockResolvedValue(athlete());
@@ -288,6 +298,7 @@ describe('importProgressWrite', () => {
       skippedOld: 3,
       failed: 1,
       status: 'importing',
+      error: null,
       updatedAt: expect.any(Date),
     });
     const { sql, params } = new PgDialect().sqlToQuery(stmt.where!);
@@ -398,5 +409,40 @@ describe('reading imports', () => {
     expect(params).toEqual(['unpacking', 'importing', cutoff.toISOString()]);
     expect(new PgDialect().sqlToQuery(orders[0][0] as SQL)).toMatchObject({ sql: '"history_import"."updated_at" asc' });
     expect(limits).toEqual([5]);
+  });
+});
+
+describe('ending a stalled import (ruling 5a)', () => {
+  it('recordImportError stores the error on a running import and leaves updated_at alone', async () => {
+    await recordImportError('imp1', 'db down');
+    const [stmt] = statements;
+    expect(stmt).toMatchObject({ kind: 'update', table: historyImport, values: { error: 'db down' } });
+    expect(Object.keys(stmt.values as object)).toEqual(['error']);
+    const { sql, params } = new PgDialect().sqlToQuery(stmt.where!);
+    expect(sql).toBe('("history_import"."id" = $1 and "history_import"."status" in ($2, $3, $4))');
+    expect(params).toEqual(['imp1', 'uploading', 'unpacking', 'importing']);
+  });
+
+  it('failStalledImports fails every running import untouched since the cutoff, keeping a caught error over the reason', async () => {
+    selects.set(historyImport, [{ id: 'imp1', athleteId: 'a1' }]);
+    const cutoff = new Date('2026-09-25T11:30:00Z');
+
+    expect(await failStalledImports(cutoff, 'stalled: no progress')).toEqual([{ id: 'imp1', athleteId: 'a1' }]);
+
+    const [stmt] = statements;
+    expect(stmt.kind).toBe('update');
+    expect(stmt.table).toBe(historyImport);
+    const { status, error, updatedAt } = stmt.values as { status: string; error: SQL; updatedAt: Date };
+    expect(status).toBe('failed');
+    expect(updatedAt).toEqual(expect.any(Date));
+    expect(new PgDialect().sqlToQuery(error)).toMatchObject({ sql: 'coalesce("history_import"."error", $1)', params: ['stalled: no progress'] });
+    const { sql, params } = new PgDialect().sqlToQuery(stmt.where!);
+    expect(sql).toBe('("history_import"."status" in ($1, $2, $3) and "history_import"."updated_at" < $4)');
+    expect(params).toEqual(['uploading', 'unpacking', 'importing', cutoff.toISOString()]);
+    expect(returned).toEqual([{ id: historyImport.id, athleteId: historyImport.athleteId }]);
+  });
+
+  it('failStalledImports is empty when nothing has stalled', async () => {
+    expect(await failStalledImports(new Date(), 'stalled: no progress')).toEqual([]);
   });
 });

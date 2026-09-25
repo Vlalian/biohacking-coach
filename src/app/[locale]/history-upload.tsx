@@ -42,19 +42,26 @@ const UPLOAD_ERROR: Record<Exclude<BlobUploadResult, { ok: true }>['reason'], { 
  * `allowRemove` is set, which is Settings — to the one way back: remove it all,
  * behind a confirmation, and upload again (ballots 10–11).
  *
+ * An import that stopped making progress ends `failed` (ruling 5a): the screen
+ * says so, and the remove is the way to start again.
+ *
  * Onboarding and Settings share the lock. Onboarding does not show the count
  * or the remove; it calls `onImported` as soon as the import has started.
+ * Settings passes `initialProgress`, the import as the page read it, so a
+ * finished or failed one shows without waiting for the first poll.
  */
 export function HistoryUpload({
   locked,
   importedCount,
   allowRemove,
   onImported,
+  initialProgress = null,
 }: {
   locked: boolean;
   importedCount: number;
   allowRemove: boolean;
   onImported?: () => void;
+  initialProgress?: ImportSummary | null;
 }) {
   const t = useTranslations('History');
   const tGarmin = useTranslations('Garmin');
@@ -65,7 +72,7 @@ export function HistoryUpload({
   // The lock as this screen last saw it: taken the moment Import succeeds,
   // released by the remove, without waiting for the page to refresh.
   const [lockedNow, setLockedNow] = useState(locked);
-  const [progress, setProgress] = useState<ImportSummary | null>(null);
+  const [progress, setProgress] = useState<ImportSummary | null>(initialProgress);
   const [confirming, setConfirming] = useState(false);
   const importing = progress !== null && importRunning(progress.status);
 
@@ -243,21 +250,25 @@ export function HistoryUpload({
 /**
  * How far an import has got: "Unpacking…" while the export is opened, then
  * "Importing 340 of 1 200", then how many activities were older than the
- * window and how many files would not read.
+ * window and how many files would not read — or, for one that stalled, that it
+ * stopped.
  * A live region, so a screen reader hears it move.
  */
 export function HistoryImportProgress({ status }: { status: ImportSummary }) {
   const t = useTranslations('History');
   const running = importRunning(status.status);
+  const failed = status.status === 'failed';
   return (
     <div role="status" className="space-y-1 font-body text-sm">
-      <p className={running ? 'text-foreground' : 'text-session-recovery'}>
+      <p className={running ? 'text-foreground' : failed ? 'text-destructive' : 'text-session-recovery'}>
         {running && <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />}
         {status.status === 'unpacking'
           ? t('unpacking')
           : running
             ? t('importing', { done: status.done, total: status.total })
-            : t('imported', { done: status.done })}
+            : failed
+              ? t('importFailed', { done: status.done })
+              : t('imported', { done: status.done })}
       </p>
       {status.skippedOld > 0 && (
         <p className="text-muted-foreground">{t('skippedOld', { count: status.skippedOld, weeks: HISTORY_WINDOW_WEEKS })}</p>

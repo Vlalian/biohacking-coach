@@ -38,6 +38,7 @@ function render(
         hoursPerWeek: 9,
         historyImportedAt,
         importedHistoryCount: historyImportedAt ? 42 : 0,
+        historyImport: null,
         weeklySessionDay: null,
         fixedConstraints: [],
       }}

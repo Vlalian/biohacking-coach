@@ -24,7 +24,7 @@ const call = (authorization?: string) =>
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('CRON_SECRET', 'test-secret');
-  resumeImports.mockResolvedValue(2);
+  resumeImports.mockResolvedValue({ resumed: 2, failed: 1 });
   sweepOldBlobs.mockResolvedValue(3);
 });
 
@@ -46,13 +46,14 @@ describe('GET /api/cron/garmin-import', () => {
     expect(sweepOldBlobs).not.toHaveBeenCalled();
   });
 
-  it('runs importing rows and sweeps blobs older than 24 h', async () => {
+  it('runs importing rows, fails the stalled ones, and sweeps blobs older than 24 h', async () => {
     vi.useFakeTimers({ now: new Date('2026-09-25T12:00:00Z') });
     const response = await call('Bearer test-secret');
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ imports: 2, swept: 3 });
-    const [deps, now, timeUp] = resumeImports.mock.calls[0];
+    expect(await response.json()).toEqual({ imports: 2, failed: 1, swept: 3 });
+    const [deps, now, timeUp, stallAfterMs] = resumeImports.mock.calls[0];
+    expect(stallAfterMs).toBe(30 * 60 * 1000);
     expect(deps).toBe(blobWorkerDeps);
     expect(now).toEqual(new Date('2026-09-25T12:00:00Z'));
     expect(timeUp()).toBe(false);

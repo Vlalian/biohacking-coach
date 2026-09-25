@@ -447,6 +447,7 @@
     "unpacking": "Pakker din eksport ud…",
     "importing": "Importerer {done} af {total} filer…",
     "imported": "{done, plural, one {# fil læst} other {# filer læst}}.",
+    "importFailed": "Importen stoppede efter {done, plural, one {# fil} other {# filer}} og bliver ikke færdig. Fjern den nedenfor, og upload igen.",
     "skippedOld": "{count, plural, one {# aktivitet} other {# aktiviteter}} ældre end {weeks} uger sprunget over",
     "failedFiles": "{count, plural, one {# fil} other {# filer}} kunne ikke læses",
     "tooLarge": "Den fil er over 500 MB, det største ét upload kan tage. Intet blev uploadet.",

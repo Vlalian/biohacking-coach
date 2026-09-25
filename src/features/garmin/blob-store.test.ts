@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { get, del, list, put } = vi.hoisted(() => ({ get: vi.fn(), del: vi.fn(), list: vi.fn(), put: vi.fn() }));
 vi.mock('@vercel/blob', () => ({ get, del, list, put }));
 
-const { fetchBlob, openBlob, putBlob, deleteBlob, deleteAthleteBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
+const { fetchBlob, openBlob, putBlob, deleteBlob, deleteAthleteBlobs, deleteHistoryBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
 const { today } = await import('@/lib/date');
 
 const URL1 = 'https://s.private.blob.vercel-storage.com/garmin/history/a1/x.zip';
@@ -80,6 +80,15 @@ describe('deleteBlob', () => {
   });
 });
 
+describe('deleteHistoryBlobs', () => {
+  it('deletes the athlete’s history uploads, and only those', async () => {
+    list.mockResolvedValue({ blobs: [{ url: 'u1' }], hasMore: false });
+    await deleteHistoryBlobs('a1');
+    expect(list).toHaveBeenCalledWith({ prefix: 'garmin/history/a1/', cursor: undefined });
+    expect(del.mock.calls).toEqual([[['u1']]]);
+  });
+});
+
 describe('deleteAthleteBlobs', () => {
   it('deletes every blob under the athlete’s prefix for that kind, page by page', async () => {
     list
@@ -124,6 +133,6 @@ describe('sweepOldBlobs', () => {
 
 describe('blobWorkerDeps', () => {
   it('is this adapter and the app clock, as the import worker wants them', () => {
-    expect(blobWorkerDeps).toEqual({ fetchBlob, openBlob, putBlob, deleteBlob, today });
+    expect(blobWorkerDeps).toEqual({ fetchBlob, openBlob, putBlob, deleteBlob, deleteHistoryBlobs, today });
   });
 });

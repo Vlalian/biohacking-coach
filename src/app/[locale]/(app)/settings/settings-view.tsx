@@ -26,6 +26,7 @@ import type {
 import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './settings-past-races';
 import { RacesSection, type SettingsRace } from './settings-races';
 import { HistoryUpload } from '../../history-upload';
+import type { ImportSummary } from '@/features/garmin/blob-upload';
 import type { DeleteAccountResult } from './erasure-actions';
 
 /** Communication Style is hidden until the post-test discussion (Mads, 2026-09-24). */
@@ -48,6 +49,8 @@ export interface SettingsProfile {
   /** When the history import ran; null while it is open (`garmin-integration/03`). */
   historyImportedAt: string | null;
   importedHistoryCount: number;
+  /** The latest history import as the page read it — running, done or failed — or null when there is none. */
+  historyImport: ImportSummary | null;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
 }
@@ -161,6 +164,7 @@ export function SettingsView({
           hoursPerWeek={profile.hoursPerWeek}
           historyImportedAt={profile.historyImportedAt}
           importedHistoryCount={profile.importedHistoryCount}
+          historyImport={profile.historyImport}
           weeklySessionDay={profile.weeklySessionDay}
           weeklySessionDayLinked={coachingLink !== null}
           fixedConstraints={profile.fixedConstraints}
@@ -449,6 +453,7 @@ function TrainingSection({
   hoursPerWeek,
   historyImportedAt,
   importedHistoryCount,
+  historyImport,
   weeklySessionDay,
   weeklySessionDayLinked,
   fixedConstraints,
@@ -472,6 +477,7 @@ function TrainingSection({
   hoursPerWeek: number | null;
   historyImportedAt: string | null;
   importedHistoryCount: number;
+  historyImport: ImportSummary | null;
   weeklySessionDay: string | null;
   /** While a Head Coach is linked the day is theirs; the tiles show it and refuse the tap. */
   weeklySessionDayLinked: boolean;
@@ -498,7 +504,12 @@ function TrainingSection({
       <RacesSection races={races} onAdd={onAddRace} onSetTarget={onSetTargetRace} onRemove={onRemoveRace} />
       <PastRacesSection pastRaces={pastRaces} onAdd={onAddPastRace} onRemove={onRemovePastRace} />
       {/* The history upload, sharing onboarding's lock; the detection upload stays under the calendar. */}
-      <HistoryUpload locked={historyImportedAt !== null} importedCount={importedHistoryCount} allowRemove />
+      <HistoryUpload
+        locked={historyImportedAt !== null}
+        importedCount={importedHistoryCount}
+        allowRemove
+        initialProgress={historyImport}
+      />
       {/* Communication Style is hidden until it is discussed after the test
           round (Mads, 2026-09-24). The stored value, the action and the field
           below all stay, so bringing it back is one line. */}

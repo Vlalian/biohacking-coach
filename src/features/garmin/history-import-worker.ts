@@ -14,7 +14,14 @@ import {
   type UnpackOutcome,
 } from './blob-upload';
 import { unpackZipStream, type UnpackedEntry } from './export-unpacker';
-import { getHistoryImport, importProgressWrite, importsToResume, importTrainingHistory } from './history-import-service';
+import {
+  failStalledImports,
+  getHistoryImport,
+  importProgressWrite,
+  importsToResume,
+  importTrainingHistory,
+  recordImportError,
+} from './history-import-service';
 
 /**
  * The history import's background worker (`garmin-integration/04`).
@@ -43,6 +50,8 @@ export type WorkerDeps = {
   openBlob: (url: string) => Promise<ReadableStream<Uint8Array> | null>;
   putBlob: (pathname: string, bytes: Uint8Array) => Promise<string>;
   deleteBlob: (url: string) => Promise<void>;
+  /** Every history upload the athlete still has in Blob — what the bulk remove deletes, for a failed import. */
+  deleteHistoryBlobs: (athleteId: string) => Promise<void>;
   today: () => string;
 };
 
@@ -105,8 +114,13 @@ class UnpackRun {
     if (this.pending.extracted.length + this.pending.failed >= IMPORT_CHUNK_FILES) await this.save({ ...this.pending, complete: false });
   }
 
-  /** Records what was extracted since the last save; a zip read to its end is then deleted. */
+  /**
+   * Records what was extracted since the last save; a zip read to its end is
+   * then deleted. A stretch that read nothing — time ran out before the stream
+   * reached the saved place — writes nothing, so it does not count as progress.
+   */
   async save(outcome: UnpackOutcome): Promise<StepResult> {
+    if (!outcome.complete && outcome.extracted.length === 0 && outcome.failed === 0) return 'unpacking';
     const { finishedZip, ...next } = advanceUnpack(this.saved, this.zip, outcome);
     const write = importProgressWrite(this.saved.id, { status: 'unpacking', cursor: this.saved.cursor }, next);
     await importTrainingHistory(this.saved.athleteId, [], write);
@@ -156,17 +170,36 @@ async function deleteQuietly(url: string, deps: WorkerDeps): Promise<void> {
 /**
  * Runs an import step after step until it is finished or `timeUp` says to
  * stop. An error stops the run without throwing — the import stays where it
- * was last saved and the cron picks it up again. Only the import id is
- * logged, never a file or a URL.
+ * was last saved, the error is kept on it without counting as progress, and
+ * the cron picks it up again until it stalls ({@link resumeImports}). Only the
+ * import id is logged, never a file or a URL.
  */
 export async function runHistoryImport(importId: string, deps: WorkerDeps, timeUp: () => boolean): Promise<void> {
   try {
     while (!timeUp()) {
       if (!importRunning(await importNextChunk(importId, deps, timeUp))) return;
     }
-  } catch {
+  } catch (error) {
     console.error('history import stopped', importId);
+    await recordImportError(importId, importErrorText(error)).catch(() => {});
   }
+}
+
+/** The most of an error the import keeps. */
+const IMPORT_ERROR_MAX_CHARS = 500;
+
+/**
+ * What an import keeps of an error: the database's own message where the query
+ * wrapper has one as its cause — the wrapper's message carries the query's
+ * parameters, the activities' streams and blob URLs among them — cut short.
+ *
+ * Export-for-test: the wrapper is the driver's, and faking it through the
+ * worker says less than this does. Delete freely if the worker stops keeping errors.
+ */
+export function importErrorText(error: unknown): string {
+  const inner = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+  const text = inner instanceof Error ? inner.message : String(inner);
+  return text.slice(0, IMPORT_ERROR_MAX_CHARS);
 }
 
 /** How long an import must sit untouched before the cron takes it — a run started by *Import* may still hold it. */
@@ -176,18 +209,41 @@ const RESUME_AFTER_MS = 60_000;
 const RESUME_LIMIT = 5;
 
 /**
- * The cron's half: every import still `importing` that nothing has advanced
- * for a minute, run in turn while time allows. Returns how many it ran.
+ * How long a running import may go without progress before it is failed
+ * (ruling 5a). Progress is a saved step — `updated_at` moves on nothing else —
+ * so this is thirty minutes of cron runs that each got nowhere.
  */
-export async function resumeImports(deps: WorkerDeps, now: Date, timeUp: () => boolean): Promise<number> {
+export const IMPORT_STALL_MS = 30 * 60 * 1000;
+
+/** What a stalled import is failed with when no attempt caught an error. */
+export const STALLED_ERROR = 'stalled: no progress';
+
+/**
+ * The cron's half. First every running import nothing has advanced for
+ * `stallAfterMs` ends `failed` and its blobs go, so the athlete sees it stopped
+ * and can remove it and start again. Then every import still running that
+ * nothing has advanced for a minute runs in turn while time allows.
+ */
+export async function resumeImports(
+  deps: WorkerDeps,
+  now: Date,
+  timeUp: () => boolean,
+  stallAfterMs: number,
+): Promise<{ resumed: number; failed: number }> {
+  const failed = await failStalledImports(new Date(now.getTime() - stallAfterMs), STALLED_ERROR);
+  for (const { athleteId } of failed) {
+    // A failed delete does not undo the failure: the 24 h sweep removes what is left.
+    await deps.deleteHistoryBlobs(athleteId).catch(() => {});
+  }
+
   const ids = await importsToResume(new Date(now.getTime() - RESUME_AFTER_MS), RESUME_LIMIT);
-  let ran = 0;
+  let resumed = 0;
   for (const id of ids) {
     if (timeUp()) break;
     await runHistoryImport(id, deps, timeUp);
-    ran++;
+    resumed++;
   }
-  return ran;
+  return { resumed, failed: failed.length };
 }
 
 /**

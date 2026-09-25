@@ -4,7 +4,15 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import { getDb } from '@/db';
-import { detectedActivities, historyImport, sessions, sessionStreams, type HistoryImportRow, type HistoryImportStatus } from '@/db/schema';
+import {
+  detectedActivities,
+  historyImport,
+  RUNNING_IMPORT_STATUSES,
+  sessions,
+  sessionStreams,
+  type HistoryImportRow,
+  type HistoryImportStatus,
+} from '@/db/schema';
 import { athleteProfileMerge, getAthleteById } from '@/features/athlete/athlete-repository';
 import { getSessionsOnDates } from '@/features/session/session-repository';
 import type { ParsedSession } from './garmin';
@@ -88,6 +96,11 @@ export type ImportReadAt = { status: HistoryImportStatus; cursor: number };
  * division fails the whole batch. So the step's history and proposals never
  * land without its progress, and the worker stops. Without the guard the
  * update would match no row and the inserts beside it would still run.
+ *
+ * This is the only write that moves `updated_at`, so it measures progress and
+ * nothing else: a step that fails writes none of it, and the stall rule
+ * ({@link failStalledImports}) reads it. A step that lands clears the error an
+ * earlier attempt recorded.
  */
 export function importProgressWrite(importId: string, readAt: ImportReadAt, next: ImportProgressChange): ProgressWrite {
   const db = getDb();
@@ -96,7 +109,7 @@ export function importProgressWrite(importId: string, readAt: ImportReadAt, next
     db.execute(sql`select 1 / count(*) from (select 1 from ${historyImport} where ${asRead} for update) as held`),
     db
       .update(historyImport)
-      .set({ ...next, updatedAt: new Date() })
+      .set({ ...next, error: null, updatedAt: new Date() })
       .where(asRead),
   ];
 }
@@ -248,4 +261,30 @@ export async function importsToResume(untouchedSince: Date, limit: number): Prom
     .orderBy(asc(historyImport.updatedAt))
     .limit(limit);
   return rows.map((r) => r.id);
+}
+
+/**
+ * Keeps what went wrong on an attempt, on an import still running, without
+ * moving `updated_at` — a failed attempt is not progress, so the stall clock
+ * keeps running and {@link failStalledImports} ends the import with this error.
+ */
+export async function recordImportError(importId: string, error: string): Promise<void> {
+  await getDb()
+    .update(historyImport)
+    .set({ error })
+    .where(and(eq(historyImport.id, importId), inArray(historyImport.status, [...RUNNING_IMPORT_STATUSES])));
+}
+
+/**
+ * Ends every running import nothing has advanced since `stalledBefore` (ruling
+ * 5a): `failed`, with the last error an attempt caught, or `reason` when none
+ * was. One conditional update, so an import that moved meanwhile is left
+ * running. Returns the imports it failed, for the caller to delete their blobs.
+ */
+export async function failStalledImports(stalledBefore: Date, reason: string): Promise<{ id: string; athleteId: string }[]> {
+  return getDb()
+    .update(historyImport)
+    .set({ status: 'failed', error: sql`coalesce(${historyImport.error}, ${reason})`, updatedAt: new Date() })
+    .where(and(inArray(historyImport.status, [...RUNNING_IMPORT_STATUSES]), lt(historyImport.updatedAt, stalledBefore)))
+    .returning({ id: historyImport.id, athleteId: historyImport.athleteId });
 }

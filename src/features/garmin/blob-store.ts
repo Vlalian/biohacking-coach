@@ -57,6 +57,11 @@ export async function deleteAthleteBlobs(athleteId: string, kind: UploadKind): P
   await forEachPage(blobPrefix(kind, athleteId), (blobs) => blobs.map((b) => b.url));
 }
 
+/** Every history upload the athlete has left — what the worker deletes for an import it failed. */
+export async function deleteHistoryBlobs(athleteId: string): Promise<void> {
+  await deleteAthleteBlobs(athleteId, 'history');
+}
+
 /**
  * Deletes every Garmin upload older than a day, read or not, so a failed or
  * abandoned import never leaves files behind. Returns how many went.
@@ -86,4 +91,4 @@ async function forEachPage(prefix: string, pick: (blobs: ListedBlob[]) => string
 }
 
 /** The import worker's deps as production wires them: this adapter and the app clock. */
-export const blobWorkerDeps = { fetchBlob, openBlob, putBlob, deleteBlob, today };
+export const blobWorkerDeps = { fetchBlob, openBlob, putBlob, deleteBlob, deleteHistoryBlobs, today };

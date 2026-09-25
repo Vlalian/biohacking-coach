@@ -10,6 +10,8 @@ vi.mock('./garmin-actions', () => ({}));
 vi.mock('./garmin-blob-upload', () => ({}));
 
 const { HistoryImportProgress, HistoryUpload } = await import('./history-upload');
+const en = (await import('@/messages/en.json')).default;
+const da = (await import('@/messages/da.json')).default;
 
 /** `garmin-integration/04` — what the athlete sees of an upload and an import. */
 describe('HistoryImportProgress', () => {
@@ -37,6 +39,38 @@ describe('HistoryImportProgress', () => {
     expect(html).toContain('failedFiles(count=2)');
     expect(html).not.toContain('importing(');
     expect(html).not.toContain('skippedOld');
+  });
+});
+
+describe('a failed import (ruling 5a)', () => {
+  const FAILED = { total: 1200, done: 340, skippedOld: 0, failed: 0, status: 'failed' };
+
+  it('says the import stopped and how far it got, with no spinner', () => {
+    const html = renderToStaticMarkup(<HistoryImportProgress status={FAILED} />);
+    expect(html).toContain('importFailed(done=340)');
+    expect(html).toContain('text-destructive');
+    expect(html).not.toContain('animate-spin');
+    expect(html).not.toContain('imported(');
+    expect(html).not.toContain('importing(');
+  });
+
+  it('shows the failure with the remove, so the athlete can remove it and upload again', () => {
+    const html = renderToStaticMarkup(<HistoryUpload locked importedCount={12} allowRemove initialProgress={FAILED} />);
+    expect(html).toContain('importFailed(done=340)');
+    expect(html).toContain('remove()');
+  });
+
+  it('hides the remove while an import is still running', () => {
+    const html = renderToStaticMarkup(<HistoryUpload locked importedCount={0} allowRemove initialProgress={{ ...FAILED, status: 'importing' }} />);
+    expect(html).toContain('importing(done=340,total=1200)');
+    expect(html).not.toContain('remove()');
+  });
+
+  it('has the copy in English and Danish, pointing at the remove', () => {
+    expect(en.History.importFailed).toContain('Remove');
+    expect(da.History.importFailed).toContain('Fjern');
+    expect(en.History.importFailed).toContain('{done');
+    expect(da.History.importFailed).toContain('{done');
   });
 });
 

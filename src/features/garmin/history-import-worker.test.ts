@@ -11,6 +11,8 @@ import type { ParsedSession } from './garmin';
  */
 type Row = {
   id: string;
+  updatedAt: Date;
+  error: string | null;
   athleteId: string;
   status: string;
   blobUrls: string[];
@@ -21,15 +23,25 @@ type Row = {
   failed: number;
 };
 
-const { getHistoryImport, importTrainingHistory, importProgressWrite, importsToResume } = vi.hoisted(() => ({
+const { getHistoryImport, importTrainingHistory, importProgressWrite, importsToResume, recordImportError, failStalledImports } = vi.hoisted(() => ({
   getHistoryImport: vi.fn(),
   importTrainingHistory: vi.fn(),
   importProgressWrite: vi.fn(),
   importsToResume: vi.fn(),
+  recordImportError: vi.fn(),
+  failStalledImports: vi.fn(),
 }));
-vi.mock('./history-import-service', () => ({ getHistoryImport, importTrainingHistory, importProgressWrite, importsToResume }));
+vi.mock('./history-import-service', () => ({
+  getHistoryImport,
+  importTrainingHistory,
+  importProgressWrite,
+  importsToResume,
+  recordImportError,
+  failStalledImports,
+}));
 
-const { importNextChunk, runHistoryImport, resumeImports, timeBudget, IMPORT_TIME_BUDGET_MS } = await import('./history-import-worker');
+const { importNextChunk, runHistoryImport, resumeImports, timeBudget, IMPORT_TIME_BUDGET_MS, IMPORT_STALL_MS, STALLED_ERROR, importErrorText } =
+  await import('./history-import-worker');
 
 const TODAY = '2026-09-25';
 const HOST = 'https://s.private.blob.vercel-storage.com/';
@@ -45,6 +57,10 @@ const gpxOn = (day: string) => strToU8(buildGpxFile({ start: new Date(`${day}T07
 /** A zip of `count` recent activity files. */
 const zipOf = (count: number) => zipSync(Object.fromEntries(Array.from({ length: count }, (_, i) => [`f${i}.fit`, fitOn('2026-09-20', i)])));
 
+/** When the fake import was last advanced; a progress write moves it to {@link STEP_AT}. */
+const STARTED = new Date('2026-09-25T11:00:00Z');
+const STEP_AT = new Date('2026-09-25T11:05:00Z');
+
 /** A run with all the time in the world. */
 const never = () => false;
 
@@ -52,7 +68,7 @@ const never = () => false;
 let row: Row;
 
 function startRow(over: Partial<Row> = {}): Row {
-  return { id: 'imp1', athleteId: 'a1', status: 'unpacking', blobUrls: [ZIP_URL], cursor: 0, total: 0, done: 0, skippedOld: 0, failed: 0, ...over };
+  return { id: 'imp1', updatedAt: STARTED, error: null, athleteId: 'a1', status: 'unpacking', blobUrls: [ZIP_URL], cursor: 0, total: 0, done: 0, skippedOld: 0, failed: 0, ...over };
 }
 
 /** Every activity each step handed to the history writer. */
@@ -89,6 +105,9 @@ function deps(initial: Record<string, Uint8Array>) {
     deleteBlob: vi.fn(async (url: string) => {
       store.delete(url);
     }),
+    deleteHistoryBlobs: vi.fn(async (athleteId: string) => {
+      for (const url of store.keys()) if (url.startsWith(`${HOST}garmin/history/${athleteId}/`)) store.delete(url);
+    }),
     today: () => TODAY,
   };
 }
@@ -100,10 +119,23 @@ beforeEach(() => {
   importProgressWrite.mockImplementation((id: string, readAt: { status: string; cursor: number }, next: Partial<Row>) => ({ id, readAt, next }));
   importTrainingHistory.mockImplementation(async (_a: string, parsed: unknown[], progress: { readAt: { status: string; cursor: number }; next: Partial<Row> }) => {
     // The write is conditional on where the import was read, as the real one is.
-    if (progress.readAt.status === row.status && progress.readAt.cursor === row.cursor) row = { ...row, ...progress.next };
+    if (progress.readAt.status === row.status && progress.readAt.cursor === row.cursor) row = { ...row, ...progress.next, updatedAt: STEP_AT };
     return { imported: parsed.length, proposed: 0 };
   });
+  // Both conditional as the real ones are: an error only on a running import, a stall only past the cutoff.
+  recordImportError.mockImplementation(async (id: string, error: string) => {
+    if (id === row.id && RUNNING.has(row.status)) row = { ...row, error };
+  });
+  failStalledImports.mockImplementation(async (cutoff: Date, reason: string) => {
+    if (!RUNNING.has(row.status) || row.updatedAt >= cutoff) return [];
+    row = { ...row, status: 'failed', error: row.error ?? reason, updatedAt: cutoff };
+    return [{ id: row.id, athleteId: row.athleteId }];
+  });
+  importsToResume.mockResolvedValue([]);
 });
+
+const RUNNING = new Set(['unpacking', 'importing']);
+const minutes = (n: number) => new Date(STARTED.getTime() + n * 60_000);
 
 describe('importNextChunk — unpacking', () => {
   it('turns every .fit and .gpx of the export, a zip deep included, into its own blob, and deletes the zip', async () => {
@@ -326,16 +358,144 @@ describe('resumeImports', () => {
   it('runs each import no one has touched for a minute, while time allows', async () => {
     const now = new Date('2026-09-25T12:00:00Z');
     importsToResume.mockResolvedValue(['imp1', 'imp2']);
-    row = startRow({ blobUrls: [FIT_URL] });
+    row = startRow({ blobUrls: [FIT_URL], updatedAt: new Date('2026-09-25T11:58:00Z') });
     const d = deps({ [FIT_URL]: fitOn('2026-09-20') });
     let checks = 0;
 
-    expect(await resumeImports(d, now, () => ++checks > 3)).toBe(1);
+    expect(await resumeImports(d, now, () => ++checks > 3, IMPORT_STALL_MS)).toEqual({ resumed: 1, failed: 0 });
 
     expect(importsToResume).toHaveBeenCalledWith(new Date('2026-09-25T11:59:00Z'), 5);
     expect(row.status).toBe('done');
   });
 });
+
+describe('a stalled import (ruling 5a)', () => {
+  const stuck = () => startRow({ status: 'importing', blobUrls: [extracted(0)], total: 1 });
+  const blobsOf = () => ({ [extracted(0)]: fitOn('2026-09-20'), [ZIP_URL]: zipOf(1), [`${HOST}garmin/history/a2/other.zip`]: zipOf(1) });
+
+  it('fails an import untouched for 31 minutes with the error its last attempt caught, and deletes its blobs', async () => {
+    row = { ...stuck(), error: 'db down' };
+    const d = deps(blobsOf());
+
+    expect(await resumeImports(d, minutes(31), never, IMPORT_STALL_MS)).toEqual({ resumed: 0, failed: 1 });
+
+    expect(failStalledImports).toHaveBeenCalledWith(minutes(1), STALLED_ERROR);
+    expect(row).toMatchObject({ status: 'failed', error: 'db down' });
+    expect(d.deleteHistoryBlobs.mock.calls).toEqual([['a1']]);
+    expect([...d.store.keys()]).toEqual([`${HOST}garmin/history/a2/other.zip`]);
+    expect(importTrainingHistory).not.toHaveBeenCalled();
+  });
+
+  it('says it stalled when no attempt caught an error', async () => {
+    row = stuck();
+    await resumeImports(deps(blobsOf()), minutes(31), never, IMPORT_STALL_MS);
+    expect(row).toMatchObject({ status: 'failed', error: STALLED_ERROR });
+    expect(STALLED_ERROR).toBe('stalled: no progress');
+  });
+
+  it('leaves an import untouched for 29 minutes running, and its blobs where they are', async () => {
+    row = stuck();
+    const d = deps(blobsOf());
+    importsToResume.mockResolvedValue(['imp1']);
+
+    expect(await resumeImports(d, minutes(29), never, IMPORT_STALL_MS)).toEqual({ resumed: 1, failed: 0 });
+
+    expect(row.status).toBe('done');
+    expect(d.deleteHistoryBlobs).not.toHaveBeenCalled();
+    expect(d.store.has(ZIP_URL)).toBe(true);
+  });
+
+  it('fails before resuming, so an import it failed is not run again', async () => {
+    row = stuck();
+    importsToResume.mockImplementation(async () => (RUNNING.has(row.status) ? [row.id] : []));
+    expect(await resumeImports(deps(blobsOf()), minutes(31), never, IMPORT_STALL_MS)).toEqual({ resumed: 0, failed: 1 });
+  });
+
+  it('still fails the import when its blobs cannot be deleted — the sweep will', async () => {
+    row = stuck();
+    const d = deps(blobsOf());
+    d.deleteHistoryBlobs.mockRejectedValue(new Error('blob down'));
+    expect(await resumeImports(d, minutes(31), never, IMPORT_STALL_MS)).toEqual({ resumed: 0, failed: 1 });
+    expect(row.status).toBe('failed');
+  });
+
+  it('takes the stall as passed in', async () => {
+    row = stuck();
+    await resumeImports(deps(blobsOf()), minutes(2), never, 60_000);
+    expect(failStalledImports).toHaveBeenCalledWith(minutes(1), STALLED_ERROR);
+    expect(row.status).toBe('failed');
+  });
+
+  it('is thirty minutes', () => {
+    expect(IMPORT_STALL_MS).toBe(30 * 60 * 1000);
+  });
+
+  it('a batch that throws every time keeps its updated_at, records its error, and fails with it after 30 minutes', async () => {
+    row = stuck();
+    const d = deps(blobsOf());
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    importTrainingHistory.mockRejectedValue(new Error('db down'));
+
+    for (let attempt = 0; attempt < 3; attempt++) await runHistoryImport('imp1', d, never);
+    expect(row).toMatchObject({ status: 'importing', error: 'db down', updatedAt: STARTED });
+    await resumeImports(d, minutes(29), never, IMPORT_STALL_MS);
+    expect(row.status).toBe('importing');
+    expect(recordImportError).toHaveBeenCalledWith('imp1', 'db down');
+
+    await resumeImports(d, minutes(31), never, IMPORT_STALL_MS);
+    expect(row).toMatchObject({ status: 'failed', error: 'db down' });
+    errors.mockRestore();
+  });
+
+  it('an unpack step that reads nothing before time is up saves nothing, so it does not count as progress', async () => {
+    row = startRow({ cursor: 10, total: 10 });
+    const d = deps({ [ZIP_URL]: zipOf(30) });
+    expect(await importNextChunk('imp1', d, () => true)).toBe('unpacking');
+    expect(importTrainingHistory).not.toHaveBeenCalled();
+    expect(importProgressWrite).not.toHaveBeenCalled();
+    expect(row).toMatchObject({ cursor: 10, updatedAt: STARTED });
+  });
+
+  it('an unpack step that read only a failed entry before time is up still saves it', async () => {
+    const big = new Uint8Array(10_000).map((_, i) => (i * 7919) % 251);
+    const d = deps({ [ZIP_URL]: zipSync({ 'broken.zip': strToU8('not a zip'), 'big.fit': big }, { level: 0 }) });
+    let checks = 0;
+    expect(await importNextChunk('imp1', d, () => ++checks > 1)).toBe('unpacking');
+    expect(d.putBlob).not.toHaveBeenCalled();
+    expect(row).toMatchObject({ cursor: 1, failed: 1, updatedAt: STEP_AT });
+  });
+
+  it('does not throw when the error itself cannot be recorded', async () => {
+    row = stuck();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    importTrainingHistory.mockRejectedValue(new Error('db down'));
+    recordImportError.mockRejectedValue(new Error('still down'));
+    await expect(runHistoryImport('imp1', deps(blobsOf()), never)).resolves.toBeUndefined();
+    expect(errors).toHaveBeenCalledWith('history import stopped', 'imp1');
+    errors.mockRestore();
+  });
+});
+
+describe('importErrorText', () => {
+  it('keeps the database’s own message, not the query and its parameters wrapped around it', () => {
+    const wrapped = new Error('Failed query: insert into … params: https://…', { cause: new Error('value too long') });
+    expect(importErrorText(wrapped)).toBe('value too long');
+  });
+
+  it('keeps the message of an error with no cause, or a cause that is not an error', () => {
+    expect(importErrorText(new Error('db down'))).toBe('db down');
+    expect(importErrorText(new Error('db down', { cause: 'x' }))).toBe('db down');
+  });
+
+  it('names what was thrown when it is not an error', () => {
+    expect(importErrorText('boom')).toBe('boom');
+  });
+
+  it('keeps at most 500 characters', () => {
+    expect(importErrorText(new Error('x'.repeat(501)))).toBe('x'.repeat(500));
+  });
+});
+
 
 describe('timeBudget', () => {
   it('is up once the budget has passed, and not before', () => {

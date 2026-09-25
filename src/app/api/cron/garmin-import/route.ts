@@ -1,5 +1,5 @@
 import { isCronRequest } from '@/lib/cron-auth';
-import { IMPORT_TIME_BUDGET_MS, resumeImports, timeBudget } from '@/features/garmin/history-import-worker';
+import { IMPORT_STALL_MS, IMPORT_TIME_BUDGET_MS, resumeImports, timeBudget } from '@/features/garmin/history-import-worker';
 import { blobWorkerDeps, sweepOldBlobs } from '@/features/garmin/blob-store';
 
 /**
@@ -8,7 +8,9 @@ import { blobWorkerDeps, sweepOldBlobs } from '@/features/garmin/blob-store';
  *
  * - **Carry imports on.** *Import* reads what fits in its first minute; every
  *   import still running that nothing has touched for a minute is picked up
- *   here, so a large export finishes whether or not the athlete stays.
+ *   here, so a large export finishes whether or not the athlete stays. One
+ *   that has made no progress for 30 minutes is failed instead, and its
+ *   files deleted (ruling 5a).
  * - **Sweep.** Every Garmin upload older than a day is deleted, read or not,
  *   so a failed or abandoned import never leaves files in Blob.
  *
@@ -27,7 +29,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const now = new Date();
-  const imports = await resumeImports(blobWorkerDeps, now, timeBudget(IMPORT_TIME_BUDGET_MS));
+  const { resumed, failed } = await resumeImports(blobWorkerDeps, now, timeBudget(IMPORT_TIME_BUDGET_MS), IMPORT_STALL_MS);
   const swept = await sweepOldBlobs(now);
-  return Response.json({ imports, swept });
+  return Response.json({ imports: resumed, failed, swept });
 }
