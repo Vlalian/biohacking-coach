@@ -430,10 +430,9 @@
   },
   "History": {
     "title": "Træningshistorik",
-    "help": "Upload .fit- eller .gpx-filerne fra din tidligere træning, så mange du vil på én gang. Det kan gøres én gang; fjern den for at uploade igen.",
+    "help": "Upload den .zip-fil, Garmin sender, når du eksporterer dine data, eller .fit- og .gpx-filer — op til 500 MB hver. De seneste {weeks} uger importeres. Det kan gøres én gang; fjern den for at uploade igen.",
     "choose": "Upload historikfiler",
-    "uploading": "Uploader…",
-    "result": "{imported, plural, one {# session føjet til din historik} other {# sessioner føjet til din historik}}{proposed, plural, =0 {} one {, og # at bekræfte i din kalender} other {, og # at bekræfte i din kalender}}.",
+    "uploading": "Uploader… {percent}%",
     "locked": "{count, plural, one {# session importeret} other {# sessioner importeret}}",
     "remove": "Fjern importeret historik",
     "removeConfirmTitle": "Fjern din importerede historik?",
@@ -441,7 +440,15 @@
     "removeConfirm": "Fjern den",
     "alreadyImported": "Din historik er allerede importeret. Fjern den under Indstillinger for at uploade igen.",
     "removeCancel": "Behold den",
-    "error": "Det virkede ikke. Intet blev ændret. Prøv igen."
+    "error": "Det virkede ikke. Intet blev ændret. Prøv igen.",
+    "uploaded": "{count, plural, one {# fil uploadet} other {# filer uploadet}}. Importér for at føje den til din historik.",
+    "import": "Importér",
+    "importing": "Importerer {done} af {total} filer…",
+    "imported": "{done, plural, one {# fil læst} other {# filer læst}}.",
+    "skippedOld": "{count, plural, one {# aktivitet} other {# aktiviteter}} ældre end {weeks} uger sprunget over",
+    "failedFiles": "{count, plural, one {# fil} other {# filer}} kunne ikke læses",
+    "tooLarge": "Den fil er over 500 MB, det største ét upload kan tage. Intet blev uploadet.",
+    "uploadFailed": "Uploadet blev ikke færdigt. Intet blev importeret. Prøv igen."
   },
   "Garmin": {
     "upload": "Upload Garmin-fil",
@@ -452,7 +459,9 @@
     "errorCorrupt": "Den .fit-fil er beskadiget eller ufuldstændig. Hent den fra Garmin Connect igen, og upload på ny.",
     "errorNoSessions": "Filen kunne læses, men indeholdt ingen aktivitet. Eksportér selve aktiviteten — ikke et resumé eller en rute.",
     "errorEmpty": "Den fil er tom. Vælg den .fit- eller .gpx-fil, du eksporterede fra Garmin Connect.",
-    "errorNotAuthenticated": "Du er blevet logget ud. Log ind, og upload igen — intet gik tabt."
+    "errorNotAuthenticated": "Du er blevet logget ud. Log ind, og upload igen — intet gik tabt.",
+    "errorTooLarge": "Den fil er over 500 MB. Vælg en enkelt aktivitets .fit- eller .gpx-fil.",
+    "errorUpload": "Uploadet blev ikke færdigt. Intet blev ændret. Prøv igen."
   },
   "Detected": {
     "label": "Registreret aktivitet",

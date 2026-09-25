@@ -4,6 +4,7 @@ import { getSessionsOnDates } from '@/features/session/session-repository';
 import { parseFit, parseGpx, type FitParseFailure, type ParsedSession } from './garmin';
 import { matchActivities, type MatchCandidate } from './match-activities';
 import { externalIdOf } from './history-import';
+import { expandUpload } from './blob-upload';
 
 /**
  * Why an upload did not land, in cases the athlete can act on differently.
@@ -101,6 +102,30 @@ export async function proposeDetectedActivities(params: {
   await db.batch(writes as [(typeof writes)[number], ...(typeof writes)[number][]]);
 
   return { ok: true, count: parsed.length };
+}
+
+/**
+ * Detection from an upload in Blob (`garmin-integration/04`): one `.fit` or
+ * `.gpx`, or a small zip of them, each file proposed on its own through
+ * {@link proposeDetectedActivities}. A file that fails is skipped when another
+ * landed; when none did, the first failure is the answer, so a single bad file
+ * still gets its own reason. An upload with no activity file in it at all is
+ * `unreadable`.
+ */
+export async function proposeDetectedUpload(params: { athleteId: string; name: string; bytes: Uint8Array }): Promise<ImportResult> {
+  const { files } = expandUpload(params.name, params.bytes);
+  let count = 0;
+  let firstFailure: ImportResult = { ok: false, reason: 'unreadable' };
+  for (const [index, file] of files.entries()) {
+    const result = await proposeDetectedActivities({
+      athleteId: params.athleteId,
+      filename: file.name,
+      buffer: Buffer.from(file.bytes.buffer, file.bytes.byteOffset, file.bytes.byteLength),
+    });
+    if (result.ok) count += result.count;
+    else if (index === 0) firstFailure = result;
+  }
+  return count > 0 ? { ok: true, count } : firstFailure;
 }
 
 /**

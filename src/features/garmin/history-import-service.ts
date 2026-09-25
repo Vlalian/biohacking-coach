@@ -1,17 +1,19 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
-import { and, count, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, lt } from 'drizzle-orm';
+import type { BatchItem } from 'drizzle-orm/batch';
 import { getDb } from '@/db';
-import { detectedActivities, sessions, sessionStreams } from '@/db/schema';
+import { detectedActivities, historyImport, sessions, sessionStreams, type HistoryImportRow } from '@/db/schema';
 import { athleteProfileMerge, getAthleteById } from '@/features/athlete/athlete-repository';
 import { getSessionsOnDates } from '@/features/session/session-repository';
 import type { ParsedSession } from './garmin';
 import { proposalRows } from './garmin-import';
 import { externalIdOf, planHistoryImport } from './history-import';
+import { deleteAthleteBlobs } from './blob-store';
 
 /**
- * Writing an uploaded training history (`garmin-integration/03`).
+ * Writing an uploaded training history (`garmin-integration/03`, `04`).
  *
  * The seam takes parsed activities, not a file (ballot 2), so the first sync
  * from Garmin's API can call it the way the upload does. What lands:
@@ -22,40 +24,81 @@ import { externalIdOf, planHistoryImport } from './history-import';
  *   remove find exactly these rows and nothing else.
  * - **Proposals** — an activity on a day that still holds a Planned Session
  *   becomes a Detected Activity, the same row detection writes (ballot 6).
- * - **The lock** — `historyImportedAt` on the profile. One import's worth of
- *   history is on file at a time; removing it re-opens the import (ballot 11).
  *
- * All of it lands in one `db.batch`, so a failure leaves no half-imported
- * history and no lock without the history it guards.
+ * Since `04` the upload is read in chunks by a background worker, and this is
+ * the per-chunk writer: each chunk's history, proposals and the import's
+ * progress land in one `db.batch`, so a failure leaves no half-written chunk
+ * and no counter ahead of what was written. **The lock** —
+ * `historyImportedAt` on the profile — is no longer taken here but when the
+ * athlete presses *Import* ({@link startHistoryImport}).
  *
  * It never fills a block and never drafts a week (ruling 14): what the athlete
  * uploads counts from the next week's draft on. The current week is not
  * redrawn because a file arrived.
  */
-export type HistoryImportResult =
-  | { ok: true; imported: number; proposed: number }
-  | { ok: false; reason: 'locked' };
+export type HistoryChunkResult = { imported: number; proposed: number };
+
+/** One statement a batch can carry — what {@link importProgressWrite} returns. */
+type BatchStatement = BatchItem<'pg'>;
 
 export async function importTrainingHistory(
   athleteId: string,
   parsed: readonly ParsedSession[],
-  // Kept on the seam for the API sync, which decides what "recent" means; the
-  // upload stores everything (ballot 4).
-  _today: string,
-): Promise<HistoryImportResult> {
-  const athlete = await getAthleteById(athleteId);
-  if (!athlete || athlete.profile?.historyImportedAt) return { ok: false, reason: 'locked' };
-  if (parsed.length === 0) return { ok: true, imported: 0, proposed: 0 };
+  progress: BatchStatement,
+): Promise<HistoryChunkResult> {
+  if (parsed.length === 0) {
+    await getDb().batch([progress]);
+    return { imported: 0, proposed: 0 };
+  }
 
   const days = [...new Set(parsed.map((p) => p.date))];
   const [planned, knownIds] = await Promise.all([getSessionsOnDates(athleteId, days), knownExternalIds(athleteId)]);
   const plan = planHistoryImport(parsed, { planned, knownIds });
 
-  const db = getDb();
-  const lock = athleteProfileMerge(athleteId, { historyImportedAt: new Date().toISOString() });
-  await db.batch([lock, ...historyWrites(athleteId, plan.history), ...proposalWrites(athleteId, plan.proposals, planned)]);
+  // The progress write goes first: it is always there, which is what gives the
+  // batch the non-empty tuple type it asks for.
+  await getDb().batch([progress, ...historyWrites(athleteId, plan.history), ...proposalWrites(athleteId, plan.proposals, planned)]);
 
-  return { ok: true, imported: plan.history.length, proposed: plan.proposals.length };
+  return { imported: plan.history.length, proposed: plan.proposals.length };
+}
+
+/** An import's next counters, as `advanceImport` computes them. */
+export type ImportProgressChange = Pick<
+  HistoryImportRow,
+  'blobUrls' | 'cursor' | 'total' | 'done' | 'skippedOld' | 'failed' | 'status'
+>;
+
+/**
+ * The write that records a chunk's progress, conditional on the cursor it was
+ * read at: if another worker — the cron and the post-Import run can overlap —
+ * moved the import first, this matches no row and changes nothing.
+ */
+export function importProgressWrite(importId: string, readAtCursor: number, next: ImportProgressChange) {
+  return getDb()
+    .update(historyImport)
+    .set({ ...next, updatedAt: new Date() })
+    .where(and(eq(historyImport.id, importId), eq(historyImport.cursor, readAtCursor)));
+}
+
+export type StartImportResult = { ok: true; importId: string } | { ok: false; reason: 'locked' };
+
+/**
+ * Takes the lock and opens the import, in one batch, when the athlete presses
+ * *Import*. One import's worth of history is on file at a time (ballots 5, 11):
+ * a second start is refused while the lock is held, and the partial unique
+ * index on `history_import` refuses one that races past this read.
+ */
+export async function startHistoryImport(athleteId: string, blobUrls: readonly string[]): Promise<StartImportResult> {
+  const athlete = await getAthleteById(athleteId);
+  if (!athlete || athlete.profile?.historyImportedAt) return { ok: false, reason: 'locked' };
+
+  const db = getDb();
+  const importId = randomUUID();
+  await db.batch([
+    athleteProfileMerge(athleteId, { historyImportedAt: new Date().toISOString() }),
+    db.insert(historyImport).values({ id: importId, athleteId, status: 'importing', blobUrls: [...blobUrls] }),
+  ]);
+  return { ok: true, importId };
 }
 
 /** The history sessions and their streams, linked by an id chosen here; nothing when there is none. */
@@ -127,13 +170,18 @@ async function knownExternalIds(athleteId: string): Promise<Set<string>> {
  * The undo for a wrong export (ballots 10–11): every imported history session
  * goes, and the import opens again. Proposals it made are left to the athlete,
  * who decides each one on the calendar as with any Detected Activity.
+ *
+ * The import rows go in the same batch — a worker still running finds its row
+ * gone and stops — and then whatever history uploads are left in Blob.
  */
 export async function removeImportedHistory(athleteId: string): Promise<void> {
   const db = getDb();
   await db.batch([
     db.delete(sessions).where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'garmin'))),
+    db.delete(historyImport).where(eq(historyImport.athleteId, athleteId)),
     athleteProfileMerge(athleteId, { historyImportedAt: null }),
   ]);
+  await deleteAthleteBlobs(athleteId, 'history');
 }
 
 /** How many imported history sessions the athlete has — what Settings shows beside the lock. */
@@ -143,4 +191,36 @@ export async function countImportedHistory(athleteId: string): Promise<number> {
     .from(sessions)
     .where(and(eq(sessions.athleteId, athleteId), eq(sessions.origin, 'garmin')));
   return row?.n ?? 0;
+}
+
+/** One import by id — what the worker reads before each step. */
+export async function getHistoryImport(importId: string): Promise<HistoryImportRow | undefined> {
+  const [row] = await getDb().select().from(historyImport).where(eq(historyImport.id, importId)).limit(1);
+  return row;
+}
+
+/** The athlete's newest import, running or finished — what the screen polls. */
+export async function latestHistoryImport(athleteId: string): Promise<HistoryImportRow | null> {
+  const [row] = await getDb()
+    .select()
+    .from(historyImport)
+    .where(eq(historyImport.athleteId, athleteId))
+    .orderBy(desc(historyImport.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Running imports nothing has advanced since `untouchedSince`, oldest first —
+ * the ones the cron takes over. A run started by *Import* touches its row every
+ * step, so it is left alone while it is still going.
+ */
+export async function importsToResume(untouchedSince: Date, limit: number): Promise<string[]> {
+  const rows = await getDb()
+    .select({ id: historyImport.id })
+    .from(historyImport)
+    .where(and(eq(historyImport.status, 'importing'), lt(historyImport.updatedAt, untouchedSince)))
+    .orderBy(asc(historyImport.updatedAt))
+    .limit(limit);
+  return rows.map((r) => r.id);
 }

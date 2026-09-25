@@ -430,10 +430,9 @@
   },
   "History": {
     "title": "Training history",
-    "help": "Upload the .fit or .gpx files of your past training, as many as you like at once. You can do this once; remove it to upload again.",
+    "help": "Upload the .zip Garmin sends when you export your data, or .fit and .gpx files — up to 500 MB each. The last {weeks} weeks are imported. You can do this once; remove it to upload again.",
     "choose": "Upload history files",
-    "uploading": "Uploading…",
-    "result": "{imported, plural, one {# session added to your history} other {# sessions added to your history}}{proposed, plural, =0 {} one {, and # to confirm on your calendar} other {, and # to confirm on your calendar}}.",
+    "uploading": "Uploading… {percent}%",
     "locked": "{count, plural, one {# session imported} other {# sessions imported}}",
     "remove": "Remove imported history",
     "removeConfirmTitle": "Remove your imported history?",
@@ -441,7 +440,15 @@
     "removeConfirm": "Remove it",
     "alreadyImported": "Your history is already imported. Remove it in Settings to upload again.",
     "removeCancel": "Keep it",
-    "error": "That didn’t work. Nothing was changed. Try again."
+    "error": "That didn’t work. Nothing was changed. Try again.",
+    "uploaded": "{count, plural, one {# file uploaded} other {# files uploaded}}. Import it to add it to your history.",
+    "import": "Import",
+    "importing": "Importing {done} of {total} files…",
+    "imported": "{done, plural, one {# file read} other {# files read}}.",
+    "skippedOld": "{count, plural, one {# activity} other {# activities}} older than {weeks} weeks skipped",
+    "failedFiles": "{count, plural, one {# file} other {# files}} could not be read",
+    "tooLarge": "That file is over 500 MB, the most one upload takes. Nothing was uploaded.",
+    "uploadFailed": "The upload didn’t finish. Nothing was imported. Try again."
   },
   "Garmin": {
     "upload": "Upload Garmin file",
@@ -452,7 +459,9 @@
     "errorCorrupt": "That .fit file is damaged or incomplete. Download it from Garmin Connect again and re-upload.",
     "errorNoSessions": "That file read fine but held no activity. Export the activity itself, not a summary or a course.",
     "errorEmpty": "That file is empty. Pick the .fit or .gpx you exported from Garmin Connect.",
-    "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost."
+    "errorNotAuthenticated": "You've been signed out. Sign in and upload again — nothing was lost.",
+    "errorTooLarge": "That file is over 500 MB. Pick a single activity's .fit or .gpx.",
+    "errorUpload": "The upload didn’t finish. Nothing was changed. Try again."
   },
   "Detected": {
     "label": "Detected activity",

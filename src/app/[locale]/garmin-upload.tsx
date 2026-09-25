@@ -3,12 +3,14 @@
 import { useRef, useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import { uploadGarminAction, type UploadFailure } from './garmin-actions';
+import { importDetectedFromBlobAction, type UploadFailure } from './garmin-actions';
+import { uploadToBlob, type BlobUploadResult } from './garmin-blob-upload';
 
 type Status =
   | { kind: 'idle' }
+  | { kind: 'uploading'; fraction: number }
   | { kind: 'done'; count: number }
-  | { kind: 'error'; reason: UploadFailure };
+  | { kind: 'error'; key: string };
 
 /**
  * Failure reason to message key.
@@ -34,14 +36,31 @@ export const ERROR_KEY: Record<UploadFailure, string> = {
   empty: 'errorEmpty',
   'not-authenticated': 'errorNotAuthenticated',
   unreadable: 'error',
+  // A URL outside the athlete's own prefix only comes from a hand-built
+  // request; the honest answer to a real athlete is the generic one.
+  'not-yours': 'error',
+};
+
+/** Why the file never reached Blob, to its message. */
+const UPLOAD_ERROR_KEY: Record<Exclude<BlobUploadResult, { ok: true }>['reason'], string> = {
+  'not-authenticated': 'errorNotAuthenticated',
+  empty: 'errorEmpty',
+  'too-large': 'errorTooLarge',
+  'upload-failed': 'errorUpload',
+  // Detection has no lock and one kind; neither can refuse it. Mapped anyway
+  // so the map stays total.
+  locked: 'error',
+  'bad-kind': 'error',
 };
 
 /**
- * Upload a Garmin .fit/.gpx file. The file goes straight to the server action,
- * which parses and persists it; on success the calendar revalidates and the new
- * session appears. A failure names which failure it was — the wrong kind of file
- * and a damaged one need different things from the athlete — and nothing was
- * written in any of those cases.
+ * Upload a Garmin .fit/.gpx file (or a small zip of them) for detection. The
+ * file goes straight to Vercel Blob with a progress bar (`garmin-integration/04`
+ * — a function body is capped at 4.5 MB), then the server reads it, proposes
+ * what it holds and deletes it; on success the calendar revalidates and the
+ * proposals appear. A failure names which failure it was — the wrong kind of
+ * file and a damaged one need different things from the athlete — and nothing
+ * was written in any of those cases.
  */
 export function GarminUpload() {
   const t = useTranslations('Garmin');
@@ -50,39 +69,51 @@ export function GarminUpload() {
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
-  function onFile(file: File | undefined) {
+  async function onFile(file: File | undefined) {
     if (!file) return;
-    setStatus({ kind: 'idle' });
-    const formData = new FormData();
-    formData.append('file', file);
+    setStatus({ kind: 'uploading', fraction: 0 });
+    const uploaded = await uploadToBlob('detection', [file], (fraction) => setStatus({ kind: 'uploading', fraction }));
+    if (inputRef.current) inputRef.current.value = '';
+    if (!uploaded.ok) {
+      setStatus({ kind: 'error', key: UPLOAD_ERROR_KEY[uploaded.reason] });
+      return;
+    }
 
     startTransition(async () => {
-      const result = await uploadGarminAction(formData);
-      if (inputRef.current) inputRef.current.value = '';
-      if (result.ok) {
-        setStatus({ kind: 'done', count: result.count });
-        router.refresh();
-      } else {
-        setStatus({ kind: 'error', reason: result.reason });
+      try {
+        const result = await importDetectedFromBlobAction(uploaded.urls[0]);
+        if (result.ok) {
+          setStatus({ kind: 'done', count: result.count });
+          router.refresh();
+        } else {
+          setStatus({ kind: 'error', key: ERROR_KEY[result.reason] });
+        }
+      } catch {
+        setStatus({ kind: 'error', key: 'error' });
       }
     });
   }
 
+  const busy = pending || status.kind === 'uploading';
+
   return (
     <div className="flex flex-col items-center gap-2">
       <label className="inline-flex h-10 cursor-pointer items-center gap-2 border border-signal px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground">
-        {pending ? t('uploading') : t('upload')}
+        {busy ? t('uploading') : t('upload')}
         <input
           ref={inputRef}
           type="file"
-          accept=".fit,.gpx"
-          disabled={pending}
-          onChange={(e) => onFile(e.target.files?.[0])}
+          accept=".fit,.gpx,.zip"
+          disabled={busy}
+          onChange={(e) => void onFile(e.target.files?.[0])}
           // sr-only, not hidden: visually gone but still focusable, so the
           // picker is reachable by keyboard (a display:none input is not).
           className="sr-only"
         />
       </label>
+      {status.kind === 'uploading' && (
+        <progress value={status.fraction} max={1} aria-label={t('uploading')} className="block h-1 w-40 accent-signal" />
+      )}
 
       {status.kind === 'done' && (
         <p className="font-body text-sm text-session-recovery">
@@ -91,7 +122,7 @@ export function GarminUpload() {
       )}
       {status.kind === 'error' && (
         <p role="alert" className="font-body text-sm text-destructive">
-          {t(ERROR_KEY[status.reason])}
+          {t(status.key)}
         </p>
       )}
     </div>

@@ -1,16 +1,22 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolveAthleteId } from './current-actor';
+import { after } from 'next/server';
+import { resolveAthlete, resolveAthleteId, type AuthFailure } from './current-actor';
+import { proposeDetectedUpload, type ImportResult, type ImportFailure } from '@/features/garmin/garmin-import';
+import { latestHistoryImport, removeImportedHistory, startHistoryImport } from '@/features/garmin/history-import-service';
+import { IMPORT_TIME_BUDGET_MS, runHistoryImport, timeBudget } from '@/features/garmin/history-import-worker';
+import { blobWorkerDeps, deleteBlob, fetchBlob } from '@/features/garmin/blob-store';
 import {
-  parseUpload,
-  proposeDetectedActivities,
-  type ImportResult,
-  type ImportFailure,
-} from '@/features/garmin/garmin-import';
-import { importTrainingHistory, removeImportedHistory } from '@/features/garmin/history-import-service';
-import type { ParsedSession } from '@/features/garmin/garmin';
-import { today } from '@/lib/date';
+  blobPrefix,
+  importSummary,
+  isOwnBlobUrl,
+  uploadPolicy,
+  uploadState,
+  type ImportSummary,
+  type UploadKind,
+  type UploadRefusal,
+} from '@/features/garmin/blob-upload';
 import {
   acceptDetectedActivity,
   declineDetectedActivity,
@@ -20,10 +26,14 @@ import {
   type UndoResult,
 } from '@/features/garmin/detected-activity';
 
-/** The two failures this action decides itself, before the importer is reached. */
-export type ActionFailure = 'not-authenticated' | 'empty';
+/**
+ * The failures these actions decide themselves, before the importer is
+ * reached. `not-yours` is a blob URL outside the signed-in athlete's own
+ * prefix — the client names the file, so it is checked, never trusted.
+ */
+export type ActionFailure = 'not-authenticated' | 'empty' | 'not-yours';
 
-/** Every way an upload can fail, including the two above. */
+/** Every way an upload can fail, including the ones above. */
 export type UploadFailure = ImportFailure | ActionFailure;
 
 /**
@@ -33,34 +43,59 @@ export type UploadFailure = ImportFailure | ActionFailure;
 export type UploadResult = ImportResult | { ok: false; reason: ActionFailure };
 
 /**
- * Server action for a Garmin upload.
+ * Where the signed-in athlete may put a Garmin upload (`garmin-integration/04`).
  *
- * The owning athlete is resolved here from the authenticated session — the
- * upload carries only the file. All parsing and the atomic write live in
- * {@link proposeDetectedActivities}; this wires the request to it and
- * revalidates so the new proposals appear. Nothing has entered the training
- * record at this point — the athlete has to accept them.
+ * Both uploads go browser → Vercel Blob, because a function body is capped at
+ * 4.5 MB and a Garmin export is hundreds of MB. The client asks here first: it
+ * learns its own prefix, and a history upload is refused before a single byte
+ * moves when the lock is already taken. The token route applies the same
+ * policy again when the upload itself asks for a token.
  */
-export async function uploadGarminAction(
-  formData: FormData,
-): Promise<UploadResult> {
-  const file = formData.get('file');
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, reason: 'empty' };
-  }
+export async function prepareGarminUploadAction(
+  kind: UploadKind,
+): Promise<{ ok: true; pathPrefix: string } | { ok: false; reason: UploadRefusal }> {
+  const policy = uploadPolicy(kind, uploadState(await resolveAthlete()));
+  return policy.ok ? { ok: true, pathPrefix: policy.pathPrefix } : policy;
+}
 
+/**
+ * The detection upload, once its file is in Blob: read it, propose what it
+ * holds as Detected Activities, delete it. Nothing has entered the training
+ * record — the athlete accepts each proposal on the calendar.
+ *
+ * The owning athlete is resolved here from the authenticated session, and the
+ * URL must sit under that athlete's detection prefix. The blob is deleted
+ * whatever the outcome; the bytes are never kept or logged.
+ */
+export async function importDetectedFromBlobAction(blobUrl: string): Promise<UploadResult> {
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+  if (!isOwnBlobUrl(blobUrl, blobPrefix('detection', athleteId))) return { ok: false, reason: 'not-yours' };
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await proposeDetectedActivities({
-    athleteId,
-    filename: file.name,
-    buffer,
-  });
+  try {
+    const bytes = await fetchBlob(blobUrl);
+    if (!bytes) return { ok: false, reason: 'unreadable' };
+    const result = await proposeDetectedUpload({ athleteId, name: fileNameOf(blobUrl), bytes });
+    if (result.ok) revalidatePath('/', 'layout');
+    return result;
+  } finally {
+    await deleteQuietly(blobUrl);
+  }
+}
 
-  if (result.ok) revalidatePath('/', 'layout');
-  return result;
+/** A failed delete does not fail the upload: the 24 h sweep takes what is left. */
+async function deleteQuietly(blobUrl: string): Promise<void> {
+  try {
+    await deleteBlob(blobUrl);
+  } catch {
+    // Left for sweepOldBlobs.
+  }
+}
+
+/** The uploaded file's name: the URL's last segment, unescaped. */
+function fileNameOf(blobUrl: string): string {
+  const path = new URL(blobUrl).pathname;
+  return decodeURIComponent(path.slice(path.lastIndexOf('/') + 1));
 }
 
 /**
@@ -115,47 +150,41 @@ export async function undoDetectedImportAction(
   return result;
 }
 
-/** A file in a history upload that could not be read, and why. */
-export type HistoryFileFailure = { name: string; reason: ImportFailure };
-
-export type HistoryUploadResult =
-  | { ok: true; imported: number; proposed: number; failed: HistoryFileFailure[] }
-  | { ok: false; reason: ActionFailure | 'locked' };
+export type StartHistoryImportResult = { ok: true } | { ok: false; reason: 'empty' | 'not-authenticated' | 'not-yours' | 'locked' };
 
 /**
- * Server action for the history upload (`garmin-integration/03`) — onboarding's
- * history step and Settings both call it.
+ * *Import* on the history upload (`garmin-integration/03`, `04`) — onboarding's
+ * history step and Settings both call it, once the files are in Blob.
  *
- * Every `file` entry is parsed on its own with the parser detection uses. A file
- * that fails is reported by name with its reason, and does not stop the rest:
- * every file that parsed is imported together, in one call, so the lock is set
- * once for the whole upload. The bytes are never kept and neither they nor the
- * names are logged; the names go back only to the athlete who sent them.
+ * Every URL must be one of the athlete's own history uploads. Then the lock is
+ * taken and the import opened, and reading starts in the background after the
+ * response: as many 25-file steps as fit in the time budget, the rest left to
+ * the cron. The athlete can leave; the screen polls
+ * {@link historyImportStatusAction} for progress.
  */
-export async function importHistoryAction(formData: FormData): Promise<HistoryUploadResult> {
-  const files = formData.getAll('file').filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) return { ok: false, reason: 'empty' };
+export async function startHistoryImportAction(blobUrls: readonly string[]): Promise<StartHistoryImportResult> {
+  if (!Array.isArray(blobUrls) || blobUrls.length === 0) return { ok: false, reason: 'empty' };
 
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+  const prefix = blobPrefix('history', athleteId);
+  if (!blobUrls.every((url) => typeof url === 'string' && isOwnBlobUrl(url, prefix))) return { ok: false, reason: 'not-yours' };
 
-  const { parsed, failed } = await readAll(files);
-  const result = await importTrainingHistory(athleteId, parsed, today());
-  if (!result.ok) return result;
-  if (parsed.length > 0) revalidatePath('/', 'layout');
-  return { ...result, failed };
+  const started = await startHistoryImport(athleteId, blobUrls);
+  if (!started.ok) return started;
+
+  after(() => runHistoryImport(started.importId, blobWorkerDeps, timeBudget(IMPORT_TIME_BUDGET_MS)));
+  revalidatePath('/', 'layout');
+  return { ok: true };
 }
 
-/** Every file parsed on its own: the activities of the ones that read, and why the others did not. */
-async function readAll(files: readonly File[]): Promise<{ parsed: ParsedSession[]; failed: HistoryFileFailure[] }> {
-  const parsed: ParsedSession[] = [];
-  const failed: HistoryFileFailure[] = [];
-  for (const file of files) {
-    const read = await parseUpload(file.name, Buffer.from(await file.arrayBuffer()));
-    if (read.ok) parsed.push(...read.sessions);
-    else failed.push({ name: file.name, reason: read.reason });
-  }
-  return { parsed, failed };
+/** Where the athlete's latest history import stands — counts only, never the blob URLs. */
+export async function historyImportStatusAction(): Promise<{ ok: true; summary: ImportSummary | null } | AuthFailure> {
+  const athleteId = await resolveAthleteId();
+  if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+
+  const latest = await latestHistoryImport(athleteId);
+  return { ok: true, summary: latest ? importSummary(latest) : null };
 }
 
 /** Removes the imported history and re-opens the import (ballots 10–11). */
