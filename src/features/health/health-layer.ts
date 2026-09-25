@@ -36,7 +36,7 @@ export interface HealthSpan {
   bother: number | null;
   /** The injury's short name ("left knee"), or null: an illness has none. */
   name: string | null;
-  /** When it was declared, to the second — the "reported by mistake" window. */
+  /** When it was declared, to the second — which open record is the newest (`currentStatus`). */
   openedAt: Date;
 }
 
@@ -71,9 +71,6 @@ export function spansFrom(
   ];
 }
 
-/** How long after declaring a record it may still be deleted as a mistake (`showable-version/28a`). */
-export const MISTAKE_WINDOW_MS = 24 * 60 * 60 * 1000;
-
 /** One icon on a session chip: which kind, whether still open, and the injury's name if any. */
 export interface HealthMark {
   kind: 'injury' | 'illness';
@@ -102,23 +99,20 @@ export function marksFor(date: string, spans: readonly HealthSpan[], todayKey: s
 }
 
 /**
- * The two statuses the calendar's health area shows for a week
- * (`showable-version/28a`): injured / ill when a record of that kind is
- * **still open** and touches the week. The status is the current state, not
- * the week's history — a record healed on Tuesday leaves Wednesday's status
- * clean while Monday's session keeps its muted mark. The area is always shown,
- * so this returns both flags, not a list.
+ * What the calendar's one status card says (`showable-version/28e`, Mads
+ * 2026-09-19): the newest **open** record of each kind, or null. It reads
+ * today and nothing else — a healed record is history, which lives in the
+ * muted marks on the days and the drawer's History fold, never on the card.
  */
-export function weekStatus(
-  weekDates: readonly string[],
-  spans: readonly HealthSpan[],
-  todayKey: string,
-): { injured: boolean; ill: boolean } {
-  const openOn = (kind: HealthSpan['kind']) =>
-    spans.some(
-      (s) => s.kind === kind && s.to === null && weekDates.some((date) => covers(s, date, todayKey)),
-    );
-  return { injured: openOn('injury'), ill: openOn('illness') };
+export function currentStatus(spans: readonly HealthSpan[]): {
+  injury: HealthSpan | null;
+  illness: HealthSpan | null;
+} {
+  const newestOpen = (kind: HealthSpan['kind']) =>
+    spans
+      .filter((s) => s.kind === kind && s.to === null)
+      .reduce<HealthSpan | null>((best, s) => (best && best.openedAt >= s.openedAt ? best : s), null);
+  return { injury: newestOpen('injury'), illness: newestOpen('illness') };
 }
 
 /**
