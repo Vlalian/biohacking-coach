@@ -59,7 +59,8 @@ async function readChunk(url: string, cursor: number, deps: WorkerDeps): Promise
   const bytes = await deps.fetchBlob(url);
   if (!bytes) return { chunk: BLOB_GONE, recent: [] };
 
-  const found = expandUpload(blobName(url), bytes, { from: cursor, to: cursor + IMPORT_CHUNK_FILES });
+  // The URL's path ends in the uploaded file's name, and only its extension is read.
+  const found = expandUpload(new URL(url).pathname, bytes, { from: cursor, to: cursor + IMPORT_CHUNK_FILES });
   const { activities, failed } = await parseAll(found.files);
   const today = deps.today();
   const recent = activities.filter((a) => withinWindow(a.date, today, HISTORY_WINDOW_WEEKS));
@@ -79,12 +80,6 @@ async function parseAll(files: readonly UploadedFile[]): Promise<{ activities: P
     else failed++;
   }
   return { activities, failed };
-}
-
-/** The uploaded file's own name — the last path segment, which keeps its extension. */
-function blobName(url: string): string {
-  const path = new URL(url).pathname;
-  return decodeURIComponent(path.slice(path.lastIndexOf('/') + 1));
 }
 
 /** A failed delete does not fail the step: the 24 h sweep removes what is left. */

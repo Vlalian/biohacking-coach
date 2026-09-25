@@ -36,7 +36,9 @@ afterEach(() => {
 describe('GET /api/cron/garmin-import', () => {
   it('answers 401 without the bearer secret and runs nothing', async () => {
     for (const header of [undefined, 'Bearer wrong', 'test-secret']) {
-      expect((await call(header)).status).toBe(401);
+      const response = await call(header);
+      expect(response.status).toBe(401);
+      expect(await response.text()).toBe('Unauthorized');
     }
     vi.stubEnv('CRON_SECRET', '');
     expect((await call('Bearer ')).status).toBe(401);

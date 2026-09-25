@@ -168,7 +168,8 @@ export async function startHistoryImportAction(blobUrls: readonly string[]): Pro
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
   const prefix = blobPrefix('history', athleteId);
-  if (!blobUrls.every((url) => typeof url === 'string' && isOwnBlobUrl(url, prefix))) return { ok: false, reason: 'not-yours' };
+  // Anything that is not a URL string fails `isOwnBlobUrl` too — it never parses.
+  if (!blobUrls.every((url) => isOwnBlobUrl(url, prefix))) return { ok: false, reason: 'not-yours' };
 
   const started = await startHistoryImport(athleteId, blobUrls);
   if (!started.ok) return started;

@@ -49,9 +49,7 @@ export async function POST(request: Request): Promise<Response> {
       body,
       request,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        const kind = uploadKindOf(clientPayload);
-        if (kind === null) throw new UploadRefused('bad-kind');
-        const policy = uploadPolicy(kind, uploadState(await resolveAthlete()));
+        const policy = uploadPolicy(uploadKindOf(clientPayload), uploadState(await resolveAthlete()));
         if (!policy.ok) throw new UploadRefused(policy.reason);
         if (!acceptsPathname(policy.pathPrefix, pathname)) throw new UploadRefused('bad-path');
         return {

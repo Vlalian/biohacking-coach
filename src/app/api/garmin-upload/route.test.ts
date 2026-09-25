@@ -75,7 +75,9 @@ describe('POST /api/garmin-upload', () => {
 
   it('refuses another file type, and a payload with no kind it knows', async () => {
     resolveAthlete.mockResolvedValue(OPEN);
-    expect((await ask('garmin/history/a1/notes.txt', { kind: 'history' })).response.status).toBe(403);
+    const wrongType = await ask('garmin/history/a1/notes.txt', { kind: 'history' });
+    expect(wrongType.response.status).toBe(403);
+    expect(await wrongType.response.json()).toEqual({ error: 'bad-path' });
     const unknown = await ask('garmin/history/a1/export.zip', { kind: 'photos' });
     expect(unknown.response.status).toBe(403);
     expect(await unknown.response.json()).toEqual({ error: 'bad-kind' });
@@ -92,6 +94,7 @@ describe('POST /api/garmin-upload', () => {
   it('answers 400 to a body that is not JSON, before Blob is asked', async () => {
     const response = await route.POST(new Request('http://localhost/api/garmin-upload', { method: 'POST', body: 'nope' }));
     expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'bad-request' });
     expect(handleUpload).not.toHaveBeenCalled();
   });
 

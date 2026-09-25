@@ -123,6 +123,22 @@ describe('importNextChunk', () => {
     expect(writtenHistory()).toEqual([]);
   });
 
+  it('counts a single .fit that is gone as one failed file', async () => {
+    row = startRow({ blobUrls: [BLOB_URL_2] });
+    expect(await importNextChunk('imp1', deps({}))).toBe('done');
+    expect(row).toMatchObject({ failed: 1, done: 1, total: 1, blobUrls: [] });
+  });
+
+  it('finishes an import with no blob left, reading nothing', async () => {
+    row = startRow({ blobUrls: [] });
+    const d = deps({});
+    expect(await importNextChunk('imp1', d)).toBe('done');
+    expect(d.fetchBlob).not.toHaveBeenCalled();
+    expect(importTrainingHistory).toHaveBeenCalledWith('a1', [], expect.anything());
+    expect(row).toMatchObject({ status: 'done', total: 0, done: 0, failed: 0 });
+    expect(d.deleteBlob).not.toHaveBeenCalled();
+  });
+
   it('does nothing for an import that is gone or already finished', async () => {
     const d = deps({ [BLOB_URL]: fitOn('2026-09-20') });
     expect(await importNextChunk('nope', d)).toBe('stopped');

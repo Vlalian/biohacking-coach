@@ -52,14 +52,13 @@ export const TOKEN_VALID_MS = 60 * 60 * 1000;
  * athlete id, say — is ignored: who is uploading comes from the session.
  */
 export function uploadKindOf(clientPayload: string | null): UploadKind | null {
-  let payload: unknown;
   try {
-    payload = JSON.parse(clientPayload ?? '');
+    // `Object()` turns a parsed null or number into an object with no `kind`.
+    const { kind } = Object(JSON.parse(String(clientPayload))) as { kind?: unknown };
+    return kind === 'history' || kind === 'detection' ? kind : null;
   } catch {
     return null;
   }
-  const kind = (payload as { kind?: unknown } | null)?.kind;
-  return kind === 'history' || kind === 'detection' ? kind : null;
 }
 
 /**
@@ -83,10 +82,11 @@ export type UploadPolicy =
  *
  * `state` is resolved by the caller from the authenticated session — never from
  * the request (ADR 0006). A history upload is refused once the import lock is
- * taken; a detection upload is not, because detection has no lock. The path
- * prefix carries only the opaque athlete id.
+ * taken; a detection upload is not, because detection has no lock. A kind it
+ * does not know — including none — is refused. The path prefix carries only
+ * the opaque athlete id.
  */
-export function uploadPolicy(kind: UploadKind, state: { athleteId: string | null; historyLocked: boolean }): UploadPolicy {
+export function uploadPolicy(kind: UploadKind | null, state: { athleteId: string | null; historyLocked: boolean }): UploadPolicy {
   if (kind !== 'history' && kind !== 'detection') return { ok: false, reason: 'bad-kind' };
   if (state.athleteId === null) return { ok: false, reason: 'not-authenticated' };
   if (kind === 'history' && state.historyLocked) return { ok: false, reason: 'locked' };
@@ -126,7 +126,7 @@ const UPLOAD_NAME = /^[^/]+\.(fit|gpx|zip)$/i;
 export function acceptsPathname(prefix: string, pathname: string): boolean {
   if (!pathname.startsWith(prefix)) return false;
   const name = pathname.slice(prefix.length);
-  return UPLOAD_NAME.test(name) && !name.startsWith('.');
+  return UPLOAD_NAME.test(name);
 }
 
 /** Private Vercel Blob URLs: `https://<store>.private.blob.vercel-storage.com/<pathname>`. */
@@ -171,6 +171,15 @@ export type ExpandedUpload = { total: number; files: UploadedFile[]; failed: num
 const ACTIVITY_FILE = /\.(fit|gpx)$/i;
 const ZIP_FILE = /\.zip$/i;
 
+/** Files by position, `from` inclusive, `to` exclusive. */
+type FileRange = { from: number; to: number };
+
+const EVERY_FILE: FileRange = { from: 0, to: Infinity };
+
+function inRange(range: FileRange, position: number): boolean {
+  return position >= range.from && position < range.to;
+}
+
 /**
  * Opens one upload into its activity files. A `.fit` or `.gpx` is itself; a
  * `.zip` is opened, and so is every zip inside it — Garmin's full export
@@ -184,35 +193,35 @@ const ZIP_FILE = /\.zip$/i;
  * inflated at once. An archive that will not open counts once in `failed` and
  * the rest carries on; nothing here throws on a bad file.
  */
-export function expandUpload(name: string, bytes: Uint8Array, range = { from: 0, to: Infinity }): ExpandedUpload {
-  const found: ExpandedUpload = { total: 0, files: [], failed: 0 };
-  const inRange = () => {
-    const position = found.total++;
-    return position >= range.from && position < range.to;
-  };
+export function expandUpload(name: string, bytes: Uint8Array, range: FileRange = EVERY_FILE): ExpandedUpload {
+  if (ACTIVITY_FILE.test(name)) return { total: 1, files: inRange(range, 0) ? [{ name, bytes }] : [], failed: 0 };
+  if (!ZIP_FILE.test(name)) return { total: 0, files: [], failed: 0 };
+  return openExport(bytes, range);
+}
 
-  if (ACTIVITY_FILE.test(name)) {
-    if (inRange()) found.files.push({ name, bytes });
-    return found;
-  }
-  if (!ZIP_FILE.test(name)) return found;
+/** A zip's own activity files, then each nested zip's; an outer zip that will not open is one failure. */
+function openExport(bytes: Uint8Array, range: FileRange): ExpandedUpload {
+  let total = 0;
+  const outer = openZip(bytes, (entry) => (ACTIVITY_FILE.test(entry.name) ? inRange(range, total++) : ZIP_FILE.test(entry.name)));
+  if (outer === null) return { total: 0, files: [], failed: 1 };
 
-  const outer = openZip(bytes, (entry) => (ACTIVITY_FILE.test(entry.name) ? inRange() : ZIP_FILE.test(entry.name)));
-  if (!outer) return { total: 0, files: [], failed: 1 };
-  found.files.push(...activityFiles(outer));
-
+  const found: ExpandedUpload = { total, files: activityFiles(outer), failed: 0 };
   for (const [entry, data] of Object.entries(outer)) {
-    if (!ZIP_FILE.test(entry)) continue;
-    const counted = found.total;
-    const inner = openZip(data, (file) => ACTIVITY_FILE.test(file.name) && inRange());
-    if (inner) {
-      found.files.push(...activityFiles(inner));
-    } else {
-      found.total = counted;
-      found.failed++;
-    }
+    if (ZIP_FILE.test(entry)) addNested(found, data, range);
   }
   return found;
+}
+
+/** Adds a nested zip's activity files, numbered after everything before them; one that will not open is one failure. */
+function addNested(found: ExpandedUpload, data: Uint8Array, range: FileRange): void {
+  let count = 0;
+  const inner = openZip(data, (file) => ACTIVITY_FILE.test(file.name) && inRange(range, found.total + count++));
+  if (inner === null) {
+    found.failed++;
+  } else {
+    found.total += count;
+    found.files.push(...activityFiles(inner));
+  }
 }
 
 /** The activity files of an opened zip, named without their folders. */
@@ -275,21 +284,30 @@ export function advanceImport(
   row: ImportProgress,
   chunk: ChunkOutcome,
 ): ImportProgress & { finishedBlob: string | null; status: 'importing' | 'done' } {
+  const position = moveCursor(row.blobUrls, row.cursor + chunk.read, chunk.blobTotal);
+  return {
+    ...position,
+    ...countsAfter(row, chunk),
+    status: position.blobUrls.length === 0 ? 'done' : 'importing',
+  };
+}
+
+/** The cursor after a step: still inside the first blob, or past it and on to the next. */
+function moveCursor(blobUrls: string[], cursor: number, blobTotal: number) {
+  if (cursor < blobTotal) return { blobUrls, finishedBlob: null, cursor };
+  const [head, ...rest] = blobUrls;
+  return { blobUrls: rest, finishedBlob: head ?? null, cursor: 0 };
+}
+
+/** The counters after a step; a blob's size and its unreadable archives count once, when it is first opened. */
+function countsAfter(row: ImportProgress, chunk: ChunkOutcome) {
   const firstOpen = row.cursor === 0;
   const archivesFailed = firstOpen ? chunk.blobFailed : 0;
-  const cursor = row.cursor + chunk.read;
-  const finished = cursor >= chunk.blobTotal;
-  const [head = null, ...rest] = row.blobUrls;
-  const blobUrls = finished ? rest : row.blobUrls;
   return {
-    blobUrls,
-    finishedBlob: finished ? head : null,
-    cursor: finished ? 0 : cursor,
     total: row.total + (firstOpen ? chunk.blobTotal + chunk.blobFailed : 0),
     done: row.done + chunk.read + archivesFailed,
     skippedOld: row.skippedOld + chunk.skippedOld,
     failed: row.failed + chunk.failed + archivesFailed,
-    status: blobUrls.length === 0 ? 'done' : 'importing',
   };
 }
 

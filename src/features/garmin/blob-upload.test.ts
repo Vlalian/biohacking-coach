@@ -13,6 +13,7 @@ describe('uploadPolicy', () => {
     expect(uploadPolicy('history', { athleteId: null, historyLocked: false })).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(uploadPolicy('history', { athleteId: 'a1', historyLocked: true })).toEqual({ ok: false, reason: 'locked' });
     expect(uploadPolicy('other' as never, { athleteId: 'a1', historyLocked: false })).toEqual({ ok: false, reason: 'bad-kind' });
+    expect(uploadPolicy(null, { athleteId: 'a1', historyLocked: false })).toEqual({ ok: false, reason: 'bad-kind' });
   });
 
   it('allows a detection upload even when the history is locked, capped at 500 MB, under the athlete prefix', () => {
@@ -74,6 +75,10 @@ describe('contentTypeFor', () => {
     const allowed = (uploadPolicy('history', { athleteId: 'a1', historyLocked: false }) as { allowedContentTypes: string[] }).allowedContentTypes;
     for (const name of ['a.zip', 'a.gpx', 'a.fit']) expect(allowed).toContain(contentTypeFor(name));
   });
+
+  it('reads only a real extension at the end of the name', () => {
+    for (const name of ['x.zip.fit', 'xzip', 'x.gpx.fit', 'xgpx']) expect(contentTypeFor(name)).toBe('application/octet-stream');
+  });
 });
 
 describe('withinWindow', () => {
@@ -107,6 +112,8 @@ describe('acceptsPathname', () => {
     expect(acceptsPathname(PREFIX, `${PREFIX}../a2/ride.fit`)).toBe(false);
     expect(acceptsPathname(PREFIX, `${PREFIX}.fit`)).toBe(false);
     expect(acceptsPathname(PREFIX, `x/${PREFIX}ride.fit`)).toBe(false);
+    expect(acceptsPathname(PREFIX, `${PREFIX}ridefit`)).toBe(false);
+    expect(acceptsPathname(PREFIX, `${PREFIX}ride.fit.txt`)).toBe(false);
   });
 });
 
@@ -182,7 +189,35 @@ describe('expandUpload', () => {
   });
 
   it('holds nothing for a file of another type', () => {
-    expect(expandUpload('notes.txt', strToU8('x'))).toEqual({ total: 0, files: [], failed: 0 });
+    for (const name of ['notes.txt', 'x.fit.txt', 'xfit', 'xzip', 'x.zip.txt']) {
+      expect(expandUpload(name, zipSync({ 'a.fit': FIT }))).toEqual({ total: 0, files: [], failed: 0 });
+    }
+  });
+
+  it('reads only a real .fit, .gpx or .zip inside the zip, and names each file without its folders', () => {
+    const inner = zipSync({ 'deep/c.fit': FIT, 'cfit': FIT });
+    const outer = zipSync({
+      'dir/a.fit': FIT,
+      'notes.fit.txt': FIT,
+      'xfit': FIT,
+      'xgpx': GPX,
+      'nested.zip': inner,
+      'azip': inner,
+      'b.zip.txt': inner,
+    });
+    expect(expandUpload('e.zip', outer)).toEqual({
+      total: 2,
+      failed: 0,
+      files: [
+        { name: 'a.fit', bytes: FIT },
+        { name: 'c.fit', bytes: FIT },
+      ],
+    });
+  });
+
+  it('keeps counting after a nested zip that will not open', () => {
+    const outer = zipSync({ 'a.fit': FIT, 'bad.zip': strToU8('nope'), 'good.zip': zipSync({ 'b.fit': FIT, 'c.fit': FIT }) });
+    expect(expandUpload('e.zip', outer, { from: 1, to: 2 })).toEqual({ total: 3, failed: 1, files: [{ name: 'b.fit', bytes: FIT }] });
   });
 });
 

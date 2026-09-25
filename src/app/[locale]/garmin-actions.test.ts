@@ -319,6 +319,7 @@ describe('startHistoryImportAction', () => {
     expect(await startHistoryImportAction([])).toEqual({ ok: false, reason: 'empty' });
     expect(await startHistoryImportAction('nope' as never)).toEqual({ ok: false, reason: 'empty' });
     expect(await startHistoryImportAction([42] as never)).toEqual({ ok: false, reason: 'not-yours' });
+    expect(await startHistoryImportAction([null] as never)).toEqual({ ok: false, reason: 'not-yours' });
     resolveAthleteId.mockResolvedValue(null);
     expect(await startHistoryImportAction(URLS)).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(startHistoryImport).not.toHaveBeenCalled();
