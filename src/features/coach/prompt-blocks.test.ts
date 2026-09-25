@@ -34,6 +34,7 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
         completed: 1,
         skipped: 1,
         byType: [{ type: 'Endurance', completed: 1, doneMinutes: 60 }],
+        soFar: false,
       },
     ]);
     expect(rendered).toContain('RECENT WEEKS:');
@@ -48,6 +49,7 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     completed: 0,
     skipped: 0,
     byType: [],
+    soFar: false,
   });
 
   it('is null when there is no history, so assemble drops it', () => {
@@ -74,6 +76,18 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     ]) {
       expect(recentWeeksBlock([empty('2026-09-14'), week])).toContain('- Week of 2026-09-21: 0.0h done of');
     }
+  });
+
+  it('says the current week is only up to today, empty or not', () => {
+    const rendered = recentWeeksBlock([
+      { ...empty('2026-09-14'), plannedMinutes: 60, doneMinutes: 60, completed: 1 },
+      { ...empty('2026-09-21'), soFar: true },
+    ]);
+    expect(rendered).toContain('- Week of 2026-09-14: 1.0h done of 1.0h planned');
+    expect(rendered).toContain('- Week of 2026-09-21 (this week, up to today): empty — nothing planned, nothing done');
+    expect(recentWeeksBlock([{ ...empty('2026-09-21'), plannedMinutes: 90, doneMinutes: 30, completed: 1, soFar: true }])).toContain(
+      '- Week of 2026-09-21 (this week, up to today): 0.5h done of 1.5h planned',
+    );
   });
 });
 

@@ -190,8 +190,11 @@ describe('whatChangedFrom (training-architecture/40)', () => {
 });
 
 describe('fourWeekSummary', () => {
+  // Drafted on the target Monday itself: all four weeks are behind today.
+  const DRAFTED_ON_THE_MONDAY = '2026-09-28';
+
   it('returns four weeks ending at the target, including the ones with nothing in them', () => {
-    const summary = fourWeekSummary([session({ date: '2026-09-07', status: 'completed', duration: 60 })], '2026-09-28');
+    const summary = fourWeekSummary([session({ date: '2026-09-07', status: 'completed', duration: 60 })], '2026-09-28', DRAFTED_ON_THE_MONDAY);
     expect(summary.map((w) => w.weekStart)).toEqual(['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21']);
     expect(summary[1].completed).toBe(1);
     expect(summary[2]).toMatchObject({ plannedMinutes: 0, doneMinutes: 0, completed: 0, skipped: 0, byType: [] });
@@ -205,12 +208,13 @@ describe('fourWeekSummary', () => {
         session({ date: '2026-09-23', status: 'planned', duration: 45 }),
       ],
       '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
     )[3];
     expect(week).toMatchObject({ plannedMinutes: 195, doneMinutes: 60, completed: 1, skipped: 1 });
   });
 
   it('counts a session with no duration without inventing minutes for it', () => {
-    const week = fourWeekSummary([session({ date: '2026-09-21', status: 'completed', duration: null })], '2026-09-28')[3];
+    const week = fourWeekSummary([session({ date: '2026-09-21', status: 'completed', duration: null })], '2026-09-28', DRAFTED_ON_THE_MONDAY)[3];
     expect(week).toMatchObject({ completed: 1, doneMinutes: 0, plannedMinutes: 0 });
   });
 
@@ -223,6 +227,7 @@ describe('fourWeekSummary', () => {
         session({ date: '2026-09-22', status: 'completed', duration: 30, origin: 'garmin' }),
       ],
       '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
     )[3];
     expect(week).toMatchObject({ completed: 2, doneMinutes: 90 });
   });
@@ -235,6 +240,7 @@ describe('fourWeekSummary', () => {
         session({ date: '2026-09-23', type: 'Intensity', status: 'skipped', duration: 45 }),
       ],
       '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
     )[3];
     expect(week.byType).toEqual([{ type: 'Endurance', completed: 2, doneMinutes: 150 }]);
   });
@@ -247,11 +253,40 @@ describe('fourWeekSummary', () => {
         session({ date: '2026-09-24', type: 'Endurance', status: 'completed', duration: 90 }),
       ],
       '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
     )[3];
     expect(week.byType).toEqual([
       { type: 'Endurance', completed: 2, doneMinutes: 150 },
       { type: 'Intensity', completed: 1, doneMinutes: 45 },
     ]);
+  });
+
+  it('leaves out what the current week still has to come, and marks that week as so far', () => {
+    // Drafting 2026-09-28's week on Wednesday 2026-09-23.
+    const summary = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', duration: 60 }),
+        // Before today and never done: planned, not done.
+        session({ date: '2026-09-22', status: 'planned', duration: 45 }),
+        // Today, not yet done: still to come.
+        session({ date: '2026-09-23', status: 'planned', duration: 30 }),
+        // Today, and already done.
+        session({ date: '2026-09-23', status: 'completed', duration: 20 }),
+        // Later this week: still to come.
+        session({ date: '2026-09-24', status: 'planned', duration: 90 }),
+        // Later this week, but already skipped.
+        session({ date: '2026-09-25', status: 'skipped', duration: 40 }),
+      ],
+      '2026-09-28',
+      '2026-09-23',
+    );
+    expect(summary[3]).toMatchObject({ plannedMinutes: 165, doneMinutes: 80, completed: 2, skipped: 1, soFar: true });
+    expect(summary.slice(0, 3).map((w) => w.soFar)).toEqual([false, false, false]);
+  });
+
+  it('marks no week as so far when all four are behind today', () => {
+    const summary = fourWeekSummary([], '2026-09-28', DRAFTED_ON_THE_MONDAY);
+    expect(summary.map((w) => w.soFar)).toEqual([false, false, false, false]);
   });
 });
 

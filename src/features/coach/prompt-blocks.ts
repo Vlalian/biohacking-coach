@@ -145,10 +145,12 @@ export function recentWeeksBlock(weeks: WeekSummary[]): PromptBlock {
 const isEmptyWeek = (w: WeekSummary): boolean => w.plannedMinutes === 0 && w.completed === 0 && w.skipped === 0;
 
 function recentWeekLine(week: WeekSummary): string {
-  if (isEmptyWeek(week)) return `- Week of ${week.weekStart}: empty — nothing planned, nothing done`;
+  // The current week is only part-way through; say so, or its unfinished days read as a light week.
+  const label = `- Week of ${week.weekStart}${week.soFar ? ' (this week, up to today)' : ''}`;
+  if (isEmptyWeek(week)) return `${label}: empty — nothing planned, nothing done`;
   const counts = `${week.completed} completed, ${week.skipped} skipped`;
   const types = week.byType.map((t) => `${t.type} ${t.completed} (${hours(t.doneMinutes)})`).join(', ');
-  return `- Week of ${week.weekStart}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}`;
+  return `${label}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}`;
 }
 
 const hours = (minutes: number): string => `${(minutes / 60).toFixed(1)}h`;

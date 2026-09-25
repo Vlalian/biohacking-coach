@@ -311,6 +311,11 @@ export interface WeekSummary {
   completed: number;
   skipped: number;
   byType: { type: string; completed: number; doneMinutes: number }[];
+  /**
+   * The week holds today, so it is only part-way through: what is still to
+   * come is left out rather than read as not done.
+   */
+  soFar: boolean;
 }
 
 /** How many weeks before the drafted one the draft reads. */
@@ -321,15 +326,22 @@ export const RECENT_WEEKS = 4;
  * in it is returned empty rather than dropped, so the Coach reads a gap as a
  * gap. Done means `status = 'completed'` whatever wrote the session: the
  * history importer writes `origin: 'athlete'`, and nothing writes `'garmin'`.
+ *
+ * The draft is written days before its week starts, so the last of the four is
+ * usually the current one. A session from today on that is neither completed
+ * nor skipped has not had its chance yet: it is left out, and that week is
+ * marked {@link WeekSummary.soFar}.
  */
-export function fourWeekSummary(sessions: Session[], targetWeekStart: string): WeekSummary[] {
+export function fourWeekSummary(sessions: Session[], targetWeekStart: string, today: string): WeekSummary[] {
+  const decided = sessions.filter((s) => s.date < today || s.status === 'completed' || s.status === 'skipped');
   return Array.from({ length: RECENT_WEEKS }, (_, i) => {
     const weekStart = addDays(targetWeekStart, (i - RECENT_WEEKS) * 7);
-    return summariseWeek(weekStart, sessions.filter((s) => weekStartOf(s.date) === weekStart));
+    const week = decided.filter((s) => weekStartOf(s.date) === weekStart);
+    return summariseWeek(weekStart, week, weekStart === weekStartOf(today));
   });
 }
 
-function summariseWeek(weekStart: string, week: Session[]): WeekSummary {
+function summariseWeek(weekStart: string, week: Session[], soFar: boolean): WeekSummary {
   const done = week.filter((s) => s.status === 'completed');
   return {
     weekStart,
@@ -338,6 +350,7 @@ function summariseWeek(weekStart: string, week: Session[]): WeekSummary {
     completed: done.length,
     skipped: week.filter((s) => s.status === 'skipped').length,
     byType: typeSplit(done),
+    soFar,
   };
 }
 

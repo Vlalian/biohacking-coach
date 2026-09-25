@@ -695,6 +695,16 @@ describe('the draft says whether it adjusted a full week, and what it changed (t
   });
 });
 
+describe('the draft names the Target Race it builds toward', () => {
+  it('passes the resolved race, by name and date, into the prompt', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const system: string = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('Ironman Copenhagen');
+    expect(system).toContain('2027-08-15');
+  });
+});
+
 describe('the draft reads the four weeks before the drafted one (training-architecture/44)', () => {
   const past = (date: string, status: string, origin: string, duration: number | null = 60) => ({
     id: `s-${date}`, date, type: 'Endurance', status, parked: false, dayOrder: 0, version: 1, title: null,
@@ -719,13 +729,17 @@ describe('the draft reads the four weeks before the drafted one (training-archit
       past('2026-09-10', 'skipped', 'coach', 45),
       // The week of 09-14 is imported history: the importer writes origin 'athlete'.
       past('2026-09-15', 'completed', 'athlete', 90),
+      // Still to come on the day of the draft (2026-09-16): not a missed session.
+      past('2026-09-18', 'planned', 'coach', 120),
     ]);
     await ensureWeekDrafted(ATHLETE, TODAY);
     const system: string = callCoach.mock.calls[0][0].system;
     expect(system).toContain('RECENT WEEKS:');
     expect(system).toContain('- Week of 2026-08-24: empty — nothing planned, nothing done');
     expect(system).toContain('- Week of 2026-09-07: 0.0h done of 1.8h planned; 0 completed, 2 skipped');
-    expect(system).toContain('- Week of 2026-09-14: 1.5h done of 1.5h planned; 1 completed, 0 skipped; done by type: Endurance 1 (1.5h)');
+    expect(system).toContain(
+      '- Week of 2026-09-14 (this week, up to today): 1.5h done of 1.5h planned; 1 completed, 0 skipped; done by type: Endurance 1 (1.5h)',
+    );
   });
 
   it('carries no block when the four weeks hold nothing', async () => {

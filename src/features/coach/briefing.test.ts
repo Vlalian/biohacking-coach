@@ -97,12 +97,12 @@ describe('renderBriefingPrompt — transcripts gated by shareAiTranscripts', () 
     const prompt = renderBriefingPrompt(
       ctx({
         transcripts: [
-          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Coach: good — then we build'] },
+          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Momentum: good — then we build'] },
           { kind: 'coach_chat', lines: ['Athlete: I felt tired'] },
         ],
       }),
     );
-    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nCoach: good — then we build');
+    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nMomentum: good — then we build');
     expect(prompt).toContain('[Coach Chat]\nAthlete: I felt tired');
   });
 });
@@ -270,9 +270,10 @@ describe('renderBriefingPrompt — golden', () => {
             { date: '2026-08-06', type: 'Intensity', body: 4, mind: 6, comment: null },
           ],
         },
+        // Speaker labels as \`briefing-service.ts\` writes them since showable-version/46.
         transcripts: [
-          { kind: 'coach_chat', lines: ['Athlete: tired', 'Coach: rest'] },
-          { kind: 'weekly_session', lines: ['Head Coach: note', 'Coach: ok'] },
+          { kind: 'coach_chat', lines: ['Athlete: tired', 'Momentum: rest'] },
+          { kind: 'weekly_session', lines: ['Coach: note', 'Momentum: ok'] },
         ],
       }),
     );

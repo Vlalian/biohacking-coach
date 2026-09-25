@@ -44,11 +44,11 @@ SESSION REFLECTIONS (Body/Mind the athlete reported):
 ATHLETE CONVERSATIONS (shared by the athlete):
 [Coach Chat]
 Athlete: tired
-Coach: rest
+Momentum: rest
 
 [Weekly Session]
-Head Coach: note
-Coach: ok"
+Coach: note
+Momentum: ok"
 `;
 
 exports[`renderBriefingPrompt — golden > renders identically with everything withheld or absent 1`] = `

@@ -526,7 +526,7 @@ async function gatherContext(
     window,
     skeleton,
     baseline,
-    recentWeeks: fourWeekSummary(pastSessions, draftedWeek),
+    recentWeeks: fourWeekSummary(pastSessions, draftedWeek, today),
     declined,
     passages: grounding.passages,
     citations: grounding.citations,

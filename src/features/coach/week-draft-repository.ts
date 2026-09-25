@@ -150,8 +150,10 @@ export interface NewWeekDraft {
  */
 export async function recordWeekDraft(draft: NewWeekDraft): Promise<'drafted' | 'exists'> {
   const { athleteId, weekStart, visibleFrom, sessions, citations, skeleton, adjusted, whatChanged } = draft;
-  // An absent field is left out of the JSON, so a draft that says nothing
-  // about either writes exactly the payload it always did.
+  // A field left undefined stays out of the JSON. The draft service always
+  // sets both — \`adjusted\` true or false, \`whatChanged\` a sentence or null —
+  // and readers treat anything but \`adjusted: true\` and a non-empty sentence
+  // as absent, so events written before either field read the same.
   const payload = { weekStart, visibleFrom, sessions, citations, skeleton, adjusted, whatChanged };
 
   const statement = sql`

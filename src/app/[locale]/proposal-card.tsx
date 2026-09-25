@@ -51,7 +51,6 @@ export function isDecided(outcome: CardOutcome): boolean {
 }
 
 /** The line the card shows for an outcome — pure, so the copy rules are testable without a click. */
-
 export function outcomeKey(outcome: CardOutcome): { key: string; values?: Record<string, string | number> } | null {
   switch (outcome.kind) {
     case 'idle':
