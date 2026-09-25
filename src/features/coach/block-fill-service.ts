@@ -7,6 +7,7 @@ import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import { blockSessions, weeksToFill, type ArithmeticSession, type BlockContext, type DueWeek } from './block-sessions';
 import type { TrainingBlock } from './training-blocks';
+import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { toRaceDistance, type RaceDistance } from '@/lib/race-distances';
 import { getResolvedBlocks } from './training-block-service';
 
@@ -74,6 +75,7 @@ async function readyToFill(athleteId: string, today: string): Promise<FillOutcom
     distance: toRaceDistance(resolved.race.distance),
     hours: athlete.hoursPerWeek,
     fixedConstraints: athlete.profile?.fixedConstraints,
+    firstDay: chosenFirstDay(athlete.profile, today),
     blocks: resolved.blocks,
   });
 }
@@ -86,6 +88,8 @@ async function planFor(facts: {
   distance: RaceDistance | null;
   hours: number;
   fixedConstraints: string[] | undefined;
+  /** The athlete's chosen start, already resolved; absent when there is none to honour. */
+  firstDay: string | undefined;
   blocks: TrainingBlock[];
 }): Promise<FillOutcome | FillPlan> {
   const { athleteId, today } = facts;
@@ -100,9 +104,9 @@ async function planFor(facts: {
       hours: facts.hours,
       fixedConstraints: facts.fixedConstraints,
       unavailableDates: await getUnavailableDates(athleteId),
-      // `firstDay` is the athlete's own start once `training-architecture/36`
-      // asks for it; until then the structure starts today.
-      firstDay: today,
+      // The athlete's own start (`training-architecture/36`), or today for
+      // anyone who was never asked and anyone whose day has arrived.
+      firstDay: facts.firstDay ?? today,
     },
   };
 }

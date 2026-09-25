@@ -215,3 +215,36 @@ describe('TrainingPlanPage — the cycle line names a linked Head Coach (trainin
     expect(findElement(await render(), WeeklySessionDayLine)?.props.headCoachName).toBeNull();
   });
 });
+
+describe('TrainingPlanPage — the reads run together (code-health/09)', () => {
+  const reads = () => [
+    getSessionsForAthlete,
+    getUnavailableDates,
+    listPendingActivities,
+    listImportedSessionIds,
+    getResolvedBlocks,
+    calendarSlotState,
+    getHealthHistory,
+    getLinkForAthlete,
+  ];
+
+  it('starts every calendar read before any of them resolves', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1' });
+    const never = () => new Promise<never>(() => {});
+    const saved = reads().map((m) => m.getMockImplementation());
+    for (const m of reads()) {
+      m.mockClear();
+      (m as unknown as { mockImplementation: (f: () => Promise<never>) => void }).mockImplementation(never);
+    }
+
+    void render();
+    // Let the session and athlete reads settle; the calendar reads never do.
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    for (const m of reads()) expect(m).toHaveBeenCalledTimes(1);
+    reads().forEach((m, i) =>
+      (m as unknown as { mockImplementation: (f: unknown) => void }).mockImplementation(saved[i]),
+    );
+  });
+});

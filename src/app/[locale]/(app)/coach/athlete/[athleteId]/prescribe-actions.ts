@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { resolveHeadCoachId } from '../../../../current-actor';
 import {
   deletePrescribedSession,
@@ -18,8 +17,12 @@ import { today } from '@/lib/date';
  * calls. Each resolves the acting Head Coach from the authenticated session
  * (never the request), so the client sends only *what* to change, never *who*
  * is changing it. The link gate and the content-authority guards live in the
- * service; these wire the request to it and revalidate the athlete view so the
- * change shows.
+ * service; these wire the request to it.
+ *
+ * None of them revalidates (showable-version/44). The calendar holds a move,
+ * edit or delete from what it returns. The prescribe panel sits outside the
+ * calendar and refreshes the page itself after an add. Other views read fresh
+ * on the next navigation.
  */
 
 export type PrescribeActionResult =
@@ -41,7 +44,6 @@ export async function prescribeSessionAction(
     // already closed must not be judged against a browser's idea of today.
     today: today(),
   });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -64,9 +66,6 @@ export async function editPrescribedSessionAction(
     // immutability must not be judged against a browser's idea of today.
     today: today(),
   });
-  // 'layout' is main's: the edited session shows on more than this page, so a
-  // page-scoped revalidate left the other tabs stale.
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -87,7 +86,6 @@ export async function deletePrescribedSessionAction(
     // immutability must not be judged against a browser's idea of today.
     today: today(),
   });
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }
 
@@ -119,6 +117,5 @@ export async function moveSessionAsCoachAction(
     today: today(),
   });
 
-  if (result.ok) revalidatePath(`/coach/athlete/${athleteId}`, 'layout');
   return result;
 }

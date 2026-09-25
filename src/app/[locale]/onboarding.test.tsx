@@ -87,11 +87,11 @@ describe('OnboardingFlow — the way back', () => {
 });
 
 describe('OnboardingFlow — hours and past races (training-architecture/35)', () => {
-  it('renders the hours step with a number input 1–30 and no suggested value', () => {
+  it('renders the hours step with a number input 1–50 and no suggested value', () => {
     const hours = render('hours', {});
     expect(hours).toContain('type="number"');
     expect(hours).toContain('min="1"');
-    expect(hours).toContain('max="30"');
+    expect(hours).toContain('max="50"');
     expect(hours).toContain('data-action="submit-hours"');
     // No default: "A and only A" — the field starts empty and offers no number.
     expect(hours).toMatch(/type="number"[^>]*value=""/);

@@ -8,6 +8,17 @@ import type { Session } from '@/features/session/session';
 import { dateKey, isoWeekNumber, weekStartOf } from '@/lib/date';
 import { classifyMove, isFrozen } from '@/features/session/move-rules';
 import type { MoveResult } from '@/features/session/session-move';
+import type { SessionConflict } from '@/features/session/conflict';
+import {
+  NO_WRITES,
+  answerOf,
+  beginMove,
+  inFlightIds,
+  settle,
+  shownSessions,
+  type WriteOutcome,
+  type Writes,
+} from '@/features/session/calendar-writes';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
 import { moveSessionAction } from './move-actions';
 import { markUnavailableDateAction, clearUnavailableDateAction } from './availability-actions';
@@ -32,7 +43,7 @@ export const HEADER_DAYS: readonly Date[] = Array.from({ length: 7 }, (_, i) => 
 // 'conflict' is the only reason the client cannot predict: it means someone
 // else — the Head Coach — changed this session while it was on screen, so the
 // move was refused rather than allowed to overwrite them (versioned-write.ts).
-type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked';
+type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked' | 'saving';
 
 /**
  * Every reason a Session Move can come back refused from the server, and the
@@ -57,6 +68,11 @@ type BounceReason = 'past-day' | 'other-week' | 'frozen' | 'conflict' | 'parked'
  * fix, and naming it leaks the shape of the system without helping. Every other
  * reason is something the person can act on, so every other reason is named.
  */
+/** What either door answers to a move: the athlete's own or the Head Coach's. */
+type MoveAnswer =
+  | { ok: true; version: number }
+  | { ok: false; reason: MoveRefusal; conflict?: SessionConflict };
+
 type MoveRefusal =
   | Extract<MoveResult, { ok: false }>['reason']
   // The Head Coach's door refuses two more ways than the athlete's
@@ -64,7 +80,9 @@ type MoveRefusal =
   // they hold no coach row at all. Both were invisible before this — the coach
   // dragged, and the chip went back.
   | 'not-linked'
-  | 'not-a-coach';
+  | 'not-a-coach'
+  // The call itself failed — network or server — so there is no answer to read.
+  | 'unreachable';
 
 /**
  * Why this session cannot be picked up at all, or null when it can.
@@ -84,14 +102,21 @@ type MoveRefusal =
  * planned on its own when the Rest block moves away (CONTEXT.md, Displacement);
  * telling the athlete it is frozen would describe something permanent.
  */
+// Export-for-test: the chip that calls this sits inside a client component,
+// and the repo has no DOM renderer to reach its refusal through a drag. Delete
+// freely if this is inlined.
 export function liftRefusal(
   session: { date: string; status: string; parked: boolean },
   todayKey: string,
-): Extract<BounceReason, 'frozen' | 'parked'> | null {
+  /** A write to this session is still waiting on the server (showable-version/44). */
+  inFlight = false,
+): LiftRefusal | null {
   if (isFrozen({ date: session.date, status: session.status }, todayKey)) return 'frozen';
   if (session.parked) return 'parked';
-  return null;
+  return inFlight ? 'saving' : null;
 }
+
+type LiftRefusal = Extract<BounceReason, 'frozen' | 'parked' | 'saving'>;
 
 /**
  * The message for each refusal the *calendar* decides for itself, so that a
@@ -105,6 +130,7 @@ export const BOUNCE_KEY: Record<BounceReason, string> = {
   frozen: 'bounceFrozen',
   conflict: 'bounceConflict',
   parked: 'bounceParked',
+  saving: 'bounceSaving',
 };
 
 export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
@@ -121,6 +147,7 @@ export const MOVE_REFUSAL_KEY: Record<MoveRefusal, string> = {
   // is not a coach, is a state the person cannot resolve from this drag.
   'not-linked': 'bounceError',
   'not-a-coach': 'bounceError',
+  unreachable: 'bounceError',
 };
 
 type Day = {
@@ -213,6 +240,7 @@ export function Calendar({
   proposal = null,
   health = [],
   phase = null,
+  addPanel,
 }: {
   sessions: Session[];
   /**
@@ -225,11 +253,17 @@ export function Calendar({
   unavailableDates: string[];
   /**
    * The athlete's Injuries and Illnesses, open and closed, drawn as a layer
-   * beside the plan (`training-architecture/06`). Empty by default so a caller
-   * with nothing to show — or a Head Coach the athlete has not shared their
-   * reports with — renders exactly the calendar it always did.
+   * beside the plan (`training-architecture/06`).
+   *
+   * `[]` is *nothing recorded* and reads as a clean week. **`null` is
+   * *withheld*** — a Head Coach the athlete has not shared their reports with —
+   * and draws no layer at all: no marks, no status area, no drawer. The two
+   * cannot collapse into one, or a coach could tell "no injuries" from "not
+   * shared" and infer health from absence, which is the inference
+   * `roster-service.ts` refuses to allow by not even fetching the records
+   * (`showable-version/28b`).
    */
-  health?: HealthSpan[];
+  health?: HealthSpan[] | null;
   /** Passed through to the Session Drawer, which offers undo on these. Empty
    *  by default so the Head Coach's read-only calendar needs no extra read. */
   importedSessionIds?: string[];
@@ -254,7 +288,7 @@ export function Calendar({
     sessionId: string,
     targetDate: string,
     expectedVersion: number,
-  ) => Promise<{ ok: true } | { ok: false; reason: MoveRefusal }>;
+  ) => Promise<MoveAnswer>;
   /**
    * The athlete this calendar belongs to, when the Head Coach is the one
    * looking at it. Opens the Session Drawer on their behalf.
@@ -271,6 +305,13 @@ export function Calendar({
    * panel (17). Absent, the calendar renders exactly as it did before 18.
    */
   proposal?: CalendarSlotState | null;
+  /**
+   * The Head Coach's add form, rendered beneath the calendar and handed its
+   * writes, so a prescription shows on the calendar the moment it is added and
+   * the server's answer settles it (showable-version/44). A form outside the
+   * calendar could only refresh the page.
+   */
+  addPanel?: (writer: CalendarWriter) => React.ReactNode;
 }) {
   const t = useTranslations('Calendar');
   const format = useFormatter();
@@ -294,9 +335,20 @@ export function Calendar({
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
   const [healthDrawer, setHealthDrawer] = useState<HealthDrawerState>({ open: false });
   const [ratingSession, setRatingSession] = useState<Session | null>(null);
+  // This calendar's own writes (showable-version/44). What it renders is derived
+  // from the props and these, never a copy of the props, so a refresh landing
+  // mid-write cannot undo the write — see calendar-writes.ts.
+  const [writes, setWrites] = useState<Writes>(NO_WRITES);
+  const shown = shownSessions(sessions, writes);
+  const inFlight = new Set(inFlightIds(writes));
+  // For the drawer: it starts a write on what is shown now, and settles it
+  // with the server's answer.
+  const beginWrite = (start: (w: Writes, current: Session[]) => Writes) =>
+    setWrites((w) => start(w, shownSessions(sessions, w)));
+  const settleWrite = (key: string, outcome: WriteOutcome) => setWrites((w) => settle(w, key, outcome));
 
   const byDate = new Map<string, Session[]>();
-  for (const s of sessions) {
+  for (const s of shown) {
     const list = byDate.get(s.date);
     if (list) list.push(s);
     else byDate.set(s.date, [s]);
@@ -307,7 +359,7 @@ export function Calendar({
   // ghosted one taught the athlete it shows things it does not mean.
   const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable);
   const allExpanded = weeks.length > 0 && weeks.every((w) => expanded.includes(w.isoWeekStart));
-  const hasAnySession = sessions.length > 0;
+  const hasAnySession = shown.length > 0;
 
   function toggleWeek(isoWeekStart: string) {
     setExpanded((prev) =>
@@ -348,24 +400,31 @@ export function Calendar({
       window.setTimeout(() => setBounce(null), 2600);
     } else if (dragging.session.date !== day.date) {
       const { id, version } = dragging.session;
+      const target = day.date;
+      // The chip lands on its new day now; the server's answer settles it. No
+      // page re-render: the version that comes back is all the chip needs.
+      beginWrite((w, current) => beginMove(w, current, id, target));
       startTransition(async () => {
         // Both callers carry the version the client read, so a move that lost
         // a race is refused rather than silently winning. `onMove` is the Head
         // Coach's path (it acts on someone else's calendar and needs the
         // athlete id), the default is the athlete's own.
-        const result = onMove
-          ? await onMove(id, day.date, version)
-          : await moveSessionAction(id, day.date, version);
+        // The answer type is named: inferred, it would be taken from the athlete's
+        // `moveSessionAction` alone and refuse the Head Coach's wider refusals.
+        const result = await answerOf<MoveAnswer>(() =>
+          onMove ? onMove(id, target, version) : moveSessionAction(id, target, version),
+        );
+        // A refusal puts the chip back — or, on a conflict, where the winner put it.
+        settleWrite(id, result.ok ? result : { ok: false, conflict: 'conflict' in result ? result.conflict : undefined });
         // A refused move used to look identical to a successful one, because
         // the result was discarded and the refresh put the session back where
         // it started. Say so instead — for *every* reason. This matched only
         // `conflict` until 2026-09-04, so the sentence above was true of one
         // refusal out of five and silently false of the rest.
         if (!result.ok) {
-          setBounce({ date: day.date, messageKey: MOVE_REFUSAL_KEY[result.reason] });
+          setBounce({ date: target, messageKey: MOVE_REFUSAL_KEY[result.reason] });
           window.setTimeout(() => setBounce(null), 4000);
         }
-        router.refresh();
       });
     }
     setDragging(null);
@@ -380,180 +439,194 @@ export function Calendar({
   }
 
   return (
-    <div className="w-full max-w-[1500px]" aria-busy={pending}>
-      {/* The export's header (iron-insight-grid, 2026-09-23): the View name as a
-          kicker, the month as the display headline with the year in signal. */}
-      <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-foreground pb-5">
-        <div>
-          <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
-            {format.dateTime(viewedMonth, { month: 'long' })}{' '}
-            <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
-          </h1>
-          {phase && (
-            <div className="mt-3 flex flex-col gap-1 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground" data-phase-line="">
-              <span>{t('phaseLine', { block: phase.blockName, week: phase.week, weeks: phase.weeks })}</span>
-              <span>
-                {phase.raceName} ·{' '}
-                <span className="text-signal">
-                  {t('raceLine', { days: phase.daysToRace })}
+    <>
+      <div className="w-full max-w-[1500px]" aria-busy={pending}>
+        {/* The export's header (iron-insight-grid, 2026-09-23): the View name as a
+            kicker, the month as the display headline with the year in signal. */}
+        <header className="flex flex-wrap items-end justify-between gap-5 border-b-4 border-foreground pb-5">
+          <div>
+            <h1 className="font-display text-5xl font-bold uppercase italic leading-none tracking-tight text-foreground lg:text-6xl">
+              {format.dateTime(viewedMonth, { month: 'long' })}{' '}
+              <span className="text-signal">{format.dateTime(viewedMonth, { year: 'numeric' })}</span>
+            </h1>
+            {phase && (
+              <div className="mt-3 flex flex-col gap-1 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground" data-phase-line="">
+                <span>{t('phaseLine', { block: phase.blockName, week: phase.week, weeks: phase.weeks })}</span>
+                <span>
+                  {phase.raceName} ·{' '}
+                  <span className="text-signal">
+                    {t('raceLine', { days: phase.daysToRace })}
+                  </span>
                 </span>
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <GhostButton
-            onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
-          >
-            {t('prevMonth')}
-          </GhostButton>
-          <GhostButton
-            onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-          >
-            {t('nextMonth')}
-          </GhostButton>
-          <GhostButton onClick={toggleAllWeeks} icon={ChevronsUpDown}>
-            {allExpanded ? t('collapseAll') : t('expandAll')}
-          </GhostButton>
-          {!readOnly && (
-            // "How's your body?" — always there for the athlete, healthy or
-            // not: it is how the first injury gets declared when nothing on the
-            // calendar can be clicked yet, and where "I'm back" lives too. The
-            // Head Coach never sees it. (Mads, 2026-09-11: a good start, may
-            // move — one button, easy to move.)
-            <GhostButton onClick={() => setHealthDrawer({ open: true })}>
-              {t('healthButton')}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <GhostButton
+              onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+            >
+              {t('prevMonth')}
             </GhostButton>
-          )}
-        </div>
-      </header>
+            <GhostButton
+              onClick={() => setViewedMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            >
+              {t('nextMonth')}
+            </GhostButton>
+            <GhostButton onClick={toggleAllWeeks} icon={ChevronsUpDown}>
+              {allExpanded ? t('collapseAll') : t('expandAll')}
+            </GhostButton>
+            {!readOnly && (
+              // "How's your body?" — always there for the athlete, healthy or
+              // not: it is how the first injury gets declared when nothing on the
+              // calendar can be clicked yet, and where "I'm back" lives too. The
+              // Head Coach never sees it. (Mads, 2026-09-11: a good start, may
+              // move — one button, easy to move.)
+              <GhostButton onClick={() => setHealthDrawer({ open: true })}>
+                {t('healthButton')}
+              </GhostButton>
+            )}
+          </div>
+        </header>
 
-      {proposal?.kind === 'proposal' && (
-        <div className="mt-5">
-          <ProposalCard draft={proposal.draft} />
-        </div>
-      )}
-      {proposal?.kind === 'drafting' && (
-        // The draft is being written this very request, by the shell's
-        // after(); the slot says so and re-reads until it lands (29).
-        <div className="mt-5">
-          <DraftingCard weekStart={proposal.weekStart} waiter={{ side: 'athlete' }} />
-        </div>
-      )}
-      {proposal?.kind === 'redraft-offer' && (
-        // A declined week with no plan: the one offer to draft it again
-        // (training-architecture/24). The card's place, not the calendar's.
-        <div className="mt-5">
-          <RedraftCard weekStart={proposal.weekStart} />
-        </div>
-      )}
-      {proposal?.kind === 'discussing' && (
-        // Not a second proposal: the week is in the conversation now, and this
-        // says where it went (decided 2026-09-15).
-        <p
-          className="mt-5 border border-dashed border-signal/40 bg-signal/5 px-4 py-2 font-body text-sm text-muted-foreground"
-          data-discussing={proposal.conversationId}
-        >
-          {t('discussing')}
-        </p>
-      )}
-
-      {!hasAnySession && (
-        // A note, not a replacement for the grid: the grid stays reachable
-        // (expanded on the current week by default) so the athlete can still
-        // add their own first Athlete Session via "+" — Progressive
-        // Disclosure grows the plan, it never blocks the one action that
-        // would grow it.
-        <div className="mt-6 border border-dashed border-border bg-panel px-8 py-10 text-center">
-          <h2 className="font-display text-3xl font-bold uppercase italic tracking-[0.02em] text-foreground">
-            {t('emptyTitle')}
-          </h2>
-          <p className="mx-auto mt-2 max-w-sm font-body text-base text-muted-foreground">
-            {t('emptyBody')}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-6 hidden grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-border pb-2 md:grid">
-        <span />
-        {HEADER_DAYS.map((day, i) => (
-          <span
-            key={i}
-            className="px-2.5 font-body text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+        {proposal?.kind === 'proposal' && (
+          <div className="mt-5">
+            <ProposalCard draft={proposal.draft} />
+          </div>
+        )}
+        {proposal?.kind === 'drafting' && (
+          // The draft is being written this very request, by the shell's
+          // after(); the slot says so and re-reads until it lands (29).
+          <div className="mt-5">
+            <DraftingCard weekStart={proposal.weekStart} waiter={{ side: 'athlete' }} />
+          </div>
+        )}
+        {proposal?.kind === 'redraft-offer' && (
+          // A declined week with no plan: the one offer to draft it again
+          // (training-architecture/24). The card's place, not the calendar's.
+          <div className="mt-5">
+            <RedraftCard weekStart={proposal.weekStart} />
+          </div>
+        )}
+        {proposal?.kind === 'discussing' && (
+          // Not a second proposal: the week is in the conversation now, and this
+          // says where it went (decided 2026-09-15).
+          <p
+            className="mt-5 border border-dashed border-signal/40 bg-signal/5 px-4 py-2 font-body text-sm text-muted-foreground"
+            data-discussing={proposal.conversationId}
           >
-            {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
-          </span>
-        ))}
-      </div>
+            {t('discussing')}
+          </p>
+        )}
 
-      <div className="mt-6 divide-y divide-border border-b border-border md:mt-0">
-        {weeks.map((week) => (
-          <WeekRow
-            key={week.isoWeekStart}
-            week={week}
-            expanded={expanded.includes(week.isoWeekStart)}
-            readOnly={readOnly}
-            canOpenSession={!readOnly || Boolean(coachAthleteId)}
-            canDrag={canDrag}
+        {!hasAnySession && (
+          // A note, not a replacement for the grid: the grid stays reachable
+          // (expanded on the current week by default) so the athlete can still
+          // add their own first Athlete Session via "+" — Progressive
+          // Disclosure grows the plan, it never blocks the one action that
+          // would grow it.
+          <div className="mt-6 border border-dashed border-border bg-panel px-8 py-10 text-center">
+            <h2 className="font-display text-3xl font-bold uppercase italic tracking-[0.02em] text-foreground">
+              {t('emptyTitle')}
+            </h2>
+            <p className="mx-auto mt-2 max-w-sm font-body text-base text-muted-foreground">
+              {t('emptyBody')}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-6 hidden grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-border pb-2 md:grid">
+          <span />
+          {HEADER_DAYS.map((day, i) => (
+            <span
+              key={i}
+              className="px-2.5 font-body text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+            >
+              {format.dateTime(day, { weekday: 'short', timeZone: 'UTC' })}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-6 divide-y divide-border border-b border-border md:mt-0">
+          {weeks.map((week) => (
+            <WeekRow
+              key={week.isoWeekStart}
+              week={week}
+              expanded={expanded.includes(week.isoWeekStart)}
+              readOnly={readOnly}
+              canOpenSession={!readOnly || Boolean(coachAthleteId)}
+              canDrag={canDrag}
+              todayKey={todayKey}
+              dragging={dragging}
+              hoverDate={hoverDate}
+              bounce={bounce}
+              pending={pending}
+              inFlight={inFlight}
+              t={t}
+              rejectionFor={rejectionFor}
+              onToggleWeek={() => toggleWeek(week.isoWeekStart)}
+              onOpenSession={(s) => setDrawer({ open: true, mode: 'view', sessionId: s.id })}
+              onOpenCreate={(date) => setDrawer({ open: true, mode: 'create', date })}
+              onDragStart={(s) => setDragging({ session: s, week: week.isoWeekStart })}
+              onDragEnd={() => {
+                setDragging(null);
+                setHoverDate(null);
+              }}
+              onDragOverDay={setHoverDate}
+              onDropDay={handleDrop}
+              onToggleAvailability={toggleAvailability}
+              health={health}
+              onOpenHealth={(kind) => setHealthDrawer({ open: true, kind })}
+            />
+          ))}
+        </div>
+
+        <Legend t={t} />
+
+        {(!readOnly || coachAthleteId) && (
+          <SessionDrawer
+            coachAthleteId={coachAthleteId}
+            state={drawer}
+            sessions={shown}
+            onBeginWrite={beginWrite}
+            onSettleWrite={settleWrite}
+            inFlightIds={[...inFlight]}
+            importedSessionIds={importedSessionIds}
+            locale={locale}
             todayKey={todayKey}
-            dragging={dragging}
-            hoverDate={hoverDate}
-            bounce={bounce}
-            pending={pending}
-            t={t}
-            rejectionFor={rejectionFor}
-            onToggleWeek={() => toggleWeek(week.isoWeekStart)}
-            onOpenSession={(s) => setDrawer({ open: true, mode: 'view', sessionId: s.id })}
-            onOpenCreate={(date) => setDrawer({ open: true, mode: 'create', date })}
-            onDragStart={(s) => setDragging({ session: s, week: week.isoWeekStart })}
-            onDragEnd={() => {
-              setDragging(null);
-              setHoverDate(null);
+            onClose={() => setDrawer({ open: false })}
+            onRate={(s) => {
+              setDrawer({ open: false });
+              setRatingSession(s);
             }}
-            onDragOverDay={setHoverDate}
-            onDropDay={handleDrop}
-            onToggleAvailability={toggleAvailability}
-            health={health}
-            onOpenHealth={(kind) => setHealthDrawer({ open: true, kind })}
+            onEditRequest={(s) => setDrawer({ open: true, mode: 'edit', sessionId: s.id })}
           />
-        ))}
+        )}
+
+        {ratingSession && (
+          <RatingModal session={ratingSession} onClose={() => setRatingSession(null)} />
+        )}
+
+        {healthDrawer.open && health && (
+          <HealthDrawer
+            state={healthDrawer}
+            spans={health}
+            locale={locale}
+            coachAthleteId={coachAthleteId}
+            onClose={() => setHealthDrawer({ open: false })}
+          />
+        )}
       </div>
-
-      <Legend t={t} />
-
-      {(!readOnly || coachAthleteId) && (
-        <SessionDrawer
-          coachAthleteId={coachAthleteId}
-          state={drawer}
-          sessions={sessions}
-          importedSessionIds={importedSessionIds}
-          locale={locale}
-          todayKey={todayKey}
-          onClose={() => setDrawer({ open: false })}
-          onRate={(s) => {
-            setDrawer({ open: false });
-            setRatingSession(s);
-          }}
-          onEditRequest={(s) => setDrawer({ open: true, mode: 'edit', sessionId: s.id })}
-        />
-      )}
-
-      {ratingSession && (
-        <RatingModal session={ratingSession} onClose={() => setRatingSession(null)} />
-      )}
-
-      {healthDrawer.open && (
-        <HealthDrawer
-          state={healthDrawer}
-          spans={health}
-          locale={locale}
-          coachAthleteId={coachAthleteId}
-          onClose={() => setHealthDrawer({ open: false })}
-        />
-      )}
-    </div>
+      {/* A sibling of the grid, not inside it, so the page lays it out as before. */}
+      {addPanel?.({ begin: beginWrite, settle: settleWrite })}
+    </>
   );
 }
+
+/** A calendar's writes, lent to a form beside it: start one, then settle it with the server's answer. */
+export type CalendarWriter = {
+  begin: (start: (writes: Writes, shown: Session[]) => Writes) => void;
+  settle: (key: string, outcome: WriteOutcome) => void;
+};
 
 function WeekRow({
   week,
@@ -566,6 +639,7 @@ function WeekRow({
   hoverDate,
   bounce,
   pending,
+  inFlight,
   t,
   rejectionFor,
   onToggleWeek,
@@ -583,7 +657,8 @@ function WeekRow({
   expanded: boolean;
   readOnly: boolean;
   /** Every span, open and closed: the marks on a session outlive the record (28a). */
-  health: HealthSpan[];
+  /** Null when the athlete withholds their reports — the row then draws no health at all. */
+  health: HealthSpan[] | null;
   /** Opens the Health Drawer on the newest open record of that kind. */
   onOpenHealth: (kind: 'injury' | 'illness') => void;
   /** Whether a session opens a drawer. Not `!readOnly`: the Head Coach's
@@ -596,6 +671,8 @@ function WeekRow({
   hoverDate: string | null;
   bounce: { date: string; messageKey: string } | null;
   pending: boolean;
+  /** Sessions with a write still waiting on the server: not liftable until it answers. */
+  inFlight: Set<string>;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
   rejectionFor: (day: Day) => BounceReason | null;
   onToggleWeek: () => void;
@@ -613,40 +690,41 @@ function WeekRow({
   // zone — the same reason the header days are formatted in UTC.
   const weekLabel = t('weekNumber', { n: isoWeekNumber(week.isoWeekStart) });
 
-  const status = weekStatus(
-    week.days.map((d) => d.date),
-    health,
-    todayKey,
-  );
+  const status = health && weekStatus(week.days.map((d) => d.date), health, todayKey);
 
   return (
     <div>
       {/* The health status area, above the seven day cells and beside the plan
           (training-architecture/06 → showable-version/28a, Mads 2026-09-18).
-          Always shown, so a clean week reads "healthy · uninjured" rather than
-          showing nothing: two statuses, each a door into the Health Drawer.
+          Shown on every week the athlete can see, so a clean one reads
+          "healthy · uninjured" rather than showing nothing: two statuses, each
+          a door into the Health Drawer. Absent entirely when the layer is
+          withheld (`health` null), because "uninjured" is a claim and a coach
+          who was not shown the records has not been told it (28b).
           The illness band and the injury chip it replaces are gone; what a
           record covered now shows on the sessions themselves (`Marks`).
           Muted, never red — the point is "no alarm, no demand for an
           explanation"; the open status carries the signal colour and nothing
           more. */}
-      <div
-        data-health-status={week.isoWeekStart}
-        className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1.5 md:pl-[72px]"
-      >
-        <StatusButton
-          kind="injury"
-          active={status.injured}
-          label={status.injured ? t('statusInjured') : t('statusUninjured')}
-          onClick={() => onOpenHealth('injury')}
-        />
-        <StatusButton
-          kind="illness"
-          active={status.ill}
-          label={status.ill ? t('statusIll') : t('statusHealthy')}
-          onClick={() => onOpenHealth('illness')}
-        />
-      </div>
+      {status && (
+        <div
+          data-health-status={week.isoWeekStart}
+          className="flex flex-wrap items-center gap-3 border-b border-dashed border-border px-2 py-1.5 md:pl-[72px]"
+        >
+          <StatusButton
+            kind="injury"
+            active={status.injured}
+            label={status.injured ? t('statusInjured') : t('statusUninjured')}
+            onClick={() => onOpenHealth('injury')}
+          />
+          <StatusButton
+            kind="illness"
+            active={status.ill}
+            label={status.ill ? t('statusIll') : t('statusHealthy')}
+            onClick={() => onOpenHealth('illness')}
+          />
+        </div>
+      )}
       {/* `CONTEXT.md`, Expanded Week: "Tapping a week row toggles it." Only the
           date label was a button, so the row and the glossary disagreed.
 
@@ -694,7 +772,7 @@ function WeekRow({
           // The icons every recorded session on this day carries (28a): an
           // injury or illness whose span covers the day. Proposed sessions
           // are the future and carry none.
-          const marks = marksFor(day.date, health, todayKey);
+          const marks = health ? marksFor(day.date, health, todayKey) : [];
           const isHover = hoverDate === day.date && Boolean(dragging);
           const isBounce = bounce?.date === day.date;
 
@@ -785,7 +863,7 @@ function WeekRow({
                       t={t}
                       marks={marks}
                       canDrag={canDrag}
-                      refusal={liftRefusal(s, todayKey)}
+                      refusal={liftRefusal(s, todayKey, inFlight.has(s.id))}
                       // Omitted only where there is genuinely no drawer to
                       // open. A coach viewing a linked athlete has one now.
                       // Omitted only where there is genuinely no drawer to
@@ -953,7 +1031,7 @@ function SessionChip({
    * and translated and could never be reached, because the drag that would have
    * raised it could not start.
    */
-  refusal: 'frozen' | 'parked' | null;
+  refusal: LiftRefusal | null;
   /**
    * Omitted where there is nothing to open — the Head Coach's read-only
    * calendar, which renders no `SessionDrawer`. Without it this renders plain

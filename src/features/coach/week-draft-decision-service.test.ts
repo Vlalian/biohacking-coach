@@ -83,6 +83,37 @@ describe('acceptWeekDraft', () => {
     expect(rows.some((r) => r.status === 'skipped')).toBe(false);
   });
 
+  it('refuses a draft carrying a day before the athlete’s chosen first day', async () => {
+    // Accepting is the third way into the calendar, after the arithmetic and
+    // Coach Chat. Mads, 2026-09-24: the chosen day bounds this one too, and
+    // because the day expires it can only ever reach a first week.
+    const chose = {
+      id: 'athlete_1',
+      profile: { fixedConstraints: ['Thursday'], onboardingAnswers: { firstDay: '2026-09-22' } },
+    } as never;
+    expect(await acceptWeekDraft(chose, 'd1', '2026-09-18')).toEqual({ ok: false, reason: 'invalid' });
+    expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
+  });
+
+  it('writes from the chosen first day when every session already sits on or after it', async () => {
+    const chose = {
+      id: 'athlete_1',
+      profile: { fixedConstraints: ['Thursday'], onboardingAnswers: { firstDay: '2026-09-22' } },
+    } as never;
+    getCalendarProposalState.mockResolvedValue({
+      kind: 'proposal',
+      draft: { ...DRAFT, sessions: SESSIONS.slice(1) },
+    });
+    expect(await acceptWeekDraft(chose, 'd1', '2026-09-18')).toMatchObject({
+      ok: true,
+      start: '2026-09-22',
+      end: '2026-09-27',
+    });
+    // The range that clears opens on the chosen day, so nothing before it is
+    // swept by a week the athlete said had not started.
+    expect(replaceCoachPlanForDateRange.mock.calls[0].slice(1, 3)).toEqual(['2026-09-22', '2026-09-27']);
+  });
+
   it('refuses invalid, writing nothing, when a session sits on a day the athlete ruled out', async () => {
     getUnavailableDates.mockResolvedValue(['2026-09-22']);
     expect(await acceptWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: false, reason: 'invalid' });

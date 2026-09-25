@@ -14,7 +14,9 @@ import type { SessionConflict } from './conflict';
  * refusal has to say what won (`versioned-write.ts`).
  */
 export type MoveResult =
-  | { ok: true }
+  // The version the move wrote: the client holds the moved session with it, so
+  // its next write is not refused as stale and no reload is needed (showable-version/44).
+  | { ok: true; version: number }
   | {
       ok: false;
       reason: 'not-authenticated' | 'not-found' | 'not-owner' | 'frozen' | 'bounce';
@@ -126,7 +128,7 @@ export async function applyMove(params: {
     },
   });
 
-  return written.ok ? { ok: true } : written;
+  return written;
 }
 
 /**

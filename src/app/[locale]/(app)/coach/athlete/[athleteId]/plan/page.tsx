@@ -1,5 +1,4 @@
 import { loadCoachAthlete, NotACoach } from '../coach-athlete-guard';
-import { PrescribePanel } from '../prescribe-panel';
 import { BlockPanel } from '../block-panel';
 import { CoachCalendar } from './coach-calendar';
 import { WeeklySessionDayCard } from '../weekly-session-day-card';
@@ -86,7 +85,6 @@ export default async function CoachAthletePlanPage({
         todayKey={todayKey}
         health={view.health}
       />
-      <PrescribePanel athleteId={athleteId} />
     </>
   );
 }

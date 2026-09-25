@@ -5,6 +5,7 @@ import { fixedConstraintsOf, proposedToNewSessionRows, validateProposedPlan, typ
 import { createConversation, getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
 import { declineReasonOf, wholeWeekWindow } from './week-draft';
+import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import {
   getCalendarProposalState,
   recordWeekDraftDecision,
@@ -52,9 +53,16 @@ export async function acceptWeekDraft(athlete: Athlete, draftId: string, today: 
 
   // The draft's whole week, whatever today is — the ruling above. Excluded
   // days are still refused: a session on a day the athlete ruled out was never
-  // valid, late or not.
+  // valid, late or not. So is a day before the athlete's chosen first day
+  // (`training-architecture/36`; Mads, 2026-09-24): accepting is the third way
+  // into the calendar and the bound has to hold on all three.
   const unavailableDates = await getUnavailableDates(athlete.id);
-  const window = wholeWeekWindow(draft.weekStart, fixedConstraintsOf(athlete), unavailableDates);
+  const window = wholeWeekWindow(
+    draft.weekStart,
+    fixedConstraintsOf(athlete),
+    unavailableDates,
+    chosenFirstDay(athlete.profile, today),
+  );
   const validated = validateProposedPlan({ sessions: draft.sessions }, window);
   if (!validated.ok || validated.sessions.length !== draft.sessions.length) return { ok: false, reason: 'invalid' };
 

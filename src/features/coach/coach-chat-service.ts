@@ -14,6 +14,7 @@ import { getLatestPlanWrittenAt } from './plan-proposal-repository';
 import { productionGrounding } from './grounding';
 import { proposalTurnTools } from './proposal-tools';
 import { capacityFor } from '@/features/health/health-repository';
+import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { getResolvedBlocks } from './training-block-service';
 import { getCheckInForWeek } from './check-in-repository';
 import { getPresenceStage } from './presence-repository';
@@ -145,7 +146,13 @@ async function renderSystem(
   // discuss, else this week's remainder. Chosen here, by the server, and told
   // to the Coach as a bound — never offered as a question (ADR 0007, amended
   // 2026-09-16).
-  const window = conversationWindow(today, facts.discussedWeek, fixedConstraintsOf(athlete), unavailableDates);
+  const window = conversationWindow(
+    today,
+    facts.discussedWeek,
+    fixedConstraintsOf(athlete),
+    unavailableDates,
+    chosenFirstDay(athlete.profile, today),
+  );
 
   const checkIn = buildWeeklyCheckIn(
     athlete,

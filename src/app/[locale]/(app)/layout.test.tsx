@@ -450,3 +450,18 @@ describe('the Head Coach’s chores are read before render, once, and only for l
     spy.mockRestore();
   });
 });
+
+describe('the shell reads the athlete and the coaching links together (code-health/09)', () => {
+  it('asks for the athlete and the coaching links at the same time', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockReset().mockImplementation(() => new Promise(() => {}));
+    holdsActiveCoachingLinks.mockReset().mockImplementation(() => new Promise(() => {}));
+
+    void render();
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    expect(getAthleteByUserId).toHaveBeenCalledWith('user_abc');
+    expect(holdsActiveCoachingLinks).toHaveBeenCalledWith('user_abc');
+    holdsActiveCoachingLinks.mockReset().mockResolvedValue(false);
+  });
+});

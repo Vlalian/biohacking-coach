@@ -16,6 +16,16 @@ import {
   X,
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
+import type { SessionConflict } from '@/features/session/conflict';
+import { prescriptionColumns } from '@/features/coach/prescription';
+import {
+  answerOf,
+  beginCreate,
+  beginDelete,
+  beginEdit,
+  type WriteOutcome,
+  type Writes,
+} from '@/features/session/calendar-writes';
 import { offeredStatusActions } from '@/features/session/session-status-rules';
 import type { DrawerPolicy } from '@/features/session/drawer-policy';
 import { athleteDrawerPolicy, headCoachDrawerPolicy } from '@/features/session/drawer-policy';
@@ -61,6 +71,8 @@ const ATHLETE_SESSION_TYPES = ['Mobility', 'Strength', 'Other'] as const;
  * would leak the shape of the system without helping.
  */
 export type ActionRefusal =
+  // The call itself failed — network or server — so there is no answer to read.
+  | 'unreachable'
   | 'not-found'
   | 'not-owner'
   | 'not-athlete-authored'
@@ -87,6 +99,7 @@ export const REFUSAL_KEY: Record<ActionRefusal, string> = {
   future: 'errorFuture',
   frozen: 'errorFrozen',
   conflict: 'errorConflict',
+  unreachable: 'error',
   'not-found': 'error',
   'not-owner': 'error',
   'not-athlete-authored': 'error',
@@ -155,6 +168,9 @@ export function SessionDrawer({
   onRate,
   onEditRequest,
   coachAthleteId,
+  onBeginWrite,
+  onSettleWrite,
+  inFlightIds,
 }: {
   state: DrawerState;
   /** Resolved fresh every render, never snapshotted at open-time — after a
@@ -179,6 +195,19 @@ export function SessionDrawer({
    * a tampered value buys nothing (ADR 0006).
    */
   coachAthleteId?: string;
+  /**
+   * The calendar's own writes (showable-version/44). Add, edit and delete show
+   * on the calendar at once through these and settle with the server's answer,
+   * with no page re-render; the status actions still refresh.
+   */
+  onBeginWrite: (start: (writes: Writes, shown: Session[]) => Writes) => void;
+  onSettleWrite: (key: string, outcome: WriteOutcome) => void;
+  /**
+   * Sessions with a write still waiting on the server, from any source — a
+   * drag included. The drawer writes nothing to one of these until it answers:
+   * a second write would send the version the first is about to replace.
+   */
+  inFlightIds: string[];
 }) {
   const t = useTranslations('SessionDrawer');
   const router = useRouter();
@@ -218,9 +247,42 @@ export function SessionDrawer({
     });
   }
 
+  /**
+   * Add, edit and delete: shown on the calendar at once, settled by the
+   * server's answer. A refusal puts the calendar back — on a conflict, to the
+   * row that won, so the next submit carries the version as it now stands while
+   * the form keeps what was typed. That used to take a `router.refresh()`.
+   */
+  function write(
+    key: string,
+    start: (writes: Writes, shown: Session[]) => Writes,
+    action: () => Promise<
+      | ({ ok: true } & WriteOutcome)
+      | { ok: false; reason: ActionRefusal; conflict?: SessionConflict }
+    >,
+    after?: () => void,
+  ) {
+    if (inFlightIds.includes(key)) return;
+    setError(null);
+    onBeginWrite(start);
+    startTransition(async () => {
+      const result = await answerOf(action);
+      if (result.ok) {
+        onSettleWrite(key, result);
+        after?.();
+        return;
+      }
+      onSettleWrite(key, { ok: false, conflict: 'conflict' in result ? result.conflict : undefined });
+      setError(result.reason);
+    });
+  }
+
   const mode = state.mode;
   const session =
     mode !== 'create' ? sessions.find((s) => s.id === state.sessionId) : undefined;
+  // Busy while this drawer's own action runs, or while a write to this session
+  // from anywhere (a drag) has not come back: every action waits for it.
+  const busy = pending || (session !== undefined && inFlightIds.includes(session.id));
 
   return (
     <div className="fixed inset-0 z-50">
@@ -263,19 +325,35 @@ export function SessionDrawer({
               date={state.date}
               todayKey={todayKey}
               locale={locale}
-              pending={pending}
+              pending={busy}
               t={t}
-              onSubmit={(input) =>
-                run(() => createAthleteSessionAction({ date: state.date, ...input }), onClose)
-              }
+              onSubmit={(input) => {
+                const key = `tmp:${crypto.randomUUID()}`;
+                const draft = {
+                  date: state.date,
+                  type: input.type,
+                  duration: input.durationMin,
+                  isTraining: input.isTraining,
+                  note: input.note,
+                };
+                write(
+                  key,
+                  (w, shown) => beginCreate(w, shown, key, draft, todayKey),
+                  () => createAthleteSessionAction({ date: state.date, ...input }),
+                  onClose,
+                );
+              }}
             />
           ) : mode === 'edit' && session && coachAthleteId ? (
             <HeadCoachSessionForm
               session={session}
-              pending={pending}
+              pending={busy}
               t={t}
               onSubmit={(input) =>
-                run(
+                write(
+                  session.id,
+                  // The columns the server writes, from the same rule.
+                  (w, shown) => beginEdit(w, shown, session.id, prescriptionColumns(input)),
                   () =>
                     editPrescribedSessionAction(
                       coachAthleteId,
@@ -292,7 +370,7 @@ export function SessionDrawer({
               date={session.date}
               todayKey={todayKey}
               locale={locale}
-              pending={pending}
+              pending={busy}
               t={t}
               initial={{
                 type: session.type,
@@ -301,7 +379,18 @@ export function SessionDrawer({
                 note: session.note ?? '',
               }}
               onSubmit={(input) =>
-                run(() => updateAthleteSessionAction(session.id, input, session.version), onClose)
+                write(
+                  session.id,
+                  (w, shown) =>
+                    beginEdit(w, shown, session.id, {
+                      type: input.type,
+                      duration: input.durationMin,
+                      isTraining: input.isTraining,
+                      note: input.note,
+                    }),
+                  () => updateAthleteSessionAction(session.id, input, session.version),
+                  onClose,
+                )
               }
             />
           ) : session ? (
@@ -315,7 +404,7 @@ export function SessionDrawer({
               fromImport={importedSessionIds.includes(session.id)}
               todayKey={todayKey}
               locale={locale}
-              pending={pending}
+              pending={busy}
               t={t}
               onMarkComplete={() => run(() => markCompleteAction(session.id))}
               onSkip={() => run(() => toggleSkipAction(session.id))}
@@ -335,7 +424,9 @@ export function SessionDrawer({
               onRate={() => onRate(session)}
               onEdit={() => onEditRequest(session)}
               onDelete={() =>
-                run(
+                write(
+                  session.id,
+                  (w) => beginDelete(w, session.id),
                   () =>
                     coachAthleteId
                       ? deletePrescribedSessionAction(coachAthleteId, session.id, session.version)

@@ -1,15 +1,14 @@
 import { getRatingsForConversation } from '@/features/feedback/message-feedback-repository';
 import { hasLocale } from 'next-intl';
 import { setRequestLocale, getTranslations } from 'next-intl/server';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { after } from 'next/server';
 import type { ViewId } from '@/components/shell/app-shell';
 import { ShellChrome } from '@/components/shell/shell-chrome';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { timed } from '@/lib/render-timing';
+import { getCurrentAthlete, getCurrentSession } from './current-user';
 import { holdsActiveCoachingLinks } from '@/features/coach/coach-repository';
 import { getOpenConversations } from '@/features/coach/conversation-repository';
 import { selectOpenConversations } from '@/features/coach/conversation';
@@ -72,13 +71,17 @@ export default async function AppShellLayout({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
 
-  const athlete = await getAthleteByUserId(session!.user.id);
-  const isHeadCoach = await holdsActiveCoachingLinks(session!.user.id);
+  // Neither read waits for the other (`code-health/09`). The athlete read is
+  // the cached one the page under this layout reuses, so it costs the render
+  // one round trip, not two.
+  const [athlete, isHeadCoach] = await timed('shell.reads', () =>
+    Promise.all([getCurrentAthlete(), holdsActiveCoachingLinks(session!.user.id)]),
+  );
   const firstName = session!.user.name.trim().split(/\s+/)[0] ?? '';
 
   // The Coach Chat thread — the one conversation (ADR 0007). Resumed
@@ -114,10 +117,12 @@ export default async function AppShellLayout({
     const narrationCopy = await getTranslations('Narration');
     const weekdayOf = new Intl.DateTimeFormat(locale, { weekday: 'long' });
     try {
-      await narratePendingEvents(
-        athlete.id,
-        (key, values) => narrationCopy(key, values),
-        (key) => weekdayOf.format(new Date(`${key}T12:00:00Z`)),
+      await timed('shell.narration', () =>
+        narratePendingEvents(
+          athlete.id,
+          (key, values) => narrationCopy(key, values),
+          (key) => weekdayOf.format(new Date(`${key}T12:00:00Z`)),
+        ),
       );
     } catch (error) {
       logNarrationFailure(athlete.id, error);
@@ -130,10 +135,12 @@ export default async function AppShellLayout({
     // not restored either — the behavior is retired (`training-architecture/21`)
     // and there is no screen for it; its transcript still renders for a Head
     // Coach through the shared-transcript reader.
-    const [openConversations, thisWeeksCheckIn] = await Promise.all([
-      getOpenConversations(athlete.id),
-      getCheckInForWeek(athlete.id, weekStartOf(todayKey)),
-    ]);
+    const [openConversations, thisWeeksCheckIn] = await timed('shell.thread', () =>
+      Promise.all([
+        getOpenConversations(athlete.id),
+        getCheckInForWeek(athlete.id, weekStartOf(todayKey)),
+      ]),
+    );
     const { coachChat: openChat } = selectOpenConversations(openConversations);
     // The transcript and the week awaiting a decision, if the chat holds one —
     // a refresh mid-decision must not lose the card (`training-architecture/20`).

@@ -138,7 +138,9 @@ describe('createAthleteSessionAction', () => {
         today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       }),
     );
-    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+    // No page re-render (showable-version/44): the calendar shows the written
+    // session from this result; mark complete and skip still revalidate.
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('revalidates nothing when the service refuses', async () => {
@@ -193,9 +195,7 @@ describe('updateAthleteSessionAction and deleteAthleteSessionAction', () => {
       expectedVersion: 1,
     });
     // Both writes refresh the whole shell, once each.
-    expect(revalidatePath).toHaveBeenCalledTimes(2);
-    expect(revalidatePath).toHaveBeenNthCalledWith(1, '/', 'layout');
-    expect(revalidatePath).toHaveBeenNthCalledWith(2, '/', 'layout');
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('both revalidate nothing when the service refuses', async () => {

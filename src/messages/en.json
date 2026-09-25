@@ -353,6 +353,7 @@
     "bounceNotYours": "This is the athlete's own session — it stays where they put it.",
     "bounceError": "That didn't work. Try again.",
     "bounceParked": "This session is held by a rest day. Move the rest block first.",
+    "bounceSaving": "Still saving your last change. Try again in a moment.",
     "statusHealthy": "Healthy",
     "statusIll": "Ill",
     "statusUninjured": "Uninjured",
@@ -481,7 +482,7 @@
     "pastRaceFinish": "Finish time, e.g. 5:12 or 5:12:30 (optional)",
     "pastRaceNote": "A note (optional)",
     "qHours": "How many hours a week can you train?",
-    "qHoursSub": "Whole hours, 1 to 30. Pick what you can keep up, week after week.",
+    "qHoursSub": "Whole hours, 1 to 50. Pick what you can keep up, week after week.",
     "stepLanguage": "Language",
     "stepName": "Name",
     "stepRace": "Race",
@@ -552,7 +553,13 @@
     "optSprint": "Sprint",
     "optOlympic": "Olympic",
     "optHalf": "Half",
-    "optFull": "Full"
+    "optFull": "Full",
+    "stepFirstDay": "Start",
+    "qFirstDay": "When shall we start?",
+    "qFirstDaySub": "Your first training day. Signing up late in the evening is a poor reason to train tonight.",
+    "firstDayToday": "Today",
+    "firstDayTomorrow": "Tomorrow",
+    "firstDayNextMonday": "Next Monday"
   },
   "CoachThread": {
     "offerBody": "It's your check-in day. Before I draft next week — how are you arriving at it? Takes a minute, and it's fine to skip.",
