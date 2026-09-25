@@ -28,8 +28,8 @@ const {
   declareIllness: vi.fn(async () => {}),
   closeInjury: vi.fn(async () => {}),
   closeIllness: vi.fn(async () => {}),
-  deleteInjury: vi.fn(async (): Promise<'deleted' | 'too-old' | 'missing'> => 'deleted'),
-  deleteIllness: vi.fn(async (): Promise<'deleted' | 'too-old' | 'missing'> => 'deleted'),
+  deleteInjury: vi.fn(async (): Promise<'deleted' | 'missing'> => 'deleted'),
+  deleteIllness: vi.fn(async (): Promise<'deleted' | 'missing'> => 'deleted'),
   addHealthNote: vi.fn(async () => {}),
   setBother: vi.fn(async () => {}),
   getHealthNotes: vi.fn(async () => [{ id: 'n1' }]),
@@ -168,6 +168,7 @@ describe('closing, rating, noting', () => {
   it('refuses a subject that names no record', async () => {
     expect(await addHealthNoteAction({} as never, 'x')).toEqual({ ok: false, reason: 'invalid' });
     expect(await setBotherAction({ injuryId: '' } as never, 3)).toEqual({ ok: false, reason: 'invalid' });
+    expect(await setBotherAction({ illnessId: '' } as never, 3)).toEqual({ ok: false, reason: 'invalid' });
     // Not an object at all: the guard must answer, not throw on a property read.
     expect(await setBotherAction(null as never, 3)).toEqual({ ok: false, reason: 'invalid' });
     expect(await addHealthNoteAction('inj_1' as never, 'x')).toEqual({ ok: false, reason: 'invalid' });
@@ -175,16 +176,14 @@ describe('closing, rating, noting', () => {
   });
 });
 
-describe('"reported by mistake" (showable-version/28a)', () => {
-  it('deleteInjuryAction: as the resolved athlete, against the server clock, revalidates on deleted and passes too-old/missing through', async () => {
+describe('delete any record, at any age (showable-version/28e)', () => {
+  it('deleteInjuryAction: as the resolved athlete, revalidates on deleted and passes missing through', async () => {
     deleteInjury.mockResolvedValue('deleted');
     expect(await deleteInjuryAction('inj_1')).toEqual({ ok: true });
-    expect(deleteInjury).toHaveBeenCalledWith('athlete_1', 'inj_1', expect.any(Date));
+    expect(deleteInjury).toHaveBeenCalledWith('athlete_1', 'inj_1');
     expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
 
     revalidatePath.mockClear();
-    deleteInjury.mockResolvedValue('too-old');
-    expect(await deleteInjuryAction('inj_1')).toEqual({ ok: false, reason: 'too-old' });
     deleteInjury.mockResolvedValue('missing');
     expect(await deleteInjuryAction('inj_1')).toEqual({ ok: false, reason: 'missing' });
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -193,15 +192,19 @@ describe('"reported by mistake" (showable-version/28a)', () => {
   it('deleteIllnessAction does the same', async () => {
     deleteIllness.mockResolvedValue('deleted');
     expect(await deleteIllnessAction('ill_1')).toEqual({ ok: true });
-    expect(deleteIllness).toHaveBeenCalledWith('athlete_1', 'ill_1', expect.any(Date));
-    deleteIllness.mockResolvedValue('too-old');
-    expect(await deleteIllnessAction('ill_1')).toEqual({ ok: false, reason: 'too-old' });
+    expect(deleteIllness).toHaveBeenCalledWith('athlete_1', 'ill_1');
+    deleteIllness.mockResolvedValue('missing');
+    expect(await deleteIllnessAction('ill_1')).toEqual({ ok: false, reason: 'missing' });
   });
+});
 
+describe('declaring with a name (showable-version/28a)', () => {
   it('declareInjuryAction passes a trimmed name through, and null for none', async () => {
     expect(await declareInjuryAction(CANNOT_RUN, 2, '  left knee ')).toEqual({ ok: true });
     expect(declareInjury).toHaveBeenCalledWith('athlete_1', CANNOT_RUN, 2, 'left knee');
     expect(await declareInjuryAction(CANNOT_RUN, null, '   ')).toEqual({ ok: true });
+    expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null, null);
+    expect(await declareInjuryAction(CANNOT_RUN, null, null)).toEqual({ ok: true });
     expect(declareInjury).toHaveBeenLastCalledWith('athlete_1', CANNOT_RUN, null, null);
   });
 

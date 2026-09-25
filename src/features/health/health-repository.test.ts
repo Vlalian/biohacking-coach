@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { healthNotes, illnesses, injuries } from '@/db/schema';
 
 const rows: unknown[] = [];
@@ -441,51 +441,36 @@ describe('the Bother Rating and the history (training-architecture/06)', () => {
   });
 });
 
-describe('"reported by mistake" — a record younger than 24 h can be deleted (showable-version/28a)', () => {
-  const NOW = new Date('2026-09-18T12:00:00Z');
-  const DAY_AGO = new Date('2026-09-17T12:00:00Z');
-
-  it('deletes an Injury the athlete owns, only when it was opened inside the last 24 hours — in the one statement', async () => {
+describe('delete any record, at any age — the athlete\'s own (showable-version/28e)', () => {
+  it('deletes an athlete\'s own Injury at any age — the SQL has no openedAt bound', async () => {
     deletedRows = [{ id: 'injury_1' }];
-    expect(await deleteInjury('athlete_1', 'injury_1', NOW)).toBe('deleted');
-    expect(deletes[0]).toEqual(
-      and(eq(injuries.athleteId, 'athlete_1'), eq(injuries.id, 'injury_1'), gt(injuries.openedAt, DAY_AGO)),
-    );
-    // No read first: the athlete, the id and the age are all in the WHERE.
+    expect(await deleteInjury('athlete_1', 'injury_1')).toBe('deleted');
+    expect(deletes[0]).toEqual(and(eq(injuries.athleteId, 'athlete_1'), eq(injuries.id, 'injury_1')));
+    // No read first and none after: the athlete and the id are the whole WHERE.
     expect(selectWhere).not.toHaveBeenCalled();
     // Returning the id and nothing more — the count is the answer.
     expect(returning).toHaveBeenCalledWith({ id: injuries.id });
   });
 
-  it('refuses an older record by name, and a record that is not there or not theirs as missing', async () => {
+  it('answers missing for another athlete\'s record, or one that is not there', async () => {
     deletedRows = [];
-    owned = [{ id: 'injury_1' }];
-    expect(await deleteInjury('athlete_1', 'injury_1', NOW)).toBe('too-old');
-    // The reason is read after the refused delete, athlete-scoped like every probe.
-    expect(selectWhere).toHaveBeenCalledWith(and(eq(injuries.id, 'injury_1'), eq(injuries.athleteId, 'athlete_1')));
-
-    owned = [];
-    expect(await deleteInjury('athlete_1', 'nope', NOW)).toBe('missing');
-    expect(await deleteInjury('athlete_2', 'injury_1', NOW)).toBe('missing');
+    expect(await deleteInjury('athlete_2', 'injury_1')).toBe('missing');
+    expect(deletes[0]).toEqual(and(eq(injuries.athleteId, 'athlete_2'), eq(injuries.id, 'injury_1')));
+    expect(await deleteInjury('athlete_1', 'nope')).toBe('missing');
   });
 
   it('does the same for an Illness against its own table', async () => {
     deletedRows = [{ id: 'illness_1' }];
-    expect(await deleteIllness('athlete_1', 'illness_1', NOW)).toBe('deleted');
-    expect(deletes[0]).toEqual(
-      and(eq(illnesses.athleteId, 'athlete_1'), eq(illnesses.id, 'illness_1'), gt(illnesses.openedAt, DAY_AGO)),
-    );
-
+    expect(await deleteIllness('athlete_1', 'illness_1')).toBe('deleted');
+    expect(deletes[0]).toEqual(and(eq(illnesses.athleteId, 'athlete_1'), eq(illnesses.id, 'illness_1')));
     expect(returning).toHaveBeenCalledWith({ id: illnesses.id });
 
     deletedRows = [];
-    owned = [{ id: 'illness_1' }];
-    expect(await deleteIllness('athlete_1', 'illness_1', NOW)).toBe('too-old');
-    expect(selectWhere).toHaveBeenCalledWith(and(eq(illnesses.id, 'illness_1'), eq(illnesses.athleteId, 'athlete_1')));
-    owned = [];
-    expect(await deleteIllness('athlete_1', 'illness_1', NOW)).toBe('missing');
+    expect(await deleteIllness('athlete_2', 'illness_1')).toBe('missing');
   });
+});
 
+describe('declaring with a name (showable-version/28a)', () => {
   it('declares an Injury with its name, and without one', async () => {
     await declareInjury('athlete_1', CANNOT_RUN, 3, 'left knee');
     await declareInjury('athlete_1', CANNOT_RUN, null);

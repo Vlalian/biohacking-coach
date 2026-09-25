@@ -38,7 +38,7 @@ export type HealthActionResult =
   | { ok: true }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
 
-/** "Reported by mistake": deleted, or why not (`showable-version/28a`). */
+/** A delete: done, or why not (`showable-version/28e`). */
 export type DeleteActionResult =
   | { ok: true }
   | { ok: false; reason: 'not-authenticated' | Exclude<DeleteOutcome, 'deleted'> };
@@ -95,20 +95,20 @@ export async function closeIllnessAction(illnessId: string): Promise<HealthActio
 }
 
 /**
- * "Reported by mistake": removes a record the athlete declared less than 24
- * hours ago. The clock is the server's, never the client's; the repository
- * says why when it refuses, and the reason goes back as-is.
+ * Removes a record the athlete owns, open or closed, at any age — "declared
+ * by mistake" and "Remove from history" (`showable-version/28e`). The
+ * repository scopes it to the athlete; `missing` goes back as-is.
  */
 export async function deleteInjuryAction(injuryId: string): Promise<DeleteActionResult> {
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
-  return deleteResult(await deleteInjury(athleteId, injuryId, new Date()));
+  return deleteResult(await deleteInjury(athleteId, injuryId));
 }
 
 export async function deleteIllnessAction(illnessId: string): Promise<DeleteActionResult> {
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
-  return deleteResult(await deleteIllness(athleteId, illnessId, new Date()));
+  return deleteResult(await deleteIllness(athleteId, illnessId));
 }
 
 function deleteResult(outcome: DeleteOutcome): DeleteActionResult {
@@ -157,7 +157,9 @@ export async function addHealthNoteAction(
 
 /** Exactly the three disciplines, each with a known allowance, and nothing else. */
 function isCapacity(value: unknown): value is Capacity {
-  if (!value || typeof value !== 'object') return false;
+  // Only null and undefined need refusing before `Object.keys`: any other
+  // primitive has no discipline keys and fails the checks below.
+  if (!value) return false;
   const keys = Object.keys(value);
   if (keys.length !== DISCIPLINES.length) return false;
   return DISCIPLINES.every((d) =>

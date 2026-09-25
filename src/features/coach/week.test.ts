@@ -9,6 +9,7 @@ function session(over: Partial<Session> = {}): Session {
     type: 'Endurance',
     status: 'planned',
     parked: false,
+    sport: null,
     dayOrder: 0,
     version: 1,
     title: null,

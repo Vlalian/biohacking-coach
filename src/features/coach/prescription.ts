@@ -44,6 +44,7 @@ export function prescribedSessionOf(id: string, input: PrescriptionInput, versio
     ...prescriptionColumns(input),
     status: 'planned',
     parked: false,
+    sport: null,
     dayOrder: 0,
     origin: HEAD_COACH_ORIGIN,
     feedbackBody: null,
