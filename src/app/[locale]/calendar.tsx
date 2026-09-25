@@ -482,9 +482,10 @@ export function Calendar({
 
         {health && (
           // Today's health, once (showable-version/28e): above the grid, and
-          // sticky on desktop so it stays in view down a long month. Absent
-          // when withheld — "uninjured" is a claim nobody was shown (28b).
-          <div className="mt-4 md:sticky md:top-4 md:z-10 md:ml-auto md:w-max">
+          // static — sticky floated it over the Sunday column (Mads,
+          // 2026-09-25). Absent when withheld — "uninjured" is a claim nobody
+          // was shown (28b).
+          <div className="mt-4 md:ml-auto md:w-max">
             <HealthStatusCard spans={health} onOpen={(kind) => setHealthDrawer({ open: true, kind })} />
           </div>
         )}

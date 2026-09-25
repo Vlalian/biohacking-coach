@@ -507,6 +507,11 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(healed).toContain('statusUninjured');
   });
 
+  it('keeps the status card static, so it never floats over the Sunday column (Mads, 2026-09-25)', () => {
+    const html = render({ health: [injury] });
+    expect(html).not.toContain('sticky');
+  });
+
   it('offers "How’s your body?" to the athlete whether or not anything is open, and never to the Head Coach', () => {
     expect(render()).toContain('healthButton');
     expect(render({ health: [injury] })).toContain('healthButton');
