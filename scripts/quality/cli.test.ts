@@ -345,10 +345,13 @@ describe('report — what a human is actually told', () => {
 });
 
 describe('the mutation exemption', () => {
-  it('covers the shell and nothing else', () => {
+  it('covers the shell and the declarative schema, and nothing else', () => {
     // A scoping decision, so it should be small enough to read in one line.
-    // If this list grows, that is the thing to argue about.
-    expect(MUTATION_EXEMPT).toEqual(['scripts/quality/cli.ts']);
+    // If this list grows, that is the thing to argue about. `schema.ts` was
+    // argued (Mads, 2026-09-25): it declares tables and decides nothing, and
+    // grading it cost ~3 hours on garmin-integration/03 for survivors that
+    // were all in tables the ticket never touched.
+    expect(MUTATION_EXEMPT).toEqual(['scripts/quality/cli.ts', 'src/db/schema.ts']);
   });
 
   it('still grades an exempt file for CRAP', () => {

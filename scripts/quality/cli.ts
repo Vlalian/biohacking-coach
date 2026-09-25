@@ -93,7 +93,10 @@ function collectCoverage(): Record<string, FileCoverage> {
  * Anything added here that *decides* something belongs in a pure module beside
  * this one, not behind this exemption.
  */
-export const MUTATION_EXEMPT = ['scripts/quality/cli.ts'];
+// `src/db/schema.ts` joined 2026-09-25 (Mads): it declares tables and decides
+// nothing a mutant could test, and grading it took ~3 hours on
+// garmin-integration/03 for survivors all in tables that ticket never touched.
+export const MUTATION_EXEMPT = ['scripts/quality/cli.ts', 'src/db/schema.ts'];
 
 /**
  * Paths Stryker must not copy into its sandbox.
