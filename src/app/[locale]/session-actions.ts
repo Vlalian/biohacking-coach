@@ -23,8 +23,12 @@ import { isValidDateKey, today } from '@/lib/date';
  * acting athlete from the authenticated session — never from the request —
  * and re-derives `today` server-side so a client cannot forge the clock the
  * authority checks run against. All the authority lives in the
- * `@/features/session` services; these just wire the request to it and
- * revalidate the calendar on success, mirroring move-actions.ts / rate-actions.ts.
+ * `@/features/session` services; these just wire the request to it.
+ *
+ * The status actions revalidate the calendar on success. The authoring actions
+ * (create, update, delete) do not (showable-version/44): the calendar holds
+ * those writes from what they return, and other views read fresh on the next
+ * navigation.
  */
 
 export async function markCompleteAction(
@@ -85,7 +89,6 @@ export async function createAthleteSessionAction(input: {
     note: input.note,
     today: today(),
   });
-  if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
 
@@ -106,7 +109,6 @@ export async function updateAthleteSessionAction(
     note: input.note,
     expectedVersion,
   });
-  if (result.ok) revalidatePath('/', 'layout');
   return result;
 }
 
@@ -118,6 +120,5 @@ export async function deleteAthleteSessionAction(
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
   const result = await deleteAthleteSession({ athleteId, sessionId, expectedVersion });
-  if (result.ok) revalidatePath('/', 'layout');
   return result;
 }

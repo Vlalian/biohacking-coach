@@ -67,6 +67,21 @@ describe('moveSession — server authority', () => {
     updateReturning.mockReset().mockResolvedValue([{ version: 2 }]);
   });
 
+  it('a landed move returns its new version, so the calendar can hold it without a reload (showable-version/44)', async () => {
+    limit.mockResolvedValue([sessionRow({ version: 3 })]);
+    updateReturning.mockResolvedValue([{ version: 4 }]);
+
+    const result = await moveSession({
+      athleteId: OWNER,
+      sessionId: 'sess_1',
+      targetDate: '2026-07-18',
+      today: TODAY,
+      expectedVersion: 3,
+    });
+
+    expect(result).toEqual({ ok: true, version: 4 });
+  });
+
   it('applies a legal within-week move, bumping the version, and records the event', async () => {
     limit.mockResolvedValue([sessionRow()]);
 
@@ -78,7 +93,7 @@ describe('moveSession — server authority', () => {
       expectedVersion: 1,
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, version: 2 });
     // The version is bumped in the same statement that sets the date, so the
     // next writer holding version 1 is caught.
     expect(updateSet).toHaveBeenCalledWith(
@@ -221,7 +236,7 @@ describe('applyMove — the Head Coach as actor', () => {
       permittedOrigin: coachOrigins,
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, version: 2 });
     // The event is the material narration will need to tell the athlete who
     // moved their training (coached-mode/03).
     expect(insertValues).toHaveBeenCalledWith(

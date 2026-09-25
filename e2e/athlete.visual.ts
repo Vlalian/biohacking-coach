@@ -34,11 +34,14 @@ for (const route of pages) {
   });
 }
 
-// Mads holds a coach row that links to nobody since the personas retired
-// (code-health/13), so his Roster is the empty state — deliberate, not an error.
-test('coach roster, empty', async ({ page }) => {
+// Mads holds a coach row, and `seed-template` links the three personas to it
+// until they retire (code-health/16). The reset keeps them, because the seed
+// only inserts links (frontend-quality/10), so his Roster lists all three.
+test("Mads's own coach account lists the three personas", async ({ page }) => {
   await page.goto('/en/coach');
   await settled(page);
-  await expect(page.getByText('No athletes linked yet.')).toBeVisible();
+  for (const name of ['Alex Rivera', 'Sam Chen', 'Nadia Holm']) {
+    await expect(page.locator('a[href*="/coach/athlete/"]', { hasText: name })).toBeVisible();
+  }
   await snapshot(page);
 });

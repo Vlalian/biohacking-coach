@@ -123,7 +123,7 @@ describe('Calendar — what a read-only calendar offers', () => {
     // surface stayed read-only. Removing the button must not take drag with it.
     const markup = render({
       readOnly: true,
-      onMove: async () => ({ ok: true }),
+      onMove: async () => ({ ok: true, version: 2 }),
     });
 
     expect(markup).toContain('draggable="true"');
@@ -160,6 +160,9 @@ describe('MOVE_REFUSAL_KEY', () => {
     // record exists for working before anyone shipped it.
     'not-linked',
     'not-a-coach',
+    // Not the server's: the call itself failed, so no answer came back
+    // (`answerOf`, CodeRabbit on PR #107). The chip still has to go back and say so.
+    'unreachable',
   ] as const;
 
   it('maps every reason the server can refuse with', () => {
@@ -188,6 +191,7 @@ describe('MOVE_REFUSAL_KEY', () => {
     // the athlete's to fix, and naming it would leak the shape of the system
     // without helping.
     expect(MOVE_REFUSAL_KEY['not-found']).toBe(MOVE_REFUSAL_KEY['not-authenticated']);
+    expect(MOVE_REFUSAL_KEY.unreachable).toBe(MOVE_REFUSAL_KEY['not-found']);
   });
 });
 
@@ -227,6 +231,18 @@ describe('liftRefusal', () => {
 
   it('lets an ordinary planned session in the current week be lifted', () => {
     expect(liftRefusal({ date: MONDAY_THIS_WEEK, status: 'planned', parked: false }, TODAY)).toBeNull();
+  });
+
+  it('refuses a session whose last write has not come back yet (showable-version/44)', () => {
+    // A second drag would send the version the first write is about to
+    // replace, and be refused as stale. Waiting a moment is the honest answer.
+    const session = { date: MONDAY_THIS_WEEK, status: 'planned', parked: false };
+    expect(liftRefusal(session, TODAY, true)).toBe('saving');
+    expect(liftRefusal(session, TODAY, false)).toBeNull();
+  });
+
+  it('names the permanent refusal before the passing one', () => {
+    expect(liftRefusal({ date: TODAY, status: 'completed', parked: false }, TODAY, true)).toBe('frozen');
   });
 
   it('agrees with isFrozen rather than re-deciding it', async () => {
@@ -443,6 +459,20 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     const html = render({ sessions: [session({ date: '2026-08-19', parked: true })], health: [injury] });
     const chip = html.match(/<button[^>]*Long ride · markInjury[^>]*>/)?.[0] ?? '';
     expect(chip).toMatch(/aria-label="[^"]*bounceParked[^"]*"/);
+  });
+
+  it('renders no status area and no marks when health is withheld, so absence cannot read as healthy', () => {
+    // `null` is "not shared", `[]` is "nothing recorded" — and the coach must
+    // not be able to tell the second from the first. `roster-service.ts` takes
+    // care never to fetch a withheld athlete's records; the calendar has to
+    // honour that rather than draw a clean week (showable-version/28b).
+    const withheld = render({ sessions: [session({ date: '2026-08-19' })], health: null });
+    expect(withheld).not.toContain('data-health-status');
+    expect(withheld).not.toContain('data-mark');
+
+    const clean = render({ sessions: [session({ date: '2026-08-19' })], health: [] });
+    expect(clean).toContain('data-health-status');
+    expect(clean).toContain('statusUninjured');
   });
 
   it('shows the two statuses on every week — healthy/uninjured on a clean week — and the band and chip are gone', () => {

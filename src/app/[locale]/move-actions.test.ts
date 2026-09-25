@@ -45,9 +45,10 @@ describe('moveSessionAction', () => {
       // failing test and not an unversioned write.
       expectedVersion: 1,
     });
-    // A moved session shows on the calendar and in every view that reads it,
-    // so the whole shell is refreshed, not one page.
-    expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
+    // No page re-render (showable-version/44): the calendar holds the move
+    // itself from the version this returns, and other views read fresh on the
+    // next navigation.
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed target date before resolving anyone', async () => {

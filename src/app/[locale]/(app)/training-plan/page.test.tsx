@@ -187,3 +187,35 @@ describe('TrainingPlanPage — the drafted week (training-architecture/18, 29)',
     expect(calendarSlotState).not.toHaveBeenCalled();
   });
 });
+
+describe('TrainingPlanPage — the reads run together (code-health/09)', () => {
+  const reads = () => [
+    getSessionsForAthlete,
+    getUnavailableDates,
+    listPendingActivities,
+    listImportedSessionIds,
+    getResolvedBlocks,
+    calendarSlotState,
+    getHealthHistory,
+  ];
+
+  it('starts every calendar read before any of them resolves', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1' });
+    const never = () => new Promise<never>(() => {});
+    const saved = reads().map((m) => m.getMockImplementation());
+    for (const m of reads()) {
+      m.mockClear();
+      (m as unknown as { mockImplementation: (f: () => Promise<never>) => void }).mockImplementation(never);
+    }
+
+    void render();
+    // Let the session and athlete reads settle; the calendar reads never do.
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    for (const m of reads()) expect(m).toHaveBeenCalledTimes(1);
+    reads().forEach((m, i) =>
+      (m as unknown as { mockImplementation: (f: unknown) => void }).mockImplementation(saved[i]),
+    );
+  });
+});

@@ -1,11 +1,9 @@
 import { hasLocale } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { submittedFromView } from '@/features/feedback/feedback';
 import { getOpenInterview } from '@/features/feedback/feedback-service';
 import { FeedbackInterview } from '../../feedback-interview';
@@ -43,14 +41,14 @@ export default async function FeedbackPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
 
   // Scoped to the signed-in account's own athlete row, so no shape of this page
   // reads another tester's interview (ADR 0006).
-  const athlete = await getAthleteByUserId(session!.user.id);
+  const athlete = await getCurrentAthlete();
   const initial = athlete ? await getOpenInterview(athlete.id) : null;
 
   return (

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { HOURS_PER_WEEK_MAX, HOURS_PER_WEEK_MIN } from '@/features/onboarding/onboarding-flow';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 /**
@@ -84,7 +85,9 @@ describe('SettingsView', () => {
   it('shows the stored hours in Training, inside onboarding’s bounds', () => {
     const html = render(null);
     expect(html).toContain('hoursLabel');
-    expect(html).toMatch(/id="settings-hours"[^>]*min="1"[^>]*max="30"[^>]*value="9"|value="9"[^>]*id="settings-hours"/);
+    expect(html).toMatch(
+      new RegExp(`id="settings-hours"[^>]*min="${HOURS_PER_WEEK_MIN}"[^>]*max="${HOURS_PER_WEEK_MAX}"[^>]*value="9"|value="9"[^>]*id="settings-hours"`),
+    );
   });
 
   it('offers the history upload in Training while it is open, and the count and the remove once it is used', () => {

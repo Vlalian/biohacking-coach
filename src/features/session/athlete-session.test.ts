@@ -54,6 +54,59 @@ beforeEach(() => {
 });
 
 describe('createAthleteSession', () => {
+  it('returns the written session, so the calendar can show it without a reload (showable-version/44)', async () => {
+    insertReturning.mockResolvedValue([
+      {
+        id: 'new_sess',
+        athleteId: OWNER,
+        date: '2026-07-17',
+        type: 'Strength',
+        origin: 'athlete',
+        status: 'planned',
+        parked: false,
+        parkedByDate: null,
+        isTraining: true,
+        version: 1,
+        duration: 45,
+        zone: null,
+        note: null,
+        title: null,
+        dayOrder: 2,
+        startTime: null,
+        sport: null,
+        summary: null,
+        feedbackBody: null,
+        feedbackMind: null,
+        feedbackComment: null,
+        ratedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const result = await createAthleteSession({
+      athleteId: OWNER,
+      date: '2026-07-17',
+      type: 'Strength',
+      durationMin: 45,
+      isTraining: true,
+      note: null,
+      today: TODAY,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      session: expect.objectContaining({
+        id: 'new_sess',
+        date: '2026-07-17',
+        status: 'planned',
+        origin: 'athlete',
+        dayOrder: 2,
+        version: 1,
+      }),
+    });
+  });
+
   it('creates a retro-logged session as completed when the date is today or earlier', async () => {
     insertReturning.mockResolvedValue([{ id: 'new_sess' }]);
 
@@ -67,7 +120,7 @@ describe('createAthleteSession', () => {
       today: TODAY,
     });
 
-    expect(result).toEqual({ ok: true, sessionId: 'new_sess' });
+    expect(result).toEqual({ ok: true, session: expect.objectContaining({ id: 'new_sess' }) });
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         athleteId: OWNER,
@@ -115,7 +168,7 @@ describe('createAthleteSession', () => {
       today: TODAY,
     });
 
-    expect(result).toEqual({ ok: true, sessionId: 'new_sess' });
+    expect(result).toEqual({ ok: true, session: expect.objectContaining({ id: 'new_sess' }) });
     expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({ status: 'planned' }));
   });
 

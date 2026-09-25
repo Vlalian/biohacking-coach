@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HOURS_PER_WEEK_MAX } from '@/features/onboarding/onboarding-flow';
 
 const {
   getSession,
@@ -596,7 +597,7 @@ describe('updateHoursPerWeekAction (showable-version/40)', () => {
     expect(await updateHoursPerWeekAction(30)).toEqual({ ok: true, redrawn: 0 });
   });
 
-  it.each([0, 31, 7.5, Number.NaN])('refuses %s and writes nothing', async (hours) => {
+  it.each([0, HOURS_PER_WEEK_MAX + 1, 7.5, Number.NaN])('refuses %s and writes nothing', async (hours) => {
     expect(await updateHoursPerWeekAction(hours)).toEqual({ ok: false, reason: 'invalid' });
     expect(updateHoursPerWeek).not.toHaveBeenCalled();
     expect(refillWeeksFromHours).not.toHaveBeenCalled();

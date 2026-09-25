@@ -128,15 +128,18 @@ describe('answerOnboardingStep', () => {
           raceTarget: 'Ironman Copenhagen',
           raceDate: '2026-08-30',
           hasHumanCoach: 'Yes',
+          fixedConstraints: ['Sunday'],
+          weeklySessionDay: 'Monday',
         },
-        onboardingSubmitted: { name: true, adaptive: true, history: true },
+        onboardingSubmitted: { name: true, adaptive: true, history: true, constraints: true },
       },
     });
 
     const result = await answerOnboardingStep(
       nearlyDone,
-      { step: 'constraints', fixedConstraints: ['Sunday'], weeklySessionDay: 'Monday' },
-      { question: 'Any days you can never train?', answer: 'Sunday · Monday' },
+      // The closing question is the last one now (`training-architecture/36`).
+      { step: 'firstDay', firstDay: 'today' },
+      { question: 'When shall we start?', answer: 'Starting today' },
       // Name-free by contract: messages is a training-side table (ADR 0006);
       // the action persists coachGreeting('', race), never the personalized one.
       "I'm your Coach. Ironman Copenhagen is your target. Let's get to work.",
@@ -204,14 +207,14 @@ describe('answerOnboardingStep', () => {
           hoursPerWeek: 4,
           noRaceYet: true,
         },
-        onboardingSubmitted: { name: true, adaptive: true, history: true },
+        onboardingSubmitted: { name: true, adaptive: true, history: true, constraints: true },
       },
     });
 
     const result = await answerOnboardingStep(
       nearlyDone,
-      { step: 'constraints' },
-      { question: 'Any days you can never train?', answer: '—' },
+      { step: 'firstDay', firstDay: 'today' },
+      { question: 'When shall we start?', answer: 'Starting today' },
       "I'm your Coach. Let's get to work.",
       TODAY,
     );

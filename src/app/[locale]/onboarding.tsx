@@ -13,12 +13,16 @@ import {
   type OnboardingStepId,
   type StepAnswer,
   cursorAfter,
+  FIRST_DAY_CHOICES,
+  firstDayChoiceOf,
+  type FirstDayChoice,
   HOURS_PER_WEEK_MAX,
   HOURS_PER_WEEK_MIN,
   previousStep,
 } from '@/features/onboarding/onboarding-flow';
 import { formatFinish, parseFinishInput, type PastRace } from '@/features/onboarding/past-races';
 import { PreferredNameField } from '@/components/preferred-name-field';
+import { dateKey } from '@/lib/date';
 import { answerOnboardingAction } from './onboarding-actions';
 import { HistoryUpload } from './history-upload';
 
@@ -83,6 +87,7 @@ const STEPS: OnboardingStepId[] = [
   'adaptive',
   'history',
   'constraints',
+  'firstDay',
 ];
 
 const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
@@ -95,6 +100,7 @@ const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   adaptive: 'stepAdaptive',
   history: 'stepHistory',
   constraints: 'stepConstraints',
+  firstDay: 'stepFirstDay',
 };
 
 // One source for every option set: the validation module. The UI only maps
@@ -315,6 +321,8 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
             <HistoryPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'constraints' ? (
             <ConstraintsPanel answers={state.answers} pending={pending} t={t} submit={submit} />
+          ) : state.step === 'firstDay' ? (
+            <FirstDayPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : null}
         </div>
       </div>
@@ -525,9 +533,64 @@ function AdaptivePanel({ answers, pending, t, submit }: PanelProps) {
 }
 
 /**
+ * "When shall we start?" — today, tomorrow, or next Monday
+ * (`training-architecture/36`).
+ *
+ * The athlete friend signed up at 23:00 and was handed a session for that same
+ * evening. The pre-selection is decided here, on the device's own clock, which
+ * is the only place that knows the local hour: after 18:00 "today" has little
+ * left in it and "tomorrow" starts selected. A native shell later hands over
+ * the same `Date` and nothing about this changes. The server is told the
+ * choice, never the hour.
+ */
+function FirstDayPanel({ answers, pending, t, submit }: PanelProps) {
+  // Read once, on mount: the question should not change its mind under someone
+  // who is reading it at 17:59.
+  // The stored answer is a date, so a step re-entered with Back has to map it
+  // back to the tile it came from (`showable-version/32`). The client's own
+  // day is the right anchor: it is the day the athlete is looking at.
+  const [choice, setChoice] = useState<FirstDayChoice>(() => {
+    const now = new Date();
+    return firstDayChoiceOf(answers.firstDay, dateKey(now), now);
+  });
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit({ step: 'firstDay', firstDay: choice });
+      }}
+    >
+      <StepHeading title={t('qFirstDay')} help={t('qFirstDaySub')} />
+      <div className="flex flex-wrap gap-2">
+        {FIRST_DAY_CHOICES.map((value) => (
+          <OptionTile
+            key={value}
+            label={t(FIRST_DAY_MESSAGE_KEY[value])}
+            selected={choice === value}
+            onClick={() => setChoice(value)}
+          />
+        ))}
+      </div>
+      <PrimaryButton type="submit" data-action="submit-first-day" disabled={pending} pending={pending}>
+        {t('continue')}
+      </PrimaryButton>
+    </form>
+  );
+}
+
+
+/** The three answers, as the step labels them. */
+const FIRST_DAY_MESSAGE_KEY: Record<FirstDayChoice, string> = {
+  today: 'firstDayToday',
+  tomorrow: 'firstDayTomorrow',
+  nextMonday: 'firstDayNextMonday',
+};
+
+/**
  * "How many hours a week can you realistically train?" — asked, never
  * suggested: no default, no placeholder number (Mads, 2026-09-19: "A and only
- * A"). An integer 1–30; the flow refuses anything else.
+ * A"). An integer 1–50; the flow refuses anything else.
  */
 function HoursPanel({ answers, pending, t, submit }: PanelProps) {
   const [hours, setHours] = useState(answers.hoursPerWeek === undefined ? '' : String(answers.hoursPerWeek));

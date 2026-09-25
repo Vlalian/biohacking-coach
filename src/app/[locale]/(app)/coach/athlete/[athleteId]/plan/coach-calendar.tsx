@@ -4,6 +4,7 @@ import { Calendar } from '@/app/[locale]/calendar';
 import type { Session } from '@/features/session/session';
 import type { HealthSpan } from '@/features/health/health-layer';
 import { moveSessionAsCoachAction } from '../prescribe-actions';
+import { PrescribePanel } from '../prescribe-panel';
 
 /**
  * The athlete's calendar as the Head Coach sees it: read-only in every respect
@@ -27,7 +28,9 @@ export function CoachCalendar({
   sessions: Session[];
   unavailableDates: string[];
   todayKey: string;
-  /** Null when the athlete does not share their reports — the calendar then draws no layer. */
+  /** Null when the athlete does not share their reports — the calendar then draws
+   *  no layer at all, not an empty one: "uninjured" is a claim, and a coach who
+   *  was not shown the records has not been told it (`showable-version/28b`). */
   health: HealthSpan[] | null;
 }) {
   return (
@@ -35,12 +38,15 @@ export function CoachCalendar({
       sessions={sessions}
       unavailableDates={unavailableDates}
       todayKey={todayKey}
-      health={health ?? []}
+      health={health}
       readOnly
       coachAthleteId={athleteId}
       onMove={(sessionId, targetDate, expectedVersion) =>
         moveSessionAsCoachAction(athleteId, sessionId, targetDate, expectedVersion)
       }
+      // Beneath the grid and sharing its writes, so an add lands at once
+      // (showable-version/44).
+      addPanel={(writer) => <PrescribePanel athleteId={athleteId} writer={writer} />}
     />
   );
 }

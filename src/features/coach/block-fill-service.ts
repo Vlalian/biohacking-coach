@@ -19,6 +19,7 @@ import {
   type DueWeek,
 } from './block-sessions';
 import type { TrainingBlock } from './training-blocks';
+import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { toRaceDistance, type RaceDistance } from '@/lib/race-distances';
 import { getResolvedBlocks } from './training-block-service';
 
@@ -70,7 +71,7 @@ async function readyToFill(athleteId: string, today: string): Promise<FillOutcom
     getAthleteById(athleteId),
     getResolvedBlocks(athleteId, today),
   ]);
-  const facts = drawFacts(athlete, resolved);
+  const facts = drawFacts(athlete, resolved, today);
   if (typeof facts === 'string') return facts;
   return planFor({ athleteId, today, ...facts });
 }
@@ -81,6 +82,8 @@ type DrawFacts = {
   distance: RaceDistance | null;
   hours: number;
   fixedConstraints: string[] | undefined;
+  /** The athlete's chosen start (`training-architecture/36`), already resolved; absent when there is none to honour. */
+  firstDay: string | undefined;
   blocks: TrainingBlock[];
 };
 
@@ -88,6 +91,7 @@ type DrawFacts = {
 function drawFacts(
   athlete: Awaited<ReturnType<typeof getAthleteById>>,
   resolved: Awaited<ReturnType<typeof getResolvedBlocks>>,
+  today: string,
 ): 'no-race' | 'no-hours' | DrawFacts {
   // No race is an ordinary state, not a failure: the Coach still plans the
   // week, there is simply no horizon to hang a block structure off.
@@ -102,6 +106,7 @@ function drawFacts(
     distance: toRaceDistance(resolved.race.distance),
     hours: athlete.hoursPerWeek,
     fixedConstraints: athlete.profile?.fixedConstraints,
+    firstDay: chosenFirstDay(athlete.profile, today),
     blocks: resolved.blocks,
   };
 }
@@ -125,9 +130,9 @@ async function drawContext(
     hours: facts.hours,
     fixedConstraints: facts.fixedConstraints,
     unavailableDates: await getUnavailableDates(facts.athleteId),
-    // `firstDay` is the athlete's own start once `training-architecture/36`
-    // asks for it; until then the structure starts today.
-    firstDay: facts.today,
+    // The athlete's own start (`training-architecture/36`), or today for
+    // anyone who was never asked and anyone whose day has arrived.
+    firstDay: facts.firstDay ?? facts.today,
   };
 }
 
@@ -216,7 +221,7 @@ async function refill(athleteId: string, today: string): Promise<RefillResult> {
     getResolvedBlocks(athleteId, today),
     getSessionsForAthlete(athleteId),
   ]);
-  const facts = drawFacts(athlete, resolved);
+  const facts = drawFacts(athlete, resolved, today);
   if (typeof facts === 'string') return { outcome: facts, weeks: [] };
 
   const due = redrawDue(facts.blocks, weeksToRefill({ today, sessions }));

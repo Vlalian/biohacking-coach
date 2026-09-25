@@ -1,12 +1,10 @@
 import { hasLocale } from 'next-intl';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { getPastRaces, getRaces } from '@/features/race/race-repository';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
-import { getAthleteByUserId } from '@/features/athlete/athlete-repository';
+import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { getLinkForAthlete } from '@/features/coach/coach-repository';
 import { countImportedHistory } from '@/features/garmin/history-import-service';
 import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
@@ -46,13 +44,13 @@ export default async function SettingsPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
 
   const t = await getTranslations('Settings');
-  const athlete = await getAthleteByUserId(session!.user.id);
+  const athlete = await getCurrentAthlete();
 
   if (!athlete) {
     return (

@@ -113,3 +113,34 @@ describe('planningWindow — the days ruled out inside it', () => {
     expect(w.excludedDates).toEqual(['2026-08-29', '2026-08-30']);
   });
 });
+
+describe('the athlete’s chosen first day (training-architecture/36)', () => {
+  it('opens the window on the chosen day, and falls through to its week when it is past this one', () => {
+    // Mads ruled 2026-09-23: no session lands before the chosen day, from
+    // anyone. So the bound is here and not only on the block arithmetic — this
+    // is the one place the rule lives, and the Coach's draft derives its write
+    // range from it. That reopens the 2026-09-02 "rest of this week" start;
+    // the no-floor rule and the fall-through are untouched.
+    expect(planningWindow('2026-10-07', [], [], '2026-10-09').start).toBe('2026-10-09');
+    expect(planningWindow('2026-10-07', [], [], '2026-10-09').end).toBe('2026-10-11');
+
+    // Next Monday: nothing of this week is theirs to plan.
+    const next = planningWindow('2026-10-07', [], [], '2026-10-12');
+    expect(next.start).toBe('2026-10-12');
+    expect(next.end).toBe('2026-10-18');
+  });
+
+  it('leaves the rule exactly as it was with no choice, or one already past', () => {
+    expect(planningWindow('2026-10-07', [], []).start).toBe('2026-10-07');
+    expect(planningWindow('2026-10-07', [], [], '2026-10-01').start).toBe('2026-10-07');
+    expect(planningWindow('2026-10-07', [], [], '2026-10-07').start).toBe('2026-10-07');
+  });
+
+  it('still falls through when every day from the chosen one is ruled out', () => {
+    // The chosen day is Friday and Friday–Sunday are all excluded: there is no
+    // remainder to plan, so the window is next week, as it always was.
+    const w = planningWindow('2026-10-07', ['Friday', 'Saturday', 'Sunday'], [], '2026-10-09');
+    expect(w.fellThrough).toBe(true);
+    expect(w.start).toBe('2026-10-12');
+  });
+});

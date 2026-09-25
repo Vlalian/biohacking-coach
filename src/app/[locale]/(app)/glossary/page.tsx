@@ -1,10 +1,9 @@
 import { setRequestLocale, getTranslations } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
-import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { auth } from '@/lib/auth';
+import { getCurrentSession } from '../current-user';
 import { GlossaryView } from './glossary-view';
 
 // The page itself is static copy, but it sits inside the app shell, which
@@ -28,7 +27,7 @@ export default async function GlossaryPage({
   }
   setRequestLocale(locale);
 
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getCurrentSession();
   if (!session) {
     redirect({ href: '/sign-in', locale });
   }
