@@ -355,6 +355,57 @@ export const detectedActivities = pgTable(
 export type DetectedActivityRow = typeof detectedActivities.$inferSelect;
 export type NewDetectedActivityRow = typeof detectedActivities.$inferInsert;
 
+/** Where a history import stands (`garmin-integration/04`). */
+export const HISTORY_IMPORT_STATUSES = ['uploading', 'importing', 'done', 'failed'] as const;
+export type HistoryImportStatus = (typeof HISTORY_IMPORT_STATUSES)[number];
+/** The statuses of an import still running — at most one per athlete. */
+export const RUNNING_IMPORT_STATUSES = ['uploading', 'importing'] as const satisfies readonly HistoryImportStatus[];
+
+/**
+ * One history import (`garmin-integration/04`): the files the athlete uploaded
+ * to Vercel Blob, and how far the background worker has read them.
+ *
+ * `blob_urls` holds the blobs still to read, in order; a blob leaves the list
+ * when all its files are read, and is deleted from Blob at the same moment.
+ * `cursor` is how many files of the first blob are already read — a Garmin
+ * export is one zip holding hundreds of files, read 25 at a time. `total` grows
+ * as each blob is first opened, because a zip's file count is only known then.
+ * `done` and `failed` count files; `skipped_old` counts activities older than
+ * the history window.
+ *
+ * The partial unique index keeps at most one running import per athlete; the
+ * lock itself stays `historyImportedAt` on the profile, taken in the same batch
+ * that inserts the row. Cascades with its athlete, like every training table
+ * (ADR 0006). The URLs carry the opaque athlete id and the file's own name.
+ */
+export const historyImport = pgTable(
+  'history_import',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    athleteId: uuid('athlete_id')
+      .notNull()
+      .references(() => athlete.id, { onDelete: 'cascade' }),
+    status: text('status').notNull(),
+    blobUrls: jsonb('blob_urls').$type<string[]>().notNull().default([]),
+    cursor: integer('cursor').notNull().default(0),
+    total: integer('total').notNull().default(0),
+    done: integer('done').notNull().default(0),
+    skippedOld: integer('skipped_old').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
+    error: text('error'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check('history_import_status_known', sql.raw(`status IN (${quotedList(HISTORY_IMPORT_STATUSES)})`)),
+    uniqueIndex('history_import_one_running')
+      .on(table.athleteId)
+      .where(sql.raw(`status IN (${quotedList(RUNNING_IMPORT_STATUSES)})`)),
+  ],
+);
+
+export type HistoryImportRow = typeof historyImport.$inferSelect;
+
 /**
  * A coach — a role you *have*, not a kind of person (route ticket 05, ballot 1).
  *
