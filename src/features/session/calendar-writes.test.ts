@@ -291,3 +291,23 @@ describe('several writes at once', () => {
     ]);
   });
 });
+
+describe('a second write to a session that is still saving', () => {
+  // Review finding (showable-version/44): a move in flight, then a delete from
+  // the drawer on the same chip, shared one slot, and the move's answer was
+  // recorded as the delete's. One write per session at a time.
+  const props = [s('a', '2026-09-22', { version: 3 })];
+  const moving = beginMove(NO_WRITES, props, 'a', '2026-09-24');
+
+  it('is not started: a delete, an edit or a move leaves the first write as it was', () => {
+    expect(beginDelete(moving, 'a')).toBe(moving);
+    expect(beginEdit(moving, props, 'a', { note: 'x' })).toBe(moving);
+    expect(beginMove(moving, props, 'a', '2026-09-25')).toBe(moving);
+  });
+
+  it('so the first write settles as itself', () => {
+    const writes = settle(beginDelete(moving, 'a'), 'a', { ok: true, version: 4 });
+
+    expect(find(shownSessions(props, writes), 'a')).toMatchObject({ date: '2026-09-24', version: 4 });
+  });
+});

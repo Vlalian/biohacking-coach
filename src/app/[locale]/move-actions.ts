@@ -11,7 +11,11 @@ import { isValidDateKey, today } from '@/lib/date';
  * client sends only which session to move and where. `today` is the server's,
  * not the browser's, so the Move rules are judged against a clock the client
  * cannot spoof. All the authority lives in {@link moveSession}; this just wires
- * the request to it and revalidates the calendar on success.
+ * the request to it.
+ *
+ * It does not revalidate (showable-version/44). The calendar holds the move
+ * from the version this returns, and other views read fresh on the next
+ * navigation.
  */
 export async function moveSessionAction(
   sessionId: string,
@@ -34,7 +38,5 @@ export async function moveSessionAction(
     expectedVersion,
   });
 
-  // No revalidation (showable-version/44): the calendar holds this write from
-  // the result, and other views read fresh on the next navigation.
   return result;
 }

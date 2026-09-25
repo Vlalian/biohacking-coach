@@ -12,6 +12,7 @@ import { applyMove, type MoveResult } from '@/features/session/session-move';
 import { isFrozen } from '@/features/session/move-rules';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
 import type { SessionConflict } from '@/features/session/conflict';
+import { prescriptionColumns, type PrescriptionInput } from './prescription';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -69,16 +70,7 @@ export type HeadCoachActionResult =
   // carries what won, because the Head Coach has no other way to find out.
   | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 
-/** The mutable fields of a session the Head Coach may set. */
-export type PrescriptionInput = {
-  date: string;
-  type: string;
-  duration?: number | null;
-  zone?: string | null;
-  title?: string | null;
-  note?: string | null;
-  isTraining?: boolean;
-};
+export type { PrescriptionInput };
 
 function isValidPrescription(input: PrescriptionInput): boolean {
   return (
@@ -167,19 +159,6 @@ function landsInAClosedWeek(date: string, today: string): boolean {
   return isFrozen({ date, status: 'planned' }, today);
 }
 
-/** Normalises the optional fields into the column set, shared by add and edit. */
-function contentColumns(input: PrescriptionInput) {
-  return {
-    date: input.date,
-    type: input.type.trim(),
-    duration: input.duration ?? null,
-    zone: input.zone ?? null,
-    title: input.title ?? null,
-    note: input.note ?? null,
-    isTraining: input.isTraining ?? true,
-  };
-}
-
 /**
  * Adds a Prescribed Session (`origin: 'head_coach'`) to a linked athlete's plan.
  *
@@ -214,14 +193,14 @@ export async function prescribeSession(params: {
       origin: HEAD_COACH_ORIGIN,
       status: 'planned',
       dayOrder: 0,
-      ...contentColumns(input),
+      ...prescriptionColumns(input),
     }),
     db.insert(events).values({
       athleteId,
       actorType: 'head_coach',
       actorId: headCoachId,
       type: 'session_prescribed',
-      payload: { sessionId: id, ...contentColumns(input) },
+      payload: { sessionId: id, ...prescriptionColumns(input) },
     }),
   ]);
 
@@ -266,7 +245,7 @@ export async function editPrescribedSession(params: {
   // over the ceiling, which is moving a number rather than improving anything.
   if (landsInAClosedWeek(input.date, today)) return { ok: false, reason: 'frozen' };
 
-  const columns = contentColumns(input);
+  const columns = prescriptionColumns(input);
   const written = await casUpdateSession({
     athleteId,
     sessionId,

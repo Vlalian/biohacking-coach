@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
 import type { SessionConflict } from '@/features/session/conflict';
+import { prescriptionColumns } from '@/features/coach/prescription';
 import {
   beginCreate,
   beginDelete,
@@ -165,6 +166,7 @@ export function SessionDrawer({
   coachAthleteId,
   onBeginWrite,
   onSettleWrite,
+  inFlightIds,
 }: {
   state: DrawerState;
   /** Resolved fresh every render, never snapshotted at open-time — after a
@@ -196,6 +198,12 @@ export function SessionDrawer({
    */
   onBeginWrite: (start: (writes: Writes, shown: Session[]) => Writes) => void;
   onSettleWrite: (key: string, outcome: WriteOutcome) => void;
+  /**
+   * Sessions with a write still waiting on the server, from any source — a
+   * drag included. The drawer writes nothing to one of these until it answers:
+   * a second write would send the version the first is about to replace.
+   */
+  inFlightIds: string[];
 }) {
   const t = useTranslations('SessionDrawer');
   const router = useRouter();
@@ -250,6 +258,7 @@ export function SessionDrawer({
     >,
     after?: () => void,
   ) {
+    if (inFlightIds.includes(key)) return;
     setError(null);
     onBeginWrite(start);
     startTransition(async () => {
@@ -267,6 +276,9 @@ export function SessionDrawer({
   const mode = state.mode;
   const session =
     mode !== 'create' ? sessions.find((s) => s.id === state.sessionId) : undefined;
+  // Busy while this drawer's own action runs, or while a write to this session
+  // from anywhere (a drag) has not come back: every action waits for it.
+  const busy = pending || (session !== undefined && inFlightIds.includes(session.id));
 
   return (
     <div className="fixed inset-0 z-50">
@@ -309,7 +321,7 @@ export function SessionDrawer({
               date={state.date}
               todayKey={todayKey}
               locale={locale}
-              pending={pending}
+              pending={busy}
               t={t}
               onSubmit={(input) => {
                 const key = `tmp:${crypto.randomUUID()}`;
@@ -331,23 +343,13 @@ export function SessionDrawer({
           ) : mode === 'edit' && session && coachAthleteId ? (
             <HeadCoachSessionForm
               session={session}
-              pending={pending}
+              pending={busy}
               t={t}
               onSubmit={(input) =>
                 write(
                   session.id,
-                  // The same columns the server writes (head-coach-service `contentColumns`).
-                  (w, shown) =>
-                    beginEdit(w, shown, session.id, {
-                      date: input.date,
-                      type: input.type.trim(),
-                      duration: input.duration ?? null,
-                      zone: input.zone ?? null,
-                      title: input.title ?? null,
-                      note: input.note ?? null,
-                      // The form sends no flag, and the server writes its default.
-                      isTraining: true,
-                    }),
+                  // The columns the server writes, from the same rule.
+                  (w, shown) => beginEdit(w, shown, session.id, prescriptionColumns(input)),
                   () =>
                     editPrescribedSessionAction(
                       coachAthleteId,
@@ -364,7 +366,7 @@ export function SessionDrawer({
               date={session.date}
               todayKey={todayKey}
               locale={locale}
-              pending={pending}
+              pending={busy}
               t={t}
               initial={{
                 type: session.type,
@@ -398,7 +400,7 @@ export function SessionDrawer({
               fromImport={importedSessionIds.includes(session.id)}
               todayKey={todayKey}
               locale={locale}
-              pending={pending}
+              pending={busy}
               t={t}
               onMarkComplete={() => run(() => markCompleteAction(session.id))}
               onSkip={() => run(() => toggleSkipAction(session.id))}

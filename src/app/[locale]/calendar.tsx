@@ -94,6 +94,9 @@ type MoveRefusal =
  * planned on its own when the Rest block moves away (CONTEXT.md, Displacement);
  * telling the athlete it is frozen would describe something permanent.
  */
+// Export-for-test: the chip that calls this sits inside a client component,
+// and the repo has no DOM renderer to reach its refusal through a drag. Delete
+// freely if this is inlined.
 export function liftRefusal(
   session: { date: string; status: string; parked: boolean },
   todayKey: string,
@@ -562,6 +565,7 @@ export function Calendar({
           sessions={shown}
           onBeginWrite={beginWrite}
           onSettleWrite={settleWrite}
+          inFlightIds={[...inFlight]}
           importedSessionIds={importedSessionIds}
           locale={locale}
           todayKey={todayKey}

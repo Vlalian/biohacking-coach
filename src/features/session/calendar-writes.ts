@@ -59,7 +59,12 @@ function newerOf(row: Session, landed: Session | null | undefined): Session | nu
   return landed && landed.version <= row.version ? row : landed;
 }
 
-/** The sessions with a write in flight — not draggable, so a second drag cannot send a stale version. */
+/**
+ * The sessions with a write in flight. One write per session at a time: the
+ * chip will not lift and the drawer will not write until the first answers,
+ * because a second write sends the version the first is about to replace. The
+ * `begin*` functions refuse a second write on their own too.
+ */
 export function inFlightIds(writes: Writes): string[] {
   return Object.keys(writes.inFlight);
 }
@@ -97,7 +102,7 @@ function landing(key: string, sent: Session | null, outcome: WriteOutcome): Writ
 }
 
 /** What the athlete typed into the create form, in the calendar's own fields. */
-export type SessionDraft = Pick<Session, 'date' | 'type' | 'duration' | 'isTraining' | 'note'>;
+type SessionDraft = Pick<Session, 'date' | 'type' | 'duration' | 'isTraining' | 'note'>;
 
 /**
  * Adds the athlete's new session at once, under a placeholder key, pending the
@@ -143,10 +148,12 @@ export function beginEdit(
   patch: Partial<Session>,
 ): Writes {
   const row = shown.find((x) => x.id === id);
-  return row ? { ...writes, inFlight: { ...writes.inFlight, [id]: { ...row, ...patch } } } : writes;
+  if (!row || id in writes.inFlight) return writes;
+  return { ...writes, inFlight: { ...writes.inFlight, [id]: { ...row, ...patch } } };
 }
 
 /** Removes a session at once, pending the server's answer. */
 export function beginDelete(writes: Writes, id: string): Writes {
+  if (id in writes.inFlight) return writes;
   return { ...writes, inFlight: { ...writes.inFlight, [id]: null } };
 }
