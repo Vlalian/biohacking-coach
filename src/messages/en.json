@@ -482,7 +482,7 @@
     "pastRaceFinish": "Finish time, e.g. 5:12 or 5:12:30 (optional)",
     "pastRaceNote": "A note (optional)",
     "qHours": "How many hours a week can you train?",
-    "qHoursSub": "Whole hours, 1 to 30. Pick what you can keep up, week after week.",
+    "qHoursSub": "Whole hours, 1 to 50. Pick what you can keep up, week after week.",
     "stepLanguage": "Language",
     "stepName": "Name",
     "stepRace": "Race",

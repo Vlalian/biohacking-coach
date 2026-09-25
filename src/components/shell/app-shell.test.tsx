@@ -21,4 +21,11 @@ describe('AppShell', () => {
     expect(source.match(/<Wordmark /g)).toHaveLength(1);
     expect(source.indexOf('<Wordmark')).toBeLessThan(source.indexOf('<nav'));
   });
+
+  it('has no close row inside the drawer — the top-bar toggle, Escape and a tap outside close it (Mads, 2026-09-25)', () => {
+    const source = readFileSync(fileURLToPath(new URL('./app-shell.tsx', import.meta.url)), 'utf8');
+    const drawer = source.slice(source.indexOf('<nav'), source.indexOf('</nav>'));
+    expect(drawer).not.toContain('t.closeNav');
+    expect(drawer).not.toContain('<X ');
+  });
 });

@@ -242,11 +242,11 @@ describe('past races and hours — training-architecture/35', () => {
     expect(applyAnswer({}, {}, { step: 'pastRaces', pastRaces: 'none' as never }, TODAY)).toBeNull();
   });
 
-  it('hours accepts an integer 1–30 and refuses 0, 31, 7.5 and a string', () => {
+  it('hours accepts an integer 1–50 and refuses 0, 51, 7.5 and a string (the ceiling raised from 30, Mads 2026-09-25)', () => {
     expect(applyAnswer({}, {}, { step: 'hours', hoursPerWeek: 8 }, TODAY)?.answers.hoursPerWeek).toBe(8);
     expect(applyAnswer({}, {}, { step: 'hours', hoursPerWeek: 1 }, TODAY)?.answers.hoursPerWeek).toBe(1);
-    expect(applyAnswer({}, {}, { step: 'hours', hoursPerWeek: 30 }, TODAY)?.answers.hoursPerWeek).toBe(30);
-    for (const bad of [0, 31, 7.5, '8', null, undefined]) {
+    expect(applyAnswer({}, {}, { step: 'hours', hoursPerWeek: 50 }, TODAY)?.answers.hoursPerWeek).toBe(50);
+    for (const bad of [0, 51, 7.5, '8', null, undefined]) {
       expect(applyAnswer({}, {}, { step: 'hours', hoursPerWeek: bad as never }, TODAY), String(bad)).toBeNull();
     }
   });

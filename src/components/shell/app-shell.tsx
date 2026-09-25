@@ -216,18 +216,9 @@ export function AppShell({
             navDrawerOpen ? 'translate-x-0' : '-translate-x-full',
           ].join(' ')}
         >
-          {/* No wordmark here (frontend-quality/11): the top bar's stays in view
-              with the drawer open, so a second one was a double. */}
-          <div className="flex items-center justify-end border-b border-sidebar-border px-5 py-5">
-            <button
-              type="button"
-              onClick={onToggleNavDrawer}
-              aria-label={t.closeNav}
-              className="inline-flex h-10 w-10 items-center justify-center text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          {/* No header row (frontend-quality/11, Mads 2026-09-25): the top bar's
+              wordmark stays in view with the drawer open, and its toggle, Escape
+              and a tap outside all close the drawer, so a close row repeated them. */}
           <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-4">
             {availableViews
               .filter((v) => !FOOTER_VIEWS.includes(v))
