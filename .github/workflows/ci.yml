@@ -1,0 +1,47 @@
+# Lint, types and tests on every pull request and every push to main
+# (code-health/20). A signal, not a gate: making it a required check is a
+# branch-protection setting. No secrets, nothing reaches Neon or Vercel, no e2e.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: lint, types, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # No .nvmrc or engines field in package.json; 22 is the Node the repo is
+      # developed and built on.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+        env:
+          TZ: Europe/Copenhagen
+          # Placeholder: the unit suite needs no database, but modules that
+          # construct the client at import time refuse to load without one.
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/none
