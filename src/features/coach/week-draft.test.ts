@@ -12,6 +12,7 @@ import {
   visibleTo,
   nextWeekWindow,
   pendingWeekDraft,
+  lastDeclinedDraft,
   weekSkeleton,
   weekWindow,
   WEEK_DRAFT_EVENT,
@@ -169,6 +170,12 @@ describe('pendingWeekDraft — the latest unresolved draft for a week', () => {
     for (const type of ['week_plan_written', 'week_plan_declined', WEEK_DRAFT_EVENT.withdrawn]) {
       expect(pendingWeekDraft([drafted('d1', NEXT_MON, 1), resolve(type, NEXT_MON, 2)], NEXT_MON)).toBeNull();
     }
+  });
+
+  it('carries whether the draft adjusted a full week — false for one written before the flag (training-architecture/40)', () => {
+    const flagged = { ...drafted('d1', NEXT_MON, 1), payload: { weekStart: NEXT_MON, sessions: [], adjusted: true } };
+    expect(pendingWeekDraft([flagged], NEXT_MON)?.adjusted).toBe(true);
+    expect(pendingWeekDraft([drafted('d1', NEXT_MON, 1)], NEXT_MON)?.adjusted).toBe(false);
   });
 
   it('a newer draft supersedes an older one', () => {
@@ -488,5 +495,45 @@ describe('weekWindow and the athlete’s chosen first day (training-architecture
 
   it('gives no window when the chosen day leaves nothing plannable in the week', () => {
     expect(weekWindow('2026-10-05', '2026-10-07', [], [], '2026-10-12')).toBeNull();
+  });
+});
+
+describe('lastDeclinedDraft — what the athlete turned down, for the re-draft (training-architecture/30)', () => {
+  const at = (n: number) => new Date(2026, 8, 1, 12, n);
+  const SESSIONS_A = [{ date: '2026-09-22', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null }];
+  const SESSIONS_B = [{ date: '2026-09-24', type: 'Tempo', durationMinutes: 45, zone: 'Z3', note: 'steady' }];
+  const drafted = (id: string, sessions: unknown[], n: number, weekStart = NEXT_MON) => ({
+    id, type: WEEK_DRAFT_EVENT.drafted, payload: { weekStart, sessions }, createdAt: at(n),
+  });
+  const declined = (n: number, reason?: unknown, weekStart = NEXT_MON) => ({
+    id: `x-${n}`, type: 'week_plan_declined', payload: { weekStart, draftId: 'd', sessions: [], reason }, createdAt: at(n),
+  });
+
+  it('is the declined draft’s sessions and the reason given', () => {
+    expect(lastDeclinedDraft([drafted('d1', SESSIONS_A, 1), declined(2, 'too-much')], NEXT_MON)).toEqual({
+      sessions: SESSIONS_A,
+      reason: 'too-much',
+    });
+  });
+
+  it('has a null reason when the athlete skipped the question, or the event predates it', () => {
+    expect(lastDeclinedDraft([drafted('d1', SESSIONS_A, 1), declined(2)], NEXT_MON)?.reason).toBeNull();
+    expect(lastDeclinedDraft([drafted('d1', SESSIONS_A, 1), declined(2, 'bogus')], NEXT_MON)?.reason).toBeNull();
+  });
+
+  it('is the latest one when a re-draft was declined too', () => {
+    const events = [drafted('d1', SESSIONS_A, 1), declined(2, 'too-much'), drafted('d2', SESSIONS_B, 3), declined(4, 'wrong-days')];
+    expect(lastDeclinedDraft(events, NEXT_MON)).toEqual({ sessions: SESSIONS_B, reason: 'wrong-days' });
+  });
+
+  it('is null when nothing was declined, or the decline was for another week', () => {
+    expect(lastDeclinedDraft([drafted('d1', SESSIONS_A, 1)], NEXT_MON)).toBeNull();
+    expect(lastDeclinedDraft([drafted('d1', SESSIONS_A, 1, '2026-09-14'), declined(2, 'too-much', '2026-09-14')], NEXT_MON)).toBeNull();
+    // A decline with no draft before it declined nothing the Coach can read.
+    expect(lastDeclinedDraft([declined(2, 'too-much')], NEXT_MON)).toBeNull();
+    // Accepting or handing a draft to chat is not declining it.
+    for (const type of ['week_plan_written', WEEK_DRAFT_EVENT.withdrawn]) {
+      expect(lastDeclinedDraft([drafted('d1', SESSIONS_A, 1), { ...declined(2), type }], NEXT_MON)).toBeNull();
+    }
   });
 });

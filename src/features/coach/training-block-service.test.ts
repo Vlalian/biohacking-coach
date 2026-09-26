@@ -182,6 +182,21 @@ describe('ensureBlocksAdjusted — a valid reply is written once, as the Coach',
     expect(call.system).toContain('Ironman Copenhagen on 2027-08-15');
   });
 
+  it("briefs in the athlete's language: a Danish athlete's blocks are shaped in Danish (showable-version/46)", async () => {
+    await ensureBlocksAdjusted(ATHLETE, TODAY, 'da');
+
+    const call = callCoach.mock.calls[0][0];
+    expect(call.system).toContain('LANGUAGE: Respond in Danish.');
+  });
+
+  it('stays English for an English athlete, and for one whose language was never set', async () => {
+    await ensureBlocksAdjusted(ATHLETE, TODAY, 'en');
+    await ensureBlocksAdjusted(ATHLETE, TODAY);
+
+    for (const [call] of callCoach.mock.calls) expect(call.system).not.toContain('LANGUAGE:');
+    expect(callCoach).toHaveBeenCalledTimes(2);
+  });
+
   it('replaces a stale set that has no Head Coach block, by CAS against the version it read', async () => {
     // Same race id (a race-date change updates the row in place), so a plain
     // insert would lose on the unique index forever. The CAS is the replace.

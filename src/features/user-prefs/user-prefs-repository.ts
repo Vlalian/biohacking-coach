@@ -102,11 +102,27 @@ export async function setPreferredName(
  * athlete with no user row at all.
  */
 export async function getPreferredNameForAthlete(athleteId: string): Promise<string | null> {
+  return (await uiPrefsForAthlete(athleteId))?.preferredName ?? null;
+}
+
+/**
+ * The Athlete Language of an athlete, by athlete id (showable-version/46) —
+ * for the Coach's background calls, which hold the athlete and not a session:
+ * the week draft runs from the athlete's own app-open *and* from their Head
+ * Coach's, so the language cannot come from whoever is signed in. Null when
+ * none was set (the Coach then writes English), and for a synthetic athlete.
+ */
+export async function getLanguageForAthlete(athleteId: string): Promise<string | null> {
+  return (await uiPrefsForAthlete(athleteId))?.language ?? null;
+}
+
+/** One athlete's prefs, joined through the user seam; null with no user row or no prefs. */
+async function uiPrefsForAthlete(athleteId: string): Promise<UiPrefs | null> {
   const rows = await getDb()
     .select({ uiPrefs: user.uiPrefs })
     .from(athlete)
     .innerJoin(user, eq(user.id, athlete.userId))
     .where(eq(athlete.id, athleteId))
     .limit(1);
-  return (rows[0]?.uiPrefs as UiPrefs | null)?.preferredName ?? null;
+  return (rows[0]?.uiPrefs as UiPrefs | null) ?? null;
 }

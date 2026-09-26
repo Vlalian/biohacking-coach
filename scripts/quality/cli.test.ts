@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 // Typed so a test can vary behaviour by which command was spawned.
-const execFileSync = vi.fn((cmd: string, args: string[]) => `${cmd}${args.length}` && '');
+const execFileSync = vi.fn((cmd: string, args: string[]): string => `${cmd}${args.length}` && '');
 const readFileSync = vi.fn();
 const existsSync = vi.fn((p: string) => p.length > 0);
 const writeFileSync = vi.fn();
@@ -66,13 +66,59 @@ function mutationReport(statuses: string[]) {
   });
 }
 
-/** Wires the two JSON reads and the source read that `main` performs. */
-function givenRun(opts: { mutants: string[]; covered?: boolean; source?: string }) {
+/** A `-U0` diff that adds `lines` to each of `files` — the change under grade. */
+function diffAdding(files: string[], lines = '+1'): string {
+  return files
+    .map((f) =>
+      [`diff --git a/${f} b/${f}`, `--- a/${f}`, `+++ b/${f}`, `@@ -0,0 ${lines} @@`, '+x'].join(
+        '\n',
+      ),
+    )
+    .join('\n');
+}
+
+/** Every path a test below grades, each changed on line 1. */
+const TOUCHED_LINE_1 = diffAdding([
+  'src/a.ts',
+  'src/b.ts',
+  'scripts/quality/cli.ts',
+  'src/app/[locale]/settings-actions.ts',
+  'src/app/[locale]/[id]/actions.ts',
+]);
+
+type Git = { diff?: string; untracked?: string; noMergeBase?: boolean; strykerLog?: string };
+
+/** What Stryker prints when its `mutate` list resolved to one real file. */
+const FOUND_ONE = 'INFO ProjectReader Found 1 of 765 file(s) to be mutated.';
+
+/** Answers the three git questions `main` asks about the change. */
+function git(args: string[], opts: Git): string {
+  if (args.includes('merge-base')) {
+    if (opts.noMergeBase) throw new Error('fatal: no merge base');
+    return 'base123\n';
+  }
+  if (args.includes('diff')) return opts.diff ?? TOUCHED_LINE_1;
+  if (args.includes('ls-files')) return opts.untracked ?? '';
+  return '';
+}
+
+/** Wires the two JSON reads and the source read that `main` performs, and git. */
+function givenRun(opts: { mutants: string[]; covered?: boolean; source?: string } & Git) {
   readFileSync.mockImplementation((path: string) => {
     if (String(path).endsWith('coverage-final.json')) return coverageReport(opts.covered ?? true);
     if (String(path).endsWith('mutation.json')) return mutationReport(opts.mutants);
     return opts.source ?? SOURCE;
   });
+  execFileSync.mockImplementation((cmd: string, args: string[]) => {
+    if (cmd === 'git') return git(args, opts);
+    return args.includes('stryker') ? (opts.strykerLog ?? FOUND_ONE) : '';
+  });
+}
+
+/** The `mutate` list of the Stryker config `main` wrote, or null if it wrote none. */
+function mutateList(): string[] | null {
+  const call = writeFileSync.mock.calls[0];
+  return call ? (JSON.parse(String(call[1])) as { mutate: string[] }).mutate : null;
 }
 
 beforeEach(() => {
@@ -146,18 +192,108 @@ describe('main — what it agrees to grade', () => {
 });
 
 describe('main — the Stryker run', () => {
-  it('scopes mutation to the ticket, not the repo', () => {
-    // The whole affordability argument: a couple of rule modules is seconds
-    // where the repo is minutes.
+  it('mutates only the lines the change touched', () => {
+    // GATE-SCOPE: grade what the change touched. Stryker keeps a mutant only
+    // when it sits wholly inside a range, so a survivor can only come from a
+    // line this change wrote.
+    givenRun({ mutants: ['Killed'], diff: diffAdding(['src/a.ts'], '+3,4') });
+
+    main(['src/a.ts']);
+
+    expect(mutateList()).toEqual(['src/a.ts:3-6']);
+  });
+
+  it('does not mutate a named file the change left alone', () => {
+    givenRun({ mutants: ['Killed'], diff: diffAdding(['src/a.ts']) });
+
+    main(['src/a.ts', 'src/b.ts']);
+
+    expect(mutateList()).toEqual(['src/a.ts:1-1']);
+  });
+
+  it('runs no mutation, and escalates, when none of the files changed', () => {
+    // Graded nothing is not graded clean. The branch already in origin/main,
+    // or a --base that holds the change, would otherwise print PASS.
+    const log = vi.spyOn(console, 'log');
+    givenRun({ mutants: [], diff: '' });
+
+    expect(main(['src/a.ts'])).toBe(1);
+    expect(mutateList()).toBeNull();
+    expect(log.mock.calls.flat().join(' ')).toContain('No line of these files changed');
+  });
+
+  it('names a file it left ungraded because the change did not touch it', () => {
+    const log = vi.spyOn(console, 'log');
+    givenRun({ mutants: ['Killed'], diff: diffAdding(['src/a.ts']) });
+
+    expect(main(['src/a.ts', 'src/b.ts'])).toBe(0);
+    expect(log.mock.calls.flat().join(' ')).toContain('Unchanged, not graded: src/b.ts');
+  });
+
+  it('pins the diff prefixes, so a diff.noprefix config cannot hide every path', () => {
     givenRun({ mutants: ['Killed'] });
 
     main(['src/a.ts']);
 
-    const config = JSON.parse(String(writeFileSync.mock.calls[0][1]));
-    expect(config.mutate).toEqual(['src/a.ts']);
+    const diffCall = execFileSync.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('diff'),
+    );
+    expect(diffCall?.[1]).toEqual(expect.arrayContaining(['--src-prefix=a/', '--dst-prefix=b/']));
   });
 
-  it('hands Stryker a glob that matches a [locale] path literally', () => {
+  it('grades a file git does not track yet from its first line to its last', () => {
+    // `git diff <base>` leaves an untracked file out; read as "unchanged", a
+    // brand-new module would never be graded.
+    givenRun({
+      mutants: ['Killed'],
+      diff: '',
+      untracked: 'src/a.ts\n',
+      source: 'const a = 1;\nconst b = 2;\n',
+    });
+
+    main(['src/a.ts']);
+
+    expect(mutateList()).toEqual(['src/a.ts:1-2']);
+  });
+
+  it('measures the change against --base when given one', () => {
+    givenRun({ mutants: ['Killed'] });
+
+    main(['--base', 'origin/dev', 'src/a.ts']);
+
+    const gitCalls = execFileSync.mock.calls
+      .filter(([cmd]) => cmd === 'git')
+      .map(([, args]) => args);
+    expect(gitCalls.some((args) => args.includes('merge-base'))).toBe(false);
+    expect(gitCalls.find((args) => args.includes('diff'))).toContain('origin/dev');
+  });
+
+  it('measures against the merge-base with origin/main by default', () => {
+    givenRun({ mutants: ['Killed'] });
+
+    main(['src/a.ts']);
+
+    const diffCall = execFileSync.mock.calls.find(
+      ([cmd, args]) => cmd === 'git' && args.includes('diff'),
+    );
+    expect(diffCall?.[1]).toContain('base123');
+  });
+
+  it('falls back to whole files, and says so, when there is no merge-base', () => {
+    // A fresh repository, or one with no origin/main: grading more than the
+    // change is the safe direction to be wrong in.
+    const log = vi.spyOn(console, 'log');
+    givenRun({ mutants: ['Killed'], noMergeBase: true });
+
+    main(['src/a.ts']);
+
+    expect(mutateList()).toEqual(['src/a.ts']);
+    expect(log.mock.calls.flat().join(' ')).toContain(
+      'git could not diff against the merge-base with origin/main — grading whole files',
+    );
+  });
+
+  it('hands Stryker a [locale] path escaped, range and all', () => {
     // Stryker treats `mutate` entries as globs, and `[locale]` is a character
     // class: it matches `src/app/l/…`, never the real directory. Every server
     // action under the locale segment passed the gate with zero mutants this
@@ -167,19 +303,96 @@ describe('main — the Stryker run', () => {
 
     main(['src/app/[locale]/settings-actions.ts']);
 
-    const config = JSON.parse(String(writeFileSync.mock.calls[0][1]));
-    expect(config.mutate).toEqual(['src/app/[[]locale]/settings-actions.ts']);
+    expect(mutateList()).toEqual(['src/app/[[]locale]/settings-actions.ts:1-1']);
+  });
+});
+
+describe('main — a change with nothing to mutate', () => {
+  it('passes when the changed lines hold no mutant, and Stryker found the file', () => {
+    // A comment or a type alias: nothing a mutant could change. Escalating on
+    // it would stop every build that touched a type.
+    givenRun({ mutants: [], diff: diffAdding(['src/a.ts']), strykerLog: FOUND_ONE });
+
+    expect(main(['src/a.ts'])).toBe(0);
+  });
+
+  it('escalates when Stryker found no file to mutate, whatever the scope', () => {
+    // The [locale] failure: an entry naming no real file reads exactly like a
+    // perfect run unless something checks what Stryker actually found.
+    givenRun({ mutants: [], diff: diffAdding(['src/a.ts']), strykerLog: 'Found 0 of 765 file(s)' });
+
+    expect(main(['src/a.ts'])).toBe(1);
+  });
+
+  it('escalates on no mutants in whole-file mode, as it always has', () => {
+    givenRun({ mutants: [], strykerLog: FOUND_ONE });
+
+    expect(main(['--whole-file', 'src/a.ts'])).toBe(1);
+  });
+});
+
+describe('main --whole-file — the gate as it was, for the post-test sweep', () => {
+  it('hands Stryker whole files, and never asks git', () => {
+    givenRun({ mutants: ['Killed'], diff: '' });
+
+    main(['--whole-file', 'src/a.ts', 'src/b.ts']);
+
+    expect(mutateList()).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(execFileSync.mock.calls.some(([cmd]) => cmd === 'git')).toBe(false);
   });
 
   it('escapes every bracket segment on a path, not just the first', () => {
     givenRun({ mutants: ['Killed'] });
 
-    main(['src/app/[locale]/[id]/actions.ts']);
+    main(['--whole-file', 'src/app/[locale]/[id]/actions.ts']);
 
-    const config = JSON.parse(String(writeFileSync.mock.calls[0][1]));
-    expect(config.mutate).toEqual(['src/app/[[]locale]/[[]id]/actions.ts']);
+    expect(mutateList()).toEqual(['src/app/[[]locale]/[[]id]/actions.ts']);
   });
 
+  it('fails a function over the ceiling that the change did not touch', () => {
+    givenRun({
+      mutants: ['Killed'],
+      covered: false,
+      source: BRANCHY,
+      diff: '',
+    });
+
+    expect(main(['--whole-file', 'src/a.ts'])).toBe(1);
+  });
+});
+
+describe('main — whose numbers decide the verdict', () => {
+  // BRANCHY scores 12 uncovered on line 1; the change below touches line 3.
+  const TWO_FUNCTIONS = `${BRANCHY}\n\nexport function g() { return 1; }\n`;
+
+  it('passes, and names it as left standing, when the function over the ceiling is not this change', () => {
+    const log = vi.spyOn(console, 'log');
+    givenRun({
+      mutants: ['Killed'],
+      covered: false,
+      source: TWO_FUNCTIONS,
+      diff: diffAdding(['src/a.ts'], '+3'),
+    });
+
+    expect(main(['src/a.ts'])).toBe(0);
+    const text = log.mock.calls.flat().join('\n');
+    expect(text).toContain('Left standing (not this change)');
+    expect(text).toMatch(/12\.0 {2}src\/a\.ts:1 {2}f/);
+  });
+
+  it('escalates when the change touches that same function', () => {
+    givenRun({
+      mutants: ['Killed'],
+      covered: false,
+      source: TWO_FUNCTIONS,
+      diff: diffAdding(['src/a.ts'], '+1'),
+    });
+
+    expect(main(['src/a.ts'])).toBe(1);
+  });
+});
+
+describe('main — the sandbox', () => {
   it('keeps the shared junctions out of the sandbox', () => {
     // Stryker copies the project into a sandbox, and copyfile on a Windows
     // junction fails EPERM — so without this the gate does not run at all in
@@ -200,11 +413,11 @@ describe('main — the Stryker run', () => {
     // and that must not read as "no mutants, all good".
     givenRun({ mutants: [] });
     existsSync.mockImplementation((p: string) => !String(p).endsWith('mutation.json'));
-    // Only the Stryker call fails; the coverage run before it must still work,
-    // or the test would be proving the wrong thing.
-    execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+    // Only the Stryker call fails; the coverage run and git before it must
+    // still work, or the test would be proving the wrong thing.
+    execFileSync.mockImplementation((cmd: string, args: string[]) => {
       if (args.includes('stryker')) throw new Error('stryker exited 1');
-      return '';
+      return cmd === 'git' ? git(args, {}) : '';
     });
 
     expect(() => main(['src/a.ts'])).toThrow(/no report/i);
@@ -247,7 +460,13 @@ describe('report — what a human is actually told', () => {
       report([], [], [], {
         verdict: 'escalate',
         failures: [
-          { kind: 'crap', name: 'big', file: 'src/a.ts', line: 3, detail: 'CRAP 8.0 exceeds the ceiling of 6' },
+          {
+            kind: 'crap',
+            name: 'big',
+            file: 'src/a.ts',
+            line: 3,
+            detail: 'CRAP 8.0 exceeds the ceiling of 6',
+          },
         ],
         suppressed: 0,
       }),
@@ -283,7 +502,12 @@ describe('report — what a human is actually told', () => {
   });
 
   it('counts the kills and the suppressions', () => {
-    const m = (status: string) => ({ file: 'src/a.ts', line: 1, mutator: 'X', status });
+    const m = (status: string) => ({
+      file: 'src/a.ts',
+      line: 1,
+      mutator: 'X',
+      status,
+    });
     const { text } = output(() =>
       report([], [], [m('Killed'), m('Killed'), m('Ignored')], {
         verdict: 'pass',
@@ -293,6 +517,38 @@ describe('report — what a human is actually told', () => {
     );
 
     expect(text).toContain('Mutants: 3 — 2 killed, 1 suppressed');
+  });
+
+  it('lists what it left standing with its numbers, and still passes', () => {
+    // GATE-SCOPE asks for both numbers, so the post-test sweep knows what it is
+    // walking into: what the change cleared, and what it left and where.
+    const { text, code } = output(() =>
+      report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [
+        scored({
+          name: 'old',
+          startLine: 40,
+          crap: 12,
+          complexity: 3,
+          coverage: 0,
+        }),
+        scored({ name: 'fine', crap: 2, complexity: 2, coverage: 1 }),
+      ]),
+    );
+
+    expect(code).toBe(0);
+    expect(text).toContain(
+      'Left standing (not this change): 2 function(s) not graded, 1 over the ceiling',
+    );
+    expect(text).toContain('12.0  src/a.ts:40  old  (complexity 3, coverage 0%)');
+    expect(text).not.toContain('  fine  ');
+  });
+
+  it('says nothing about standing functions when the run graded whole files', () => {
+    const { text } = output(() =>
+      report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }),
+    );
+
+    expect(text).not.toContain('Left standing');
   });
 
   const cognitiveScore = (over = {}) => ({
@@ -309,11 +565,16 @@ describe('report — what a human is actually told', () => {
     // will flatten nesting by hoisting bodies into helpers called once, which
     // moves the number without helping anyone.
     const { text } = output(() =>
-      report([], [cognitiveScore(), cognitiveScore({ name: 'shallow', cognitive: 2, startLine: 40 })], [], {
-        verdict: 'pass',
-        failures: [],
-        suppressed: 0,
-      }),
+      report(
+        [],
+        [cognitiveScore(), cognitiveScore({ name: 'shallow', cognitive: 2, startLine: 40 })],
+        [],
+        {
+          verdict: 'pass',
+          failures: [],
+          suppressed: 0,
+        },
+      ),
     );
 
     expect(text).toContain('does not gate');
@@ -345,10 +606,13 @@ describe('report — what a human is actually told', () => {
 });
 
 describe('the mutation exemption', () => {
-  it('covers the shell and nothing else', () => {
+  it('covers the shell and the declarative schema, and nothing else', () => {
     // A scoping decision, so it should be small enough to read in one line.
-    // If this list grows, that is the thing to argue about.
-    expect(MUTATION_EXEMPT).toEqual(['scripts/quality/cli.ts']);
+    // If this list grows, that is the thing to argue about. `schema.ts` was
+    // argued (Mads, 2026-09-25): it declares tables and decides nothing, and
+    // grading it cost ~3 hours on garmin-integration/03 for survivors that
+    // were all in tables the ticket never touched.
+    expect(MUTATION_EXEMPT).toEqual(['scripts/quality/cli.ts', 'src/db/schema.ts']);
   });
 
   it('still grades an exempt file for CRAP', () => {

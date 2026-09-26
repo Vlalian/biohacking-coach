@@ -86,5 +86,7 @@ export type RosterEntry = {
  */
 export type AthleteCoachingLink = {
   headCoachName: string;
+  /** The name the Head Coach chose for themselves, or null (`training-architecture/42`). */
+  headCoachPreferredName: string | null;
   link: CoachingLink;
 };

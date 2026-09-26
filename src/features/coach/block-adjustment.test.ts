@@ -6,6 +6,7 @@ import {
   buildBlockAdjustmentContext,
 } from './block-adjustment';
 import { renderBlockAdjustmentPrompt } from './prompts';
+import { COACH_IDENTITY } from './prompt-blocks';
 import { trainingBlocks } from './training-blocks';
 
 /**
@@ -207,3 +208,14 @@ describe('renderBlockAdjustmentPrompt — the lines that vary', () => {
   });
 });
 
+
+describe('renderBlockAdjustmentPrompt — who is speaking (showable-version/46)', () => {
+  it('opens with the one shared identity, not an inline copy of it', () => {
+    expect(renderBlockAdjustmentPrompt(FULL).startsWith(`${COACH_IDENTITY} You are shaping the Training Blocks`)).toBe(true);
+  });
+
+  it('speaks the athlete’s language when shaping blocks — the inline copy never did', () => {
+    expect(renderBlockAdjustmentPrompt({ ...FULL, language: 'da' })).toContain('Danish');
+    expect(renderBlockAdjustmentPrompt(FULL)).not.toContain('Danish');
+  });
+});

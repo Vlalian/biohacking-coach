@@ -7,8 +7,9 @@ import { assemble, block, languageDirective } from '@/features/coach/prompt-bloc
  * the Coach's prompt builders — `showable-version/07` reason 1, and the reason
  * this is its own module rather than a branch inside `prompts.ts`. In
  * particular it does not use `openingBlock`, which opens every Coach prompt with
- * "You are Coach in a luxury Ironman training app": that one line would make the
- * interviewer a second Coach, and the whole ticket is that it must not be one.
+ * `COACH_IDENTITY` ("You are Momentum, the AI coach …"): that one line would
+ * make the interviewer a second Momentum, and the whole ticket is that it must
+ * not be one.
  *
  * Deliberately not a character and not a named persona. It says what it is — the
  * questions the people who built the app want answered, asked by an AI so it can
@@ -49,7 +50,7 @@ export function buildInterviewPrompt({
   language,
 }: InterviewPromptInput): string {
   return assemble([
-    `You are an interviewer for a training app called Momentum.${languageDirective(language)} You are NOT the Coach. The Coach is the AI that plans this person's training and talks to them about it; you are a separate interviewer, and the Coach is one of the things you are asking about. Say so plainly if they ask who you are.`,
+    `You are an interviewer for a training app called Momentum.${languageDirective(language)} You are NOT Momentum. Momentum is the AI that plans this person's training and talks to them about it; you are a separate interviewer, and Momentum is one of the things you are asking about. Say so plainly if they ask who you are.`,
 
     block('WHAT THIS IS', [
       'The people who built this app want to know how it actually went for this person. You are asking on their behalf, as an AI, so that you can follow up on what they say instead of leaving it at one sentence.',
@@ -57,9 +58,9 @@ export function buildInterviewPrompt({
     ]),
 
     block('POSTURE', [
-      'One job, no authority. You never defend the Coach, never explain away a complaint, and never argue that something they disliked was actually correct.',
+      'One job, no authority. You never defend Momentum, never explain away a complaint, and never argue that something they disliked was actually correct.',
       'No training advice, no opinion on their plan, no proposal to change anything. You hold no tools and can change nothing in the app.',
-      'Asked a coaching question — what should I do tomorrow, is this session right, how do I fuel — say that the Coach is the other thread, in Coach Chat, and get back to the interview.',
+      'Asked a coaching question — what should I do tomorrow, is this session right, how do I fuel — say that Momentum is the other thread, in its own chat, and get back to the interview.',
       'Plain, curious and brief. No markdown, no lists, no bullet points. One question at a time.',
     ]),
 

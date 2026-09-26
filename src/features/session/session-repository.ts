@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte, or } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, lt, lte, or } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { sessions, type NewSessionRow } from '@/db/schema';
 import { addDays } from '@/lib/date';
@@ -190,6 +190,26 @@ export async function getSessionsForWeek(
         lte(sessions.date, addDays(weekStartKey, 6)),
       ),
     )
+    .orderBy(asc(sessions.date), asc(sessions.dayOrder));
+
+  return rows.map(toSession);
+}
+
+/**
+ * Reads one athlete's sessions from `fromKey` up to, not including, `toKey`, in
+ * calendar order — every origin and every status, because the weekly draft
+ * reads what was planned as well as what was done (`training-architecture/44`).
+ * One range read rather than all history filtered in memory.
+ */
+export async function getSessionsInRange(
+  athleteId: string,
+  fromKey: string,
+  toKey: string,
+): Promise<Session[]> {
+  const rows = await getDb()
+    .select()
+    .from(sessions)
+    .where(and(eq(sessions.athleteId, athleteId), gte(sessions.date, fromKey), lt(sessions.date, toKey)))
     .orderBy(asc(sessions.date), asc(sessions.dayOrder));
 
   return rows.map(toSession);

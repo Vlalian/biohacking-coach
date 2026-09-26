@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { eq, asc, inArray, type SQL } from 'drizzle-orm';
+import { eq, asc, gte, inArray, lt, type SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { sessions } from '@/db/schema';
 import type { SessionRow } from '@/db/schema';
@@ -8,7 +8,14 @@ import type { SessionRow } from '@/db/schema';
 // the filter must key on sessions.athlete_id with the id the caller passed.
 vi.mock('drizzle-orm', async (importOriginal) => {
   const actual = await importOriginal<typeof import('drizzle-orm')>();
-  return { ...actual, eq: vi.fn(actual.eq), asc: vi.fn(actual.asc), inArray: vi.fn(actual.inArray) };
+  return {
+    ...actual,
+    eq: vi.fn(actual.eq),
+    asc: vi.fn(actual.asc),
+    inArray: vi.fn(actual.inArray),
+    gte: vi.fn(actual.gte),
+    lt: vi.fn(actual.lt),
+  };
 });
 
 const orderBy = vi.fn();
@@ -29,6 +36,7 @@ vi.mock('@/db', () => ({
 const {
   getArithmeticSessionsForWeek,
   getSessionsForAthlete,
+  getSessionsInRange,
   replaceCoachPlanForDateRange,
   insertArithmeticSessions,
   replaceArithmeticWeeks,
@@ -355,5 +363,29 @@ describe('getArithmeticSessionsForWeek — the baseline the Coach adjusts (train
       zone: null,
       title: '',
     });
+  });
+});
+
+describe('getSessionsInRange — the weeks before a draft (training-architecture/44)', () => {
+  beforeEach(() => {
+    orderBy.mockReset();
+    vi.mocked(eq).mockClear();
+    vi.mocked(asc).mockClear();
+    vi.mocked(gte).mockClear();
+    vi.mocked(lt).mockClear();
+  });
+
+  it('reads one athlete’s sessions from the first day up to, not including, the last, in calendar order', async () => {
+    orderBy.mockResolvedValue([row({ date: '2026-08-25', status: 'skipped' })]);
+
+    const result = await getSessionsInRange('athlete_9', '2026-08-24', '2026-09-21');
+
+    expect(eq).toHaveBeenCalledWith(sessions.athleteId, 'athlete_9');
+    expect(gte).toHaveBeenCalledWith(sessions.date, '2026-08-24');
+    // Exclusive: the drafted week itself is not history.
+    expect(lt).toHaveBeenCalledWith(sessions.date, '2026-09-21');
+    expect(asc).toHaveBeenCalledWith(sessions.date);
+    expect(asc).toHaveBeenCalledWith(sessions.dayOrder);
+    expect(result).toMatchObject([{ date: '2026-08-25', status: 'skipped' }]);
   });
 });

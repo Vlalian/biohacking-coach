@@ -373,15 +373,15 @@ describe('startBriefing — the prompt material the rest of the suite does not r
 
     expect(getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
     expect(getLatestUnrealisticFlag).toHaveBeenCalledWith('a1', 'r1');
-    expect(lastSystem()).toContain('Build the Volume · to 2026-07-31 · Coach');
-    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach');
-    expect(lastSystem()).toContain("The Training Blocks are the Head Coach's.");
+    expect(lastSystem()).toContain('Build the Volume · to 2026-07-31 · Momentum');
+    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · coach');
+    expect(lastSystem()).toContain("The Training Blocks are the coach's.");
     expect(lastSystem()).toContain('flagged the Target Race as unrealistic: eleven months is short');
     // Reports withheld, and the blocks rendered anyway: they are plan structure.
     expect(lastSystem()).toContain('withheld');
     // ...including which block is now — the profile's phase line is gone with
     // the reports, so the block list has to say it (CodeRabbit, PR #65).
-    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · Head Coach · current');
+    expect(lastSystem()).toContain('Long Rides · to 2027-08-15 · coach · current');
   });
 
   it('says the stored set is stale while it is, and drops the line once it fits again (training-architecture/19)', async () => {
@@ -473,7 +473,7 @@ describe('startBriefing — the prompt material the rest of the suite does not r
 
     await startBriefing('coach_1', 'a1', TODAY);
 
-    expect(lastSystem()).toContain('[Weekly Session]\nAthlete: tired\nCoach: rest\nHead Coach: agreed');
+    expect(lastSystem()).toContain('[Weekly Session]\nAthlete: tired\nMomentum: rest\nCoach: agreed');
   });
 
   it('opens with the fixed primer and the briefing token budget', async () => {
