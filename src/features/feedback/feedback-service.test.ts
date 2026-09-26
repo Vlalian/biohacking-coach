@@ -166,7 +166,7 @@ describe('sendFeedbackTurn', () => {
     await sendFeedbackTurn('athlete_1', 'conv_1', 'hello');
 
     const { system } = callCoach.mock.calls[0][0];
-    expect(system).toMatch(/not the Coach/i);
+    expect(system).toMatch(/not Momentum/i);
     expect(system).not.toMatch(/You are Coach/);
   });
 

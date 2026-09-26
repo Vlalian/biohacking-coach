@@ -1,3 +1,4 @@
+import { COACH_IDENTITY } from './prompt-blocks';
 import { describe, it, expect } from 'vitest';
 import {
   BRIEFING_OPENER,
@@ -53,7 +54,7 @@ describe('renderBriefingPrompt — the plan is always visible', () => {
 
   it('addresses the coach about the athlete, never the athlete', () => {
     const prompt = renderBriefingPrompt(ctx());
-    expect(prompt).toContain('briefing their Head Coach');
+    expect(prompt).toContain("briefing the athlete's coach");
     expect(prompt).toContain('never use a real name');
   });
 });
@@ -96,12 +97,12 @@ describe('renderBriefingPrompt — transcripts gated by shareAiTranscripts', () 
     const prompt = renderBriefingPrompt(
       ctx({
         transcripts: [
-          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Coach: good — then we build'] },
+          { kind: 'weekly_session', lines: ['Athlete: in rhythm', 'Momentum: good — then we build'] },
           { kind: 'coach_chat', lines: ['Athlete: I felt tired'] },
         ],
       }),
     );
-    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nCoach: good — then we build');
+    expect(prompt).toContain('[Weekly Session]\nAthlete: in rhythm\nMomentum: good — then we build');
     expect(prompt).toContain('[Coach Chat]\nAthlete: I felt tired');
   });
 });
@@ -181,15 +182,15 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     // they render with reports withheld.
     const prompt = renderBriefingPrompt(ctx({ blocks: coachOnly, reports: null }));
     expect(prompt).toContain('TRAINING BLOCKS');
-    expect(prompt).toContain('Build the Volume · to 2027-01-10 · Coach');
-    expect(prompt).toContain('Taper · to 2027-08-15 · Coach · current');
-    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Coach · current');
+    expect(prompt).toContain('Build the Volume · to 2027-01-10 · Momentum');
+    expect(prompt).toContain('Taper · to 2027-08-15 · Momentum · current');
+    expect(prompt).not.toContain('Build the Volume · to 2027-01-10 · Momentum · current');
     // No flag, no line — not "unrealistic: null".
     expect(prompt).not.toContain('unrealistic');
   });
 
-  it('carries the suggest-do-not-overwrite line only when a block is the Head Coach’s', () => {
-    const line = "The Training Blocks are the Head Coach's.";
+  it('carries the suggest-do-not-overwrite line only when a block is the coach’s', () => {
+    const line = "The Training Blocks are the coach's.";
     expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).not.toContain(line);
 
     const withHuman = {
@@ -199,7 +200,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     const prompt = renderBriefingPrompt(ctx({ blocks: withHuman }));
     expect(prompt).toContain(line);
     expect(prompt).toContain('say so as a suggestion');
-    expect(prompt).toContain('Long Rides · to 2027-01-10 · Head Coach');
+    expect(prompt).toContain('Long Rides · to 2027-01-10 · coach');
   });
 
   it('reports the unrealistic flag with its reason, and the arithmetic draft as such', () => {
@@ -213,7 +214,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
       }),
     );
     expect(prompt).toContain('Block 1 of 2 · to 2027-01-10 · draft');
-    expect(prompt).toContain('The Coach has flagged the Target Race as unrealistic: eleven months is short');
+    expect(prompt).toContain('Momentum has flagged the Target Race as unrealistic: eleven months is short');
   });
 
   it('carries one line while a stored set no longer fits the race, and none otherwise (training-architecture/19)', () => {
@@ -225,7 +226,7 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     );
     expect(prompt).toContain(
       'The stored Training Blocks no longer fit the race date: the last block, "Taper", still ends 2027-06-01. ' +
-        'The blocks listed above are the arithmetic draft; the Head Coach re-pins the stored set from the notice on their next login.',
+        'The blocks listed above are the arithmetic draft; the coach re-pins the stored set from the notice on their next login.',
     );
   });
 
@@ -269,9 +270,10 @@ describe('renderBriefingPrompt — golden', () => {
             { date: '2026-08-06', type: 'Intensity', body: 4, mind: 6, comment: null },
           ],
         },
+        // Speaker labels as \`briefing-service.ts\` writes them since showable-version/46.
         transcripts: [
-          { kind: 'coach_chat', lines: ['Athlete: tired', 'Coach: rest'] },
-          { kind: 'weekly_session', lines: ['Head Coach: note', 'Coach: ok'] },
+          { kind: 'coach_chat', lines: ['Athlete: tired', 'Momentum: rest'] },
+          { kind: 'weekly_session', lines: ['Coach: note', 'Momentum: ok'] },
         ],
       }),
     );
@@ -345,6 +347,26 @@ describe('renderBriefingPrompt — the races (training-architecture/09)', () => 
     expect(prompt).not.toContain('Autumn Half (Half) — tune-up');
   });
 
+  it('calls a race on the Target Race\'s own day a later race, not a tune-up', () => {
+    // A tune-up is strictly *before* the target; the same day is not before it.
+    const prompt = withRaces({
+      races: [
+        { name: 'IM Copenhagen', date: '2027-08-15', distance: 'Full', isTarget: true },
+        { name: 'Morning Sprint', date: '2027-08-15', distance: 'Sprint', isTarget: false },
+      ],
+    });
+    expect(prompt).toContain('- 2027-08-15 · Morning Sprint (Sprint) — later race');
+  });
+
+  it('labels every race a later race when none of them is the target', () => {
+    // hasTargetRace can hold while the listed races carry no target flag; the
+    // lookup must not throw, and without a target nothing can be a tune-up.
+    const prompt = withRaces({
+      races: [{ name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic', isTarget: false }],
+    });
+    expect(prompt).toContain('- 2027-03-01 · Olympic Odense (Olympic) — later race');
+  });
+
   it('says No Target Race plainly when the athlete has nothing in the future to build toward', () => {
     // Mads, 2026-09-11: this is the "unplanned race" the glossary meant — the
     // Head Coach is told so they can raise it; the Coach never does unprompted.
@@ -398,5 +420,14 @@ describe('briefingRaces — the race half of the profile', () => {
     expect(briefingRaces(rows, '2026-09-11').hasTargetRace).toBe(true);
     expect(briefingRaces(rows, '2027-08-16').hasTargetRace).toBe(false);
     expect(briefingRaces([rows[1]], '2026-09-11').hasTargetRace).toBe(false);
+  });
+});
+
+describe('renderBriefingPrompt — who is briefing whom (showable-version/46)', () => {
+  it('introduces itself as Momentum to the athlete’s coach, not as Coach to their Head Coach', () => {
+    const prompt = renderBriefingPrompt(ctx());
+    expect(prompt.startsWith(COACH_IDENTITY)).toBe(true);
+    expect(prompt).toContain("You are briefing the athlete's coach — a human coach — about this athlete");
+    expect(prompt).not.toMatch(/You are Coach\b/);
   });
 });

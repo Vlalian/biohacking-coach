@@ -1,5 +1,6 @@
 import type { EquipmentCategory, EquipmentItem } from '@/features/equipment/equipment';
 import type { Onboarding } from './check-in';
+import type { WeekSummary } from './weekly-session';
 
 /**
  * How a Coach system prompt is put together.
@@ -127,6 +128,33 @@ export function groundingBlock(): PromptBlock {
   );
 }
 
+/**
+ * The four weeks before the drafted one (`training-architecture/44`), one line
+ * each, oldest first — so the draft knows what the athlete actually trained,
+ * skipped or uploaded. A week with nothing in it is stated, not dropped; four
+ * of them are no history at all, and the block is absent.
+ */
+export function recentWeeksBlock(weeks: WeekSummary[]): PromptBlock {
+  if (weeks.every(isEmptyWeek)) return null;
+  return block(
+    'RECENT WEEKS: what the athlete actually did in the four weeks before this one, oldest first. Weigh what was skipped as well as what was done.',
+    weeks.map(recentWeekLine),
+  );
+}
+
+const isEmptyWeek = (w: WeekSummary): boolean => w.plannedMinutes === 0 && w.completed === 0 && w.skipped === 0;
+
+function recentWeekLine(week: WeekSummary): string {
+  // The current week is only part-way through; say so, or its unfinished days read as a light week.
+  const label = `- Week of ${week.weekStart}${week.soFar ? ' (this week, up to today)' : ''}`;
+  if (isEmptyWeek(week)) return `${label}: empty — nothing planned, nothing done`;
+  const counts = `${week.completed} completed, ${week.skipped} skipped`;
+  const types = week.byType.map((t) => `${t.type} ${t.completed} (${hours(t.doneMinutes)})`).join(', ');
+  return `${label}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}`;
+}
+
+const hours = (minutes: number): string => `${(minutes / 60).toFixed(1)}h`;
+
 export function equipmentBlock(equipmentLines: string[]): PromptBlock {
   return block('EQUIPMENT:', equipmentLines);
 }
@@ -156,12 +184,20 @@ export function preferredNameBlock(preferredName?: string | null): PromptBlock {
 }
 
 /**
+ * What the model is told it is, in every prompt where it speaks as the AI
+ * coach (showable-version/46): **Momentum**, the name the athlete sees. One
+ * constant so a copy cannot drift. Three copies saying "You are Coach"
+ * outlived the rename in the UI.
+ */
+export const COACH_IDENTITY = 'You are Momentum, the AI coach in a luxury Ironman training app.';
+
+/**
  * The opening identity line, with the language directive spliced in exactly
- * where it has always sat — inside the first sentence, before the prompt names
- * which conversation this is.
+ * where it has always sat — after the identity, before the prompt names which
+ * conversation this is.
  */
 export function openingBlock(language: string | undefined, role: string): string {
-  return `You are Coach in a luxury Ironman training app.${languageDirective(language)} ${role}`;
+  return `${COACH_IDENTITY}${languageDirective(language)} ${role}`;
 }
 
 const EQUIPMENT_CATEGORY_LABEL: Record<EquipmentCategory, string> = {

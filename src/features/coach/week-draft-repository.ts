@@ -4,10 +4,13 @@ import { events } from '@/db/schema';
 import type { Citation } from '@/lib/citation';
 import {
   hasCoachPlannedSession,
+  lastDeclinedDraft,
   pendingWeekDraft,
   visibleTo,
   weekDraftHistory,
   WEEK_DRAFT_EVENT,
+  type DeclinedDraft,
+  type DeclineReason,
   type SkeletonDay,
   type WeekDraft,
   type WeekDraftEvent,
@@ -100,6 +103,15 @@ export async function getWeekDraftHistory(athleteId: string, weekStart: string):
   return decided ? { kind: decided } : { kind: 'discussing', conversationId: history.conversationId };
 }
 
+/**
+ * The draft the athlete last declined for this week, and why, or null — what
+ * a re-draft shows the Coach so it does not propose the same week again
+ * (`training-architecture/30`). The decision is the pure {@link lastDeclinedDraft}.
+ */
+export async function getLastDeclinedDraft(athleteId: string, weekStart: string): Promise<DeclinedDraft | null> {
+  return lastDeclinedDraft(await readWeekDraftEvents(athleteId, weekStart), weekStart);
+}
+
 export interface NewWeekDraft {
   athleteId: string;
   weekStart: string;
@@ -107,6 +119,14 @@ export interface NewWeekDraft {
   sessions: ProposedSession[];
   citations: Citation[];
   skeleton: SkeletonDay[];
+  /**
+   * The week already held the structure's sessions, so the draft adjusted it
+   * rather than filling an empty one (`training-architecture/40`). Narration
+   * reads it later, when that fact can no longer be recovered.
+   */
+  adjusted?: boolean;
+  /** The Coach's one sentence on what it changed, when it gave one. */
+  whatChanged?: string | null;
 }
 
 /**
@@ -129,8 +149,12 @@ export interface NewWeekDraft {
  * event names no human by construction (`narration.ts:coachClause`).
  */
 export async function recordWeekDraft(draft: NewWeekDraft): Promise<'drafted' | 'exists'> {
-  const { athleteId, weekStart, visibleFrom, sessions, citations, skeleton } = draft;
-  const payload = { weekStart, visibleFrom, sessions, citations, skeleton };
+  const { athleteId, weekStart, visibleFrom, sessions, citations, skeleton, adjusted, whatChanged } = draft;
+  // A field left undefined stays out of the JSON. The draft service always
+  // sets both — \`adjusted\` true or false, \`whatChanged\` a sentence or null —
+  // and readers treat anything but \`adjusted: true\` and a non-empty sentence
+  // as absent, so events written before either field read the same.
+  const payload = { weekStart, visibleFrom, sessions, citations, skeleton, adjusted, whatChanged };
 
   const statement = sql`
     INSERT INTO ${events} (
@@ -334,14 +358,18 @@ export async function recordWeekDraftDecision(decision: {
   weekStart: string;
   draftId: string;
   sessions: ProposedSession[];
+  /** Why a decline, when the athlete said (`training-architecture/30`). */
+  reason?: DeclineReason;
 }): Promise<void> {
-  const { athleteId, type, weekStart, draftId, sessions } = decision;
+  const { athleteId, type, weekStart, draftId, sessions, reason } = decision;
   await getDb().insert(events).values({
     athleteId,
     actorType: 'athlete',
     actorId: athleteId,
     type,
-    payload: { weekStart, draftId, sessions },
+    // An absent reason stays out of the JSON: the payload a skipped question
+    // writes is the one every decline wrote before.
+    payload: { weekStart, draftId, sessions, reason },
   });
 }
 

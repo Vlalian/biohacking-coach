@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let nextRows: unknown[] = [];
 /** Every `.set(...)` payload passed to an update chain, in call order. */
 let updateCalls: unknown[] = [];
+/** Every `.select(...)` projection, so a read can be held to the columns it names. */
+let selectCalls: unknown[] = [];
 const CHAIN_METHODS = [
   'select',
   'from',
@@ -23,6 +25,10 @@ function chain() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c: any = {};
   for (const m of CHAIN_METHODS) c[m] = () => c;
+  c.select = (projection?: unknown) => {
+    selectCalls.push(projection);
+    return c;
+  };
   // Not an identity method like the rest: `.set()` is where an update chain's
   // payload actually is, so it is captured rather than discarded.
   c.set = (v: unknown) => {
@@ -63,6 +69,7 @@ const linkRow = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   nextRows = [];
   updateCalls = [];
+  selectCalls = [];
 });
 
 describe('getCoachByUserId', () => {
@@ -163,6 +170,7 @@ describe('getLinkForAthlete — the athlete reading their own link', () => {
     ];
     expect(await getLinkForAthlete('a1')).toEqual({
       headCoachName: 'Lars Nielsen',
+      headCoachPreferredName: null,
       link: {
         id: 'link_1',
         coachId: 'coach_1',
@@ -176,6 +184,25 @@ describe('getLinkForAthlete — the athlete reading their own link', () => {
   it('is undefined when solo — no link, or a severed one', async () => {
     nextRows = [];
     expect(await getLinkForAthlete('a1')).toBeUndefined();
+  });
+
+  it('returns the Head Coach’s preferred name beside their account name (training-architecture/42)', async () => {
+    nextRows = [{ link: linkRow(), coachUserName: 'Sarah Berg', coachUiPrefs: { preferredName: 'Coach B', language: 'da' } }];
+    expect(await getLinkForAthlete('a1')).toMatchObject({ headCoachName: 'Sarah Berg', headCoachPreferredName: 'Coach B' });
+  });
+
+  it('reads the preferred name off the coach’s own user row, the one it already joins', async () => {
+    const { user } = await import('@/db/auth-schema');
+    nextRows = [];
+    await getLinkForAthlete('a1');
+    expect(selectCalls.at(-1)).toMatchObject({ coachUserName: user.name, coachUiPrefs: user.uiPrefs });
+  });
+
+  it('is null when the coach never set a preferred name — not an empty string, and no throw on null prefs', async () => {
+    for (const coachUiPrefs of [null, {}, { language: 'en' }]) {
+      nextRows = [{ link: linkRow(), coachUserName: 'Sarah Berg', coachUiPrefs }];
+      expect((await getLinkForAthlete('a1'))?.headCoachPreferredName).toBeNull();
+    }
   });
 });
 

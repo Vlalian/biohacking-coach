@@ -191,8 +191,8 @@ async function readReports(athleteId: string, phase: string | null, today: strin
 
 function roleLabel(role: 'athlete' | 'coach_ai' | 'head_coach'): string {
   if (role === 'athlete') return 'Athlete';
-  if (role === 'head_coach') return 'Head Coach';
-  return 'Coach';
+  if (role === 'head_coach') return 'Coach';
+  return 'Momentum';
 }
 
 export interface BriefingState {

@@ -79,6 +79,11 @@ type MoveRefusal =
   // The call itself failed — network or server — so there is no answer to read.
   | 'unreachable';
 
+/** What either door answers to a move: the athlete's own or the Head Coach's. */
+type MoveAnswer =
+  | { ok: true; version: number }
+  | { ok: false; reason: MoveRefusal; conflict?: SessionConflict };
+
 /**
  * Why this session cannot be picked up at all, or null when it can.
  *
@@ -283,9 +288,7 @@ export function Calendar({
     sessionId: string,
     targetDate: string,
     expectedVersion: number,
-  ) => Promise<
-    { ok: true; version: number } | { ok: false; reason: MoveRefusal; conflict?: SessionConflict }
-  >;
+  ) => Promise<MoveAnswer>;
   /**
    * The athlete this calendar belongs to, when the Head Coach is the one
    * looking at it. Opens the Session Drawer on their behalf.
@@ -406,7 +409,9 @@ export function Calendar({
         // a race is refused rather than silently winning. `onMove` is the Head
         // Coach's path (it acts on someone else's calendar and needs the
         // athlete id), the default is the athlete's own.
-        const result = await answerOf(() =>
+        // The answer type is named: inferred, it would be taken from the athlete's
+        // `moveSessionAction` alone and refuse the Head Coach's wider refusals.
+        const result = await answerOf<MoveAnswer>(() =>
           onMove ? onMove(id, target, version) : moveSessionAction(id, target, version),
         );
         // A refusal puts the chip back — or, on a conflict, where the winner put it.

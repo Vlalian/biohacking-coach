@@ -160,6 +160,22 @@ describe('declineWeekDraft', () => {
     expect(replaceCoachPlanForDateRange).not.toHaveBeenCalled();
   });
 
+  it('records the reason the athlete gave (training-architecture/30)', async () => {
+    for (const reason of ['too-much', 'too-little', 'wrong-days', 'other'] as const) {
+      recordWeekDraftDecision.mockClear();
+      await declineWeekDraft(ATHLETE, 'd1', '2026-09-18', reason);
+      expect(recordWeekDraftDecision.mock.calls[0][0]).toMatchObject({ type: 'week_plan_declined', reason });
+    }
+  });
+
+  it('declines with no reason when the athlete skips the question, or sends one that is not on the list', async () => {
+    for (const reason of [undefined, 'too-hard', '']) {
+      recordWeekDraftDecision.mockClear();
+      expect(await declineWeekDraft(ATHLETE, 'd1', '2026-09-18', reason)).toEqual({ ok: true });
+      expect(recordWeekDraftDecision.mock.calls[0][0].reason).toBeUndefined();
+    }
+  });
+
   it('refuses not-found for a stale id', async () => {
     getCalendarProposalState.mockResolvedValue(null);
     expect(await declineWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: false, reason: 'not-found' });

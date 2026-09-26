@@ -11,6 +11,7 @@ import {
   type RosterEntry,
 } from './coach';
 import type { LinkVisibility } from './link-visibility';
+import type { UiPrefs } from '@/features/user-prefs/user-prefs-repository';
 
 /** The placeholder shown when neither name source is present. */
 export const UNKNOWN_ATHLETE = 'Unknown athlete';
@@ -155,7 +156,7 @@ export async function getLinkForAthlete(
   athleteId: string,
 ): Promise<AthleteCoachingLink | undefined> {
   const rows = await getDb()
-    .select({ link: coachingLink, coachUserName: user.name })
+    .select({ link: coachingLink, coachUserName: user.name, coachUiPrefs: user.uiPrefs })
     .from(coachingLink)
     .innerJoin(coach, eq(coachingLink.coachId, coach.id))
     .innerJoin(user, eq(coach.userId, user.id))
@@ -167,7 +168,14 @@ export async function getLinkForAthlete(
 
   const row = rows[0];
   if (!row) return undefined;
-  return { headCoachName: row.coachUserName, link: toCoachingLink(row.link) };
+  return {
+    headCoachName: row.coachUserName,
+    // Read off the user this query already joins, so the name the Head Coach
+    // chose costs no second round-trip and `Coach` stays without a user id
+    // (ADR 0006; `training-architecture/42`).
+    headCoachPreferredName: (row.coachUiPrefs as UiPrefs | null)?.preferredName ?? null,
+    link: toCoachingLink(row.link),
+  };
 }
 
 /**

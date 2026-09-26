@@ -5,6 +5,7 @@ import {
   assemble,
   block,
   buildOnboardingLines,
+  COACH_IDENTITY,
   languageDirective,
   type PromptBlock,
 } from './prompt-blocks';
@@ -295,6 +296,8 @@ function raceLines(p: BriefingProfile): string[] {
   const targetDate = p.races.find((r) => r.isTarget)?.date ?? null;
   const roleOf = (r: BriefingRace): string => {
     if (r.isTarget) return 'target';
+    // Stryker disable next-line ConditionalExpression — equivalent: with `targetDate` null, `r.date < null` is
+    // false for any date string, so dropping the null guard still answers 'later race'. The guard is for the type.
     return targetDate !== null && r.date < targetDate ? 'tune-up' : 'later race';
   };
   return ['Races:', ...p.races.map((r) => `- ${r.date} · ${r.name} (${r.distance}) — ${roleOf(r)}`)];
@@ -311,12 +314,12 @@ function planBlock(plan: BriefingPlanEntry[]): string {
 
 const BLOCK_AUTHOR_LABEL: Record<BlockAuthor, string> = {
   arithmetic: 'draft',
-  coach_ai: 'Coach',
-  head_coach: 'Head Coach',
+  coach_ai: 'Momentum',
+  head_coach: 'coach',
 };
 
 const HEAD_COACH_BLOCKS_LINE =
-  "The Training Blocks are the Head Coach's. If you would change one, say so as a suggestion; do not present a different structure as the plan.";
+  "The Training Blocks are the coach's. If you would change one, say so as a suggestion; do not present a different structure as the plan.";
 
 /**
  * The Training Blocks, always visible like the plan they structure.
@@ -340,11 +343,11 @@ function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
     lines.push(
       `The stored Training Blocks no longer fit the race date: the last block, "${blocks.staleSet.lastBlockName}", ` +
         `still ends ${blocks.staleSet.endsOn}. The blocks listed above are the arithmetic draft; ` +
-        'the Head Coach re-pins the stored set from the notice on their next login.',
+        'the coach re-pins the stored set from the notice on their next login.',
     );
   }
   if (blocks.raceUnrealistic) {
-    lines.push(`The Coach has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
+    lines.push(`Momentum has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
   }
   return `TRAINING BLOCKS (the horizon toward the Target Race, always visible):\n${lines.join('\n')}`;
 }
@@ -426,7 +429,7 @@ export function renderBriefingPrompt(ctx: BriefingContext): string {
   const { today, language, plan, blocks, reports, transcripts, preferredName } = ctx;
 
   return assemble([
-    `You are Coach, the AI coach for one athlete in a luxury Ironman training app.${languageDirective(language)} You are briefing their Head Coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
+    `${COACH_IDENTITY}${languageDirective(language)} You are briefing the athlete's coach — a human coach — about this athlete: the analyst who has read every data point, reporting upward (Hyper Intelligence).`,
     briefingPosture(preferredName),
     `TODAY: ${today}`,
     planBlock(plan),

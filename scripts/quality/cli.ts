@@ -6,6 +6,17 @@ import { measureCognitive, type FunctionCognitive } from './cognitive';
 import { measureComplexity } from './complexity';
 import { scoreCrap, type CrapScore, type FileCoverage } from './crap';
 import { judge, CRAP_CEILING, type MutantReport } from './policy';
+import {
+  changedRanges,
+  emptyMeansMissed,
+  mutateEntries,
+  parseArgs,
+  splitByChange,
+  untouchedFiles,
+  untrackedChange,
+  widenToFunctions,
+  type ChangedFile,
+} from './scope';
 
 /**
  * `npm run quality -- <paths…>` — `/onkel` Mode A, the forward gate.
@@ -15,9 +26,13 @@ import { judge, CRAP_CEILING, type MutantReport } from './policy';
  * specified by their own tests; this wires them to real coverage and a real
  * Stryker run.
  *
- * Scope is **the files one ticket touched**, which is what makes this
- * affordable: measured on this codebase, mutation over a couple of rule
- * modules is ~80 seconds, where all of `features/coach` is seven minutes.
+ * Scope is **the files one ticket touched**, and within them **the lines the
+ * change touched** (`.scratch/onkel/GATE-SCOPE.md`; code-health/28): Stryker
+ * mutates each function a changed line touched, whole, and a changed line
+ * outside any function on its own; only functions overlapping a changed line
+ * can fail the run. The rest are measured and reported as left standing. `--whole-file`
+ * grades every function, for the post-test sweep; `--base <ref>` sets what the
+ * change is measured against (default: the merge-base with `origin/main`).
  *
  * `.tsx` is excluded. Every `{cond && <X/>}` is a decision point, so a ceiling
  * of 6 would flag most components while saying nothing about them; mutation
@@ -87,13 +102,17 @@ function collectCoverage(): Record<string, FileCoverage> {
  * this file is graded like any other and sits under the ceiling — and the
  * decisions that matter (which files are graded, which verdict is reported,
  * which exit code `/build-afk` sees) live in `selectFiles`, `report` and
- * `judge`, all of which are mutation-tested. What is exempt is the wiring
- * between them and two child processes.
+ * `judge`, all of which are mutation-tested — and since code-health/28, which
+ * lines and functions count as the change, in `scope.ts`. What is exempt is
+ * the wiring between them, git, and two child processes.
  *
  * Anything added here that *decides* something belongs in a pure module beside
  * this one, not behind this exemption.
  */
-export const MUTATION_EXEMPT = ['scripts/quality/cli.ts'];
+// `src/db/schema.ts` joined 2026-09-25 (Mads): it declares tables and decides
+// nothing a mutant could test, and grading it took ~3 hours on
+// garmin-integration/03 for survivors all in tables that ticket never touched.
+export const MUTATION_EXEMPT = ['scripts/quality/cli.ts', 'src/db/schema.ts'];
 
 /**
  * Paths Stryker must not copy into its sandbox.
@@ -116,21 +135,10 @@ export const MUTATION_EXEMPT = ['scripts/quality/cli.ts'];
 export const SANDBOX_IGNORE = ['.scratch', '.agents', '.claude', 'poc', 'docs/agents', '.next'];
 
 /**
- * A repo path as a Stryker `mutate` entry that matches it, and only it.
- *
- * Stryker reads `mutate` as globs, and `[locale]` is a character class: as a
- * glob, `src/app/[locale]/x.ts` names `src/app/l/x.ts` and nothing real, so
- * Stryker found no file, generated no mutants, and the gate reported every
- * server action under the locale segment as clean. `[[]` is the one escape
- * that survives Stryker's own `path.resolve` and backslash-to-slash
- * normalisation of the pattern; a `\[` would be flattened on Windows.
+ * One Stryker run over exactly the `mutate` entries it is handed: its mutants,
+ * and its log, which says how many files those entries resolved to.
  */
-function asMutateGlob(path: string): string {
-  return path.replaceAll('[', '[[]');
-}
-
-/** One Stryker run scoped to exactly the ticket's files. */
-function collectMutants(files: string[]): MutantReport[] {
+function collectMutants(mutate: string[]): { mutants: MutantReport[]; log: string } {
   const dir = mkdtempSync(join(tmpdir(), 'onkel-mut-'));
   const configPath = join(dir, 'stryker.json');
   const reportPath = join(dir, 'mutation.json');
@@ -140,11 +148,9 @@ function collectMutants(files: string[]): MutantReport[] {
       $schema: './node_modules/@stryker-mutator/core/schema/stryker-schema.json',
       packageManager: 'npm',
       testRunner: 'vitest',
-      // Only what the ticket touched, which is the whole affordability
-      // argument — a repo-wide run is minutes, this is seconds.
-      // The exemption is applied here rather than by dropping the file from
-      // `files`, so it still gets a CRAP score and still appears in the report.
-      mutate: files.filter((f) => !MUTATION_EXEMPT.includes(f)).map(asMutateGlob),
+      // Only what the change touched, which is the whole affordability
+      // argument — see `mutateEntries` in `scope.ts`.
+      mutate,
       reporters: ['json'],
       jsonReporter: { fileName: reportPath },
       tempDirName: join(dir, 'stryker-tmp'),
@@ -155,12 +161,14 @@ function collectMutants(files: string[]): MutantReport[] {
   );
 
   try {
+    let log = '';
     try {
-      run('npx', ['stryker', 'run', configPath]);
-    } catch {
+      log = run('npx', ['stryker', 'run', configPath]);
+    } catch (error) {
       // A non-zero exit is how Stryker reports surviving mutants. That is a
       // verdict for `judge`, not a crash — read the report and let the policy
       // decide. A genuinely broken run shows up as a missing report below.
+      log = String((error as { stdout?: unknown }).stdout ?? '');
     }
 
     if (!existsSync(reportPath)) {
@@ -169,11 +177,18 @@ function collectMutants(files: string[]): MutantReport[] {
     const report = JSON.parse(readFileSync(reportPath, 'utf8')) as {
       files: Record<
         string,
-        { mutants: { location: { start: { line: number } }; mutatorName: string; status: string; statusReason?: string }[] }
+        {
+          mutants: {
+            location: { start: { line: number } };
+            mutatorName: string;
+            status: string;
+            statusReason?: string;
+          }[];
+        }
       >;
     };
 
-    return Object.entries(report.files).flatMap(([file, { mutants }]) =>
+    const mutants = Object.entries(report.files).flatMap(([file, { mutants }]) =>
       mutants.map((m) => ({
         file: key(file),
         line: m.location.start.line,
@@ -182,6 +197,7 @@ function collectMutants(files: string[]): MutantReport[] {
         ignoreReason: m.statusReason,
       })),
     );
+    return { mutants, log };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -206,6 +222,29 @@ function reportCognitive(cognitive: FunctionCognitive[]): void {
   }
 }
 
+/** One CRAP row: the score, where it is, and the two numbers behind it. */
+function crapLine(fn: CrapScore): string {
+  return (
+    `  ${fn.crap.toFixed(1).padStart(6)}  ${fn.file}:${fn.startLine}  ${fn.name}` +
+    `  (complexity ${fn.complexity}, coverage ${(fn.coverage * 100).toFixed(0)}%)`
+  );
+}
+
+/**
+ * The functions measured but not graded, because the change did not touch
+ * them. GATE-SCOPE asks for this number beside the verdict, so the post-test
+ * sweep knows what it is walking into. Recorded, never failing the run.
+ */
+function reportStanding(standing: CrapScore[]): void {
+  if (standing.length === 0) return;
+  const over = standing.filter((fn) => fn.crap > CRAP_CEILING).sort((a, b) => b.crap - a.crap);
+  console.log(
+    `\nLeft standing (not this change): ${standing.length} function(s) not graded, ` +
+      `${over.length} over the ceiling — recorded, not gating.`,
+  );
+  for (const fn of over) console.log(crapLine(fn));
+}
+
 /**
  * Everything the run says to a human, and the exit code that goes with it.
  *
@@ -218,17 +257,14 @@ export function report(
   cognitive: FunctionCognitive[],
   mutants: MutantReport[],
   result: ReturnType<typeof judge>,
+  standing: CrapScore[] = [],
 ): number {
   const worst = [...crap].sort((a, b) => b.crap - a.crap).slice(0, 5);
   console.log('Highest CRAP:');
-  for (const fn of worst) {
-    console.log(
-      `  ${fn.crap.toFixed(1).padStart(6)}  ${fn.file}:${fn.startLine}  ${fn.name}` +
-        `  (complexity ${fn.complexity}, coverage ${(fn.coverage * 100).toFixed(0)}%)`,
-    );
-  }
+  for (const fn of worst) console.log(crapLine(fn));
 
   reportCognitive(cognitive);
+  reportStanding(standing);
 
   const killed = mutants.filter((m) => m.status === 'Killed').length;
   console.log(`\nMutants: ${mutants.length} — ${killed} killed, ${result.suppressed} suppressed`);
@@ -248,16 +284,68 @@ export function report(
 }
 
 /** The files this run will grade, and the ones it will not. */
-export function selectFiles(argv: string[]): { files: string[]; skipped: string[] } {
-  const paths = argv.filter((a) => !a.startsWith('--')).map(key);
+export function selectFiles(argv: string[]): {
+  files: string[];
+  skipped: string[];
+} {
+  const paths = parseArgs(argv).paths.map(key);
   const files = eligible(paths);
   return { files, skipped: paths.filter((p) => !files.includes(p)) };
+}
+
+/**
+ * The lines of `files` this change added or modified, or null to grade whole
+ * files. Null is also the answer when git cannot say — no merge-base with
+ * `origin/main`, or a `--base` it cannot read — because grading more than the
+ * change is the safe direction to be wrong in.
+ */
+function readChange(
+  graded: { file: string; source: string }[],
+  base: string | undefined,
+): ChangedFile[] | null {
+  const files = graded.map(({ file }) => file);
+  try {
+    const ref = base ?? run('git', ['merge-base', 'HEAD', 'origin/main']).trim();
+    const diff = run('git', [
+      '-c',
+      'core.quotePath=false',
+      'diff',
+      '-U0',
+      // A user's `diff.noprefix` or `diff.mnemonicPrefix` would change the
+      // `b/` that `changedRanges` cuts off, and every path would miss.
+      '--src-prefix=a/',
+      '--dst-prefix=b/',
+      '--relative',
+      '--no-color',
+      '--no-ext-diff',
+      ref,
+      '--',
+      ...files,
+    ]);
+    const untracked = run('git', ['ls-files', '--others', '--exclude-standard', '--', ...files])
+      .split('\n')
+      .map(key);
+    console.log(`Scope: the lines changed since ${ref} (--whole-file grades every function)\n`);
+    return [
+      ...changedRanges(diff),
+      ...graded
+        .filter(({ file }) => untracked.includes(file))
+        .map(({ file, source }) => untrackedChange(file, source)),
+    ];
+  } catch {
+    console.log(
+      `git could not diff against ${base ?? 'the merge-base with origin/main'} — grading whole files instead.\n`,
+    );
+    return null;
+  }
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
   const { files, skipped } = selectFiles(argv);
   if (files.length === 0 && skipped.length === 0) {
-    console.error('usage: npm run quality -- <path…>   (the files this ticket touched)');
+    console.error(
+      'usage: npm run quality -- [--whole-file] [--base <ref>] <path…>   (the files this ticket touched)',
+    );
     return 1;
   }
   if (skipped.length > 0) {
@@ -269,25 +357,54 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   }
 
   console.log(`Grading ${files.length} file(s) — ${CEILING_NOTE}\n`);
+  return grade(files, argv);
+}
 
-  const coverage = collectCoverage();
+/** Measure everything, then let the change decide what is judged. */
+function grade(files: string[], argv: string[]): number {
+  const { wholeFile, base } = parseArgs(argv);
   // Read once, scored twice: both metrics parse the same text, and a second
   // read would let them disagree about a file edited mid-run.
-  const graded = files.map((file) => ({ file, source: readFileSync(file, 'utf8') }));
-  const crap = graded.flatMap(({ file, source }) =>
-    scoreCrap(measureComplexity(file, source), coverage[file]),
+  const graded = files.map((file) => ({
+    file,
+    source: readFileSync(file, 'utf8'),
+  }));
+  const changed = wholeFile ? null : readChange(graded, base);
+  const untouched = untouchedFiles(files, changed);
+  if (untouched.length === files.length)
+    console.log(
+      'No line of these files changed — nothing of this change to grade. ' +
+        'Pass --whole-file, or a --base from before the change.\n',
+    );
+  else if (untouched.length > 0) console.log(`Unchanged, not graded: ${untouched.join(', ')}\n`);
+
+  const complexity = graded.map(({ file, source }) => measureComplexity(file, source));
+  const coverage = collectCoverage();
+  const { touched: crap, standing } = splitByChange(
+    complexity.flatMap((fns, i) => scoreCrap(fns, coverage[files[i]])),
+    changed,
   );
-  const cognitive = graded.flatMap(({ file, source }) => measureCognitive(file, source));
-  const gradable = files.filter((f) => !MUTATION_EXEMPT.includes(f));
-  const mutants = gradable.length > 0 ? collectMutants(files) : [];
+  const { touched: cognitive } = splitByChange(
+    graded.flatMap(({ file, source }) => measureCognitive(file, source)),
+    changed,
+  );
+  // The exemption is applied here rather than by dropping the file from
+  // `files`, so it still gets a CRAP score and still appears in the report.
+  // Stryker is handed each touched function whole, never bare changed lines:
+  // it drops any mutant whose node reaches outside a range (`widenToFunctions`).
+  const mutate = mutateEntries(
+    files.filter((f) => !MUTATION_EXEMPT.includes(f)),
+    changed && widenToFunctions(changed, complexity.flat()),
+  );
+  const { mutants, log } = mutate.length > 0 ? collectMutants(mutate) : { mutants: [], log: '' };
 
   return report(
     crap,
     cognitive,
     mutants,
-    // `ranMutation` is false when every file was exempt: an empty result then
-    // means "nothing to mutate", not "the run covered nothing", and the
-    // no-mutants rule must not fire on it.
-    judge({ crap, mutants, ranMutation: gradable.length > 0 }),
+    // Whether an empty result means the run missed the change, or only that
+    // there was nothing to mutate — see `emptyMeansMissed`.
+    judge({ crap, mutants, ranMutation: emptyMeansMissed(files, mutate, changed, log) }),
+    standing,
   );
 }
