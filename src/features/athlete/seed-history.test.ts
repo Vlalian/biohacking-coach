@@ -12,7 +12,11 @@ import { seedAthleteSessionId, seedWeekRows } from './seed-history';
  */
 
 // A Wednesday, so the "last Mon–Sun" arithmetic is exercised off a midweek day.
-const NOW = new Date(2026, 8, 16, 10, 30);
+// An instant, not local wall-clock time: `ratedAt` is `now` itself and the
+// snapshot stores it as UTC, so `new Date(2026, 8, 16, 10, 30)` pinned 08:30Z
+// in Copenhagen and 10:30Z on a UTC machine (every cloud sandbox). 08:30Z is
+// Wednesday the 16th in both zones, so the date arithmetic is unchanged.
+const NOW = new Date('2026-09-16T08:30:00Z');
 const ATHLETE = 'a0000000-0000-4000-8000-000000000001';
 
 describe('seedWeekRows', () => {
