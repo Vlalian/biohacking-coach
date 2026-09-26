@@ -35,14 +35,7 @@
     "nextjs/no-img-element": "warn",
     "nextjs/no-html-link-for-pages": "error",
     "typescript/no-unused-vars": "warn",
-    "typescript/no-explicit-any": "error",
-    // Two findings oxlint reports that eslint-config-next never ran. Neither is
-    // a regression and neither is fixed here, so they stay visible at warn
-    // rather than failing the gate on pre-existing code:
-    // `garmin.ts` strips C0 control characters on purpose, and the `chunk.ts`
-    // escape is harmless. Raise these once someone owns the two sites.
-    "no-control-regex": "warn",
-    "no-useless-escape": "warn"
+    "typescript/no-explicit-any": "error"
   },
   "overrides": [
     // Scoped to app code. Test files are the legitimate consumers and are

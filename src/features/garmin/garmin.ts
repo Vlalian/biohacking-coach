@@ -90,6 +90,9 @@ export function boundFileText(value: unknown): string | null {
   // treat anything but a string as absent rather than throwing on `.replace`.
   if (typeof value !== 'string') return null;
   // Strip ASCII control characters (C0 range + DEL), then cap the length.
+  // The control characters are the point: this keeps hostile file text out of
+  // prompts, so the rule is wrong here. `file-text-policy.test.ts` pins it.
+  // oxlint-disable-next-line no-control-regex
   const cleaned = value.replace(/[\x00-\x1F\x7F]/g, '').trim();
   return cleaned ? cleaned.slice(0, MAX_FILE_TEXT) : null;
 }
