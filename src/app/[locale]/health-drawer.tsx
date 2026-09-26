@@ -8,6 +8,7 @@ import { useDialogFocus } from '@/lib/use-dialog-focus';
 import { formatFullDate } from '@/lib/date';
 import type { HealthNoteRow } from '@/db/schema';
 import { ALLOWANCES, DISCIPLINES, type Allowance, type Capacity } from '@/features/health/capacity';
+import { confirmationKey } from '@/features/health/delete-confirmation';
 import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
 import { ConfirmDelete } from './confirm-delete';
 import {
@@ -79,7 +80,8 @@ export function HealthDrawer({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
-  // The one record whose delete is waiting on its confirm tap (28e).
+  // The one record whose delete is waiting on its confirm tap, keyed by its
+  // section so an open record's confirm never arms its History row (28e).
   const [confirming, setConfirming] = useState<string | null>(null);
   const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
   const isCoach = Boolean(coachAthleteId);
@@ -159,14 +161,14 @@ export function HealthDrawer({
                     pending={pending}
                     locale={locale}
                     t={t}
-                    confirmingDelete={confirming === span.id}
+                    confirmingDelete={confirming === confirmationKey('open', span.id)}
                     onSelect={() => setSelectedId(span.id)}
                     onClose={() =>
                       run(() =>
                         span.kind === 'injury' ? closeInjuryAction(span.id) : closeIllnessAction(span.id),
                       )
                     }
-                    onAskDelete={() => setConfirming(span.id)}
+                    onAskDelete={() => setConfirming(confirmationKey('open', span.id))}
                     onDelete={() => run(() => deleteOf(span))}
                     onBother={(value) => run(() => setBotherAction(subjectOf(span), value))}
                   />
@@ -227,9 +229,9 @@ export function HealthDrawer({
                             action="remove"
                             label={t('removeFromHistory')}
                             confirmLabel={t('confirmRemove')}
-                            confirming={confirming === span.id}
+                            confirming={confirming === confirmationKey('history', span.id)}
                             disabled={pending}
-                            onAsk={() => setConfirming(span.id)}
+                            onAsk={() => setConfirming(confirmationKey('history', span.id))}
                             onConfirm={() => run(() => deleteOf(span))}
                           />
                         </div>
