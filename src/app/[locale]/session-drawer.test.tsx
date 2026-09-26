@@ -77,6 +77,7 @@ function session(overrides: Partial<Session> = {}): Session {
     // is the state undo exists for.
     status: 'planned',
     parked: false,
+    sport: null,
     dayOrder: 0,
     title: null,
     duration: 60,

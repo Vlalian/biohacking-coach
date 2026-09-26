@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IllnessRow, InjuryRow } from '@/db/schema';
-import { glance, marksFor, spansFrom, weekStatus, type HealthSpan } from './health-layer';
+import { currentStatus, glance, marksFor, spansFrom, type HealthSpan } from './health-layer';
 
 /**
  * `training-architecture/06` — the health layer the calendar draws beside the
@@ -100,19 +100,42 @@ describe('marksFor — the icons a session carries (showable-version/28a)', () =
     expect(marks.map((m) => m.kind)).toEqual(['injury', 'illness']);
   });
 
-  it('weekStatus: injured/ill while a record is open and touches the week; a closed record leaves the status clean and its marks in place', () => {
-    const week = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20'];
-    expect(weekStatus(week, [knee], '2026-09-16')).toEqual({ injured: true, ill: false });
-    expect(weekStatus(week, [flu], '2026-09-16')).toEqual({ injured: false, ill: false });
-    expect(weekStatus(week, [{ ...flu, from: '2026-09-15', to: null }], '2026-09-16')).toEqual({ injured: false, ill: true });
-    // Opened Monday, healed Tuesday, today Wednesday: the status is the current
-    // state, so it reads uninjured — the Monday session keeps its muted mark
-    // (review, 2026-09-18: a signal "Injured" over a healed record was wrong).
-    expect(weekStatus(week, [{ ...knee, from: '2026-09-14', to: '2026-09-15' }], '2026-09-16')).toEqual({ injured: false, ill: false });
-    expect(weekStatus(week, [], '2026-09-16')).toEqual({ injured: false, ill: false });
-    // A week before the record: nothing yet. A past week it ran through: still open, so injured.
-    expect(weekStatus(['2026-09-07', '2026-09-08'], [knee], '2026-09-16')).toEqual({ injured: false, ill: false });
-    expect(weekStatus(['2026-09-10', '2026-09-11'], [knee], '2026-09-16')).toEqual({ injured: true, ill: false });
+});
+
+describe('currentStatus — the status card reads today, never the past (showable-version/28e)', () => {
+  const openedOn = (day: string) => new Date(`${day}T08:00:00Z`);
+  const knee: HealthSpan = {
+    kind: 'injury', id: 'i1', name: 'left knee', from: '2026-09-10', to: null,
+    openedAt: openedOn('2026-09-10'), capacity: { swim: 'full', bike: 'easy', run: 'none' }, bother: null,
+  };
+  const flu: HealthSpan = { kind: 'illness', id: 'l1', name: null, from: '2026-09-02', to: '2026-09-05', openedAt: openedOn('2026-09-02'), bother: null };
+
+  it('names the newest open injury and illness, and nothing that is closed', () => {
+    const spans: HealthSpan[] = [
+      { ...knee, id: 'k1', name: 'left knee', to: null, openedAt: openedOn('2026-09-10') },
+      { ...knee, id: 'k0', name: 'ankle', to: '2026-09-12', openedAt: openedOn('2026-09-11') },
+      { ...flu, to: '2026-09-09' },
+    ];
+    expect(currentStatus(spans)).toEqual({ injury: expect.objectContaining({ name: 'left knee' }), illness: null });
+  });
+
+  it('picks the newest of two open records of a kind, whatever order they arrive in', () => {
+    const older = { ...knee, id: 'old', to: null, openedAt: openedOn('2026-09-01') };
+    const newer = { ...knee, id: 'new', to: null, openedAt: openedOn('2026-09-12') };
+    expect(currentStatus([older, newer]).injury?.id).toBe('new');
+    expect(currentStatus([newer, older]).injury?.id).toBe('new');
+  });
+
+  it('keeps the first listed of two opened at the same instant — the repository lists them oldest first', () => {
+    const first = { ...knee, id: 'first', to: null, openedAt: openedOn('2026-09-12') };
+    const second = { ...knee, id: 'second', to: null, openedAt: openedOn('2026-09-12') };
+    expect(currentStatus([first, second]).injury?.id).toBe('first');
+  });
+
+  it('reads an open illness as ill, and nothing at all as clean', () => {
+    const ill = { ...flu, to: null };
+    expect(currentStatus([ill])).toEqual({ injury: null, illness: ill });
+    expect(currentStatus([])).toEqual({ injury: null, illness: null });
   });
 });
 

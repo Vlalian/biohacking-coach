@@ -49,6 +49,11 @@ export type Session = {
   duration: number | null;
   zone: string | null;
   note: string | null;
+  /** The discipline, where one is known: a Garmin import's raw sport
+   *  (`cycling`, `running` …) or the arithmetic's `swim`/`bike`/`run`/`brick`.
+   *  Null on a session the Coach, the athlete or the Head Coach wrote. The
+   *  card picks its icon by it (`showable-version/37`). */
+  sport: string | null;
   feedbackBody: number | null;
   feedbackMind: number | null;
   feedbackComment: string | null;
@@ -78,6 +83,7 @@ export function toSession(row: SessionRow): Session {
     duration: row.duration,
     zone: row.zone,
     note: row.note,
+    sport: row.sport,
     feedbackBody: row.feedbackBody,
     feedbackMind: row.feedbackMind,
     feedbackComment: row.feedbackComment,

@@ -65,6 +65,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   feedbackComment: null,
   origin: 'coach',
   isTraining: true,
+  sport: null,
   ...over,
 });
 
@@ -275,8 +276,6 @@ describe('Calendar — a session that cannot be lifted says why', () => {
    * collapsed back into a boolean on the way.
    *
    * `t` is mocked to return its key, so the assertions below are message keys.
-   * The current week is expanded on first render, so a session dated in it is a
-   * real `SessionChip` here and not a collapsed dot.
    */
   it('explains a completed session instead of being silently inert', () => {
     const markup = render({ sessions: [session({ status: 'completed' })] });
@@ -306,45 +305,73 @@ describe('Calendar — a session that cannot be lifted says why', () => {
   });
 });
 
-describe('Calendar — the week row is the toggle', () => {
-  /**
-   * `CONTEXT.md`'s Expanded Week says "Tapping a week row toggles it." Only the
-   * 56-pixel date label was a button, so the row and the glossary disagreed.
-   *
-   * The click itself is not testable here — `renderToStaticMarkup` drops event
-   * handlers and this repo has no DOM renderer — so what is pinned is the
-   * precondition the handler depends on: every day cell is marked, so the row
-   * handler can tell "clicked the row" from "clicked a day" and let the day's
-   * own controls through. Remove the marker and the row would start swallowing
-   * drags and the ✕; that regression is what this test catches.
-   */
-  it('marks every day cell so the row handler can let them through', () => {
-    const markup = render();
-
-    // Seven days in the current week, plus the surrounding weeks the month grid
-    // renders. The exact count is not the point; the marker being present is.
-    expect(markup).toContain('data-day=');
-    expect((markup.match(/data-day=/g) ?? []).length).toBeGreaterThanOrEqual(7);
+describe('Calendar — every week expanded, sessions as cards (showable-version/37)', () => {
+  it('renders every week expanded, with no week toggle, no expand-all and no dots', () => {
+    // Two weeks before today's: it rendered as a collapsed row of dots until 37.
+    const html = render({ sessions: [session({ date: '2026-08-04' })] });
+    expect(html).not.toContain('data-week-toggle');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('expandAll');
+    expect(html).not.toContain('collapseAll');
+    expect(html).not.toContain('h-2.5 w-2.5');
+    expect(html).toMatch(/data-card-state="accepted"[^>]*>(?:(?!<\/button>)[\s\S])*Long ride/);
   });
 
-  it('keeps the date label a real button, for keyboard users', () => {
-    // The row click is a mouse convenience. A div with an onClick is not
-    // reachable by keyboard, so the button stays and remains the accessible
-    // path — widening the hit area must not narrow who can reach it.
-    const markup = render();
-
-    expect(markup).toMatch(/<button[^>]*aria-expanded=/);
+  it('offers the athlete’s + on every week, not only the expanded one', () => {
+    // One per day cell in the grid: August 2026 renders six Monday-first weeks.
+    const html = render({ sessions: [] });
+    expect(html.match(/aria-label="addSession"/g)).toHaveLength(42);
   });
 
-  it('keeps the date label out of the row handler, so it toggles once', () => {
-    // The button and the row both toggle. Without the marker the button's own
-    // click bubbles to the row, `toggleWeek` runs twice against a functional
-    // setState, and the week does not move at all — the failure is silent and
-    // it lands hardest on the keyboard user, whose Enter also fires a click.
-    // The marker is what the row handler's selector excludes.
-    const markup = render();
+  it('a card carries its state, icon, meta and note line', () => {
+    const html = render({
+      sessions: [session({ origin: 'arithmetic', sport: 'run', duration: 45, zone: 'Zone 2', note: 'Steady\nthen home' })],
+    });
+    expect(html).toMatch(/data-card-state="arithmetic"/);
+    expect(html).toMatch(/data-card-icon="Footprints"/);
+    expect(html).toContain('45minutes · Zone 2');
+    expect(html).toContain('Steady');
+    expect(html).not.toContain('then home');
+  });
 
-    expect(markup).toMatch(/<button[^>]*data-week-toggle=/);
+  it('omits a line the session has nothing for, and never writes a placeholder', () => {
+    const html = render({ sessions: [session({ duration: null, zone: null, note: null })] });
+    expect(html).not.toContain('data-card-meta');
+    expect(html).not.toContain('data-card-note');
+  });
+
+  it('draws the four states apart', () => {
+    const stateOf = (over: Partial<Session>) =>
+      render({ sessions: [session(over)] }).match(/data-card-state="(\w+)"[^>]*class="([^"]*)"/)?.slice(1) ?? [];
+    const [arithmetic, arithmeticClass] = stateOf({ origin: 'arithmetic' });
+    const [accepted, acceptedClass] = stateOf({ origin: 'coach' });
+    const [done, doneClass] = stateOf({ status: 'completed' });
+    const [missed, missedClass] = stateOf({ status: 'skipped' });
+    expect([arithmetic, accepted, done, missed]).toEqual(['arithmetic', 'accepted', 'done', 'missed']);
+    expect(new Set([arithmeticClass, acceptedClass, doneClass, missedClass]).size).toBe(4);
+    expect(arithmeticClass).toContain('border-dashed');
+    expect(acceptedClass).not.toContain('border-dashed');
+    expect(doneClass).toContain('bg-muted/60');
+    expect(missedClass).toContain('line-through');
+    expect(render({ sessions: [session({ status: 'completed' })] })).toContain('data-card-done');
+  });
+
+  it('a card with a drag permission stays draggable, and one without does not', () => {
+    expect(render()).toMatch(/<button[^>]*draggable="true"[^>]*data-card-state=/);
+    expect(render({ readOnly: true })).not.toContain('draggable="true"');
+  });
+
+  it('names the card for a screen reader by title, type and status, so the Head Coach’s e2e locator still finds it', () => {
+    // e2e/coach.visual.ts clicks `{ name: 'Strength · completed' }` — the old
+    // collapsed dot's name. The card keeps that phrase inside its own.
+    const html = render({ sessions: [session({ type: 'Strength', title: 'Core', status: 'completed', duration: 30, zone: null })] });
+    // Then the refusal a completed session carries.
+    expect(html).toContain('aria-label="Core · Strength · completed · 30minutes · bounceFrozen"');
+  });
+
+  it('says an untitled card’s type once, not as title and type both', () => {
+    const html = render({ sessions: [session({ type: 'Strength', title: null, status: 'completed', duration: null, zone: null })] });
+    expect(html).toContain('aria-label="Strength · completed · bounceFrozen"');
   });
 });
 
@@ -403,11 +430,11 @@ describe('Calendar — the drafted week the athlete has not decided on (training
 
 /**
  * `training-architecture/06` → `showable-version/28a` — the health layer,
- * drawn beside the plan. Rulings of 2026-09-17/18: two icons on every recorded
- * session a record covers (signal while open, muted once over, forever), none
- * on a proposed session; the illness band is gone; the health row is an
- * always-shown two-status area that opens the drawer; and the persistent
- * "How's your body?" button for the athlete, never for the Head Coach.
+ * drawn beside the plan. Rulings of 2026-09-17/18, moved by 28e (2026-09-19):
+ * the icons sit at the bottom of each day cell a record covers (signal while
+ * open, muted once over); one current-status card above the grid, never a
+ * status per week; and the persistent "How's your body?" button for the
+ * athlete, never for the Head Coach.
  */
 vi.mock('./health-drawer', () => ({ HealthDrawer: () => <div data-testid="health-drawer" /> }));
 
@@ -421,47 +448,38 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     capacity: { swim: 'full' as const, bike: 'easy' as const, run: 'none' as const }, bother: 3,
     name: 'left knee', openedAt: new Date('2026-08-01T08:00:00Z'),
   };
-  const draft = {
-    id: 'd1', weekStart: '2026-08-17', visibleFrom: '2026-08-17', citations: [], approved: false, createdAt: new Date(),
-    sessions: [{ date: '2026-08-20', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: null }],
-  };
+  /** The day cell for a date, from its opening tag to the next day's. */
+  const dayCell = (html: string, date: string) =>
+    html.match(new RegExp(`data-day="${date}"[^]*?(?=data-day="|$)`))?.[0] ?? '';
 
-  it('a recorded session during an open injury carries the injury icon, signal-coloured, with the name in its label', () => {
-    // Until training-architecture/25 this also asserted that a proposed
-    // session carried no mark; nothing proposed is in the grid any more.
-    const html = render({ sessions: [session({ date: '2026-08-19' })], health: [injury], proposal: { kind: 'proposal', draft } });
-    expect(html).toMatch(/data-mark="injury"[^>]*data-open="true"/);
-    expect(html).toContain('left knee');
-    // Label and tooltip both (the ruling): the chip's title names the mark.
-    expect(html).toContain('title="Long ride · markInjury: left knee"');
-    expect(html.match(/data-mark=/g)).toHaveLength(1);
+  it('puts a day’s marks inside its day cell, and none on a day without (showable-version/28e)', () => {
+    const html = render({ sessions: [session({ date: '2026-08-19' })], health: [injury] });
+    const today = dayCell(html, '2026-08-19');
+    expect(today).toContain('data-day-marks');
+    expect(today).toMatch(/data-mark="injury"[^>]*data-open="true"/);
+    // Named for a screen reader, since the icons are images.
+    expect(today).toMatch(/data-day-marks=""[^>]*aria-label="markInjury: left knee"/);
+    // The future carries none: an open span ends at today.
+    expect(dayCell(html, '2026-08-20')).not.toContain('data-day-marks');
+    // One element per marked day (1–19 August), and never on the card.
+    expect(html.match(/data-day-marks/g)?.length).toBe(19);
+    expect(html).not.toMatch(/data-card-state[^>]*>(?:(?!<\/button>)[\s\S])*data-mark=/);
+    expect(html).not.toContain('title="Long ride · markInjury');
   });
 
-  it('after the injury closes, the same session keeps the icon, muted', () => {
-    const html = render({ sessions: [session({ date: '2026-08-19' })], health: [{ ...injury, to: '2026-08-20' }] });
-    expect(html).toMatch(/data-mark="injury"[^>]*data-open="false"/);
+  it('marks a day with no session too — the ruling is about the day, not the session', () => {
+    const html = render({ sessions: [], health: [illness] });
+    expect(dayCell(html, '2026-08-18')).toMatch(/data-mark="illness"/);
+    expect(dayCell(html, '2026-08-17')).not.toContain('data-day-marks');
   });
 
-  it('a session on an illness day carries the illness icon; a session before it carries nothing', () => {
-    expect(render({ sessions: [session({ date: '2026-08-19' })], health: [illness] })).toMatch(/data-mark="illness"/);
-    expect(render({ sessions: [session({ date: '2026-08-17' })], health: [illness] })).not.toContain('data-mark=');
+  it('after the injury closes, its days keep the icon, muted', () => {
+    const html = render({ sessions: [], health: [{ ...injury, to: '2026-08-10' }] });
+    expect(dayCell(html, '2026-08-05')).toMatch(/data-mark="injury"[^>]*data-open="false"/);
+    expect(dayCell(html, '2026-08-11')).not.toContain('data-day-marks');
   });
 
-  it('marks the collapsed week’s dots too, tooltip included', () => {
-    // Session in the week of the 10th, collapsed (today is in the week of the 17th).
-    const html = render({ sessions: [session({ date: '2026-08-12' })], health: [injury] });
-    expect(html).toMatch(/data-mark="injury"/);
-    // The dot's title names the mark as the expanded chip's does (CodeRabbit, PR #86).
-    expect(html).toContain('title="Long ride · markInjury: left knee"');
-  });
-
-  it('a marked chip that cannot be lifted still announces why (CodeRabbit, PR #86)', () => {
-    const html = render({ sessions: [session({ date: '2026-08-19', parked: true })], health: [injury] });
-    const chip = html.match(/<button[^>]*Long ride · markInjury[^>]*>/)?.[0] ?? '';
-    expect(chip).toMatch(/aria-label="[^"]*bounceParked[^"]*"/);
-  });
-
-  it('renders no status area and no marks when health is withheld, so absence cannot read as healthy', () => {
+  it('renders no status card and no marks when health is withheld, so absence cannot read as healthy', () => {
     // `null` is "not shared", `[]` is "nothing recorded" — and the coach must
     // not be able to tell the second from the first. `roster-service.ts` takes
     // care never to fetch a withheld athlete's records; the calendar has to
@@ -475,32 +493,23 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(clean).toContain('statusUninjured');
   });
 
-  it('shows the two statuses on every week — healthy/uninjured on a clean week — and the band and chip are gone', () => {
-    const clean = render({});
-    expect(clean).toContain('data-health-status');
-    expect(clean).toContain('statusHealthy');
-    expect(clean).toContain('statusUninjured');
-    expect(clean).not.toMatch(/data-active="true"/);
+  it('renders one status card and no status on any week row (showable-version/28e)', () => {
     const hurt = render({ health: [injury, illness] });
+    expect(hurt.match(/data-health-status/g)).toHaveLength(1);
     expect(hurt).toMatch(/data-status="injury"[^>]*data-active="true"/);
     expect(hurt).toMatch(/data-status="illness"[^>]*data-active="true"/);
-    expect(hurt).toContain('statusInjured');
-    expect(hurt).toContain('statusIll');
-    expect(hurt).not.toContain('data-health-day');
-    expect(hurt).not.toContain('data-health-chip');
+    expect(hurt).toContain('statusInjured: left knee');
+    // Above the grid: before the first week's first day.
+    expect(hurt.indexOf('data-health-status')).toBeLessThan(hurt.indexOf('data-day='));
+    // A healed record leaves the card clean.
+    const healed = render({ health: [{ ...injury, to: '2026-08-10' }] });
+    expect(healed).not.toMatch(/data-active="true"/);
+    expect(healed).toContain('statusUninjured');
   });
 
-  it('reads the current state: a healed record leaves every week’s status clean, an open one lights every week it touches', () => {
-    const weekOf = (html: string, start: string) =>
-      html.match(new RegExp(`data-health-status="${start}"[^>]*>[^]*?</div>`))?.[0] ?? '';
-    // Ran 1–10 Aug, healed: the week of the 10th keeps its marks, its status reads uninjured.
-    const healed = render({ health: [{ ...injury, to: '2026-08-10' }] });
-    expect(weekOf(healed, '2026-08-10')).not.toMatch(/data-active="true"/);
-    expect(weekOf(healed, '2026-08-17')).not.toMatch(/data-active="true"/);
-    // Still open since 1 Aug: both weeks read injured (the boundary before it is weekStatus's own test).
-    const open = render({ health: [injury] });
-    expect(weekOf(open, '2026-08-10')).toMatch(/data-status="injury"[^>]*data-active="true"/);
-    expect(weekOf(open, '2026-08-17')).toMatch(/data-status="injury"[^>]*data-active="true"/);
+  it('keeps the status card static, so it never floats over the Sunday column (Mads, 2026-09-25)', () => {
+    const html = render({ health: [injury] });
+    expect(html).not.toContain('sticky');
   });
 
   it('offers "How’s your body?" to the athlete whether or not anything is open, and never to the Head Coach', () => {
@@ -509,10 +518,11 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
     expect(render({ readOnly: true, coachAthleteId: 'a1', health: [injury] })).not.toContain('healthButton');
   });
 
-  it('gives the Head Coach the same marks when the athlete shares them', () => {
+  it('gives the Head Coach the same marks and card when the athlete shares them', () => {
     const html = render({ readOnly: true, coachAthleteId: 'a1', sessions: [session({ date: '2026-08-19' })], health: [injury, illness] });
     expect(html).toMatch(/data-mark="injury"/);
     expect(html).toMatch(/data-mark="illness"/);
+    expect(html.match(/data-health-status/g)).toHaveLength(1);
   });
 });
 

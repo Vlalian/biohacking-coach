@@ -95,20 +95,23 @@ describe('getSessionsForAthlete', () => {
 
   it('maps rows to the domain shape in the order returned', async () => {
     orderBy.mockResolvedValue([
-      row({ id: 'a', dayOrder: 0 }),
+      row({ id: 'a', dayOrder: 0, sport: 'cycling' }),
       row({ id: 'b', dayOrder: 1 }),
     ]);
 
     const result = await getSessionsForAthlete('athlete_1');
 
     expect(result.map((s) => s.id)).toEqual(['a', 'b']);
+    expect(result.map((s) => s.sport)).toEqual(['cycling', null]);
     // Domain shape only — the Garmin columns stay in the repository;
     // feedback comes through because the calendar renders and pre-fills it.
     // `origin`/`isTraining` came in with the Session Drawer's status and
     // Athlete Session actions (edit/delete gating on origin, Double/Rest
     // rules on isTraining). `version` came in with write-conflict detection:
     // nothing renders it, but every editor sends it back so a concurrent
-    // write is refused rather than overwritten.
+    // write is refused rather than overwritten. `sport` is the one Garmin
+    // column that crossed: the calendar card picks its icon by it
+    // (showable-version/37).
     expect(Object.keys(result[0]).sort()).toEqual(
       [
         'date',
@@ -122,6 +125,7 @@ describe('getSessionsForAthlete', () => {
         'note',
         'origin',
         'parked',
+        'sport',
         'status',
         'title',
         'type',

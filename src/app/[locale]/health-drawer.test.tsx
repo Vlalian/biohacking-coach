@@ -127,12 +127,24 @@ describe('HealthDrawer — the athlete', () => {
     expect(html).not.toMatch(/<details[^>]*data-record="inj_0"[^>]* open[ =>]/);
   });
 
-  it('offers "declared by mistake" only on a record younger than 24 h, and only to the athlete', () => {
+  it('offers Delete – it was a mistake on an open record of any age, to the athlete only (showable-version/28e)', () => {
     const young = { ...openInjury, openedAt: new Date(Date.now() - 3_600_000) };
-    expect(render({ spans: [young] })).toContain('data-action="delete"');
-    const old = { ...openInjury, openedAt: new Date(Date.now() - 48 * 3_600_000) };
-    expect(render({ spans: [old] })).not.toContain('data-action="delete"');
-    expect(render({ spans: [young], coachAthleteId: 'a1' })).not.toContain('data-action="delete"');
+    expect(render({ spans: [young] })).toMatch(/data-action="delete"[^>]*>declaredByMistake</);
+    // A year old: the 24 h window is gone.
+    const old = { ...openInjury, openedAt: new Date(Date.now() - 365 * 24 * 3_600_000) };
+    expect(render({ spans: [old] })).toContain('data-action="delete"');
+    expect(render({ spans: [old], coachAthleteId: 'a1' })).not.toContain('data-action="delete"');
+  });
+
+  it('offers Remove from history on a closed record, to the athlete only, and asks nothing yet (showable-version/28e)', () => {
+    const html = render({ spans: [closedInjury] });
+    expect(html).toMatch(/data-history="inj_0"[^]*data-action="remove"[^>]*>removeFromHistory</);
+    expect(html).not.toContain('data-action="confirm-remove"');
+    expect(render({ spans: [closedInjury], coachAthleteId: 'a1' })).not.toContain('data-action="remove"');
+  });
+
+  it('has no "too old" message left to show', () => {
+    expect(render()).not.toContain('tooOld');
   });
 
   it('the declare form asks for a name', () => {

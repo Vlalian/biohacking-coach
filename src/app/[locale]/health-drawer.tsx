@@ -8,7 +8,9 @@ import { useDialogFocus } from '@/lib/use-dialog-focus';
 import { formatFullDate } from '@/lib/date';
 import type { HealthNoteRow } from '@/db/schema';
 import { ALLOWANCES, DISCIPLINES, type Allowance, type Capacity } from '@/features/health/capacity';
-import { MISTAKE_WINDOW_MS, glanceParts, type HealthSpan } from '@/features/health/health-layer';
+import { confirmationKey } from '@/features/health/delete-confirmation';
+import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
+import { ConfirmDelete } from './confirm-delete';
 import {
   addHealthNoteAction,
   closeIllnessAction,
@@ -48,8 +50,12 @@ import {
  * `showable-version/28a` (Mads, 2026-09-17/18): one list — open records first,
  * expanded (name · dates, then the glance); past ones collapsed under a fold,
  * each its own fold with the same line as summary. The injury carries a short
- * name ("left knee"). A record younger than 24 hours offers "declared by
- * mistake", which deletes it; after that it is history.
+ * name ("left knee").
+ *
+ * `showable-version/28e` (Mads, 2026-09-19: "tooOld should not be a thing"):
+ * the athlete may delete any record at any age, each after a confirm tap — an
+ * open one as "declared by mistake", a past one as "Remove from history". The
+ * Head Coach deletes nothing.
  */
 export type HealthDrawerState =
   | { open: false }
@@ -73,7 +79,10 @@ export function HealthDrawer({
   const t = useTranslations('HealthDrawer');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  // The one record whose delete is waiting on its confirm tap, keyed by its
+  // section so an open record's confirm never arms its History row (28e).
+  const [confirming, setConfirming] = useState<string | null>(null);
   const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
   const isCoach = Boolean(coachAthleteId);
 
@@ -83,20 +92,15 @@ export function HealthDrawer({
   const open = spans.filter((s) => s.to === null);
   const closed = spans.filter((s) => s.to !== null);
   const [selectedId, setSelectedId] = useState<string | null>(() => initialSelection(state, open));
-  // The clock for "declared by mistake": read once, when the drawer mounts,
-  // on whichever side renders it. A record on the 24 h boundary may differ by
-  // the request's latency between server and client markup; the action
-  // decides on its own clock either way.
-  const [now] = useState(Date.now);
   if (!state.open) return null;
 
-  function run(action: () => Promise<{ ok: boolean; reason?: string }>) {
-    setError(null);
+  function run(action: () => Promise<{ ok: boolean }>) {
+    setFailed(false);
     startTransition(async () => {
       // A rejected action (network, server) is an error like a refused one:
       // without the catch the drawer shows nothing (CodeRabbit, PR #86).
       const result = await action().catch(() => ({ ok: false as const }));
-      if (!result.ok) setError('reason' in result && result.reason === 'too-old' ? 'tooOld' : 'error');
+      if (!result.ok) setFailed(true);
       else router.refresh();
     });
   }
@@ -131,9 +135,9 @@ export function HealthDrawer({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {error && (
+          {failed && (
             <p role="alert" className="mb-3 font-body text-sm text-destructive">
-              {t(error === 'tooOld' ? 'tooOld' : 'error')}
+              {t('error')}
             </p>
           )}
 
@@ -157,18 +161,15 @@ export function HealthDrawer({
                     pending={pending}
                     locale={locale}
                     t={t}
-                    canDelete={!isCoach && now - span.openedAt.getTime() < MISTAKE_WINDOW_MS}
+                    confirmingDelete={confirming === confirmationKey('open', span.id)}
                     onSelect={() => setSelectedId(span.id)}
                     onClose={() =>
                       run(() =>
                         span.kind === 'injury' ? closeInjuryAction(span.id) : closeIllnessAction(span.id),
                       )
                     }
-                    onDelete={() =>
-                      run(() =>
-                        span.kind === 'injury' ? deleteInjuryAction(span.id) : deleteIllnessAction(span.id),
-                      )
-                    }
+                    onAskDelete={() => setConfirming(confirmationKey('open', span.id))}
+                    onDelete={() => run(() => deleteOf(span))}
                     onBother={(value) => run(() => setBotherAction(subjectOf(span), value))}
                   />
                   {selectedId === span.id && (
@@ -222,6 +223,19 @@ export function HealthDrawer({
                         <RecordLine span={span} locale={locale} t={t} />
                       </summary>
                       <RecordGlance span={span} t={t} />
+                      {!isCoach && (
+                        <div className="mt-2">
+                          <ConfirmDelete
+                            action="remove"
+                            label={t('removeFromHistory')}
+                            confirmLabel={t('confirmRemove')}
+                            confirming={confirming === confirmationKey('history', span.id)}
+                            disabled={pending}
+                            onAsk={() => setConfirming(confirmationKey('history', span.id))}
+                            onConfirm={() => run(() => deleteOf(span))}
+                          />
+                        </div>
+                      )}
                       {selectedId === span.id && (
                         <Thread
                           subject={subjectOf(span)}
@@ -250,6 +264,11 @@ export function HealthDrawer({
 }
 
 type T = ReturnType<typeof useTranslations<'HealthDrawer'>>;
+
+/** Deletes the record for good, whatever its age (28e). The athlete's only. */
+function deleteOf(span: HealthSpan) {
+  return span.kind === 'injury' ? deleteInjuryAction(span.id) : deleteIllnessAction(span.id);
+}
 
 function subjectOf(span: HealthSpan): HealthSubject {
   return span.kind === 'injury' ? { injuryId: span.id } : { illnessId: span.id };
@@ -310,9 +329,10 @@ function RecordRow({
   pending,
   locale,
   t,
-  canDelete,
+  confirmingDelete,
   onSelect,
   onClose,
+  onAskDelete,
   onDelete,
   onBother,
 }: {
@@ -322,10 +342,11 @@ function RecordRow({
   pending: boolean;
   locale: string;
   t: T;
-  /** Younger than 24 h and the athlete's own: "declared by mistake" is offered. */
-  canDelete: boolean;
+  /** "Declared by mistake" was tapped: the confirm is showing. */
+  confirmingDelete: boolean;
   onSelect: () => void;
   onClose: () => void;
+  onAskDelete: () => void;
   onDelete: () => void;
   onBother: (value: number | null) => void;
 }) {
@@ -345,17 +366,16 @@ function RecordRow({
           >
             {span.kind === 'injury' ? t('imBack') : t('illnessOver')}
           </button>
-          {canDelete && (
-            <button
-              type="button"
-              data-action="delete"
-              onClick={onDelete}
-              disabled={pending}
-              className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
-            >
-              {t('declaredByMistake')}
-            </button>
-          )}
+          {/* Any age (28e): the 24 h window is gone. */}
+          <ConfirmDelete
+            action="delete"
+            label={t('declaredByMistake')}
+            confirmLabel={t('confirmRemove')}
+            confirming={confirmingDelete}
+            disabled={pending}
+            onAsk={onAskDelete}
+            onConfirm={onDelete}
+          />
         </div>
       )}
     </div>
