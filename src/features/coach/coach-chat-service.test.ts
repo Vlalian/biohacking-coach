@@ -582,6 +582,7 @@ describe('Coach Chat sees the week', () => {
     type: 'Intensity',
     status: 'planned',
     parked: false,
+    sport: null,
     dayOrder: 0,
     version: 1,
     title: null,

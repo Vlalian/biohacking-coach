@@ -23,6 +23,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   type: 'Endurance',
   status: 'completed',
   parked: false,
+  sport: null,
   dayOrder: 0,
   version: 1,
   title: 'Ride',
