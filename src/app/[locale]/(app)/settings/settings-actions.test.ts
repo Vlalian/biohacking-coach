@@ -594,7 +594,7 @@ describe('updateHoursPerWeekAction (showable-version/40)', () => {
   it('accepts both ends of the onboarding band', async () => {
     refillWeeksFromHours.mockResolvedValue({ outcome: 'nothing-due', weeks: [] });
     expect(await updateHoursPerWeekAction(1)).toEqual({ ok: true, redrawn: 0 });
-    expect(await updateHoursPerWeekAction(30)).toEqual({ ok: true, redrawn: 0 });
+    expect(await updateHoursPerWeekAction(HOURS_PER_WEEK_MAX)).toEqual({ ok: true, redrawn: 0 });
   });
 
   it.each([0, HOURS_PER_WEEK_MAX + 1, 7.5, Number.NaN])('refuses %s and writes nothing', async (hours) => {

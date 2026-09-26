@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_DETECTION_UPLOAD_BYTES, maxUploadBytes, MAX_ACTIVITY_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
+import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_DETECTION_UPLOAD_BYTES, maxUploadBytes, MAX_ACTIVITY_BYTES, MAX_UPLOAD_INFLATED_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**
  * `garmin-integration/04` — the pure half of the Blob upload: who may upload
@@ -198,6 +198,65 @@ describe('expandUpload', () => {
     // 0xff opens a deflate block of reserved type 3, which no inflater accepts.
     broken.fill(0xff, at, at + 8);
     expect(expandUpload('e.zip', broken)).toEqual({ files: [{ name: 'a.fit', bytes: FIT }], failed: 0 });
+  });
+
+  // CodeRabbit on PR #109: a 50 MB detection zip must not inflate to gigabytes
+  // in memory. fflate allocates exactly an entry's declared size, so the cap
+  // is read from the header before anything is inflated.
+  it('fails an entry whose declared size is over the per-file cap, without inflating it', () => {
+    const zip = zipSync({ 'huge.fit': new Uint8Array(FIT.length + 1), 'a.fit': FIT });
+    expect(expandUpload('e.zip', zip, { perFile: FIT.length, total: 1_000_000 })).toEqual({
+      files: [{ name: 'a.fit', bytes: FIT }],
+      failed: 1,
+    });
+  });
+
+  it('admits an entry exactly at the per-file cap', () => {
+    const zip = zipSync({ 'a.fit': FIT });
+    expect(expandUpload('e.zip', zip, { perFile: FIT.length, total: FIT.length })).toEqual({
+      files: [{ name: 'a.fit', bytes: FIT }],
+      failed: 0,
+    });
+  });
+
+  it('opens a detection upload under the activity cap by default', () => {
+    // A tiny entry whose header claims one byte over the cap: refused on the
+    // claim alone, so nothing that size is ever allocated.
+    const zip = zipSync({ 'a.fit': FIT, 'b.fit': new Uint8Array(10) }, { level: 0 });
+    const view = new DataView(zip.buffer);
+    const at = indexOfName(zip, 'b.fit');
+    for (let i = 0; i < zip.length - 4; i++) {
+      const sig = view.getUint32(i, true);
+      const names = (off: number) => indexOfName(zip.subarray(i + off), 'b.fit') === 0;
+      if (sig === 0x02014b50 && names(46)) view.setUint32(i + 24, MAX_ACTIVITY_BYTES + 1, true);
+      if (sig === 0x04034b50 && names(30)) view.setUint32(i + 22, MAX_ACTIVITY_BYTES + 1, true);
+    }
+    expect(at).toBeGreaterThan(0);
+    expect(expandUpload('e.zip', zip)).toEqual({ files: [{ name: 'a.fit', bytes: FIT }], failed: 1 });
+  });
+
+  it('shares one inflation budget across the zip and the zips inside it', () => {
+    const inner = zipSync({ 'f1.fit': new Uint8Array(1000), 'f2.fit': new Uint8Array(1000) }, { level: 0 });
+    const outer = zipSync({ 'p1.zip': inner }, { level: 0 });
+    // The nested zip itself spends its size, which leaves room for one file of it.
+    const expanded = expandUpload('e.zip', outer, { perFile: 10_000, total: inner.length + 1500 });
+    expect(expanded.files.map((f) => f.name)).toEqual(['f1.fit']);
+    expect(expanded.failed).toBe(1);
+  });
+
+  it('never holds more than an entry declares, even when the header lies', () => {
+    const zip = zipSync({ 'a.fit': new Uint8Array(100_000) }, { level: 9 });
+    const view = new DataView(zip.buffer);
+    for (let i = 0; i < zip.length - 4; i++) {
+      if (view.getUint32(i, true) === 0x02014b50) view.setUint32(i + 24, 100, true);
+      if (view.getUint32(i, true) === 0x04034b50) view.setUint32(i + 22, 100, true);
+    }
+    const bytes = expandUpload('e.zip', zip).files.reduce((sum, f) => sum + f.bytes.length, 0);
+    expect(bytes).toBeLessThanOrEqual(100);
+  });
+
+  it('caps a whole upload well above a real one and below a function’s memory', () => {
+    expect(MAX_UPLOAD_INFLATED_BYTES).toBe(256 * 1024 * 1024);
   });
 
   it('holds nothing for a file of another type', () => {

@@ -147,7 +147,15 @@ function historyWrites(athleteId: string, activities: readonly ParsedSession[]) 
       // The known ids were filtered out above; this covers only a second
       // import racing the first past the lock.
       .onConflictDoNothing(),
-    db.insert(sessionStreams).values(history.map(({ id, activity }) => ({ sessionId: id, samples: activity.streams }))),
+    // Streams only for sessions that insert actually wrote: a session the index
+    // skipped has no row, and a plain insert would fail its foreign key and
+    // with it the whole batch, on every run (CodeRabbit, PR #109).
+    db.execute(sql`
+      insert into ${sessionStreams} (session_id, samples)
+      select v.id, v.samples
+      from jsonb_to_recordset(${JSON.stringify(history.map(({ id, activity }) => ({ id, samples: activity.streams })))}::jsonb)
+        as v(id uuid, samples jsonb)
+      where exists (select 1 from ${sessions} where ${sessions.id} = v.id)`),
   ];
 }
 

@@ -240,7 +240,7 @@
     "raceDistanceLabel": "Race distance",
     "raceDistanceNote": "The shape of your training week. Set it even if you have no race booked.",
     "hoursLabel": "Hours per week",
-    "hoursNote": "What your plan is built from. Whole hours, 1 to 30.",
+    "hoursNote": "What your plan is built from. Whole hours, 1 to 50.",
     "hoursConfirmTitle": "Change to {hours} hours a week?",
     "hoursConfirmBody": "{count, plural, one {# week} other {# weeks}} from {date} will be redrawn from the new hours. This week, weeks you accepted and your coach’s sessions stay as they are.",
     "hoursNothingToRedraw": "No week is redrawn now: this week, weeks you accepted and your coach’s sessions stay as they are. Weeks not planned yet will use the new hours.",

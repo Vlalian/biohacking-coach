@@ -190,25 +190,64 @@ const ZIP_FILE = /\.zip$/i;
  * opened in memory; the history import streams its zips instead
  * (`export-unpacker.ts`).
  */
-export function expandUpload(name: string, bytes: Uint8Array): ExpandedUpload {
+export function expandUpload(name: string, bytes: Uint8Array, limits: InflateLimits = UPLOAD_LIMITS): ExpandedUpload {
   if (ACTIVITY_FILE.test(name)) return { files: [{ name, bytes }], failed: 0 };
   if (!ZIP_FILE.test(name)) return { files: [], failed: 0 };
-  return openExport(bytes);
+  return openExport(bytes, inflateBudget(limits));
 }
 
 /** A zip's own activity files, then each nested zip's; an outer zip that will not open is one failure. */
-function openExport(bytes: Uint8Array): ExpandedUpload {
-  const outer = openZip(bytes, (entry) => ACTIVITY_FILE.test(entry.name) || ZIP_FILE.test(entry.name));
+function openExport(bytes: Uint8Array, budget: InflateBudget): ExpandedUpload {
+  const outer = openZip(bytes, budget.admit((entry) => ACTIVITY_FILE.test(entry.name) || ZIP_FILE.test(entry.name)));
   if (outer === null) return { files: [], failed: 1 };
 
   const found: ExpandedUpload = { files: activityFiles(outer), failed: 0 };
   for (const [entry, data] of Object.entries(outer)) {
     if (!ZIP_FILE.test(entry)) continue;
-    const inner = openZip(data, (file) => ACTIVITY_FILE.test(file.name));
+    const inner = openZip(data, budget.admit((file) => ACTIVITY_FILE.test(file.name)));
     if (inner === null) found.failed++;
     else found.files.push(...activityFiles(inner));
   }
+  found.failed += budget.refused();
   return found;
+}
+
+/**
+ * How much an upload opened in memory may inflate to (CodeRabbit, PR #109):
+ * one entry, and all of them together, nested zips included. A detection zip
+ * is at most 50 MB, but a zip bomb that size inflates to gigabytes.
+ */
+export type InflateLimits = { perFile: number; total: number };
+
+/** The whole upload, opened in memory: far above a real batch of activities, far below a function's memory. */
+export const MAX_UPLOAD_INFLATED_BYTES = 256 * 1024 * 1024;
+
+type InflateBudget = {
+  /** `filter`, plus the caps: an entry over either is left shut and counted. */
+  admit: (filter: UnzipFileFilter) => UnzipFileFilter;
+  refused: () => number;
+};
+
+/**
+ * One budget for a whole upload. The caps read an entry's declared size before
+ * it is inflated; fflate allocates exactly that size and stops there, so a
+ * header that lies yields a cut-short file, never a bigger one.
+ */
+function inflateBudget({ perFile, total }: InflateLimits): InflateBudget {
+  let left = total;
+  let refused = 0;
+  return {
+    admit: (filter) => (entry) => {
+      if (!filter(entry)) return false;
+      if (entry.originalSize > perFile || entry.originalSize > left) {
+        refused++;
+        return false;
+      }
+      left -= entry.originalSize;
+      return true;
+    },
+    refused: () => refused,
+  };
 }
 
 /** The activity files of an opened zip, named without their folders. */
@@ -234,6 +273,9 @@ function openZip(bytes: Uint8Array, filter: UnzipFileFilter): Unzipped | null {
  * than run out of memory on it.
  */
 export const MAX_ACTIVITY_BYTES = 64 * 1024 * 1024;
+
+/** The caps `expandUpload` opens a detection upload under. */
+const UPLOAD_LIMITS: InflateLimits = { perFile: MAX_ACTIVITY_BYTES, total: MAX_UPLOAD_INFLATED_BYTES };
 
 /**
  * How many files one import step reads, and how many extracted files the

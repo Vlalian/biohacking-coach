@@ -122,6 +122,19 @@ function parsed(over: Partial<ParsedSession> = {}): ParsedSession {
 
 const athlete = (profile: Record<string, unknown> | null = null) => ({ id: 'a1', profile });
 
+/** The streams statement: raw SQL, so it can join on the sessions actually written. */
+function streamsQuery() {
+  const stmt = batch.mock.calls[0][0].find(
+    (s) => (s as { kind?: string; query?: SQL }).kind === 'guard' && /session_streams/.test(new PgDialect().sqlToQuery((s as { query: SQL }).query).sql),
+  ) as { query: SQL };
+  return new PgDialect().sqlToQuery(stmt.query);
+}
+
+/** The streams the batch would write, as `{ id, samples }` pairs. */
+function streamsWritten(): unknown {
+  return JSON.parse(streamsQuery().params[0] as string);
+}
+
 function inserted(table: unknown): Record<string, unknown>[] {
   return statements.filter((s) => s.kind === 'insert' && s.table === table).flatMap((s) => s.values as Record<string, unknown>[]);
 }
@@ -183,8 +196,19 @@ describe('importTrainingHistory', () => {
     const [row] = insertedSessions();
     expect(row.startTime).toEqual(new Date('2026-08-01T06:30:00.000Z'));
     expect(row.summary).toEqual(expect.objectContaining({ avgHr: 140 }));
-    expect(inserted(sessionStreams)).toEqual([{ sessionId: row.id, samples: { t: [0] } }]);
+    expect(streamsWritten()).toEqual([{ id: row.id, samples: { t: [0] } }]);
     expect(row.id).toEqual(expect.any(String));
+  });
+
+  // CodeRabbit on PR #109: when the unique index skips a session (a calendar
+  // upload of the same ride landed first), its streams must be skipped too, or
+  // the foreign key fails the whole batch on every run until the import stalls.
+  it('writes streams only for sessions the batch actually inserted', async () => {
+    await importTrainingHistory('a1', [parsed()], PROGRESS);
+    const text = streamsQuery().sql.replace(/\s+/g, ' ').trim();
+    expect(text).toMatch(/^insert into "session_streams" \(session_id, samples\)/);
+    expect(text).toMatch(/where exists \(select 1 from "sessions" where "sessions"\."id" = v\.id\)/);
+    expect(inserted(sessionStreams)).toEqual([]);
   });
 
   it('skips an activity already on file under the unique index rather than failing', async () => {
