@@ -100,7 +100,9 @@ export function GarminUpload() {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <label className="inline-flex h-10 cursor-pointer items-center gap-2 border border-signal px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground">
+      {/* relative: anchors the sr-only input inside the scroller, or focusing it
+          scrolls the shell frame and the page slides up (showable-version/57). */}
+      <label className="relative inline-flex h-10 cursor-pointer items-center gap-2 border border-signal px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground">
         {busy ? t('uploading') : t('upload')}
         <input
           ref={inputRef}

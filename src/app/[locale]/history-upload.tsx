@@ -178,7 +178,9 @@ export function HistoryUpload({
       ) : (
         <>
           <p className="font-body text-[13px] text-muted-foreground">{t('help', { weeks: HISTORY_WINDOW_WEEKS })}</p>
-          <label className="inline-flex h-11 cursor-pointer items-center gap-2 border border-signal px-4 font-body text-base font-semibold text-signal transition-colors hover:bg-signal hover:text-signal-foreground">
+          {/* relative: anchors the sr-only input inside the scroller, or focusing it
+              scrolls the shell frame and the page slides up (showable-version/57). */}
+          <label className="relative inline-flex h-11 cursor-pointer items-center gap-2 border border-signal px-4 font-body text-base font-semibold text-signal transition-colors hover:bg-signal hover:text-signal-foreground">
             {uploading && <Loader2 className="h-3 w-3 animate-spin" />}
             {uploading ? t('uploading', { percent: Math.round(status.fraction * 100) }) : t('choose')}
             <input
