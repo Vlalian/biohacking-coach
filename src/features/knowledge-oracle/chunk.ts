@@ -81,7 +81,7 @@ export function splitSentences(text: string): string[] {
   const sentences: string[] = [];
   let start = 0;
 
-  const boundary = /([.!?]["')\]]?)(\s+)(?=["'(\[]?[A-Z0-9])/g;
+  const boundary = /([.!?]["')\]]?)(\s+)(?=["'([]?[A-Z0-9])/g;
   let match: RegExpExecArray | null;
 
   while ((match = boundary.exec(text)) !== null) {
