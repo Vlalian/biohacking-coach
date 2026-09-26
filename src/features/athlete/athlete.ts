@@ -24,6 +24,13 @@ export interface AthleteProfile {
   onboardingSubmitted?: OnboardingSubmitted;
   fixedConstraints?: string[];
   weeklySessionDay?: string;
+  /**
+   * When the athlete's training history was imported (`garmin-integration/03`),
+   * ISO timestamp. Set, the history import is locked — onboarding and Settings
+   * share the one lock; null or absent, it is open. Removing the imported
+   * history clears it.
+   */
+  historyImportedAt?: string | null;
 }
 
 /**

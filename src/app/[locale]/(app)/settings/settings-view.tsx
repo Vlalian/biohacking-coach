@@ -3,17 +3,30 @@
 import { RACE_DISTANCES } from '@/lib/race-distances';
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useSave, useSaveStatus } from './use-save';
-import { useTranslations } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { Check, Download, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-react';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { usePathname, useRouter } from '@/i18n/navigation';
-import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
+import {
+  HOURS_PER_WEEK_MAX,
+  HOURS_PER_WEEK_MIN,
+  isHoursPerWeek,
+  ONBOARDING_OPTIONS,
+} from '@/features/onboarding/onboarding-flow';
 import { PreferredNameField } from '@/components/preferred-name-field';
 import { ChangePasswordForm } from '@/components/change-password-form';
-import type { AddPastRaceResult, AddRaceResult, SettingsActionResult } from './settings-actions';
+import type {
+  AddPastRaceResult,
+  AddRaceResult,
+  HoursChangeResult,
+  HoursPreviewResult,
+  SettingsActionResult,
+} from './settings-actions';
 import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './settings-past-races';
 import { RacesSection, type SettingsRace } from './settings-races';
+import { HistoryUpload } from '../../history-upload';
+import type { ImportSummary } from '@/features/garmin/blob-upload';
 import type { DeleteAccountResult } from './erasure-actions';
 
 /** Communication Style is hidden until the post-test discussion (Mads, 2026-09-24). */
@@ -31,6 +44,13 @@ export interface SettingsProfile {
   /** The races the athlete has finished (`training-architecture/35`). */
   pastRaces: SettingsPastRace[];
   raceDistance: string;
+  /** Null for an athlete who onboarded before the question existed. */
+  hoursPerWeek: number | null;
+  /** When the history import ran; null while it is open (`garmin-integration/03`). */
+  historyImportedAt: string | null;
+  importedHistoryCount: number;
+  /** The latest history import as the page read it — running, done or failed — or null when there is none. */
+  historyImport: ImportSummary | null;
   weeklySessionDay: string | null;
   fixedConstraints: string[];
 }
@@ -57,6 +77,9 @@ export interface SettingsViewProps {
   onAddPastRace: (entry: PastRaceInput) => Promise<AddPastRaceResult>;
   onRemovePastRace: (pastRaceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
+  /** The weeks an hours change would redraw, asked before the athlete confirms. */
+  onPreviewHoursChange: () => Promise<HoursPreviewResult>;
+  onUpdateHoursPerWeek: (hours: number) => Promise<HoursChangeResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -85,8 +108,10 @@ const DAY_KEYS = [
 /**
  * Settings — durable preferences and, in Coached Mode, Link Visibility
  * (`lovable/briefs/settings.md`). One scrolling page of sections, matching
- * how Equipment reads in this theme: Profile, Preferences, Training, and —
- * only when a Coaching Link exists — Sharing.
+ * how Equipment reads in this theme: Training first — the race, the hours and
+ * the days that decide what the plan looks like, and what the athlete comes
+ * back to (`showable-version/40`) — then Profile, Preferences, Sharing (only
+ * when a Coaching Link exists) and Your data.
  *
  * Link Visibility renders exactly the two flags the schema actually carries
  * (`shareAthleteReports`, `shareAiTranscripts`) — CONTEXT.md's six named
@@ -107,6 +132,8 @@ export function SettingsView({
   onAddPastRace,
   onRemovePastRace,
   onUpdateRaceDistance,
+  onPreviewHoursChange,
+  onUpdateHoursPerWeek,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
@@ -130,20 +157,14 @@ export function SettingsView({
           </p>
         </header>
 
-        <ProfileSection name={profile.name} email={profile.email} />
-
-        <PreferencesSection
-          language={language}
-          onUpdateLanguage={onUpdateLanguage}
-          preferredName={preferredName}
-          accountName={profile.name}
-          onUpdatePreferredName={onUpdatePreferredName}
-        />
-
         <TrainingSection
           communicationStyle={profile.communicationStyle}
           races={profile.races}
           raceDistance={profile.raceDistance}
+          hoursPerWeek={profile.hoursPerWeek}
+          historyImportedAt={profile.historyImportedAt}
+          importedHistoryCount={profile.importedHistoryCount}
+          historyImport={profile.historyImport}
           weeklySessionDay={profile.weeklySessionDay}
           weeklySessionDayLinked={coachingLink !== null}
           fixedConstraints={profile.fixedConstraints}
@@ -155,9 +176,21 @@ export function SettingsView({
           onAddPastRace={onAddPastRace}
           onRemovePastRace={onRemovePastRace}
           onUpdateRaceDistance={onUpdateRaceDistance}
+          onPreviewHoursChange={onPreviewHoursChange}
+          onUpdateHoursPerWeek={onUpdateHoursPerWeek}
           onUpdateWeeklySessionDay={onUpdateWeeklySessionDay}
           onAddFixedConstraint={onAddFixedConstraint}
           onRemoveFixedConstraint={onRemoveFixedConstraint}
+        />
+
+        <ProfileSection name={profile.name} email={profile.email} />
+
+        <PreferencesSection
+          language={language}
+          onUpdateLanguage={onUpdateLanguage}
+          preferredName={preferredName}
+          accountName={profile.name}
+          onUpdatePreferredName={onUpdatePreferredName}
         />
 
         {coachingLink && (
@@ -417,6 +450,10 @@ function TrainingSection({
   races,
   pastRaces,
   raceDistance,
+  hoursPerWeek,
+  historyImportedAt,
+  importedHistoryCount,
+  historyImport,
   weeklySessionDay,
   weeklySessionDayLinked,
   fixedConstraints,
@@ -427,6 +464,8 @@ function TrainingSection({
   onAddPastRace,
   onRemovePastRace,
   onUpdateRaceDistance,
+  onPreviewHoursChange,
+  onUpdateHoursPerWeek,
   onUpdateWeeklySessionDay,
   onAddFixedConstraint,
   onRemoveFixedConstraint,
@@ -435,6 +474,10 @@ function TrainingSection({
   races: SettingsRace[];
   pastRaces: SettingsPastRace[];
   raceDistance: string;
+  hoursPerWeek: number | null;
+  historyImportedAt: string | null;
+  importedHistoryCount: number;
+  historyImport: ImportSummary | null;
   weeklySessionDay: string | null;
   /** While a Head Coach is linked the day is theirs; the tiles show it and refuse the tap. */
   weeklySessionDayLinked: boolean;
@@ -446,6 +489,8 @@ function TrainingSection({
   onAddPastRace: (entry: PastRaceInput) => Promise<AddPastRaceResult>;
   onRemovePastRace: (pastRaceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
+  onPreviewHoursChange: () => Promise<HoursPreviewResult>;
+  onUpdateHoursPerWeek: (hours: number) => Promise<HoursChangeResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -455,8 +500,16 @@ function TrainingSection({
   return (
     <Section label={t('sectionTraining')}>
       <RaceDistanceField value={raceDistance} onSave={onUpdateRaceDistance} />
+      <HoursPerWeekField value={hoursPerWeek} onPreview={onPreviewHoursChange} onSave={onUpdateHoursPerWeek} />
       <RacesSection races={races} onAdd={onAddRace} onSetTarget={onSetTargetRace} onRemove={onRemoveRace} />
       <PastRacesSection pastRaces={pastRaces} onAdd={onAddPastRace} onRemove={onRemovePastRace} />
+      {/* The history upload, sharing onboarding's lock; the detection upload stays under the calendar. */}
+      <HistoryUpload
+        locked={historyImportedAt !== null}
+        importedCount={importedHistoryCount}
+        allowRemove
+        initialProgress={historyImport}
+      />
       {/* Communication Style is hidden until it is discussed after the test
           round (Mads, 2026-09-24). The stored value, the action and the field
           below all stay, so bringing it back is one line. */}
@@ -527,6 +580,125 @@ function RaceDistanceField({
       <div className="mt-2">
         <SaveStatus status={status} t={t} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Hours per week — asked at onboarding, changeable here (`showable-version/40`).
+ *
+ * Onboarding's bounds, onboarding's check. A change is not saved on the spot:
+ * the structure's weeks are drawn from this number, so Save first asks which
+ * weeks a change would redraw and says so, and only a confirmation writes. The
+ * number is not something to nudge casually, and the athlete should know what
+ * it will move before it moves.
+ */
+function HoursPerWeekField({
+  value,
+  onPreview,
+  onSave,
+}: {
+  value: number | null;
+  onPreview: () => Promise<HoursPreviewResult>;
+  onSave: (hours: number) => Promise<HoursChangeResult>;
+}) {
+  const t = useTranslations('Settings');
+  const format = useFormatter();
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
+  // The baseline is what has been saved, not the prop — same rule as the race
+  // fields: the action does not revalidate the route.
+  const [saved, setSaved] = useState(value);
+  // The weeks the pending change would redraw; null while nothing is being confirmed.
+  const [confirming, setConfirming] = useState<string[] | null>(null);
+  const { pending, error, run } = useSave();
+  const hours = Number(draft);
+  const valid = draft !== '' && isHoursPerWeek(hours);
+  const dirty = valid && hours !== saved;
+
+  async function ask() {
+    let weeks: string[] = [];
+    const ok = await run(async () => {
+      const result = await onPreview();
+      if (result.ok) weeks = result.weeks;
+      return result;
+    });
+    if (ok) setConfirming(weeks);
+  }
+
+  async function confirm() {
+    if (await run(() => onSave(hours))) {
+      setSaved(hours);
+      setConfirming(null);
+    }
+  }
+
+  return (
+    <div>
+      <label htmlFor="settings-hours" className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
+        {t('hoursLabel')}
+      </label>
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('hoursNote')}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          id="settings-hours"
+          type="number"
+          inputMode="numeric"
+          min={HOURS_PER_WEEK_MIN}
+          max={HOURS_PER_WEEK_MAX}
+          step={1}
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setConfirming(null);
+          }}
+          disabled={pending}
+          className="h-11 w-24 border border-border bg-background px-3 font-body text-base text-foreground outline-none transition-colors focus:border-signal"
+        />
+        {confirming === null && (
+          <button
+            type="button"
+            onClick={ask}
+            disabled={pending || !dirty}
+            className="inline-flex items-center gap-2 border border-border h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:border-signal disabled:opacity-50"
+          >
+            {pending && <Loader2 className="h-3 w-3 animate-spin" />}
+            {t('save')}
+          </button>
+        )}
+      </div>
+      {confirming !== null && (
+        <div className="mt-3 border border-signal/40 bg-signal/5 p-4">
+          <p className="font-body text-sm text-foreground">{t('hoursConfirmTitle', { hours })}</p>
+          <p className="mt-1 font-body text-[13px] text-muted-foreground">
+            {confirming.length > 0
+              ? t('hoursConfirmBody', {
+                  count: confirming.length,
+                  date: format.dateTime(new Date(`${confirming[0]}T00:00:00`), { day: 'numeric', month: 'long' }),
+                })
+              : t('hoursNothingToRedraw')}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={pending}
+              className="inline-flex items-center gap-2 border border-signal h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
+            >
+              {pending && <Loader2 className="h-3 w-3 animate-spin" />}
+              {t('hoursConfirm')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(null)}
+              disabled={pending}
+              className="border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {t('hoursCancel')}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <FieldError message={t('error')} />}
     </div>
   );
 }

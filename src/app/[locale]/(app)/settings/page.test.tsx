@@ -7,6 +7,8 @@ const {
   getLinkForAthlete,
   getUiPrefs,
   SettingsView,
+  countImportedHistory,
+  latestHistoryImport,
 } = vi.hoisted(() => ({
   getSession: vi.fn(),
   redirect: vi.fn(() => {
@@ -20,6 +22,8 @@ const {
   getLinkForAthlete: vi.fn(),
   getUiPrefs: vi.fn(() => Promise.resolve({})),
   SettingsView: vi.fn(() => null),
+  countImportedHistory: vi.fn(() => Promise.resolve(0)),
+  latestHistoryImport: vi.fn(() => Promise.resolve(null as unknown)),
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -32,6 +36,7 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
 vi.mock('@/features/coach/coach-repository', () => ({ getLinkForAthlete }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getUiPrefs }));
+vi.mock('@/features/garmin/history-import-service', () => ({ countImportedHistory, latestHistoryImport }));
 // The client component pulls in browser deps (next-themes, i18n navigation);
 // the page's data wiring is what is under test here.
 vi.mock('./settings-view', () => ({ SettingsView }));
@@ -51,6 +56,8 @@ vi.mock('./settings-actions', () => ({
   removePastRaceAction: vi.fn(),
   removeRaceAction: vi.fn(),
   updateWeeklySessionDayAction: vi.fn(),
+  updateHoursPerWeekAction: vi.fn(),
+  previewHoursChangeAction: vi.fn(),
 }));
 
 const { getRaces } = vi.hoisted(() => ({
@@ -117,6 +124,7 @@ describe('SettingsPage', () => {
     getAthleteByUserId.mockResolvedValue({
       id: 'athlete_1',
       communicationStyle: null,
+      hoursPerWeek: 8,
       profile: null,
     });
     getLinkForAthlete.mockResolvedValue(undefined);
@@ -137,6 +145,12 @@ describe('SettingsPage', () => {
       races: [],
       pastRaces: [],
       raceDistance: '',
+      // The hours onboarding asked, editable here since showable-version/40.
+      hoursPerWeek: 8,
+      // No history imported yet: the upload is open (garmin-integration/03).
+      historyImportedAt: null,
+      importedHistoryCount: 0,
+      historyImport: null,
       weeklySessionDay: null,
       fixedConstraints: [],
     });
@@ -240,3 +254,35 @@ describe('SettingsPage', () => {
     expect(getUiPrefs).toHaveBeenCalledWith('user_abc');
   });
 });
+
+describe('the history upload in Settings (garmin-integration/03)', () => {
+  it('hands the lock and the count of imported sessions to the view', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads', email: 'mads@example.com' } });
+    getAthleteByUserId.mockResolvedValue({
+      id: 'athlete_1',
+      communicationStyle: null,
+      hoursPerWeek: 8,
+      profile: { historyImportedAt: '2026-09-20T10:00:00.000Z' },
+    });
+    getLinkForAthlete.mockResolvedValue(undefined);
+    countImportedHistory.mockResolvedValue(42);
+
+    const element = await render('en');
+    const props = (element as unknown as { props: { profile: Record<string, unknown> } }).props;
+    expect(props.profile).toMatchObject({ historyImportedAt: '2026-09-20T10:00:00.000Z', importedHistoryCount: 42 });
+    expect(countImportedHistory).toHaveBeenCalledWith('athlete_1');
+  });
+
+  it('hands the latest import to the view as counts, never its blob URLs, so a failed one shows at once (ruling 5a)', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc', name: 'Mads', email: 'mads@example.com' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', communicationStyle: null, hoursPerWeek: 8, profile: { historyImportedAt: '2026-09-20T10:00:00.000Z' } });
+    getLinkForAthlete.mockResolvedValue(undefined);
+    latestHistoryImport.mockResolvedValue({ status: 'failed', total: 40, done: 12, skippedOld: 3, failed: 1, blobUrls: ['u'], error: 'db down' });
+
+    const element = await render('en');
+    const props = (element as unknown as { props: { profile: Record<string, unknown> } }).props;
+    expect(props.profile.historyImport).toEqual({ status: 'failed', total: 40, done: 12, skippedOld: 3, failed: 1 });
+    expect(latestHistoryImport).toHaveBeenCalledWith('athlete_1');
+  });
+});
+

@@ -1,6 +1,7 @@
 'use server';
 
 import { eraseAccount } from '@/features/erasure/erasure-repository';
+import { deleteAthleteBlobs } from '@/features/garmin/blob-store';
 import { resolveErasureSubject } from '../../current-actor';
 
 /**
@@ -51,10 +52,26 @@ export async function deleteMyAccountAction(
     userId: subject.userId,
     coachId: subject.coachId,
   });
+  await eraseGarminUploads(subject.athleteId);
 
   // No revalidation and no redirect from here. The `session` rows went with the
   // user row, so the next request resolves to nobody and the app redirects to
   // sign-in on its own; the client navigates immediately so the athlete does not
   // sit on a page whose data no longer exists.
   return { ok: true };
+}
+
+/**
+ * The athlete's Garmin uploads still in Blob (`garmin-integration/04`), deleted
+ * after the rows — the cascade has already stopped any import reading them.
+ * A Blob failure does not undo an erasure that has happened: the 24 h sweep
+ * deletes whatever is left, and only that fact is logged, never an id.
+ */
+async function eraseGarminUploads(athleteId: string): Promise<void> {
+  try {
+    await deleteAthleteBlobs(athleteId, 'history');
+    await deleteAthleteBlobs(athleteId, 'detection');
+  } catch {
+    console.error('erasure: Garmin uploads left for the sweep');
+  }
 }

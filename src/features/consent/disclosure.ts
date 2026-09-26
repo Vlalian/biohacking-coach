@@ -169,8 +169,13 @@ export function purposesToShow(
  * athlete chooses for the Coach, stored on the user and passed into the
  * prompt deliberately. Landed together with the correction so the disclosure
  * is never false in a new way while it stops being false in the old one.
+ *
+ * `2026-09-18` → `2026-09-24`: the roles renamed (`showable-version/47`) — the
+ * AI is Momentum and the human a coach / træner, as everywhere else since PR
+ * #106; the meaning of each purpose is unchanged. Bumped before the tester
+ * invite, so the only grants it invalidates are Mads's and the smoke accounts'.
  */
-export const DISCLOSURE_VERSION = '2026-09-18';
+export const DISCLOSURE_VERSION = '2026-09-24';
 
 /** Narrows an arbitrary string to a known purpose — untrusted input guard. */
 export function isConsentPurpose(value: string): value is ConsentPurpose {
@@ -216,26 +221,26 @@ const EN: DisclosureCopy = {
   intro:
     'To coach you, this app processes what you tell it and share with it. Please choose what you agree to below. You can change any of these later in Privacy & consent.',
   controller:
-    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which does the coaching itself, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. We never send your account name or email address to either — only the name you choose for the Coach to call you, if you set one. Anything you type yourself — session notes, ratings, and messages to the Coach — is sent as you wrote it, so leave out names and addresses you would rather the AI did not see.',
-  requiredLabel: 'Required to use the Coach',
+    'Your coaching data is processed by the app operator as data controller, and by two processors: Anthropic (Claude AI), which powers Momentum, and OpenAI, which turns a training-science question into a search key for our reference library. Both run on servers in the United States under the safeguards in our data processing agreements. We never send your account name or email address to either — only the name you choose for Momentum to call you, if you set one. Anything you type yourself — session notes, ratings, and messages to Momentum — is sent as you wrote it, so leave out names and addresses you would rather the AI did not see.',
+  requiredLabel: 'Required to use Momentum',
   optionalLabel: 'Optional',
   agree: 'Agree and continue',
   requiredHint: 'Tick both required items to continue.',
   manageHeading: 'Privacy & consent',
   manageIntro:
-    'What you have agreed to let this app process. You can withdraw any of these at any time. Withdrawing a required item pauses the AI Coach until you grant it again.',
+    'What you have agreed to let this app process. You can withdraw any of these at any time. Withdrawing a required item pauses Momentum until you grant it again.',
   grantedState: 'Granted',
   notGrantedState: 'Not granted',
   grant: 'Grant',
   withdraw: 'Withdraw',
   withdrawRequiredWarning:
-    'This is required for coaching. Withdrawing it pauses the AI Coach until you grant it again.',
+    'This is required for coaching. Withdrawing it pauses Momentum until you grant it again.',
   back: 'Back to your plan',
   retryError: "That didn't work. Please try again.",
   purposes: {
     ai_coaching: {
       title: 'AI coaching',
-      body: 'Let the AI Coach (Claude, by Anthropic) process your training data — your plan, sessions, ratings, and the messages you send it — to coach you. When the Coach looks something up in its training-science library, a short pseudonymous query — your training phase, your experience level, and your question — goes to OpenAI to be turned into a search key; the search itself runs on our own database. Without this the Coach cannot work.',
+      body: 'Let Momentum (Claude, by Anthropic) process your training data — your plan, sessions, ratings, and the messages you send it — to coach you. When Momentum looks something up in its training-science library, a short pseudonymous query — your training phase, your experience level, and your question — goes to OpenAI to be turned into a search key; the search itself runs on our own database. Without this Momentum cannot work.',
     },
     health_data: {
       title: 'Health-related signals',
@@ -243,11 +248,11 @@ const EN: DisclosureCopy = {
     },
     injury_health_data: {
       title: 'Injuries and illness you tell us about',
-      body: 'Let the app store an injury or illness you report — what it stops you doing, and any notes you or your coach add. This is health information stated outright rather than inferred from training, so we ask separately. Only what it prevents ("can\'t run") ever reaches the AI Coach; your notes never do.',
+      body: 'Let the app store an injury or illness you report — what it stops you doing, and any notes you or your coach add. This is health information stated outright rather than inferred from training, so we ask separately. Only what it prevents ("can\'t run") ever reaches Momentum; your notes never do.',
     },
     head_coach_visibility: {
       title: 'Letting a human coach see your data',
-      body: 'If you link with a human Head Coach, let them see the data you choose to share with them — your plan, and whichever of your reports and conversations you leave switched on. A second person reading your training is different from an app processing it, so we ask for it separately, and only when you actually link with someone.',
+      body: 'If you link with a human coach, let them see the data you choose to share with them — your plan, and whichever of your reports and conversations you leave switched on. A second person reading your training is different from an app processing it, so we ask for it separately, and only when you actually link with someone.',
     },
     product_improvement: {
       title: 'Help improve the product',
@@ -261,26 +266,26 @@ const DA: DisclosureCopy = {
   intro:
     'For at kunne coache dig behandler appen det, du fortæller og deler med den. Vælg nedenfor, hvad du giver samtykke til. Du kan altid ændre det senere under Privatliv & samtykke.',
   controller:
-    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som står for selve coachingen, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Vi sender aldrig dit kontonavn eller din e-mailadresse til nogen af dem — kun det navn, du selv vælger, at Coachen skal kalde dig, hvis du sætter et. Det, du selv skriver — sessionsnoter, vurderinger og beskeder til Coachen — sendes, som du har skrevet det, så undlad navne og adresser, du helst vil holde fra AI\'en.',
-  requiredLabel: 'Krævet for at bruge Coachen',
+    'Dine coachingdata behandles af appudbyderen som dataansvarlig og af to databehandlere: Anthropic (Claude AI), som driver Momentum, og OpenAI, som omdanner et træningsfagligt spørgsmål til en søgenøgle til vores kildebibliotek. Begge kører på servere i USA under de sikkerhedsforanstaltninger, der står i vores databehandleraftaler. Vi sender aldrig dit kontonavn eller din e-mailadresse til nogen af dem — kun det navn, du selv vælger, at Momentum skal kalde dig, hvis du sætter et. Det, du selv skriver — sessionsnoter, vurderinger og beskeder til Momentum — sendes, som du har skrevet det, så undlad navne og adresser, du helst vil holde fra AI\'en.',
+  requiredLabel: 'Krævet for at bruge Momentum',
   optionalLabel: 'Valgfrit',
   agree: 'Accepter og fortsæt',
   requiredHint: 'Sæt flueben ved begge krævede punkter for at fortsætte.',
   manageHeading: 'Privatliv & samtykke',
   manageIntro:
-    'Det, du har givet appen lov til at behandle. Du kan til enhver tid trække et samtykke tilbage. Trækker du et krævet punkt tilbage, sættes AI-Coachen på pause, indtil du giver det igen.',
+    'Det, du har givet appen lov til at behandle. Du kan til enhver tid trække et samtykke tilbage. Trækker du et krævet punkt tilbage, sættes Momentum på pause, indtil du giver det igen.',
   grantedState: 'Givet',
   notGrantedState: 'Ikke givet',
   grant: 'Giv samtykke',
   withdraw: 'Træk tilbage',
   withdrawRequiredWarning:
-    'Dette er krævet for coaching. Trækker du det tilbage, sættes AI-Coachen på pause, indtil du giver det igen.',
+    'Dette er krævet for coaching. Trækker du det tilbage, sættes Momentum på pause, indtil du giver det igen.',
   back: 'Tilbage til din plan',
   retryError: 'Det virkede ikke. Prøv igen.',
   purposes: {
     ai_coaching: {
       title: 'AI-coaching',
-      body: 'Lad AI-Coachen (Claude fra Anthropic) behandle dine træningsdata — din plan, dine sessioner, dine vurderinger og de beskeder, du sender — for at coache dig. Når Coachen slår noget op i sit træningsfaglige bibliotek, sendes en kort pseudonym forespørgsel — din træningsfase, dit erfaringsniveau og dit spørgsmål — til OpenAI for at blive omdannet til en søgenøgle; selve søgningen kører på vores egen database. Uden dette kan Coachen ikke fungere.',
+      body: 'Lad Momentum (Claude fra Anthropic) behandle dine træningsdata — din plan, dine sessioner, dine vurderinger og de beskeder, du sender — for at coache dig. Når Momentum slår noget op i sit træningsfaglige bibliotek, sendes en kort pseudonym forespørgsel — din træningsfase, dit erfaringsniveau og dit spørgsmål — til OpenAI for at blive omdannet til en søgenøgle; selve søgningen kører på vores egen database. Uden dette kan Momentum ikke fungere.',
     },
     health_data: {
       title: 'Helbredsrelaterede signaler',
@@ -288,7 +293,7 @@ const DA: DisclosureCopy = {
     },
     injury_health_data: {
       title: 'Skader og sygdom, du fortæller om',
-      body: 'Lad appen gemme en skade eller sygdom, du rapporterer — hvad den forhindrer dig i, og de noter du eller din træner tilføjer. Det er helbredsoplysninger sagt direkte og ikke udledt af træning, så vi spørger særskilt. Kun det, den forhindrer ("kan ikke løbe"), når frem til AI-Coachen; dine noter gør aldrig.',
+      body: 'Lad appen gemme en skade eller sygdom, du rapporterer — hvad den forhindrer dig i, og de noter du eller din træner tilføjer. Det er helbredsoplysninger sagt direkte og ikke udledt af træning, så vi spørger særskilt. Kun det, den forhindrer ("kan ikke løbe"), når frem til Momentum; dine noter gør aldrig.',
     },
     head_coach_visibility: {
       title: 'At lade en menneskelig træner se dine data',

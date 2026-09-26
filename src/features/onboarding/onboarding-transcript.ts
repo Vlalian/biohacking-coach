@@ -31,6 +31,12 @@ function pastRacesLine(value: unknown): string {
     .join(' · ');
 }
 
+/** The given answers joined, or a dash when the athlete gave none of them. */
+function joinedOrDash(parts: readonly (string | undefined)[]): string {
+  const given = parts.filter(Boolean);
+  return given.length > 0 ? given.join(' · ') : '—';
+}
+
 /** The three answers as the Coach's log reads them (`training-architecture/36`). */
 const FIRST_DAY_TRANSCRIPT: Record<FirstDayChoice, string> = {
   today: 'Starting today',
@@ -86,9 +92,11 @@ export function answerText(payload: StepAnswer): string {
         payload.hasHumanCoach,
         payload.targetTime,
         listed(payload.trackedMetrics),
-      ].filter(Boolean);
-      return parts.length > 0 ? parts.join(' · ') : '—';
+      ];
+      return joinedOrDash(parts);
     }
+    case 'history':
+      return joinedOrDash([payload.yearsTraining, payload.recentWeeklyVolume]);
     case 'constraints': {
       const days = listed(payload.fixedConstraints) ?? '—';
       return `${days} · ${payload.weeklySessionDay ?? 'Sunday'}`;

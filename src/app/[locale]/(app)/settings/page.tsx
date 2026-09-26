@@ -6,6 +6,8 @@ import { getPastRaces, getRaces } from '@/features/race/race-repository';
 import { routing } from '@/i18n/routing';
 import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { getLinkForAthlete } from '@/features/coach/coach-repository';
+import { countImportedHistory, latestHistoryImport } from '@/features/garmin/history-import-service';
+import { importSummary } from '@/features/garmin/blob-upload';
 import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import {
   addFixedConstraintAction,
@@ -13,6 +15,8 @@ import {
   severCoachingLinkAction,
   updateCommunicationStyleAction,
   updateRaceDistanceAction,
+  updateHoursPerWeekAction,
+  previewHoursChangeAction,
   addRaceAction,
   setTargetRaceAction,
   removeRaceAction,
@@ -67,7 +71,14 @@ export default async function SettingsPage({
   // The races, read here rather than in the view: a Race is an entity, and the
   // page is where server reads belong. All of them — the Target Race is the one
   // flagged, and the view shows the rest beside it (`training-architecture/09`).
-  const [races, pastRaces] = await Promise.all([getRaces(athlete.id), getPastRaces(athlete.id)]);
+  // The imported-history count sits beside the lock in Training (garmin-integration/03),
+  // with the latest import, so a failed one shows at once (garmin-integration/04, ruling 5a).
+  const [races, pastRaces, importedHistoryCount, latestImport] = await Promise.all([
+    getRaces(athlete.id),
+    getPastRaces(athlete.id),
+    countImportedHistory(athlete.id),
+    latestHistoryImport(athlete.id),
+  ]);
 
   return (
     <SettingsView
@@ -90,6 +101,10 @@ export default async function SettingsPage({
           note: r.note,
         })),
         raceDistance: athlete.raceDistance ?? '',
+        hoursPerWeek: athlete.hoursPerWeek,
+        historyImportedAt: athlete.profile?.historyImportedAt ?? null,
+        importedHistoryCount,
+        historyImport: latestImport ? importSummary(latestImport) : null,
         weeklySessionDay: athlete.profile?.weeklySessionDay ?? null,
         fixedConstraints: athlete.profile?.fixedConstraints ?? [],
       }}
@@ -111,6 +126,8 @@ export default async function SettingsPage({
       onAddPastRace={addPastRaceAction}
       onRemovePastRace={removePastRaceAction}
       onUpdateRaceDistance={updateRaceDistanceAction}
+      onPreviewHoursChange={previewHoursChangeAction}
+      onUpdateHoursPerWeek={updateHoursPerWeekAction}
       onUpdateWeeklySessionDay={updateWeeklySessionDayAction}
       onAddFixedConstraint={addFixedConstraintAction}
       onRemoveFixedConstraint={removeFixedConstraintAction}

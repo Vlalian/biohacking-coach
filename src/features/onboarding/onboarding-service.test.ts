@@ -131,7 +131,7 @@ describe('answerOnboardingStep', () => {
           fixedConstraints: ['Sunday'],
           weeklySessionDay: 'Monday',
         },
-        onboardingSubmitted: { name: true, adaptive: true, constraints: true },
+        onboardingSubmitted: { name: true, adaptive: true, history: true, constraints: true },
       },
     });
 
@@ -207,7 +207,7 @@ describe('answerOnboardingStep', () => {
           hoursPerWeek: 4,
           noRaceYet: true,
         },
-        onboardingSubmitted: { name: true, adaptive: true, constraints: true },
+        onboardingSubmitted: { name: true, adaptive: true, history: true, constraints: true },
       },
     });
 

@@ -154,6 +154,18 @@ export async function updateRaceDistance(
 }
 
 /**
+ * Hours per week, changed after onboarding (`showable-version/40`). The caller
+ * checks the value with onboarding's own `isHoursPerWeek` first, for the same
+ * reason the Race Distance is checked before it reaches here.
+ */
+export async function updateHoursPerWeek(athleteId: string, hoursPerWeek: number): Promise<void> {
+  await getDb()
+    .update(athlete)
+    .set({ hoursPerWeek, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+}
+
+/**
  * The top-level merge of `changes` into the athlete's `profile` JSONB, as a SQL
  * expression.
  *
@@ -176,7 +188,16 @@ export async function mergeAthleteProfile(
   athleteId: string,
   changes: Partial<AthleteProfile>,
 ): Promise<void> {
-  await getDb()
+  await athleteProfileMerge(athleteId, changes);
+}
+
+/**
+ * The same atomic merge as {@link mergeAthleteProfile}, as a statement not yet
+ * run — for a caller that has to land it in one `db.batch` with other writes
+ * (the history import's lock, `garmin-integration/03`).
+ */
+export function athleteProfileMerge(athleteId: string, changes: Partial<AthleteProfile>) {
+  return getDb()
     .update(athlete)
     .set({ profile: profileMergedWith(changes), updatedAt: new Date() })
     .where(eq(athlete.id, athleteId));

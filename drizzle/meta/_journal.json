@@ -218,6 +218,20 @@
       "when": 1790076209424,
       "tag": "0030_session_origin_arithmetic",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790282169838,
+      "tag": "0031_session_external_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790334969276,
+      "tag": "0032_history_import",
+      "breakpoints": true
     }
   ]
 }

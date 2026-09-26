@@ -28,9 +28,10 @@ import { parsePreferredName } from '@/features/user-prefs/preferred-name';
  *   reaches prompts, so here it always says "The athlete" (GDPR decision 1).
  * - **No API-key field.** Retired by ADR 0006 — the key is a server secret.
  *
- * The Garmin-upload step is also omitted: upload landed as its own feature in
- * slice 06 and is reachable from the main page; the acceptance criteria for this
- * slice do not name it.
+ * The history step (`garmin-integration/03`) came later: two optional
+ * closed-set questions, answered by submission like the adaptive step, with the
+ * history upload beside them on the screen. The upload itself is not an answer
+ * here — it is its own action, and a successful one submits this step.
  */
 
 export type OnboardingStepId =
@@ -41,6 +42,7 @@ export type OnboardingStepId =
   | 'hours'
   | 'race'
   | 'adaptive'
+  | 'history'
   | 'constraints'
   | 'firstDay';
 
@@ -52,6 +54,7 @@ export const ONBOARDING_STEPS: OnboardingStepId[] = [
   'hours',
   'race',
   'adaptive',
+  'history',
   'constraints',
   // Last, and deliberately: it is the one question about *when the plan starts*
   // rather than about the athlete, and it reads as the closing handshake
@@ -128,6 +131,10 @@ export interface OnboardingAnswers {
   // Adaptive — veteran
   targetTime?: string;
   trackedMetrics?: string[];
+  // History — asked of every level, both optional (garmin-integration/03,
+  // ballot 7). Stored only: no prompt reads them yet.
+  yearsTraining?: string;
+  recentWeeklyVolume?: string;
   // Constraints
   fixedConstraints?: string[];
   weeklySessionDay?: string;
@@ -148,6 +155,10 @@ export const ONBOARDING_OPTIONS = {
   // proposed week has to arrive on some day, and a Head Coach sees it the day
   // before that. The same seven the Fixed Constraints use.
   weeklySessionDay: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+  // The history step's two questions — what the upload stands in for when the
+  // athlete has no file to give (garmin-integration/03, failsafe B).
+  yearsTraining: ['Under 1', '1-3', '3-6', '6+'],
+  recentWeeklyVolume: ['0-3h', '3-6h', '6-10h', '10h+'],
 } as const;
 
 /**
@@ -173,7 +184,9 @@ type LabelledGroup =
   | 'hasHumanCoach'
   | 'trackedMetrics'
   | 'days'
-  | 'weeklySessionDay';
+  | 'weeklySessionDay'
+  | 'yearsTraining'
+  | 'recentWeeklyVolume';
 
 /** Every option value the UI renders as a labelled tile. */
 export type LabelledOption = (typeof ONBOARDING_OPTIONS)[LabelledGroup][number];
@@ -209,6 +222,14 @@ export const OPTION_MESSAGE_KEY: Record<LabelledOption, string> = {
   Friday: 'dayFriday',
   Saturday: 'daySaturday',
   Sunday: 'daySunday',
+  'Under 1': 'optYearsUnder1',
+  '1-3': 'optYears1to3',
+  '3-6': 'optYears3to6',
+  '6+': 'optYears6plus',
+  '0-3h': 'optVolume0to3',
+  '3-6h': 'optVolume3to6',
+  '6-10h': 'optVolume6to10',
+  '10h+': 'optVolume10plus',
 };
 
 /**
@@ -281,6 +302,7 @@ export function chosenFirstDay(
 export interface OnboardingSubmitted {
   name?: boolean;
   adaptive?: boolean;
+  history?: boolean;
   constraints?: boolean;
 }
 
@@ -309,6 +331,7 @@ export function nextStep(
   // record sails past every step and is stuck at the end (CodeRabbit, PR #60).
   if (!hasNamedRace(answers) && !answers.noRaceYet) return 'race';
   if (!submitted.adaptive) return 'adaptive';
+  if (!submitted.history) return 'history';
   if (!submitted.constraints) return 'constraints';
   // Last: when the plan starts. Asked of everyone, so its presence is the answer.
   if (!answers.firstDay) return 'firstDay';
@@ -380,6 +403,8 @@ export type StepAnswer =
       targetTime?: string;
       trackedMetrics?: string[];
     }
+  /** Both optional; an empty submission is the skip. A successful upload also submits it. */
+  | { step: 'history'; yearsTraining?: string; recentWeeklyVolume?: string }
   | { step: 'constraints'; fixedConstraints?: string[]; weeklySessionDay?: string };
 
 /** The adaptive step's answer fields, minus the discriminator. */
@@ -541,6 +566,8 @@ export function applyAnswer(
         submitted: { ...submitted, adaptive: true },
       };
     }
+    case 'history':
+      return applyHistory(answers, submitted, payload);
     case 'constraints': {
       if (!allInSet(payload.fixedConstraints, ONBOARDING_OPTIONS.days)) return null;
       if (
@@ -562,6 +589,26 @@ export function applyAnswer(
   }
 }
 
+/**
+ * The history step (`garmin-integration/03`): two optional closed-set answers,
+ * each refused unless it is absent or one of its options — the adaptive step's
+ * rule. Submitting marks the step answered either way; skipping clears both.
+ */
+function applyHistory(
+  answers: OnboardingAnswers,
+  submitted: OnboardingSubmitted,
+  payload: Extract<StepAnswer, { step: 'history' }>,
+): { answers: OnboardingAnswers; submitted: OnboardingSubmitted } | null {
+  const { yearsTraining, recentWeeklyVolume } = payload;
+  if (yearsTraining !== undefined && !inSet(yearsTraining, ONBOARDING_OPTIONS.yearsTraining)) return null;
+  if (recentWeeklyVolume !== undefined && !inSet(recentWeeklyVolume, ONBOARDING_OPTIONS.recentWeeklyVolume))
+    return null;
+  return {
+    answers: { ...answers, yearsTraining, recentWeeklyVolume },
+    submitted: { ...submitted, history: true },
+  };
+}
+
 /** Every entry parsed, or null when any is refused or the value is not a list. */
 function parsePastRaces(value: unknown, today: string): PastRace[] | null {
   if (!Array.isArray(value)) return null;
@@ -574,8 +621,12 @@ export const HOURS_PER_WEEK_MIN = 1;
 // 30 hours a week, and the ceiling leaves room above a professional's peak week.
 export const HOURS_PER_WEEK_MAX = 50;
 
-/** A whole number of hours inside the band; anything else is refused. */
-function isHoursPerWeek(value: unknown): value is number {
+/**
+ * A whole number of hours inside the band; anything else is refused. Exported
+ * for Settings, which is a second door onto the same column
+ * (`showable-version/40`).
+ */
+export function isHoursPerWeek(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= HOURS_PER_WEEK_MIN && (value as number) <= HOURS_PER_WEEK_MAX;
 }
 

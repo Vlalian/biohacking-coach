@@ -24,6 +24,7 @@ import { formatFinish, parseFinishInput, type PastRace } from '@/features/onboar
 import { PreferredNameField } from '@/components/preferred-name-field';
 import { dateKey } from '@/lib/date';
 import { answerOnboardingAction } from './onboarding-actions';
+import { HistoryUpload } from './history-upload';
 
 /**
  * MCQ onboarding, Coach-voice-only (ADR 0001): every question is the Coach
@@ -47,10 +48,10 @@ import { answerOnboardingAction } from './onboarding-actions';
  * Visual language ported from the Lovable design (iron-insight-grid,
  * onboarding-session brief): race-bib header with a step progress rail,
  * bordered option tiles, and the climax hand-off screen. The Lovable brief
- * assumed an identity step and a history-upload step that don't exist in this
- * flow — the athlete's name already lives on the auth user (ADR 0006) and
- * upload is its own feature reachable from the Training Plan — so this port
- * carries the *look*, not those steps.
+ * assumed an identity step that doesn't exist in this flow — the athlete's
+ * name already lives on the auth user (ADR 0006). Its history-upload step does
+ * exist since `garmin-integration/03`: two optional questions with the history
+ * upload beside them, between the adaptive questions and the constraints.
  *
  * Back (showable-version/32): every step after the first has one. It returns
  * to the previous step with its saved answer shown; nothing is unsubmitted.
@@ -84,6 +85,7 @@ const STEPS: OnboardingStepId[] = [
   'hours',
   'race',
   'adaptive',
+  'history',
   'constraints',
   'firstDay',
 ];
@@ -96,6 +98,7 @@ const STEP_LABEL_KEY: Record<OnboardingStepId, string> = {
   hours: 'stepHours',
   race: 'stepRace',
   adaptive: 'stepAdaptive',
+  history: 'stepHistory',
   constraints: 'stepConstraints',
   firstDay: 'stepFirstDay',
 };
@@ -314,6 +317,8 @@ export function OnboardingFlow({ initial }: { initial: OnboardingInitial }) {
             <RacePanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'adaptive' ? (
             <AdaptivePanel answers={state.answers} pending={pending} t={t} submit={submit} />
+          ) : state.step === 'history' ? (
+            <HistoryPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'constraints' ? (
             <ConstraintsPanel answers={state.answers} pending={pending} t={t} submit={submit} />
           ) : state.step === 'firstDay' ? (
@@ -399,6 +404,8 @@ function RacePanel({ answers, pending, t, submit }: PanelProps) {
       >
         {t('noRaceYet')}
       </button>
+      {/* What choosing it costs, said before it is chosen (training-architecture/40). */}
+      <p className="font-body text-sm text-muted-foreground">{t('noRaceYetNote')}</p>
     </form>
   );
 }
@@ -748,6 +755,64 @@ function PastRacesPanel({ answers, pending, t, submit }: PanelProps) {
           className="font-body text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
         >
           {t('noPastRaces')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The history step (`garmin-integration/03`), for every athlete (ruling 16):
+ * two optional closed-set questions first, the history upload beside them, and
+ * all of it skippable (ballot 7). An upload that lands also completes the step,
+ * carrying whatever the two questions hold. It sits before the constraints, so
+ * whatever is uploaded is on file before onboarding's first block fill.
+ */
+function HistoryPanel({ answers, pending, t, submit }: PanelProps) {
+  const [yearsTraining, setYearsTraining] = useState(answers.yearsTraining ?? '');
+  const [recentWeeklyVolume, setRecentWeeklyVolume] = useState(answers.recentWeeklyVolume ?? '');
+  const answered = () =>
+    submit({
+      step: 'history',
+      yearsTraining: yearsTraining || undefined,
+      recentWeeklyVolume: recentWeeklyVolume || undefined,
+    });
+
+  return (
+    <div className="space-y-8">
+      <StepHeading title={t('qHistory')} help={t('qHistorySub')} />
+      <FieldGroup label={t('yearsTraining')} note={t('optional')}>
+        {ONBOARDING_OPTIONS.yearsTraining.map((o) => (
+          <OptionTile
+            key={o}
+            label={t(OPTION_MESSAGE_KEY[o])}
+            selected={yearsTraining === o}
+            onClick={() => setYearsTraining(yearsTraining === o ? '' : o)}
+          />
+        ))}
+      </FieldGroup>
+      <FieldGroup label={t('recentVolume')} note={t('optional')}>
+        {ONBOARDING_OPTIONS.recentWeeklyVolume.map((o) => (
+          <OptionTile
+            key={o}
+            label={t(OPTION_MESSAGE_KEY[o])}
+            selected={recentWeeklyVolume === o}
+            onClick={() => setRecentWeeklyVolume(recentWeeklyVolume === o ? '' : o)}
+          />
+        ))}
+      </FieldGroup>
+      <HistoryUpload locked={false} importedCount={0} allowRemove={false} onImported={answered} />
+      <div className="flex flex-wrap items-center gap-4">
+        <PrimaryButton onClick={answered} disabled={pending} pending={pending}>
+          {t('continue')}
+        </PrimaryButton>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => submit({ step: 'history' })}
+          className="font-body text-sm text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          {t('skipHistory')}
         </button>
       </div>
     </div>

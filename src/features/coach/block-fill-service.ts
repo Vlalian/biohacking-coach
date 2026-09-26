@@ -2,10 +2,22 @@ import 'server-only';
 
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
-import { getSessionsForAthlete, insertArithmeticSessions } from '@/features/session/session-repository';
+import {
+  getSessionsForAthlete,
+  insertArithmeticSessions,
+  replaceArithmeticWeeks,
+} from '@/features/session/session-repository';
 import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
-import { blockSessions, weeksToFill, type ArithmeticSession, type BlockContext, type DueWeek } from './block-sessions';
+import {
+  blockSessions,
+  PLAN_ORIGINS,
+  weeksToFill,
+  weeksToRefill,
+  type ArithmeticSession,
+  type BlockContext,
+  type DueWeek,
+} from './block-sessions';
 import type { TrainingBlock } from './training-blocks';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { toRaceDistance, type RaceDistance } from '@/lib/race-distances';
@@ -59,7 +71,28 @@ async function readyToFill(athleteId: string, today: string): Promise<FillOutcom
     getAthleteById(athleteId),
     getResolvedBlocks(athleteId, today),
   ]);
+  const facts = drawFacts(athlete, resolved, today);
+  if (typeof facts === 'string') return facts;
+  return planFor({ athleteId, today, ...facts });
+}
 
+/** What the structure draws from: the race, the hours and the blocks. */
+type DrawFacts = {
+  raceDate: string;
+  distance: RaceDistance | null;
+  hours: number;
+  fixedConstraints: string[] | undefined;
+  /** The athlete's chosen start (`training-architecture/36`), already resolved; absent when there is none to honour. */
+  firstDay: string | undefined;
+  blocks: TrainingBlock[];
+};
+
+/** The facts a fill or a redraw draws from, or why there are none. */
+function drawFacts(
+  athlete: Awaited<ReturnType<typeof getAthleteById>>,
+  resolved: Awaited<ReturnType<typeof getResolvedBlocks>>,
+  today: string,
+): 'no-race' | 'no-hours' | DrawFacts {
   // No race is an ordinary state, not a failure: the Coach still plans the
   // week, there is simply no horizon to hang a block structure off.
   if (!resolved.race || resolved.blocks.length === 0) return 'no-race';
@@ -68,46 +101,38 @@ async function readyToFill(athleteId: string, today: string): Promise<FillOutcom
   // an absent answer — the structure waits until the athlete says.
   if (!athlete || athlete.hoursPerWeek === null) return 'no-hours';
 
-  return planFor({
-    athleteId,
-    today,
+  return {
     raceDate: resolved.race.date,
     distance: toRaceDistance(resolved.race.distance),
     hours: athlete.hoursPerWeek,
     fixedConstraints: athlete.profile?.fixedConstraints,
     firstDay: chosenFirstDay(athlete.profile, today),
     blocks: resolved.blocks,
-  });
+  };
 }
 
 /** The weeks owed and the context to draw them with, or why there is nothing owed. */
-async function planFor(facts: {
-  athleteId: string;
-  today: string;
-  raceDate: string;
-  distance: RaceDistance | null;
-  hours: number;
-  fixedConstraints: string[] | undefined;
-  /** The athlete's chosen start, already resolved; absent when there is none to honour. */
-  firstDay: string | undefined;
-  blocks: TrainingBlock[];
-}): Promise<FillOutcome | FillPlan> {
+async function planFor(facts: DrawFacts & { athleteId: string; today: string }): Promise<FillOutcome | FillPlan> {
   const { athleteId, today } = facts;
   const due = weeksToFill({ today, blocks: facts.blocks, plannedWeeks: await plannedWeeks(athleteId) });
   if (due.length === 0) return 'nothing-due';
 
+  return { due, ctx: await drawContext(facts) };
+}
+
+/** Everything `blockSessions` draws with, read the same way for a fill and a redraw. */
+async function drawContext(
+  facts: Omit<DrawFacts, 'blocks'> & { athleteId: string; today: string },
+): Promise<BlockContext> {
   return {
-    due,
-    ctx: {
-      raceDate: facts.raceDate,
-      distance: facts.distance,
-      hours: facts.hours,
-      fixedConstraints: facts.fixedConstraints,
-      unavailableDates: await getUnavailableDates(athleteId),
-      // The athlete's own start (`training-architecture/36`), or today for
-      // anyone who was never asked and anyone whose day has arrived.
-      firstDay: facts.firstDay ?? today,
-    },
+    raceDate: facts.raceDate,
+    distance: facts.distance,
+    hours: facts.hours,
+    fixedConstraints: facts.fixedConstraints,
+    unavailableDates: await getUnavailableDates(facts.athleteId),
+    // The athlete's own start (`training-architecture/36`), or today for
+    // anyone who was never asked and anyone whose day has arrived.
+    firstDay: facts.firstDay ?? facts.today,
   };
 }
 
@@ -147,5 +172,81 @@ async function plannedWeeks(athleteId: string): Promise<Set<string>> {
   );
 }
 
-/** The origins that count as "this week is planned" — the athlete's own additions do not. */
-const PLAN_ORIGINS: readonly string[] = ['coach', 'head_coach', 'arithmetic'];
+// ── The redraw after an hours change (showable-version/40) ──────────────────
+
+/**
+ * What an hours change did: the outcome, and the weeks it redrew (empty unless
+ * `refilled`).
+ */
+export type RefillResult = {
+  outcome: 'refilled' | 'nothing-due' | 'no-race' | 'no-hours' | 'failed';
+  weeks: string[];
+};
+
+/**
+ * Redraws the weeks the structure still owns from the athlete's current hours.
+ *
+ * `ensureBlockFilled` fills a week once and never again, so without this an
+ * hours change in Settings would change nothing the athlete can see. Only the
+ * weeks {@link weeksToRefill} names are touched — after this one, not accepted,
+ * no Head Coach prescription — and the repository's delete is scoped to the
+ * structure's own planned rows as a second guard. A draft already pending for
+ * next week was drafted from the old hours and is left alone: withdrawing it is
+ * drafting behaviour, not this function's.
+ *
+ * Never throws, for the same reason the fill does not: the caller is a
+ * Settings save the athlete is waiting on, and the hours are already stored.
+ */
+export async function refillWeeksFromHours(athleteId: string, today: string): Promise<RefillResult> {
+  try {
+    return await refill(athleteId, today);
+  } catch (error) {
+    logCoachFailure({ surface: 'block_fill', athleteId, conversationId: null, error });
+    return { outcome: 'failed', weeks: [] };
+  }
+}
+
+/** The weeks {@link refillWeeksFromHours} would redraw today — a read, for the confirmation. */
+export async function previewRefill(athleteId: string, today: string): Promise<string[]> {
+  const [resolved, sessions] = await Promise.all([
+    getResolvedBlocks(athleteId, today),
+    getSessionsForAthlete(athleteId),
+  ]);
+  return weeksOf(redrawDue(resolved.blocks, weeksToRefill({ today, sessions })));
+}
+
+async function refill(athleteId: string, today: string): Promise<RefillResult> {
+  const [athlete, resolved, sessions] = await Promise.all([
+    getAthleteById(athleteId),
+    getResolvedBlocks(athleteId, today),
+    getSessionsForAthlete(athleteId),
+  ]);
+  const facts = drawFacts(athlete, resolved, today);
+  if (typeof facts === 'string') return { outcome: facts, weeks: [] };
+
+  const due = redrawDue(facts.blocks, weeksToRefill({ today, sessions }));
+  if (due.length === 0) return { outcome: 'nothing-due', weeks: [] };
+
+  const ctx = await drawContext({ athleteId, today, ...facts });
+  const weeks = weeksOf(due);
+  await replaceArithmeticWeeks(athleteId, weeks, owedRows(due, ctx));
+  return { outcome: 'refilled', weeks };
+}
+
+/**
+ * Each redrawable week paired with the blocks that have not ended before it, in
+ * block order — the shape `owedRows` reads. Its owner rule takes the first, which
+ * is the block the week starts in, so a week straddling a boundary is drawn by
+ * the earlier block exactly as the fill draws it. A week past the last block is
+ * paired with nothing and left alone.
+ */
+function redrawDue(blocks: readonly TrainingBlock[], weeks: readonly string[]): DueWeek[] {
+  return blocks.flatMap((block) =>
+    weeks.filter((weekStart) => weekStart <= block.endDate).map((weekStart) => ({ block, weekStart })),
+  );
+}
+
+/** The distinct weeks of a due list, in order. */
+function weeksOf(due: readonly DueWeek[]): string[] {
+  return [...new Set(due.map((d) => d.weekStart))];
+}
