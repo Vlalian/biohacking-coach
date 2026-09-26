@@ -10,10 +10,29 @@ import { coachSeesDay, dayMessageKey } from '@/features/coach/weekly-session-day
  * points there rather than carrying a control.
  */
 
-export function WeeklySessionDayLine({ weeklySessionDay }: { weeklySessionDay: string | null | undefined }) {
+export function WeeklySessionDayLine({
+  weeklySessionDay,
+  headCoachName,
+}: {
+  weeklySessionDay: string | null | undefined;
+  /**
+   * The linked Head Coach's name, Preferred Name first, or null for a solo
+   * athlete. While linked the day is the Head Coach's (ADR 0003, amended
+   * 2026-09-14), so the line names them and drops the Settings pointer
+   * (`training-architecture/42`).
+   */
+  headCoachName?: string | null;
+}) {
   const t = useTranslations('WeeklySessionDayLine');
   const tDays = useTranslations('Settings');
   const day = tDays(dayMessageKey(effectiveWeeklySessionDay(weeklySessionDay)));
+  if (headCoachName) {
+    return (
+      <p className="font-body text-sm text-muted-foreground" data-weekly-session-day-line="">
+        {t('textLinked', { coach: headCoachName, day })}
+      </p>
+    );
+  }
   const coachDay = tDays(dayMessageKey(coachSeesDay(weeklySessionDay)));
   return (
     <p className="font-body text-sm text-muted-foreground" data-weekly-session-day-line="">

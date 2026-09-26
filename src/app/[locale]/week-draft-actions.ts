@@ -33,10 +33,14 @@ export async function acceptWeekDraftAction(draftId: string): Promise<AcceptResu
   return result;
 }
 
-export async function declineWeekDraftAction(draftId: string): Promise<DeclineResult | AuthFailure> {
+/**
+ * `reason` is the athlete's one optional answer to why (`training-architecture/30`).
+ * It arrives from the client, so the service checks it against the list.
+ */
+export async function declineWeekDraftAction(draftId: string, reason?: string): Promise<DeclineResult | AuthFailure> {
   const resolved = await currentAthlete();
   if (!resolved.ok) return resolved;
-  const result = await declineWeekDraft(resolved.athlete, draftId, today());
+  const result = await declineWeekDraft(resolved.athlete, draftId, today(), reason);
   if (result.ok) revalidatePath('/', 'layout');
   return result;
 }

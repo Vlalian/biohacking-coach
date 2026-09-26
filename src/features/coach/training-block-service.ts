@@ -141,6 +141,7 @@ async function gatherContext(
   today: string,
   race: RaceRow,
   draft: TrainingBlock[],
+  language: string | undefined,
 ): Promise<BlockAdjustmentContext> {
   const since = addDays(today, -REFLECTION_WEEKS * 7);
   const [athlete, capacity, checkInRow, sessions] = await Promise.all([
@@ -159,6 +160,7 @@ async function gatherContext(
     readiness: readinessFrom(checkInRow),
     notableSignal: notableSignalFrom(checkInRow),
     reflections: weekFeedbackFrom(sessions.filter((s) => s.date >= since && s.date < today)),
+    language,
   });
 }
 
@@ -276,8 +278,17 @@ async function writeAdjustment(
  * Makes sure this athlete's Target Race has a Coach-shaped block set, drafting
  * one if it does not. Idempotent and cheap on the common path: one race read
  * and one set read, then nothing. Never throws.
+ *
+ * `language` is the Athlete Language, read by the caller through the user seam
+ * (`ui_prefs`), as the Weekly Session's is: the block names the Coach writes
+ * here are the ones the athlete reads, so a Danish athlete's are Danish
+ * (showable-version/46). Absent means English.
  */
-export async function ensureBlocksAdjusted(athleteId: string, today: string): Promise<AdjustmentOutcome> {
+export async function ensureBlocksAdjusted(
+  athleteId: string,
+  today: string,
+  language?: string,
+): Promise<AdjustmentOutcome> {
   // Same rule as the week draft: a switched-off Coach is an outcome, not a
   // failure, and costs no read and no log.
   if (isCoachDisabled()) return 'coach-disabled';
@@ -288,7 +299,7 @@ export async function ensureBlocksAdjusted(athleteId: string, today: string): Pr
   if (gated) return gated;
   if (tooCloseToRedraw(today, race, existing)) return 'too-close';
 
-  const ctx = await gatherContext(athleteId, today, race, trainingBlocks(today, race.date));
+  const ctx = await gatherContext(athleteId, today, race, trainingBlocks(today, race.date), language);
   const asked = await askCoach(athleteId, ctx);
   if (typeof asked === 'string') return asked;
 

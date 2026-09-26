@@ -167,7 +167,28 @@ function coachClause(event: NarratableEvent, t: Translate, weekdayOf: WeekdayOf)
  */
 function weekDraftedClause(payload: unknown, t: Translate, weekdayOf: WeekdayOf): string {
   const first = firstSessionDate(payload);
-  return first ? t('weekDraftedFrom', { day: weekdayOf(first) }) : t('weekDrafted');
+  const key = wasAdjusted(payload) ? 'weekAdjusted' : 'weekDrafted';
+  const announced = first ? t(`${key}From`, { day: weekdayOf(first) }) : t(key);
+  const change = whatChangedOf(payload);
+  return change ? t('weekDraftChange', { clause: announced, change }) : announced;
+}
+
+/**
+ * The Coach's one sentence on what it changed, without its closing punctuation
+ * — the catalogue finishes the sentence (`single` adds a full stop, a list
+ * item adds none) — or undefined when it gave none.
+ */
+function whatChangedOf(payload: unknown): string | undefined {
+  return field(payload, 'whatChanged')?.replace(/[.!?…\s]+$/u, '') || undefined;
+}
+
+/**
+ * Whether the draft adjusted a week the structure had already filled
+ * (`training-architecture/40`). Only a recorded `true` says so: every
+ * `week_drafted` written before the flag existed reads as a plain draft.
+ */
+function wasAdjusted(payload: unknown): boolean {
+  return (payload as { adjusted?: unknown } | null)?.adjusted === true;
 }
 
 /** The earliest `date` among the payload's sessions, or undefined when none is dated. */

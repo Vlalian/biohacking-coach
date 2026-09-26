@@ -203,7 +203,7 @@ function IconButton({
   );
 }
 
-function EquipmentForm({
+export function EquipmentForm({
   t,
   item,
   pending,
@@ -284,7 +284,7 @@ function EquipmentForm({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t('namePlaceholder')}
+              placeholder={t(`namePlaceholder_${category}`)}
               className="mt-2 w-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
             />
           </label>

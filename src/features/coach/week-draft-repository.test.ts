@@ -66,6 +66,7 @@ const {
   recordWeekDraftDiscussed,
   getDiscussedWeek,
   getWeekDraftHistory,
+  getLastDeclinedDraft,
 } = await import('./week-draft-repository');
 
 function boundValues(node: unknown, seen = new Set<unknown>()): unknown[] {
@@ -189,6 +190,13 @@ describe('recordWeekDraft', () => {
     });
   });
 
+  it('records whether the week was adjusted, and the Coach’s sentence, on the event (training-architecture/40)', async () => {
+    executeRows = [{ id: 'new' }];
+    await recordWeekDraft({ ...draft, adjusted: true, whatChanged: 'Swapped Tuesday and Thursday.' });
+    const payload = executed[0].params.find((p) => typeof p === 'string' && p.startsWith('{')) as string;
+    expect(JSON.parse(payload)).toMatchObject({ adjusted: true, whatChanged: 'Swapped Tuesday and Thursday.' });
+  });
+
   it('reports exists when the guard let nothing through — the loser of two tabs', async () => {
     executeRows = [];
     expect(await recordWeekDraft(draft)).toBe('exists');
@@ -303,6 +311,15 @@ describe('getCalendarProposalState — what the athlete’s calendar shows (18; 
   it('shows this week’s visible draft before next week’s', async () => {
     rowsQueue.push([drafted('2026-09-14')], [drafted('2026-09-21', '2026-09-16')]);
     expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({ kind: 'proposal', draft: { id: 'd-2026-09-14' } });
+  });
+
+  it('shows the other week’s draft after one week is accepted, carrying its own week (showable-version/42)', async () => {
+    const written = { id: 'x', type: 'week_plan_written', payload: { weekStart: '2026-09-14' }, createdAt: new Date('2026-09-16T09:00:00Z') };
+    rowsQueue.push([drafted('2026-09-14'), written], [drafted('2026-09-21', '2026-09-16')]);
+    expect(await getCalendarProposalState(ATHLETE, '2026-09-16')).toMatchObject({
+      kind: 'proposal',
+      draft: { id: 'd-2026-09-21', weekStart: '2026-09-21' },
+    });
   });
 
   it('shows next week’s draft when this week has none, and nothing when it is not visible yet', async () => {
@@ -428,6 +445,13 @@ describe('the athlete’s own writes on a draft', () => {
     ]);
   });
 
+  it('recordWeekDraftDecision carries the athlete’s reason on a decline (training-architecture/30)', async () => {
+    await recordWeekDraftDecision({ athleteId: ATHLETE, type: 'week_plan_declined', weekStart: WEEK, draftId: 'd1', sessions: [], reason: 'wrong-days' });
+    expect(insertValues).toEqual([
+      { athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'week_plan_declined', payload: { weekStart: WEEK, draftId: 'd1', sessions: [], reason: 'wrong-days' } },
+    ]);
+  });
+
   it('recordWeekDraftDiscussed stages the proposal and withdraws the draft in one batch — the conversation owns the week, or nothing changed', async () => {
     // Two statements used to go separately; a failure between them left the
     // proposal pending with the calendar draft still actionable (CodeRabbit,
@@ -438,5 +462,18 @@ describe('the athlete’s own writes on a draft', () => {
       { athleteId: ATHLETE, actorType: 'coach_ai', type: 'week_plan_proposed', payload: { conversationId: 'c1', sessions: [SESSION] } },
       { athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'week_draft_withdrawn', payload: { weekStart: WEEK, draftId: 'd1', reason: 'discussed', conversationId: 'c1' } },
     ]);
+  });
+});
+
+describe('getLastDeclinedDraft — the declined draft a re-draft reads (training-architecture/30)', () => {
+  it('reads the week’s events for this athlete and pairs the declined draft with its reason', async () => {
+    rowsQueue.push([
+      { id: 'd1', type: 'week_drafted', payload: { weekStart: WEEK, sessions: [SESSION] }, createdAt: new Date('2026-09-16T08:00:00Z') },
+      { id: 'r', type: 'week_plan_declined', payload: { weekStart: WEEK, sessions: [], reason: 'too-little' }, createdAt: new Date('2026-09-16T09:00:00Z') },
+    ]);
+    expect(await getLastDeclinedDraft(ATHLETE, WEEK)).toEqual({ sessions: [SESSION], reason: 'too-little' });
+    const bound = boundValues(whereArgs.at(-1));
+    expect(bound).toContain(ATHLETE);
+    expect(bound).toContain(WEEK);
   });
 });

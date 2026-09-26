@@ -39,3 +39,11 @@ describe('the interviewer prompt, rendered', () => {
     ).toMatchSnapshot();
   });
 });
+
+describe('the interviewer disclaims the right name (showable-version/46)', () => {
+  it('says it is not Momentum, rather than not "the Coach"', () => {
+    const prompt = buildInterviewPrompt({ askTrustSignal: false });
+    expect(prompt).toContain('You are NOT Momentum.');
+    expect(prompt).not.toMatch(/\bthe Coach\b/);
+  });
+});

@@ -446,7 +446,7 @@ describe('formatWeekSessions', () => {
     expect(fromHeadCoach).not.toContain('Bjorn');
     expect(fromHeadCoach).not.toContain('hold your pace');
     // The session itself still appears, attributed — only the prose is gone.
-    expect(fromHeadCoach).toContain('Head Coach');
+    expect(fromHeadCoach).toContain("the athlete's coach set this");
 
     for (const origin of ['coach', 'athlete', 'garmin'] as const) {
       expect(
@@ -464,8 +464,16 @@ describe('formatWeekSessions', () => {
     expect(line).toContain('you planned this');
   });
 
-  it('names the Head Coach as the author of a Prescribed Session', () => {
-    expect(formatWeekSessions([planned({ origin: 'head_coach' })])).toContain('Head Coach');
+  it('names the athlete’s coach as the author of a Prescribed Session, never "Head Coach" (showable-version/46)', () => {
+    const line = formatWeekSessions([planned({ origin: 'head_coach' })]);
+    expect(line).toContain("the athlete's coach set this");
+    expect(line).not.toContain('Head Coach');
+  });
+
+  it('never calls the human "Head Coach" in a prompt the athlete talks to, and tells the model to say "your coach"', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-17', null, [planned({ origin: 'head_coach' })]);
+    expect(prompt).not.toContain('Head Coach');
+    expect(prompt).toContain('"your coach"');
   });
 
   // An Athlete Session typed `Other` carries its meaning in the label alone.
@@ -662,7 +670,7 @@ describe('formatWeekSessions — authorship labels and the parameter tail', () =
   it('names every origin in the athlete-facing wording', () => {
     const labelFor = (origin: WeekSession['origin']) => formatWeekSessions([planned({ origin })]);
     expect(labelFor('coach')).toContain('you planned this');
-    expect(labelFor('head_coach')).toContain("the athlete's Head Coach set this");
+    expect(labelFor('head_coach')).toContain("the athlete's coach set this");
     expect(labelFor('athlete')).toContain('the athlete added this themselves');
     // The structure's own row (`training-architecture/34`): the Coach is
     // adjusting a default, not holding on someone else's prescription.

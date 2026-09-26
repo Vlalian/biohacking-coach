@@ -304,6 +304,50 @@ describe('composeNarration — the Coach announcing its own blocks (training-arc
     expect(mixed).toBe('single(clause=weekDraftedFrom(day=day:2026-09-24))');
   });
 
+  // training-architecture/40: the structure fills the week before the Coach
+  // drafts, so "drafted a week" reads wrong over a week the athlete could
+  // already see. The `adjusted` flag is recorded with the draft.
+  const weekDrafted = (payload: unknown) =>
+    composeNarration([{ id: 'ev_w', actorId: null, type: 'week_drafted', payload, createdAt: new Date() }], {}, t, weekday);
+
+  it('says the week was adjusted when the structure had already filled it', () => {
+    expect(weekDrafted({ sessions: [{ date: '2026-09-28' }], adjusted: true })).toBe(
+      'single(clause=weekAdjustedFrom(day=day:2026-09-28))',
+    );
+    expect(weekDrafted({ sessions: [], adjusted: true })).toBe('single(clause=weekAdjusted)');
+  });
+
+  it('keeps the planned wording where there was nothing to adjust, and for an event written before the flag', () => {
+    // Every `week_drafted` already in the events table predates `adjusted`.
+    for (const payload of [
+      { sessions: [{ date: '2026-09-28' }], adjusted: false },
+      { sessions: [{ date: '2026-09-28' }] },
+      { sessions: [{ date: '2026-09-28' }], adjusted: 'true' },
+    ]) {
+      expect(weekDrafted(payload)).toBe('single(clause=weekDraftedFrom(day=day:2026-09-28))');
+    }
+  });
+
+  it('carries the Coach’s one-line summary of what it changed as its own sentence', () => {
+    expect(
+      weekDrafted({ sessions: [{ date: '2026-09-28' }], adjusted: true, whatChanged: 'Moved the long ride to Saturday.' }),
+    ).toBe('single(clause=weekDraftChange(clause=weekAdjustedFrom(day=day:2026-09-28),change=Moved the long ride to Saturday))');
+  });
+
+  it('leaves the catalogue to finish the sentence, so the summary never ends in two stops', () => {
+    // `single` adds the full stop and a list item adds none; a summary that
+    // brought its own would read "Saturday.." in one and inconsistently in the other.
+    expect(weekDrafted({ sessions: [], adjusted: true, whatChanged: '  Cut Thursday short!  ' })).toBe(
+      'single(clause=weekDraftChange(clause=weekAdjusted,change=Cut Thursday short))',
+    );
+  });
+
+  it('adds nothing when the Coach said nothing, or said only blank space', () => {
+    for (const whatChanged of [undefined, null, '', '   ', 42, '...']) {
+      expect(weekDrafted({ sessions: [], adjusted: true, whatChanged })).toBe('single(clause=weekAdjusted)');
+    }
+  });
+
   it('announces a drafted week with no dated session in one sentence with no day, whatever the payload', () => {
     // `training-architecture/16`: the proposal itself is on the calendar, so the
     // sentence carries no session list — and a malformed payload says the same.

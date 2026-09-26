@@ -15,6 +15,8 @@ import { logBlockAdjustmentFailure } from '@/lib/coach-log';
 import { ensureBlocksAdjusted, getResolvedBlocks } from '@/features/coach/training-block-service';
 import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
+import { getLinkForAthlete } from '@/features/coach/coach-repository';
+import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
 import { Calendar } from '../../calendar';
@@ -62,6 +64,9 @@ function readCalendar(athleteId: string, todayKey: string) {
     // Injuries and Illnesses, open and closed, drawn as a layer beside
     // the plan (training-architecture/06). Their own rows only.
     getHealthHistory(athleteId).then((h) => spansFrom(h.injuries, h.illnesses)),
+    // The athlete's Coaching Link, when one is active: the cycle line names
+    // the Head Coach instead of pointing at Settings (training-architecture/42).
+    getLinkForAthlete(athleteId),
   ]);
 }
 
@@ -74,6 +79,7 @@ const NO_ATHLETE: Awaited<ReturnType<typeof readCalendar>> = [
   { race: null, set: null, blocks: [] },
   null,
   [],
+  undefined,
 ];
 
 /**
@@ -109,6 +115,7 @@ export default async function TrainingPlanPage({
     horizon,
     proposal,
     health,
+    link,
   ] = await timed('plan.reads', () =>
     athlete ? readCalendar(athlete.id, todayKey) : Promise.resolve(NO_ATHLETE),
   );
@@ -133,11 +140,17 @@ export default async function TrainingPlanPage({
   // nothing), so hanging it off the default View costs the athlete no wait and
   // covers every tester who already has a race. Never on a render path, never
   // thrown: a failure here is logged and the athlete stays on the draft.
-  if (athlete) {
+  // An athlete row implies a session; the check is for the compiler, which
+  // cannot see through next-intl's redirect.
+  if (athlete && session) {
     const athleteId = athlete.id;
+    const userId = session.user.id;
     after(async () => {
       try {
-        await ensureBlocksAdjusted(athleteId, todayKey);
+        // The Athlete Language lives on the user, not the athlete (ui_prefs):
+        // read here, off the render path, so the blocks are named in it.
+        const { language } = await getUiPrefs(userId);
+        await ensureBlocksAdjusted(athleteId, todayKey, language);
       } catch (error) {
         logBlockAdjustmentFailure(athleteId, error);
       }
@@ -152,7 +165,12 @@ export default async function TrainingPlanPage({
         blocks={horizon.blocks}
       />
       {/* One line on the athlete's own cycle (training-architecture/28); the day is changed in Settings. */}
-      {athlete && <WeeklySessionDayLine weeklySessionDay={athlete.profile?.weeklySessionDay} />}
+      {athlete && (
+        <WeeklySessionDayLine
+          weeklySessionDay={athlete.profile?.weeklySessionDay}
+          headCoachName={link ? (link.headCoachPreferredName ?? link.headCoachName) : null}
+        />
+      )}
       <Calendar
         sessions={trainingSessions}
         unavailableDates={unavailableDates}

@@ -262,11 +262,72 @@ describe('the baseline week — what the structure already wrote (training-archi
     expect(lines).toContain('2026-09-21: swim Endurance 66 min Z2 — Easy swim');
   });
 
+  it('asks for one sentence on what changed when there was a week to change (training-architecture/40)', () => {
+    expect(renderWeekDraftPrompt(ctx({ baseline }))).toContain(
+      'The athlete can already see this week: say in one sentence, in whatChanged, what you changed.',
+    );
+    expect(renderWeekDraftPrompt(ctx())).not.toContain('whatChanged');
+  });
+
   it('falls back to the skeleton when the structure wrote nothing for this week', () => {
     for (const value of [null, []]) {
       const out = renderWeekDraftPrompt(ctx({ baseline: value }));
       expect(out).toContain('WEEK SKELETON');
       expect(out).not.toContain('BASELINE WEEK');
+    }
+  });
+});
+
+describe('the four weeks before the drafted one (training-architecture/44)', () => {
+  const SUMMARY = [
+    { weekStart: '2026-08-24', plannedMinutes: 0, doneMinutes: 0, completed: 0, skipped: 0, byType: [], soFar: false },
+    { weekStart: '2026-08-31', plannedMinutes: 300, doneMinutes: 240, completed: 4, skipped: 1, byType: [{ type: 'Endurance', completed: 3, doneMinutes: 180 }, { type: 'Intensity', completed: 1, doneMinutes: 60 }], soFar: false },
+    { weekStart: '2026-09-07', plannedMinutes: 280, doneMinutes: 0, completed: 0, skipped: 4, byType: [], soFar: false },
+    { weekStart: '2026-09-14', plannedMinutes: 90, doneMinutes: 90, completed: 1, skipped: 0, byType: [{ type: 'Endurance', completed: 1, doneMinutes: 90 }], soFar: true },
+  ];
+
+  it('carries the last four weeks', () => {
+    expect(renderWeekDraftPrompt(ctx({ recentWeeks: SUMMARY }))).toMatchSnapshot();
+  });
+
+  it('adds nothing when there is no history to read', () => {
+    expect(renderWeekDraftPrompt(ctx({ recentWeeks: [] }))).toBe(renderWeekDraftPrompt(ctx()));
+  });
+
+  it('refuses a summary carrying a direct identifier, like every other input', () => {
+    const leaked = [{ ...SUMMARY[3], byType: [{ type: 'anna@example.com', completed: 1, doneMinutes: 90 }] }];
+    expect(() => renderWeekDraftPrompt(ctx({ recentWeeks: leaked }))).toThrow();
+  });
+});
+
+describe('a re-draft after a decline (training-architecture/30)', () => {
+  const DECLINED_SESSIONS = [
+    { date: '2026-09-22', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: 'easy spin' },
+    { date: '2026-09-23', type: 'Intensity' as const, durationMinutes: 45, zone: 'Z4', note: null },
+    { date: '2026-09-27', type: 'Endurance' as const, durationMinutes: 150, zone: 'Z2', note: 'long ride' },
+  ];
+
+  it('shows the Coach what it proposed and was turned down, and asks for a different shape', () => {
+    const rendered = renderWeekDraftPrompt(ctx({ declined: { sessions: DECLINED_SESSIONS, reason: null } }));
+    expect(rendered).toContain('DECLINED');
+    expect(rendered).toContain('2026-09-27: Endurance 150min Z2 — long ride');
+    expect(rendered).toContain('different shape');
+    expect(rendered).toContain('whatChanged');
+    expect(rendered).toMatchSnapshot();
+  });
+
+  it.each(['too-much', 'too-little', 'wrong-days', 'other'] as const)('renders the %s reason', (reason) => {
+    expect(renderWeekDraftPrompt(ctx({ declined: { sessions: DECLINED_SESSIONS, reason } }))).toMatchSnapshot();
+  });
+
+  it('refuses a declined session whose note carries an identifier, like the staged week in chat', () => {
+    const leaked = [{ ...DECLINED_SESSIONS[0], note: 'call +45 12345678' }];
+    expect(() => renderWeekDraftPrompt(ctx({ declined: { sessions: leaked, reason: null } }))).toThrow();
+  });
+
+  it('adds nothing to a first draft', () => {
+    for (const declined of [undefined, null]) {
+      expect(renderWeekDraftPrompt(ctx({ declined }))).not.toContain('DECLINED');
     }
   });
 });

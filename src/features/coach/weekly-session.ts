@@ -2,7 +2,7 @@ import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
 import type { Session } from '@/features/session/session';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
-import { dateKey, isValidDateKey } from '@/lib/date';
+import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
   inTuneUpWindow,
   racesEnteredAfterPlan,
@@ -298,6 +298,75 @@ export function weekFeedbackFrom(sessions: Session[]): WeekFeedbackEntry[] {
     }));
 }
 
+/**
+ * One past week, as the weekly draft reads it (`training-architecture/44`):
+ * minutes planned against minutes done, sessions completed and skipped, and
+ * what was done split by Session Type. Discipline (swim/bike/run) is not
+ * stored anywhere, so the split is by type.
+ */
+export interface WeekSummary {
+  weekStart: string;
+  plannedMinutes: number;
+  doneMinutes: number;
+  completed: number;
+  skipped: number;
+  byType: { type: string; completed: number; doneMinutes: number }[];
+  /**
+   * The week holds today, so it is only part-way through: what is still to
+   * come is left out rather than read as not done.
+   */
+  soFar: boolean;
+}
+
+/** How many weeks before the drafted one the draft reads. */
+export const RECENT_WEEKS = 4;
+
+/**
+ * The four weeks before `targetWeekStart`, oldest first — a week with nothing
+ * in it is returned empty rather than dropped, so the Coach reads a gap as a
+ * gap. Done means `status = 'completed'` whatever wrote the session: the
+ * history importer writes `origin: 'athlete'`, and nothing writes `'garmin'`.
+ *
+ * The draft is written days before its week starts, so the last of the four is
+ * usually the current one. A session from today on that is neither completed
+ * nor skipped has not had its chance yet: it is left out, and that week is
+ * marked {@link WeekSummary.soFar}.
+ */
+export function fourWeekSummary(sessions: Session[], targetWeekStart: string, today: string): WeekSummary[] {
+  const decided = sessions.filter((s) => s.date < today || s.status === 'completed' || s.status === 'skipped');
+  return Array.from({ length: RECENT_WEEKS }, (_, i) => {
+    const weekStart = addDays(targetWeekStart, (i - RECENT_WEEKS) * 7);
+    const week = decided.filter((s) => weekStartOf(s.date) === weekStart);
+    return summariseWeek(weekStart, week, weekStart === weekStartOf(today));
+  });
+}
+
+function summariseWeek(weekStart: string, week: Session[], soFar: boolean): WeekSummary {
+  const done = week.filter((s) => s.status === 'completed');
+  return {
+    weekStart,
+    plannedMinutes: minutesOf(week),
+    doneMinutes: minutesOf(done),
+    completed: done.length,
+    skipped: week.filter((s) => s.status === 'skipped').length,
+    byType: typeSplit(done),
+    soFar,
+  };
+}
+
+/** What was done, by Session Type, in the order each type first appeared. */
+function typeSplit(done: Session[]): WeekSummary['byType'] {
+  const types = [...new Set(done.map((s) => s.type))];
+  return types.map((type) => {
+    const ofType = done.filter((s) => s.type === type);
+    return { type, completed: ofType.length, doneMinutes: minutesOf(ofType) };
+  });
+}
+
+function minutesOf(sessions: Session[]): number {
+  return sessions.reduce((sum, s) => sum + (s.duration ?? 0), 0);
+}
+
 /** The week's skipped sessions as natural date + type references (no ids). */
 export function skippedFrom(sessions: Session[]): SkippedSession[] {
   return sessions
@@ -381,6 +450,11 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
           required: ['date', 'type', 'durationMinutes', 'zone', 'note'],
         },
       },
+      whatChanged: {
+        type: 'string',
+        description:
+          "When you changed the week you were given, one sentence in the athlete's language on what you changed. Leave it out when you changed nothing.",
+      },
     },
     required: ['sessions'],
   },
@@ -402,6 +476,15 @@ function positiveMinutes(value: unknown): number | null {
     value <= MAX_SESSION_MINUTES
     ? value
     : null;
+}
+
+/**
+ * The Coach's one sentence on what it changed in the week it was given
+ * (`training-architecture/40`), or null when it gave none. Optional in the
+ * tool, so an absent, blank or non-string value is simply no sentence.
+ */
+export function whatChangedFrom(input: unknown): string | null {
+  return optionalString((input as { whatChanged?: unknown } | null | undefined)?.whatChanged)?.trim() ?? null;
 }
 
 export type ValidatePlanResult =

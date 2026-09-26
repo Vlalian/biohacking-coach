@@ -8,6 +8,8 @@ const getUnavailableDates = vi.fn();
 const getSessionsForWeek = vi.fn();
 type ArithmeticRow = { date: string; sport: string; type: string; durationMinutes: number | null; zone: string | null; title: string };
 const getArithmeticSessionsForWeek = vi.fn<() => Promise<ArithmeticRow[]>>(async () => []);
+// The four weeks before the drafted one (`training-architecture/44`). None by default.
+const getSessionsInRange = vi.fn<(athleteId: string, from: string, to: string) => Promise<unknown[]>>(async () => []);
 const capacityFor = vi.fn();
 const assertAiCoachingConsent = vi.fn();
 const openAiEmbedder = vi.fn();
@@ -22,16 +24,20 @@ const getResolvedBlocks = vi.fn();
 const getRaces = vi.fn(async () => []);
 const getWeekDraftHistory = vi.fn();
 const getCalendarProposalState = vi.fn();
+// The draft declined for the week (`training-architecture/30`). None by default.
+const getLastDeclinedDraft = vi.fn(async (): Promise<unknown> => null);
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
 const getLinkForAthlete = vi.fn();
 const getCoachByUserId = vi.fn();
 const getRoster = vi.fn();
+// The Athlete Language, read by athlete id from the user seam (showable-version/46). None by default.
+const getLanguageForAthlete = vi.fn(async (_athleteId: string): Promise<string | null> => null);
 
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
-vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek, getArithmeticSessionsForWeek }));
+vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek, getArithmeticSessionsForWeek, getSessionsInRange }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('@/features/consent/consent-gate', () => ({ assertAiCoachingConsent }));
 vi.mock('@/features/knowledge-oracle/embedder', () => ({ openAiEmbedder }));
@@ -43,9 +49,10 @@ vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('./presence-repository', () => ({ getPresenceStage }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
-vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState }));
+vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState, getLastDeclinedDraft }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
+vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getLanguageForAthlete }));
 
 const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState, draftLanded } =
   await import(
@@ -83,6 +90,7 @@ beforeEach(() => {
   getEquipmentItems.mockResolvedValue([]);
   getUnavailableDates.mockResolvedValue([]);
   getArithmeticSessionsForWeek.mockResolvedValue([]);
+  getSessionsInRange.mockResolvedValue([]);
   // One coach-planned session in the current week by default: the cycle rule
   // (next week) is what most of these tests are about. The this-week rule
   // (training-architecture/24) has its own block below and clears this.
@@ -106,6 +114,8 @@ beforeEach(() => {
   recordWeekDraft.mockResolvedValue('drafted');
   getLinkForAthlete.mockResolvedValue(undefined);
   getCalendarProposalState.mockResolvedValue(null);
+  getLastDeclinedDraft.mockResolvedValue(null);
+  getLanguageForAthlete.mockResolvedValue(null);
 });
 
 describe('draftGate — a week is drafted once (training-architecture/24)', () => {
@@ -320,6 +330,30 @@ describe('redraftWeek — the athlete asks once more after a decline (24)', () =
     expect(getWeekDraftHistory).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
     expect(callCoach).toHaveBeenCalledTimes(1);
     expect(recordWeekDraft).toHaveBeenCalledWith(expect.objectContaining({ weekStart: NEXT_MON, visibleFrom: TODAY }));
+  });
+
+  it('shows the Coach the week it declined, and the reason, so it proposes something else (training-architecture/30)', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    getLastDeclinedDraft.mockResolvedValue({ sessions: PROPOSED, reason: 'too-much' });
+    await redraftWeek(ATHLETE, NEXT_MON, TODAY);
+    expect(getLastDeclinedDraft).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    const system: string = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('DECLINED DRAFT');
+    expect(system).toContain('2026-09-27: Endurance 150min Z2 — long ride');
+    expect(system).toContain('They said it was too much.');
+  });
+
+  it('re-drafts without the block when the declined draft cannot be found — a week declined in chat', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    await redraftWeek(ATHLETE, NEXT_MON, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('DECLINED');
+  });
+
+  it('never shows a first draft a declined week', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(getLastDeclinedDraft).not.toHaveBeenCalled();
+    expect(callCoach.mock.calls[0][0].system).not.toContain('DECLINED');
   });
 
   it('refuses not-declined for a never-drafted, written or discussing week; draft-pending while one is on the table', async () => {
@@ -633,5 +667,132 @@ describe('the draft is seeded with the week the structure already wrote (trainin
     getArithmeticSessionsForWeek.mockResolvedValue([]);
     await ensureWeekDrafted(ATHLETE, TODAY);
     expect(callCoach.mock.calls[0][0].system).toContain('WEEK SKELETON');
+  });
+});
+
+describe('the draft says whether it adjusted a full week, and what it changed (training-architecture/40)', () => {
+  const ROW = { date: '2026-09-22', sport: 'bike', type: 'Endurance', durationMinutes: 90, zone: 'Z2', title: 'Easy ride' };
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+  });
+
+  it('records a draft over the structure’s week as adjusted, with the Coach’s sentence', async () => {
+    getArithmeticSessionsForWeek.mockResolvedValue([ROW]);
+    callCoach.mockResolvedValue(toolReply({ sessions: PROPOSED, whatChanged: 'Moved the long ride to Sunday.' }));
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ adjusted: true, whatChanged: 'Moved the long ride to Sunday.' });
+  });
+
+  it('records a draft over an empty week as planned, and no sentence when the Coach gave none', async () => {
+    getArithmeticSessionsForWeek.mockResolvedValue([]);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0]).toMatchObject({ adjusted: false, whatChanged: null });
+  });
+
+  it('asks the Coach for the sentence in the tool it answers with', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const [tool] = callCoach.mock.calls[0][0].tools;
+    expect(tool.input_schema.properties.whatChanged).toMatchObject({ type: 'string' });
+    expect(tool.input_schema.required).toEqual(['sessions']);
+  });
+});
+
+describe('the draft names the Target Race it builds toward', () => {
+  it('passes the resolved race, by name and date, into the prompt', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const system: string = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('Ironman Copenhagen');
+    expect(system).toContain('2027-08-15');
+  });
+});
+
+describe('the draft reads the four weeks before the drafted one (training-architecture/44)', () => {
+  const past = (date: string, status: string, origin: string, duration: number | null = 60) => ({
+    id: `s-${date}`, date, type: 'Endurance', status, parked: false, dayOrder: 0, version: 1, title: null,
+    duration, zone: null, note: null, feedbackBody: null, feedbackMind: null, feedbackComment: null, origin, isTraining: true,
+  });
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+  });
+
+  it('counts back from the drafted week, not from today', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    // Drafting 2026-09-21 on 2026-09-16: the four weeks are 08-24 up to (not including) 09-21.
+    expect(getSessionsInRange).toHaveBeenCalledWith(ATHLETE, '2026-08-24', NEXT_MON);
+  });
+
+  it('puts a skipped week and an imported week in front of the Coach, and states an empty one', async () => {
+    getSessionsInRange.mockResolvedValue([
+      // The week of 09-07 was skipped whole.
+      past('2026-09-08', 'skipped', 'coach', 60),
+      past('2026-09-10', 'skipped', 'coach', 45),
+      // The week of 09-14 is imported history: the importer writes origin 'athlete'.
+      past('2026-09-15', 'completed', 'athlete', 90),
+      // Still to come on the day of the draft (2026-09-16): not a missed session.
+      past('2026-09-18', 'planned', 'coach', 120),
+    ]);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const system: string = callCoach.mock.calls[0][0].system;
+    expect(system).toContain('RECENT WEEKS:');
+    expect(system).toContain('- Week of 2026-08-24: empty — nothing planned, nothing done');
+    expect(system).toContain('- Week of 2026-09-07: 0.0h done of 1.8h planned; 0 completed, 2 skipped');
+    expect(system).toContain(
+      '- Week of 2026-09-14 (this week, up to today): 1.5h done of 1.5h planned; 1 completed, 0 skipped; done by type: Endurance 1 (1.5h)',
+    );
+  });
+
+  it('carries no block when the four weeks hold nothing', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(callCoach.mock.calls[0][0].system).not.toContain('RECENT WEEKS');
+  });
+});
+
+describe("the draft is written in the athlete's own language (showable-version/46)", () => {
+  const DANISH = 'LANGUAGE: Respond in Danish.';
+
+  it("a Danish athlete's draft prompt carries the Danish directive, read by their own id", async () => {
+    getLanguageForAthlete.mockResolvedValue('da');
+
+    expect(await ensureWeekDrafted(ATHLETE, TODAY)).toBe('drafted');
+
+    expect(getLanguageForAthlete).toHaveBeenCalledWith(ATHLETE);
+    expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
+  });
+
+  it('an English athlete, and one whose language was never set, get no language line', async () => {
+    getLanguageForAthlete.mockResolvedValueOnce('en');
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    getLanguageForAthlete.mockResolvedValueOnce(null);
+    await ensureWeekDrafted(ATHLETE, TODAY);
+
+    expect(callCoach).toHaveBeenCalledTimes(2);
+    for (const [call] of callCoach.mock.calls) expect(call.system).not.toContain('LANGUAGE:');
+  });
+
+  it('the re-draft after a decline is Danish too', async () => {
+    getLanguageForAthlete.mockResolvedValue('da');
+    getWeekDraftHistory.mockResolvedValue({ kind: 'declined' });
+    getSessionsForWeek.mockResolvedValue([]);
+
+    expect(await redraftWeek(ATHLETE, NEXT_MON, TODAY)).toBe('drafted');
+
+    expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
+  });
+
+  it("a Head Coach's app-open drafts each athlete in that athlete's language, not the coach's", async () => {
+    getCoachByUserId.mockResolvedValue({ id: 'coach-1' });
+    getRoster.mockResolvedValue([{ athleteId: 'a-da' }, { athleteId: 'a-en' }]);
+    getLanguageForAthlete.mockImplementation(async (id: string) => (id === 'a-da' ? 'da' : 'en'));
+
+    await ensureRosterDrafted('user_coach', TODAY);
+
+    expect(callCoach).toHaveBeenCalledTimes(2);
+    expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
+    expect(callCoach.mock.calls[1][0].system).not.toContain('LANGUAGE:');
   });
 });

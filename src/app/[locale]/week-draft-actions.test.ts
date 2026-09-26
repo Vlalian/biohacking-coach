@@ -47,9 +47,17 @@ describe('the three actions resolve the athlete from the session and take only a
     expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
+  it('decline: passes on the one reason the athlete chose, and nothing when they skipped (training-architecture/30)', async () => {
+    await declineWeekDraftAction('d1', 'wrong-days');
+    expect(declineWeekDraft).toHaveBeenCalledWith(ATHLETE, 'd1', expect.stringMatching(TODAY), 'wrong-days');
+    await declineWeekDraftAction('d1');
+    expect(declineWeekDraft).toHaveBeenLastCalledWith(ATHLETE, 'd1', expect.stringMatching(TODAY), undefined);
+  });
+
   it('decline: likewise, refreshing so the card goes', async () => {
     expect(await declineWeekDraftAction('d1')).toEqual({ ok: true });
-    expect(declineWeekDraft).toHaveBeenCalledWith(ATHLETE, 'd1', expect.stringMatching(TODAY));
+    // The fourth argument is the decline reason (training-architecture/30): none here.
+    expect(declineWeekDraft).toHaveBeenCalledWith(ATHLETE, 'd1', expect.stringMatching(TODAY), undefined);
     expect(revalidatePath).toHaveBeenCalledWith('/', 'layout');
   });
 
