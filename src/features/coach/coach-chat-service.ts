@@ -17,6 +17,7 @@ import {
   fixedConstraintsOf,
   validateProposedPlan,
   volumeReasonFrom,
+  withArithmeticSports,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   type ProposedSession,
 } from './weekly-session';
@@ -178,8 +179,10 @@ async function stageChatProposal(
   // The same band as the week draft (`training-architecture/48`, extended to
   // Chat by Mads's ruling of 2026-09-29): held against the arithmetic's
   // sessions inside this window only.
-  const baseline = await getArithmeticSessionsForWeek(athleteId, weekStartOf(window.start));
-  const sessions = heldToBand(athleteId, validated.sessions, arithmeticInWindow(baseline, window), volumeReasonFrom(call.input));
+  const baseline = arithmeticInWindow(await getArithmeticSessionsForWeek(athleteId, weekStartOf(window.start)), window);
+  // And the arithmetic's sport unless Momentum said why not (`training-architecture/26`, E4).
+  const sports = withArithmeticSports(validated.sessions, baseline);
+  const sessions = heldToBand(athleteId, sports.sessions, baseline, volumeReasonFrom(call.input));
   await recordProposal(athleteId, conversationId, sessions);
   return { sessions };
 }

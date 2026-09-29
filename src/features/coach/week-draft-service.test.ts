@@ -767,6 +767,34 @@ describe('the draft is held to the band around the arithmetic (training-architec
   });
 });
 
+describe('the draft keeps the arithmetic’s sport unless Momentum says why (training-architecture/26, E4)', () => {
+  const BASELINE = [
+    { date: '2026-09-22', sport: 'bike', type: 'Endurance', durationMinutes: 60, zone: 'Z2', title: 'Easy ride' },
+    { date: '2026-09-23', sport: 'run', type: 'Intensity', durationMinutes: 45, zone: 'Z4', title: 'Run intervals' },
+    { date: '2026-09-27', sport: 'bike', type: 'Endurance', durationMinutes: 150, zone: 'Z2', title: 'Long ride' },
+  ];
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+    getArithmeticSessionsForWeek.mockResolvedValue(BASELINE);
+  });
+
+  it('reverts an unexplained swap, keeps an explained one, and says so in what changed', async () => {
+    const sessions = [
+      { ...PROPOSED[0], sport: 'run' },
+      { ...PROPOSED[1], sport: 'bike', sportReason: 'knee: run → bike', cue: 'Seated efforts, spare the knee.' },
+      PROPOSED[2],
+    ];
+    callCoach.mockResolvedValue(toolReply({ sessions, whatChanged: 'Eased the run load.' }));
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const recorded = recordWeekDraft.mock.calls[0][0];
+    expect(recorded.sessions.map((x: { sport: string }) => x.sport)).toEqual(['bike', 'bike', 'bike']);
+    expect(recorded.sessions[1]).toMatchObject({ sportReason: 'knee: run → bike', cue: 'Seated efforts, spare the knee.' });
+    expect(recorded.whatChanged).toBe('Eased the run load. 2026-09-23: run → bike (knee: run → bike)');
+  });
+});
+
 describe('the draft names the Target Race it builds toward', () => {
   it('passes the resolved race, by name and date, into the prompt', async () => {
     getWeekDraftHistory.mockResolvedValue({ kind: 'never' });

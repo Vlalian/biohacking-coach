@@ -15,6 +15,9 @@ import {
   clampToBand,
   isAdjusted,
   volumeReasonFrom,
+  sportOf,
+  withArithmeticSports,
+  withSwaps,
   type ProposedSession,
   type Readiness,
 } from './weekly-session';
@@ -959,5 +962,119 @@ describe('volumeReasonFrom', () => {
 
   it('is offered on the tool, beside whatChanged', () => {
     expect(PROPOSE_WEEK_PLAN_TOOL.input_schema.properties).toHaveProperty('volumeReason');
+  });
+});
+
+/**
+ * `training-architecture/26`: a drafted session keeps the arithmetic's sport
+ * unless Momentum gives a reason (E4), and may carry one personal cue (E5).
+ * The fields ride through every re-validation — the athlete's accept and the
+ * Head Coach's approval run the same validator — onto the row.
+ */
+describe('sport, sportReason and cue (training-architecture/26)', () => {
+  // 2026-07-29 is a Wednesday; its week runs Mon 2026-07-27 - Sun 2026-08-02.
+  const WINDOW = planningWindow('2026-07-29');
+  const ROW = { date: '2026-07-30', type: 'Endurance', durationMinutes: 60, zone: 'Z2', note: null };
+  const validated = (entry: Record<string, unknown>, options?: { coachHowTo: boolean }) => {
+    const result = validateProposedPlan({ sessions: [entry] }, WINDOW, options);
+    return result.ok ? result.sessions : [];
+  };
+  const COACH = {
+    segments: [
+      { name: 'warmUp', minutes: 10, zone: 'Z2', detail: null },
+      { name: 'main', minutes: 45, zone: 'Z2', detail: 'Hills' },
+      { name: 'coolDown', minutes: 5, zone: 'Z1', detail: null },
+    ],
+    focus: ['Seated on the climbs'],
+  };
+  const ARITH_RUN_DAY = [{ date: '2026-07-30', sport: 'run' }];
+
+  it('keeps sport and cue through validation, accept and approval', () => {
+    const [p] = validated({ ...ROW, sport: 'bike', cue: 'Spin light, spare the knee.' });
+    expect(p).toMatchObject({ sport: 'bike', cue: 'Spin light, spare the knee.' });
+    const [again] = validated({ ...p }, { coachHowTo: true });
+    expect(again).toEqual(p);
+    expect(proposedToNewSessionRows([p], 'a1')[0]).toMatchObject({ sport: 'bike', howTo: { cue: 'Spin light, spare the knee.' } });
+  });
+
+  it('keeps a stated reason for the sport, trimmed, and drops an unknown sport or a blank reason', () => {
+    expect(validated({ ...ROW, sport: 'bike', sportReason: '  knee  ' })[0]).toMatchObject({ sportReason: 'knee' });
+    expect(validated({ ...ROW, sport: 'cycling', sportReason: ' ' })[0]).toEqual(ROW);
+  });
+
+  it('drops a cue that is too long or carries an identifier, keeping the session', () => {
+    expect(validated({ ...ROW, cue: 'x'.repeat(141) })).toEqual([ROW]);
+    expect(validated({ ...ROW, cue: 'Write to me at a@b.dk' })).toEqual([ROW]);
+  });
+
+  it('never takes a how-to from Momentum’s tool input, only from a validated coach edit', () => {
+    expect(validated({ ...ROW, coachHowTo: COACH })).toEqual([ROW]);
+    expect(validated({ ...ROW, coachHowTo: COACH }, { coachHowTo: true })).toEqual([{ ...ROW, coachHowTo: COACH }]);
+  });
+
+  it('reads a missing or null coach how-to as none, keeping the session', () => {
+    expect(validated({ ...ROW, coachHowTo: null }, { coachHowTo: true })).toEqual([ROW]);
+  });
+
+  it('refuses a session whose coach how-to does not fit it, so a coach edit is all or nothing', () => {
+    expect(validated({ ...ROW, durationMinutes: 50, coachHowTo: COACH }, { coachHowTo: true })).toEqual([]);
+  });
+
+  it('writes the sport and what was written onto the row, and nothing for a session with neither', () => {
+    const [p] = validated({ ...ROW, sport: 'swim', coachHowTo: COACH }, { coachHowTo: true });
+    expect(proposedToNewSessionRows([p], 'a1')[0]).toMatchObject({ sport: 'swim', howTo: { coach: COACH } });
+    const [plain] = proposedToNewSessionRows([ROW as ProposedSession], 'a1');
+    expect(plain).not.toHaveProperty('sport');
+    expect(plain).not.toHaveProperty('howTo');
+  });
+
+  it('reverts an unexplained sport swap to the arithmetic\'s sport, and keeps an explained one', () => {
+    expect(sportOf({ sport: 'bike' }, ARITH_RUN_DAY)).toBe('run');
+    expect(sportOf({ sport: 'bike', sportReason: 'knee' }, ARITH_RUN_DAY)).toBe('bike');
+    expect(sportOf({ sport: 'run' }, ARITH_RUN_DAY)).toBe('run');
+  });
+
+  it('takes the arithmetic\'s sport when Momentum gave none, and Momentum\'s own on a day the arithmetic left empty', () => {
+    expect(sportOf({}, ARITH_RUN_DAY)).toBe('run');
+    expect(sportOf({ sport: 'swim' }, [])).toBe('swim');
+    expect(sportOf({}, [])).toBeUndefined();
+    // A day the arithmetic wrote no known sport for holds nothing to revert to.
+    expect(sportOf({ sport: 'swim' }, [{ sport: '' }])).toBe('swim');
+  });
+
+  it('holds a week to the arithmetic\'s sports day by day, and names each explained swap', () => {
+    const week: ProposedSession[] = [
+      { ...ROW, type: 'Endurance', sport: 'bike', sportReason: 'knee: no running' } as ProposedSession,
+      { ...ROW, date: '2026-07-31', type: 'Tempo', sport: 'swim' } as ProposedSession,
+      { ...ROW, date: '2026-08-01', type: 'Endurance', sportReason: 'no reason needed' } as ProposedSession,
+    ];
+    const baseline = [
+      { date: '2026-07-30', sport: 'run' },
+      { date: '2026-07-31', sport: 'bike' },
+      { date: '2026-08-01', sport: 'bike' },
+    ];
+    const held = withArithmeticSports(week, baseline);
+    expect(held.sessions.map((x) => x.sport)).toEqual(['bike', 'bike', 'bike']);
+    expect(held.sessions[0].sportReason).toBe('knee: no running');
+    expect(held.sessions[2]).not.toHaveProperty('sportReason');
+    expect(held.swaps).toEqual(['2026-07-30: run → bike (knee: no running)']);
+    // A day the arithmetic wrote no known sport for is no swap, whatever Momentum chose.
+    const unknown = withArithmeticSports([{ ...ROW, sport: 'swim' } as ProposedSession], [{ date: ROW.date, sport: '' }]);
+    expect(unknown).toEqual({ sessions: [{ ...ROW, sport: 'swim' }], swaps: [] });
+  });
+
+  it('adds the swaps to what changed, and leaves it alone when there are none', () => {
+    expect(withSwaps('Eased the long ride.', ['2026-07-30: run → bike (knee)'])).toBe('Eased the long ride. 2026-07-30: run → bike (knee)');
+    expect(withSwaps(null, ['a', 'b'])).toBe('a; b');
+    expect(withSwaps('Same week.', [])).toBe('Same week.');
+    expect(withSwaps(null, [])).toBeNull();
+  });
+
+  it('offers the three fields on the tool, none of them required', () => {
+    const item = PROPOSE_WEEK_PLAN_TOOL.input_schema.properties.sessions.items;
+    expect(item.properties.sport.enum).toEqual(['swim', 'bike', 'run', 'brick']);
+    expect(Object.keys(item.properties)).toEqual(expect.arrayContaining(['sport', 'sportReason', 'cue']));
+    expect(item.required).not.toContain('sport');
+    expect(item.required).not.toContain('cue');
   });
 });

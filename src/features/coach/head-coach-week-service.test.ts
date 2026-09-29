@@ -252,6 +252,54 @@ describe('approveWeekDraft', () => {
       expect(await approve({ sessions: edited })).toEqual({ ok: true, changed: true });
     });
   });
+
+  describe('the how-to in the coach’s review (training-architecture/26, E6)', () => {
+    const HOW_TO = {
+      segments: [
+        { name: 'warmUp', minutes: 10, zone: 'Z2', detail: null },
+        { name: 'main', minutes: 45, zone: 'Z2', detail: 'Rolling hills' },
+        { name: 'coolDown', minutes: 5, zone: 'Z1', detail: null },
+      ],
+      focus: ['Seated on the climbs'],
+    };
+    const FIRST = { ...SESSIONS[0], sport: 'bike', sportReason: 'knee', cue: 'Spin light.' };
+    const DRAFTED = [FIRST, { ...SESSIONS[1], sport: 'bike' }];
+
+    beforeEach(() => getPendingWeekDraft.mockResolvedValue({ ...DRAFT, sessions: DRAFTED }));
+
+    it('keeps the sport, Momentum’s cue and its reason through an unchanged approval', async () => {
+      expect(await approve({ sessions: DRAFTED })).toEqual({ ok: true, changed: false });
+      expect(recordWeekDraftApproval.mock.calls[0][0].sessions).toEqual(DRAFTED);
+    });
+
+    it('stores the coach’s own how-to on the session, and counts it as the coach shaping the week', async () => {
+      const edited = [{ ...DRAFTED[0], coachHowTo: HOW_TO }, DRAFTED[1]];
+      expect(await approve({ sessions: edited })).toEqual({ ok: true, changed: true });
+      expect(recordWeekDraftApproval.mock.calls[0][0].sessions[0]).toMatchObject({ coachHowTo: HOW_TO, cue: 'Spin light.' });
+    });
+
+    it('refuses the whole approval when the coach’s how-to does not add up to the session', async () => {
+      const edited = [{ ...DRAFTED[0], durationMinutes: 50, coachHowTo: HOW_TO }, DRAFTED[1]];
+      expect(await approve({ sessions: edited })).toEqual({ ok: false, reason: 'invalid' });
+      expect(recordWeekDraftApproval).not.toHaveBeenCalled();
+    });
+
+    it('never passes the coach’s words off as Momentum’s: an edited cue or reason is dropped', async () => {
+      const edited = [{ ...DRAFTED[0], cue: 'Tell Lars hi.', sportReason: 'her knee' }, { ...DRAFTED[1], cue: 'Mine.' }];
+      expect(await approve({ sessions: edited })).toEqual({ ok: true, changed: true });
+      const [first, second] = recordWeekDraftApproval.mock.calls[0][0].sessions;
+      expect(first).not.toHaveProperty('cue');
+      expect(first).not.toHaveProperty('sportReason');
+      expect(second).not.toHaveProperty('cue');
+      expect(first.sport).toBe('bike');
+    });
+
+    it('counts a changed sport or a removed cue as changed', async () => {
+      expect(await approve({ sessions: [{ ...DRAFTED[0], sport: 'run' }, DRAFTED[1]] })).toEqual({ ok: true, changed: true });
+      const { cue: _cue, ...noCue } = FIRST;
+      expect(await approve({ sessions: [noCue, DRAFTED[1]] })).toEqual({ ok: true, changed: true });
+    });
+  });
 });
 describe('approval never reaches the calendar', () => {
   it('head-coach-week-service.ts imports neither the plan writer nor the sessions table', () => {

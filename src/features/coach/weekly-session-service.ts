@@ -116,7 +116,10 @@ export async function commitWeeklyPlan(
   // Refuse the whole plan rather than silently commit a shrunken week; the
   // athlete re-plans.
   const window = await windowForCommit(athlete, conversation, today);
-  const validated = validateProposedPlan({ sessions: pending.sessions }, window);
+  // A discussed draft is staged here as it was approved, so it can carry the
+  // Head Coach's own how-to (`training-architecture/26`). Momentum's own
+  // proposals were validated without one before they were staged.
+  const validated = validateProposedPlan({ sessions: pending.sessions }, window, { coachHowTo: true });
   if (!validated.ok || validated.sessions.length !== pending.sessions.length) {
     return { ok: false, reason: 'stale' };
   }

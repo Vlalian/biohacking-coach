@@ -22,6 +22,8 @@ import {
   whatChangedFrom,
   volumeReasonFrom,
   isAdjusted,
+  withArithmeticSports,
+  withSwaps,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -414,10 +416,12 @@ async function askCoach(
 
   const proposal = proposalFrom(athleteId, reply, window);
   if (!proposal) return 'malformed';
-  const sessions = heldToBand(athleteId, proposal.sessions, gathered.baseline, proposal.volumeReason);
+  // The arithmetic's sport unless Momentum said why not (`training-architecture/26`, E4).
+  const sports = withArithmeticSports(proposal.sessions, gathered.baseline);
+  const sessions = heldToBand(athleteId, sports.sessions, gathered.baseline, proposal.volumeReason);
   return {
     sessions,
-    whatChanged: proposal.whatChanged,
+    whatChanged: withSwaps(proposal.whatChanged, sports.swaps),
     citations: gathered.grounding.citations,
     skeleton: gathered.skeleton,
     // Computed, never the Coach's word for it (R4): internal, for statistics.

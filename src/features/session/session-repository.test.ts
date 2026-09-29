@@ -120,7 +120,9 @@ describe('getSessionsForAthlete', () => {
     // write is refused rather than overwritten. `sport` is the one Garmin
     // column that crossed: the calendar card picks its icon by it
     // (showable-version/37). `summary` followed, narrowed to what the drawer
-    // shows of an imported session (garmin-integration/07).
+    // shows of an imported session (garmin-integration/07). `howTo` is what
+    // Momentum or the Head Coach wrote about doing it, which the drawer's
+    // how-to is computed from (training-architecture/26).
     expect(Object.keys(result[0]).sort()).toEqual(
       [
         'date',
@@ -129,6 +131,7 @@ describe('getSessionsForAthlete', () => {
         'feedbackBody',
         'feedbackComment',
         'feedbackMind',
+        'howTo',
         'id',
         'isTraining',
         'note',

@@ -95,6 +95,23 @@ describe('commitWeeklyPlan and the planning window', () => {
     expect(replaceCoachPlanForDateRange).toHaveBeenCalled();
   });
 
+  it('writes a discussed draft with the Head Coach’s approved how-to intact (training-architecture/26)', async () => {
+    const coachHowTo = {
+      segments: [
+        { name: 'warmUp', minutes: 10, zone: 'Z2', detail: null },
+        { name: 'main', minutes: 45, zone: 'Z2', detail: null },
+        { name: 'coolDown', minutes: 5, zone: 'Z2', detail: null },
+      ],
+      focus: ['Flat route'],
+    };
+    getPendingProposal.mockResolvedValue({ sessions: [{ ...INSIDE, coachHowTo }] });
+
+    await commitWeeklyPlan(ATHLETE, 'conv_1', TODAY);
+
+    const rows = (replaceCoachPlanForDateRange.mock.calls[0] as unknown[])[3] as unknown[];
+    expect(rows[0]).toMatchObject({ howTo: { coach: coachHowTo } });
+  });
+
   it('clears the whole window, not only the days the proposal filled', async () => {
     // The bound has to reach the *write*, not just the validation. A proposal
     // covering one day used to replace one day, so a Coach session already
