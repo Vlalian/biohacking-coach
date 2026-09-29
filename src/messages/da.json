@@ -872,6 +872,7 @@
     "fallbackError": "Det blev ikke gemt. Prøv igen."
   },
   "BlockStrip": {
+    "openHorizon": "Standard-forløb på seks måneder · intet løb valgt endnu",
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {uge} other {uger}} til {race}"
   },

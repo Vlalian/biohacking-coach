@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { addDays, today } from '@/lib/date';
 
 const {
   getSession,
@@ -43,7 +44,8 @@ vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getUiPrefs }));
 // adds "drafting" while the shell's after() is still writing the draft.
 const calendarSlotState = vi.fn(() => Promise.resolve(null as unknown));
 vi.mock('@/features/coach/week-draft-service', () => ({ calendarSlotState }));
-vi.mock('../../block-strip', () => ({ BlockStrip: () => null }));
+const BlockStrip = vi.fn(() => null);
+vi.mock('../../block-strip', () => ({ BlockStrip }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession } } }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteByUserId }));
@@ -290,5 +292,42 @@ describe('TrainingPlanPage — races in the calendar (training-architecture/37)'
     const tree = await render();
     expect(getRaces).not.toHaveBeenCalled();
     expect(findElement(tree, Calendar)?.props.races).toEqual([]);
+  });
+});
+
+describe('TrainingPlanPage — the Open Horizon under the month (training-architecture/13)', () => {
+  // The page reads the real clock; the dates are laid out around it.
+  const inDays = (n: number) => addDays(today(), n);
+  const block = { index: 1, total: 4, name: 'Base', startDate: inDays(-10), endDate: inDays(31), authoredBy: 'arithmetic', purpose: 'base' };
+
+  beforeEach(() => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: {} });
+  });
+
+  it('names the block and the week with no race line and no count, for an athlete with no race', async () => {
+    getResolvedBlocks.mockResolvedValueOnce({ race: null, set: null, blocks: [block], horizon: 'open', raceTooClose: false } as never);
+    const tree = await render();
+    const phase = findElement(tree, Calendar)?.props.phase as Record<string, unknown>;
+    expect(phase).toMatchObject({ blockName: 'Base', week: 2 });
+    expect(phase).not.toHaveProperty('raceName');
+    expect(phase).not.toHaveProperty('daysToRace');
+    expect(findElement(tree, BlockStrip)?.props.race).toBeNull();
+  });
+
+  it('a race too close for blocks is still named, with its days to go', async () => {
+    const race = { id: 'r1', name: 'Aarhus 70.3', date: inDays(20), distance: 'Half', isTarget: true };
+    getResolvedBlocks.mockResolvedValueOnce({ race, set: null, blocks: [block], horizon: 'open', raceTooClose: true } as never);
+    const tree = await render();
+    expect(findElement(tree, Calendar)?.props.phase).toMatchObject({ raceName: 'Aarhus 70.3', daysToRace: 20 });
+    expect(findElement(tree, BlockStrip)?.props.race).toEqual({ name: 'Aarhus 70.3', date: inDays(20) });
+  });
+
+  it('a target already run is neither named nor counted to', async () => {
+    const race = { id: 'r1', name: 'Aarhus 70.3', date: inDays(-3), distance: 'Half', isTarget: true };
+    getResolvedBlocks.mockResolvedValueOnce({ race, set: null, blocks: [block], horizon: 'open', raceTooClose: false } as never);
+    const tree = await render();
+    expect(findElement(tree, Calendar)?.props.phase).not.toHaveProperty('raceName');
+    expect(findElement(tree, BlockStrip)?.props.race).toBeNull();
   });
 });

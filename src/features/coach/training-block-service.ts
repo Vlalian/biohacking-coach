@@ -1,11 +1,12 @@
-import { getAthleteById } from '@/features/athlete/athlete-repository';
+import { getAthleteById, getAthleteSince } from '@/features/athlete/athlete-repository';
 import { getActiveLink, getLinkForAthlete } from './coach-repository';
 import { capacityFor } from '@/features/health/health-repository';
-import { getTargetRace } from '@/features/race/race-repository';
+import { getPastRaces, getRaces, getTargetRace } from '@/features/race/race-repository';
 import { getSessionsForAthlete } from '@/features/session/session-repository';
 import type { RaceRow } from '@/db/schema';
 import { logBlockAdjustmentRefused, logCoachFailure } from '@/lib/coach-log';
-import { addDays, weekStartOf } from '@/lib/date';
+import { addDays, dateKey, weekStartOf } from '@/lib/date';
+import { hasRaceHorizon, isRaceTooClose, lastPassedRaceDate, openHorizonBlocks, openHorizonStart } from './open-horizon';
 import {
   ADJUST_TRAINING_BLOCKS_TOOL,
   ADJUST_TRAINING_BLOCKS_TOOL_NAME,
@@ -66,22 +67,65 @@ const ADJUSTMENT_MAX_TOKENS = 800;
 const ADJUSTMENT_ACK = 'Recorded. Reply with one word.';
 
 export interface ResolvedBlocks {
+  /**
+   * The Target Race, or null. Present on an Open Horizon too when the athlete
+   * has one that is too close or already run: it is still their race, and the
+   * week still adjusts for it — only the blocks do not hang off it.
+   */
   race: RaceRow | null;
-  /** The stored set, whether or not it still fits the race; null when none. */
+  /** The stored set, whether or not it still fits the race; null when none, and always on an Open Horizon. */
   set: BlockSetRecord | null;
   blocks: TrainingBlock[];
+  /**
+   * What the blocks are anchored to (`training-architecture/13`): race day,
+   * counted backwards, or the Open Horizon's start, counted forwards. A reader
+   * that names a race or counts days to one reads `race`, never this.
+   */
+  horizon: 'race' | 'open';
+  /** A Target Race under eight weeks away: the Coach has not built toward it, and says so. */
+  raceTooClose: boolean;
 }
 
 /**
  * The blocks this athlete actually has today: the stored set when it fits the
- * race, otherwise the arithmetic draft. The one place the prompt readers and
- * the UI get blocks from, so they cannot disagree.
+ * race, otherwise the arithmetic draft — or, with no race eight weeks or more
+ * ahead, the Open Horizon (`training-architecture/13`). The one place the
+ * prompt readers and the UI get blocks from, so they cannot disagree.
  */
 export async function getResolvedBlocks(athleteId: string, today: string): Promise<ResolvedBlocks> {
   const race = await getTargetRace(athleteId);
-  if (!race) return { race: null, set: null, blocks: [] };
-  const set = await getBlockSet(athleteId, race.id);
-  return { race, set, blocks: resolveBlocks(today, race, set) };
+  if (race && hasRaceHorizon(today, race.date)) {
+    const set = await getBlockSet(athleteId, race.id);
+    return { race, set, blocks: resolveBlocks(today, race, set), horizon: 'race', raceTooClose: false };
+  }
+  return {
+    race,
+    set: null,
+    blocks: await openHorizonFor(athleteId, today),
+    horizon: 'open',
+    raceTooClose: race !== null && isRaceTooClose(today, race.date),
+  };
+}
+
+/**
+ * The Open Horizon's blocks, from the facts its start is read from: when the
+ * athlete onboarded (or the row was made, before that was recorded) and the
+ * last race they have run, of every race they told us of. None without an
+ * athlete row — there is no start to count from, and today would slide.
+ */
+async function openHorizonFor(athleteId: string, today: string): Promise<TrainingBlock[]> {
+  const [since, races, pastRaces] = await Promise.all([
+    getAthleteSince(athleteId),
+    getRaces(athleteId),
+    getPastRaces(athleteId),
+  ]);
+  if (!since) return [];
+  const start = openHorizonStart({
+    onboardedAt: since.onboardedAt,
+    createdAt: dateKey(since.createdAt),
+    lastPassedRaceDate: lastPassedRaceDate([...races, ...pastRaces].map((r) => r.date), today),
+  });
+  return openHorizonBlocks(start, today);
 }
 
 /** Why a run ended where it did. Returned for the log and the tests; the trigger ignores it. */

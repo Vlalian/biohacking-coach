@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AthleteRow } from '@/db/schema';
 
 const limit = vi.fn();
 const where = vi.fn(() => ({ limit }));
+const selectArgs: unknown[] = [];
 
 let updateCalls: unknown[] = [];
 const updateWhere = vi.fn(() => Promise.resolve());
@@ -13,13 +14,23 @@ const set = vi.fn((v: unknown) => {
 
 vi.mock('@/db', () => ({
   getDb: () => ({
-    select: () => ({ from: () => ({ where }) }),
+    select: (projection?: unknown) => {
+      selectArgs.push(projection);
+      return { from: () => ({ where }) };
+    },
     update: () => ({ set }),
   }),
 }));
 
-const { getAthleteByUserId, updateCommunicationStyle, updateExperienceLevel, updateHoursPerWeek, athleteProfileMerge } =
-  await import('./athlete-repository');
+const {
+  completeAthleteOnboarding,
+  getAthleteByUserId,
+  getAthleteSince,
+  updateCommunicationStyle,
+  updateExperienceLevel,
+  updateHoursPerWeek,
+  athleteProfileMerge,
+} = await import('./athlete-repository');
 
 function row(overrides: Partial<AthleteRow> = {}): AthleteRow {
   return {
@@ -169,5 +180,60 @@ describe('athleteProfileMerge (garmin-integration/03)', () => {
     expect(sql).toContain('COALESCE("athlete"."profile", \'{}\'::jsonb) ||');
     expect(params).toEqual([JSON.stringify({ historyImportedAt: null })]);
     expect(written.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('getAthleteSince (training-architecture/13)', () => {
+  beforeEach(() => {
+    limit.mockReset();
+    where.mockClear();
+  });
+
+  it('reads when the athlete arrived and when onboarding finished, scoped to the athlete', async () => {
+    const createdAt = new Date('2026-05-01T09:00:00Z');
+    limit.mockResolvedValue([{ createdAt, profile: { onboardedAt: '2026-06-01', fixedConstraints: [] } }]);
+
+    selectArgs.length = 0;
+    await expect(getAthleteSince('athlete_1')).resolves.toEqual({ createdAt, onboardedAt: '2026-06-01' });
+    // Two columns, not the row: nothing about the athlete but when they arrived.
+    expect(Object.keys(selectArgs[0] as object).sort()).toEqual(['createdAt', 'profile']);
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const condition = (where.mock.calls[0] as unknown[])[0] as import('drizzle-orm').SQL;
+    expect(new PgDialect().sqlToQuery(condition).params).toEqual(['athlete_1']);
+  });
+
+  it('has no onboarding date for a profile that never recorded one, and nothing for no athlete', async () => {
+    const createdAt = new Date('2026-05-01T09:00:00Z');
+    limit.mockResolvedValue([{ createdAt, profile: null }]);
+    await expect(getAthleteSince('athlete_1')).resolves.toEqual({ createdAt, onboardedAt: undefined });
+
+    limit.mockResolvedValue([]);
+    await expect(getAthleteSince('nobody')).resolves.toBeNull();
+  });
+});
+
+describe('completeAthleteOnboarding records the day it finished (training-architecture/13)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('merges onboardedAt, as today\'s date key, into the profile in the same write', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-01T10:00:00'));
+    updateCalls = [];
+
+    await completeAthleteOnboarding(
+      'athlete_1',
+      { experienceLevel: 'beginner', communicationStyle: 'x', raceTarget: null, raceDistance: 'Half', hoursPerWeek: 6 } as never,
+      { weeklySessionDay: 'Monday' },
+    );
+
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const profile = (updateCalls[0] as { profile: import('drizzle-orm').SQL }).profile;
+    const params = new PgDialect().sqlToQuery(profile).params;
+    expect(params.map((p) => (typeof p === 'string' && p.startsWith('{') ? JSON.parse(p) : p))).toContainEqual({
+      weeklySessionDay: 'Monday',
+      onboardedAt: '2026-06-01',
+    });
   });
 });

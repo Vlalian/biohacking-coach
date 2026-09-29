@@ -575,3 +575,18 @@ describe('Calendar — race days (training-architecture/37)', () => {
     expect(render()).not.toContain('data-race-day');
   });
 });
+
+describe('Calendar — the phase line on an Open Horizon (training-architecture/13)', () => {
+  it('names the block with no race line when there is no race', () => {
+    const html = render({ phase: { blockName: 'Base', week: 2, weeks: 6 } });
+    expect(html).toContain('data-phase-line');
+    expect(html).toContain('phaseLine');
+    expect(html).not.toContain('raceLine');
+  });
+
+  it('names the race and its days when there is one', () => {
+    const html = render({ phase: { blockName: 'Base', week: 2, weeks: 6, raceName: 'Aarhus 70.3', daysToRace: 20 } });
+    expect(html).toContain('Aarhus 70.3');
+    expect(html).toContain('raceLine');
+  });
+});

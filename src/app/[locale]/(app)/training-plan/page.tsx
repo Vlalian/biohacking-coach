@@ -82,7 +82,7 @@ const NO_ATHLETE: Awaited<ReturnType<typeof readCalendar>> = [
   [],
   [],
   [],
-  { race: null, set: null, blocks: [] },
+  { race: null, set: null, blocks: [], horizon: 'open', raceTooClose: false },
   null,
   [],
   undefined,
@@ -130,16 +130,17 @@ export default async function TrainingPlanPage({
 
   // The two lines under the month: the block and the race, from the same
   // resolved horizon the strip and the Coach read, so none of them disagree.
-  const block = horizon.race ? currentBlock(todayKey, horizon.blocks) : null;
-  const phase =
-    horizon.race && block
-      ? {
-          blockName: block.name,
-          ...blockPosition(todayKey, block),
-          raceName: horizon.race.name,
-          daysToRace: Math.max(0, daysBetween(todayKey, horizon.race.date)),
-        }
-      : null;
+  // The race only while it is ahead: an athlete on the Open Horizon with no
+  // race, or one already run, gets the block alone (training-architecture/13).
+  const block = currentBlock(todayKey, horizon.blocks);
+  const race = horizon.race && horizon.race.date >= todayKey ? horizon.race : null;
+  const phase = block
+    ? {
+        blockName: block.name,
+        ...blockPosition(todayKey, block),
+        ...(race ? { raceName: race.name, daysToRace: daysBetween(todayKey, race.date) } : {}),
+      }
+    : null;
 
   // Stage 2 runs here, **after the response is sent**. The page renders now;
   // the ~20 s Coach call runs once the athlete has their calendar, and the next
@@ -169,7 +170,7 @@ export default async function TrainingPlanPage({
     <div className="mx-auto flex w-full max-w-[1500px] flex-col items-center gap-6 px-4 py-6 lg:px-8 lg:py-8">
       <BlockStrip
         todayKey={todayKey}
-        race={horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null}
+        race={race ? { name: race.name, date: race.date } : null}
         blocks={horizon.blocks}
       />
       {/* One line on the athlete's own cycle (training-architecture/28); the day is changed in Settings. */}
