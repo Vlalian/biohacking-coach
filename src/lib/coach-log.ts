@@ -297,3 +297,21 @@ export function logCoachDrift(drift: CoachDrift): void {
     // Deliberately silent: see logCoachFailure.
   }
 }
+
+/**
+ * One line when the week draft's volume was clamped back into the band around
+ * the arithmetic (`training-architecture/48`, Mads's ruling R2): what the Coach
+ * drafted, what the clamp made it, the arithmetic's minutes and whether a
+ * reason was given. Numbers only — no athlete text. A warning, not an error:
+ * the draft still lands.
+ */
+export function logWeekDraftClamped(
+  athleteId: string,
+  clamp: { drafted: number; clampedTo: number; baseline: number; reasoned: boolean },
+): void {
+  try {
+    console.warn(JSON.stringify({ event: 'week_draft_clamped', athleteId, ...clamp }));
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}

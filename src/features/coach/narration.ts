@@ -167,8 +167,9 @@ function coachClause(event: NarratableEvent, t: Translate, weekdayOf: WeekdayOf)
  */
 function weekDraftedClause(payload: unknown, t: Translate, weekdayOf: WeekdayOf): string {
   const first = firstSessionDate(payload);
-  const key = wasAdjusted(payload) ? 'weekAdjusted' : 'weekDrafted';
-  const announced = first ? t(`${key}From`, { day: weekdayOf(first) }) : t(key);
+  // One announcement whatever the stored `adjusted` flag says: since
+  // `training-architecture/48` (R4) it is internal, for statistics only.
+  const announced = first ? t('weekDraftedFrom', { day: weekdayOf(first) }) : t('weekDrafted');
   const change = whatChangedOf(payload);
   return change ? t('weekDraftChange', { clause: announced, change }) : announced;
 }
@@ -180,15 +181,6 @@ function weekDraftedClause(payload: unknown, t: Translate, weekdayOf: WeekdayOf)
  */
 function whatChangedOf(payload: unknown): string | undefined {
   return field(payload, 'whatChanged')?.replace(/[.!?…\s]+$/u, '') || undefined;
-}
-
-/**
- * Whether the draft adjusted a week the structure had already filled
- * (`training-architecture/40`). Only a recorded `true` says so: every
- * `week_drafted` written before the flag existed reads as a plain draft.
- */
-function wasAdjusted(payload: unknown): boolean {
-  return (payload as { adjusted?: unknown } | null)?.adjusted === true;
 }
 
 /** The earliest `date` among the payload's sessions, or undefined when none is dated. */

@@ -490,6 +490,11 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
         description:
           "When you changed the week you were given, one sentence in the athlete's language on what you changed. Leave it out when you changed nothing.",
       },
+      volumeReason: {
+        type: 'string',
+        description:
+          "Only when the week's total minutes are more than 10% below the baseline week: the athlete's reason for the larger cut (injury, illness, fatigue they reported). The server allows at most 30% below with a reason, 10% without, and never more than 10% above.",
+      },
     },
     required: ['sessions'],
   },
@@ -520,6 +525,79 @@ function positiveMinutes(value: unknown): number | null {
  */
 export function whatChangedFrom(input: unknown): string | null {
   return optionalString((input as { whatChanged?: unknown } | null | undefined)?.whatChanged)?.trim() ?? null;
+}
+
+/**
+ * The stated reason for cutting the arithmetic's volume by more than 10 %
+ * (`training-architecture/48`, R1), or null when the Coach gave none.
+ */
+export function volumeReasonFrom(input: unknown): string | null {
+  return optionalString((input as { volumeReason?: unknown } | null | undefined)?.volumeReason)?.trim() ?? null;
+}
+
+/** The band around the arithmetic's minutes a draft may land in (R1). */
+const BAND = { below: 0.9, belowWithReason: 0.7, above: 1.1 } as const;
+
+/** How far a week may move before it counts as adjusted (R4). */
+const ADJUSTED_VOLUME = 0.05;
+
+function totalMinutes(sessions: readonly { durationMinutes: number | null }[]): number {
+  return sessions.reduce((sum, x) => sum + (x.durationMinutes ?? 0), 0);
+}
+
+/** A clamped session's minutes: rounded to five, never under fifteen (R2). */
+function fitMinutes(minutes: number): number {
+  return Math.max(15, Math.round(minutes / 5) * 5);
+}
+
+/**
+ * The draft held to the band around the arithmetic's volume
+ * (`training-architecture/48`, Mads's rulings R1 and R2, 2026-09-29).
+ *
+ * Within ±10 % the draft stands as it is. It may go down to −30 % only with a
+ * stated reason, and never above +10 %, reason or not. Outside the band every
+ * session's minutes are scaled by the same factor back to the nearest edge,
+ * rounded to five minutes and kept at fifteen or more — so the draft is never
+ * lost, only its volume is brought back. A week the arithmetic wrote nothing
+ * for has no band.
+ */
+export function clampToBand(
+  sessions: ProposedSession[],
+  baselineMinutes: number,
+  reason: string | null,
+): { sessions: ProposedSession[]; total: number; clamped: boolean } {
+  const total = totalMinutes(sessions);
+  const floor = baselineMinutes * (reason ? BAND.belowWithReason : BAND.below);
+  const target = Math.min(Math.max(total, floor), baselineMinutes * BAND.above);
+  if (baselineMinutes === 0 || target === total) return { sessions, total, clamped: false };
+  const factor = target / total;
+  const scaled = sessions.map((x) =>
+    x.durationMinutes === null ? x : { ...x, durationMinutes: fitMinutes(x.durationMinutes * factor) },
+  );
+  return { sessions: scaled, total: totalMinutes(scaled), clamped: true };
+}
+
+/** The (date, Session Type) pairs of a week, in date order, as one comparable key. */
+function shapeOf(sessions: readonly { date: string; type: string }[]): string {
+  return JSON.stringify(sessions.map((x) => [x.date, x.type]).sort());
+}
+
+/**
+ * Whether the draft really differs from the arithmetic's week (R4): a session
+ * added, removed, moved or retyped, or the volume moved by more than 5 %.
+ * Internal — stored for statistics, never shown to the athlete or the coach.
+ * The Coach's own flag said "adjusted" whenever a baseline existed, and a
+ * draft that copied the arithmetic to the minute claimed an adjustment (the
+ * 2026-09-26 audit). No arithmetic week is nothing to adjust.
+ */
+export function isAdjusted(
+  draft: readonly { date: string; type: string; durationMinutes: number | null }[],
+  baseline: readonly { date: string; type: string; durationMinutes: number | null }[],
+): boolean {
+  if (baseline.length === 0) return false;
+  if (shapeOf(draft) !== shapeOf(baseline)) return true;
+  const base = totalMinutes(baseline);
+  return Math.abs(totalMinutes(draft) - base) > base * ADJUSTED_VOLUME;
 }
 
 export type ValidatePlanResult =
@@ -607,7 +685,7 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow): ProposedSe
  * and narrows, so there is no sentinel empty string standing in for "not a
  * date": absence and invalidity are the same refusal and are written once.
  */
-function isPlannableDay(date: unknown, window: PlanningWindow): date is string {
+export function isPlannableDay(date: unknown, window: PlanningWindow): date is string {
   // Stryker disable next-line ConditionalExpression: equivalent. The typeof is
   // here to narrow for TypeScript; at runtime isValidDateKey already rejects a
   // non-string, so no behavioural test can tell the two apart.

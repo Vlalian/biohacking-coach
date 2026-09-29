@@ -1034,6 +1034,11 @@ export interface BaselineSession {
  * The week as it stands — what the structure drew, one line per session. The
  * Coach is adjusting a plan, not inventing one, and saying so is the whole
  * point of `training-architecture/34`: the athlete has already seen these.
+ *
+ * The two rules on how far it may move them (`training-architecture/48`, Mads
+ * 2026-09-29): R3 — adjust rather than remove, a prompt principle with no code
+ * rule behind it; R1 — the volume band, which `clampToBand` enforces anyway,
+ * stated here so the model aims inside it rather than being cut back.
  */
 function baselineBlock(baseline: BaselineSession[]): string {
   const lines = baseline.map(
@@ -1044,6 +1049,8 @@ function baselineBlock(baseline: BaselineSession[]): string {
   return `BASELINE WEEK (what the plan structure already put in the athlete's calendar):
 ${lines.join('\n')}
 Adjust it for this athlete and this week. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.
+Adjust and change the baseline's sessions rather than remove them: shorten, ease or swap a session before you drop it.
+VOLUME: keep the week within 10% of the baseline week's total minutes; go down to 30% below only with a reason in volumeReason (an injury, illness or fatigue the athlete reported); never more than 10% above. The server scales a week outside that band back to its edge.
 The athlete can already see this week: say in one sentence, in whatChanged, what you changed.`;
 }
 

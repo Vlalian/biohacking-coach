@@ -304,47 +304,41 @@ describe('composeNarration — the Coach announcing its own blocks (training-arc
     expect(mixed).toBe('single(clause=weekDraftedFrom(day=day:2026-09-24))');
   });
 
-  // training-architecture/40: the structure fills the week before the Coach
-  // drafts, so "drafted a week" reads wrong over a week the athlete could
-  // already see. The `adjusted` flag is recorded with the draft.
+  // training-architecture/40 said "adjusted" over a week the structure had
+  // filled; /48 (R4, 2026-09-29) made that internal only — a draft that copied
+  // the arithmetic still claimed an adjustment. Every draft is announced the
+  // same way now, whatever the stored flag says.
   const weekDrafted = (payload: unknown) =>
     composeNarration([{ id: 'ev_w', actorId: null, type: 'week_drafted', payload, createdAt: new Date() }], {}, t, weekday);
 
-  it('says the week was adjusted when the structure had already filled it', () => {
-    expect(weekDrafted({ sessions: [{ date: '2026-09-28' }], adjusted: true })).toBe(
-      'single(clause=weekAdjustedFrom(day=day:2026-09-28))',
-    );
-    expect(weekDrafted({ sessions: [], adjusted: true })).toBe('single(clause=weekAdjusted)');
-  });
-
-  it('keeps the planned wording where there was nothing to adjust, and for an event written before the flag', () => {
-    // Every `week_drafted` already in the events table predates `adjusted`.
+  it('announces a drafted week the same way whether or not it was adjusted', () => {
     for (const payload of [
+      { sessions: [{ date: '2026-09-28' }], adjusted: true },
       { sessions: [{ date: '2026-09-28' }], adjusted: false },
       { sessions: [{ date: '2026-09-28' }] },
-      { sessions: [{ date: '2026-09-28' }], adjusted: 'true' },
     ]) {
       expect(weekDrafted(payload)).toBe('single(clause=weekDraftedFrom(day=day:2026-09-28))');
     }
+    expect(weekDrafted({ sessions: [], adjusted: true })).toBe('single(clause=weekDrafted)');
   });
 
   it('carries the Coach’s one-line summary of what it changed as its own sentence', () => {
     expect(
       weekDrafted({ sessions: [{ date: '2026-09-28' }], adjusted: true, whatChanged: 'Moved the long ride to Saturday.' }),
-    ).toBe('single(clause=weekDraftChange(clause=weekAdjustedFrom(day=day:2026-09-28),change=Moved the long ride to Saturday))');
+    ).toBe('single(clause=weekDraftChange(clause=weekDraftedFrom(day=day:2026-09-28),change=Moved the long ride to Saturday))');
   });
 
   it('leaves the catalogue to finish the sentence, so the summary never ends in two stops', () => {
     // `single` adds the full stop and a list item adds none; a summary that
     // brought its own would read "Saturday.." in one and inconsistently in the other.
-    expect(weekDrafted({ sessions: [], adjusted: true, whatChanged: '  Cut Thursday short!  ' })).toBe(
-      'single(clause=weekDraftChange(clause=weekAdjusted,change=Cut Thursday short))',
+    expect(weekDrafted({ sessions: [], whatChanged: '  Cut Thursday short!  ' })).toBe(
+      'single(clause=weekDraftChange(clause=weekDrafted,change=Cut Thursday short))',
     );
   });
 
   it('adds nothing when the Coach said nothing, or said only blank space', () => {
     for (const whatChanged of [undefined, null, '', '   ', 42, '...']) {
-      expect(weekDrafted({ sessions: [], adjusted: true, whatChanged })).toBe('single(clause=weekAdjusted)');
+      expect(weekDrafted({ sessions: [], whatChanged })).toBe('single(clause=weekDrafted)');
     }
   });
 

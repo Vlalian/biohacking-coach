@@ -172,10 +172,9 @@ describe('pendingWeekDraft — the latest unresolved draft for a week', () => {
     }
   });
 
-  it('carries whether the draft adjusted a full week — false for one written before the flag (training-architecture/40)', () => {
+  it('does not surface whether the draft adjusted the week — internal only (training-architecture/48, R4)', () => {
     const flagged = { ...drafted('d1', NEXT_MON, 1), payload: { weekStart: NEXT_MON, sessions: [], adjusted: true } };
-    expect(pendingWeekDraft([flagged], NEXT_MON)?.adjusted).toBe(true);
-    expect(pendingWeekDraft([drafted('d1', NEXT_MON, 1)], NEXT_MON)?.adjusted).toBe(false);
+    expect(pendingWeekDraft([flagged], NEXT_MON)).not.toHaveProperty('adjusted');
   });
 
   it('a newer draft supersedes an older one', () => {

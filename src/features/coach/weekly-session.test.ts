@@ -12,6 +12,10 @@ import {
   whatChangedFrom,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   PROPOSE_WEEK_PLAN_TOOL,
+  clampToBand,
+  isAdjusted,
+  volumeReasonFrom,
+  type ProposedSession,
   type Readiness,
 } from './weekly-session';
 import { resolveBlocks, trainingBlocks } from './training-blocks';
@@ -827,5 +831,104 @@ describe('buildWeeklyCheckIn — the other races (training-architecture/09)', ()
 
   it('carries nothing when the races list has no target — a lone non-target race is just a race', () => {
     expect(build([tuneUp], null)).not.toHaveProperty('tuneUps');
+  });
+});
+
+/**
+ * `training-architecture/48`, Mads's rulings R1 and R2 (2026-09-29): the draft
+ * may move the arithmetic's volume ±10 % freely, down to −30 % with a stated
+ * reason, and never above +10 %. Outside the band, code scales every session
+ * back to the nearest edge — the draft is never lost.
+ */
+describe('clampToBand', () => {
+  const s = (durationMinutes: number | null, date = '2026-09-22'): ProposedSession => ({
+    date,
+    type: 'Endurance',
+    durationMinutes,
+    zone: 'Z2',
+    note: null,
+  });
+  const week = (each: number, n = 6) => Array.from({ length: n }, (_, i) => s(each, `2026-09-2${i + 1}`));
+
+  it('leaves a draft within ±10% of the arithmetic untouched', () => {
+    const out = clampToBand(week(90), 600, null);
+    expect(out.total).toBe(540);
+    expect(out.clamped).toBe(false);
+    expect(clampToBand(week(110), 600, null)).toMatchObject({ total: 660, clamped: false });
+  });
+
+  it('pulls an unexplained −35% back to −10%, and a reasoned −35% to −30%', () => {
+    expect(clampToBand(week(65), 600, null)).toMatchObject({ total: 540, clamped: true });
+    expect(clampToBand(week(65), 600, 'knee: easing run load')).toMatchObject({ total: 420, clamped: true });
+  });
+
+  it('lets a reasoned cut inside −30% stand as it is', () => {
+    expect(clampToBand(week(75), 600, 'tired')).toMatchObject({ total: 450, clamped: false });
+  });
+
+  it('never lets a draft exceed +10%, reason or not', () => {
+    expect(clampToBand(week(120), 600, 'feeling great')).toMatchObject({ total: 660, clamped: true });
+  });
+
+  it('scales every session proportionally, rounded to 5 min, never below 15', () => {
+    const out = clampToBand([s(300), s(60), s(30)], 600, null);
+    expect(out.sessions.map((x) => x.durationMinutes)).toEqual([415, 85, 40]);
+    expect(out.total).toBe(540);
+    expect(clampToBand([s(900), s(10)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([655, 15]);
+  });
+
+  it('keeps a session with no duration as it is', () => {
+    const out = clampToBand([s(300), s(null)], 600, null);
+    expect(out.sessions[1].durationMinutes).toBeNull();
+    expect(out.total).toBe(540);
+  });
+
+  it('has no band when the arithmetic wrote nothing for the week', () => {
+    expect(clampToBand(week(200), 0, null)).toMatchObject({ total: 1200, clamped: false });
+  });
+});
+
+describe('isAdjusted (R4: internal, for statistics)', () => {
+  const ARITH = [
+    { date: '2026-09-22', type: 'Endurance', durationMinutes: 60 },
+    { date: '2026-09-24', type: 'Tempo', durationMinutes: 80 },
+  ];
+  const drafted = (rows: typeof ARITH) =>
+    rows.map((r) => ({ ...r, type: r.type as ProposedSession['type'], zone: null, note: null }));
+
+  it('marks a week adjusted only when it really differs from the arithmetic', () => {
+    expect(isAdjusted(drafted(ARITH), ARITH)).toBe(false);
+    // Order is not a change: the same sessions listed the other way round.
+    expect(isAdjusted(drafted([...ARITH].reverse()), ARITH)).toBe(false);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], type: 'Intensity' }]), ARITH)).toBe(true);
+  });
+
+  it('counts a session added or removed as a change', () => {
+    expect(isAdjusted(drafted([ARITH[0]]), ARITH)).toBe(true);
+    expect(isAdjusted(drafted([...ARITH, { date: '2026-09-26', type: 'Recovery', durationMinutes: 30 }]), ARITH)).toBe(true);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], date: '2026-09-25' }]), ARITH)).toBe(true);
+  });
+
+  it('counts volume moved by more than 5% as a change, and 5% or less as none', () => {
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], durationMinutes: 87 }]), ARITH)).toBe(false);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], durationMinutes: 88 }]), ARITH)).toBe(true);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], durationMinutes: 72 }]), ARITH)).toBe(true);
+  });
+
+  it('is never adjusted when there was no arithmetic week to adjust', () => {
+    expect(isAdjusted(drafted(ARITH), [])).toBe(false);
+  });
+});
+
+describe('volumeReasonFrom', () => {
+  it('reads the stated reason for a larger cut, or none', () => {
+    expect(volumeReasonFrom({ sessions: [], volumeReason: ' knee ' })).toBe('knee');
+    expect(volumeReasonFrom({ sessions: [], volumeReason: '  ' })).toBeNull();
+    expect(volumeReasonFrom({ sessions: [] })).toBeNull();
+    expect(volumeReasonFrom(null)).toBeNull();
+  });
+
+  it('is offered on the tool, beside whatChanged', () => {
+    expect(PROPOSE_WEEK_PLAN_TOOL.input_schema.properties).toHaveProperty('volumeReason');
   });
 });

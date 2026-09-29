@@ -452,3 +452,19 @@ describe('the athlete signals the draft now reads (training-architecture/52)', (
     ).toMatchSnapshot();
   });
 });
+
+describe('the rules on how far the draft moves the baseline (training-architecture/48)', () => {
+  const BASELINE = [{ date: '2026-09-22', sport: 'bike', type: 'Endurance', durationMinutes: 90, zone: 'Z2', title: 'Easy ride' }];
+
+  it('tells the Coach to adjust the baseline rather than remove its sessions, and the volume band', () => {
+    const out = renderWeekDraftPrompt(ctx({ baseline: BASELINE }));
+    expect(out).toContain("Adjust and change the baseline's sessions rather than remove them");
+    expect(out).toContain('within 10% of the baseline week\'s total minutes');
+    expect(out).toContain('down to 30% below only with a reason in volumeReason');
+    expect(out).toContain('never more than 10% above');
+  });
+
+  it('says nothing of the band over a skeleton, where there is no baseline to hold to', () => {
+    expect(renderWeekDraftPrompt(ctx())).not.toContain('volumeReason');
+  });
+});

@@ -1,4 +1,4 @@
-import { logCoachFailure } from '@/lib/coach-log';
+import { logCoachFailure, logWeekDraftClamped } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
@@ -9,7 +9,7 @@ import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repositor
 import { retrievePassages, type RetrievalResult } from '@/features/knowledge-oracle/retrieval';
 import type { PlanningWindow } from './planning-window';
 import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
-import { buildWeeklyContext, renderWeekDraftPrompt } from './prompts';
+import { buildWeeklyContext, renderWeekDraftPrompt, type BaselineSession } from './prompts';
 import { draftContextOf, draftInclude, readAthleteContext } from './athlete-context';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
@@ -19,6 +19,10 @@ import {
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   validateProposedPlan,
   whatChangedFrom,
+  volumeReasonFrom,
+  clampToBand,
+  isAdjusted,
+  isPlannableDay,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -373,7 +377,7 @@ interface Drafted {
   sessions: ProposedSession[];
   citations: RetrievalResult['citations'];
   skeleton: SkeletonDay[];
-  /** The week already held the structure's sessions (`training-architecture/40`). */
+  /** The draft differs from the arithmetic's week (`isAdjusted`, R4): internal, for statistics. */
   adjusted: boolean;
   whatChanged: string | null;
 }
@@ -411,12 +415,35 @@ async function askCoach(
 
   const proposal = proposalFrom(athleteId, reply, window);
   if (!proposal) return 'malformed';
+  const sessions = heldToBand(athleteId, proposal.sessions, gathered.baseline, proposal.volumeReason);
   return {
-    ...proposal,
+    sessions,
+    whatChanged: proposal.whatChanged,
     citations: gathered.grounding.citations,
     skeleton: gathered.skeleton,
-    adjusted: gathered.adjusted,
+    // Computed, never the Coach's word for it (R4): internal, for statistics.
+    adjusted: isAdjusted(sessions, gathered.baseline),
   };
+}
+
+/**
+ * The drafted sessions held to the band around the arithmetic's minutes
+ * (`training-architecture/48`, R1/R2), with one log line when the clamp moved
+ * them. The draft is never refused for its volume.
+ */
+function heldToBand(
+  athleteId: string,
+  sessions: ProposedSession[],
+  baseline: BaselineSession[],
+  volumeReason: string | null,
+): ProposedSession[] {
+  const baselineMinutes = baseline.reduce((sum, x) => sum + (x.durationMinutes ?? 0), 0);
+  const held = clampToBand(sessions, baselineMinutes, volumeReason);
+  if (held.clamped) {
+    const drafted = sessions.reduce((sum, x) => sum + (x.durationMinutes ?? 0), 0);
+    logWeekDraftClamped(athleteId, { drafted, clampedTo: held.total, baseline: baselineMinutes, reasoned: volumeReason !== null });
+  }
+  return held.sessions;
 }
 
 /** Runs one step of the draft; a throw is logged as this surface's failure and named, never rethrown. */
@@ -438,7 +465,7 @@ function proposalFrom(
   athleteId: string,
   reply: CoachReply,
   window: PlanningWindow,
-): { sessions: ProposedSession[]; whatChanged: string | null } | null {
+): { sessions: ProposedSession[]; whatChanged: string | null; volumeReason: string | null } | null {
   const call = reply.toolCalls.find((c) => c.name === PROPOSE_WEEK_PLAN_TOOL_NAME);
   if (!call) {
     logCoachFailure({ surface: 'week_draft', athleteId, conversationId: null, error: new Error('no tool call') });
@@ -454,7 +481,11 @@ function proposalFrom(
     });
     return null;
   }
-  return { sessions: validated.sessions, whatChanged: whatChangedFrom(call.input) };
+  return {
+    sessions: validated.sessions,
+    whatChanged: whatChangedFrom(call.input),
+    volumeReason: volumeReasonFrom(call.input),
+  };
 }
 
 /** The prompt, the skeleton it was built from, and the grounding it carried. */
@@ -464,7 +495,7 @@ async function gatherContext(
   window: PlanningWindow,
   unavailableDates: string[],
   declined: DeclinedDraft | null,
-): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; adjusted: boolean }> {
+): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; baseline: BaselineSession[] }> {
   // The drafted week, not this one: the history the draft reads counts back
   // from the week it is writing (`training-architecture/44`).
   const draftedWeek = weekStartOf(window.start);
@@ -496,9 +527,10 @@ async function gatherContext(
     passages: grounding.passages,
     citations: grounding.citations,
   };
-  // The fact the narration needs and cannot recover later: the draft adjusted
-  // a week the structure had filled, rather than filling an empty one.
-  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, adjusted: baseline.length > 0 };
+  // The band and the adjusted flag (`training-architecture/48`) compare the
+  // draft with the arithmetic's sessions it could have kept: the window's days.
+  const inWindow = baseline.filter((x) => isPlannableDay(x.date, window));
+  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, baseline: inWindow };
 }
 
 const NO_GROUNDING: RetrievalResult = { passages: [], citations: [] };
