@@ -397,6 +397,11 @@
     "edit": "Rediger session",
     "delete": "Slet session",
     "undoImport": "Fortryd denne import",
+    "imported": "Hentet fra dit ur — skal ikke bedømmes.",
+    "deviceFacts": {
+      "distance": "Afstand {km} km",
+      "avgHr": "Gennemsnitspuls {bpm} slag/min"
+    },
     "readOnlyNote": "Indholdet kommer fra Momentum eller din træner — du kan flytte eller springe det over.",
     "createLabel": "Ny session",
     "createType": "Type",

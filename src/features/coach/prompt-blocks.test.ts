@@ -35,6 +35,7 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
         skipped: 1,
         byType: [{ type: 'Endurance', completed: 1, doneMinutes: 60 }],
         soFar: false,
+        imported: 0,
       },
     ]);
     expect(rendered).toContain('RECENT WEEKS:');
@@ -50,6 +51,7 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     skipped: 0,
     byType: [],
     soFar: false,
+    imported: 0,
   });
 
   it('is null when there is no history, so assemble drops it', () => {
@@ -76,6 +78,14 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     ]) {
       expect(recentWeeksBlock([empty('2026-09-14'), week])).toContain('- Week of 2026-09-21: 0.0h done of');
     }
+  });
+
+  it('says how many sessions came from the device, and that they need no rating (garmin-integration/07)', () => {
+    const rendered = recentWeeksBlock([
+      { ...empty('2026-09-21'), plannedMinutes: 120, doneMinutes: 120, completed: 2, imported: 2 },
+    ]);
+    expect(rendered).toContain('2 completed, 0 skipped, 2 imported from the athlete\'s device (no rating expected)');
+    expect(recentWeeksBlock([{ ...empty('2026-09-21'), completed: 1 }])).not.toContain('imported');
   });
 
   it('says the current week is only up to today, empty or not', () => {

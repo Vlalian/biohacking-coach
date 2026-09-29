@@ -675,8 +675,9 @@ describe('formatWeekSessions — authorship labels and the parameter tail', () =
     // The structure's own row (`training-architecture/34`): the Coach is
     // adjusting a default, not holding on someone else's prescription.
     expect(labelFor('arithmetic')).toContain('the plan structure put this here');
-    // A Detected Activity in CONTEXT.md's terms, said plainly to the model.
-    expect(labelFor('garmin')).toContain("logged from the athlete's watch");
+    // A History Upload in CONTEXT.md's terms, said plainly to the model: it is
+    // imported history and needs no rating (garmin-integration/07).
+    expect(labelFor('garmin')).toContain("imported from the athlete's watch, no rating expected");
   });
 
   it('renders duration and zone as a separated tail, and omits it entirely when there is neither', () => {

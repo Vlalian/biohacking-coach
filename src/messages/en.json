@@ -397,6 +397,11 @@
     "edit": "Edit session",
     "delete": "Delete session",
     "undoImport": "Undo this import",
+    "imported": "Imported from your device — no rating needed.",
+    "deviceFacts": {
+      "distance": "Distance {km} km",
+      "avgHr": "Average heart rate {bpm} bpm"
+    },
     "readOnlyNote": "This session's content comes from Momentum or your coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",

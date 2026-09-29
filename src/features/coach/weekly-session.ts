@@ -1,6 +1,6 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
-import type { Session } from '@/features/session/session';
+import { isImportedHistory, type Session } from '@/features/session/session';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
@@ -316,6 +316,12 @@ export interface WeekSummary {
    * come is left out rather than read as not done.
    */
   soFar: boolean;
+  /**
+   * How many of the completed sessions are imported history — a History
+   * Upload's, which needs no rating (`garmin-integration/07`). Counted within
+   * `completed`, so the Coach reads them as done and never as unrated.
+   */
+  imported: number;
 }
 
 /** How many weeks before the drafted one the draft reads. */
@@ -324,8 +330,10 @@ export const RECENT_WEEKS = 4;
 /**
  * The four weeks before `targetWeekStart`, oldest first — a week with nothing
  * in it is returned empty rather than dropped, so the Coach reads a gap as a
- * gap. Done means `status = 'completed'` whatever wrote the session: the
- * history importer writes `origin: 'athlete'`, and nothing writes `'garmin'`.
+ * gap. Done means `status = 'completed'` whatever wrote the session: a
+ * Detected Activity accept keeps `'athlete'` or the planned session's origin,
+ * and a History Upload writes `'garmin'` — counted as done and as
+ * {@link WeekSummary.imported}, never as a reflection missing.
  *
  * The draft is written days before its week starts, so the last of the four is
  * usually the current one. A session from today on that is neither completed
@@ -351,6 +359,7 @@ function summariseWeek(weekStart: string, week: Session[], soFar: boolean): Week
     skipped: week.filter((s) => s.status === 'skipped').length,
     byType: typeSplit(done),
     soFar,
+    imported: done.filter(isImportedHistory).length,
   };
 }
 

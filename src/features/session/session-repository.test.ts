@@ -118,7 +118,8 @@ describe('getSessionsForAthlete', () => {
     // nothing renders it, but every editor sends it back so a concurrent
     // write is refused rather than overwritten. `sport` is the one Garmin
     // column that crossed: the calendar card picks its icon by it
-    // (showable-version/37).
+    // (showable-version/37). `summary` followed, narrowed to what the drawer
+    // shows of an imported session (garmin-integration/07).
     expect(Object.keys(result[0]).sort()).toEqual(
       [
         'date',
@@ -134,6 +135,7 @@ describe('getSessionsForAthlete', () => {
         'parked',
         'sport',
         'status',
+        'summary',
         'title',
         'type',
         'version',

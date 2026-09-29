@@ -667,17 +667,19 @@ function chatPlanningBlocks(planning: ChatPlanning | null): PromptBlock[] {
  * set this" are the difference between a Coach that reshapes its own session and
  * one that explains and holds on someone else's (ADR 0003).
  *
- * The `garmin` origin is a **Detected Activity** in `CONTEXT.md`'s terms. The
- * label stays plain language for the same reason the others do — the model is
- * being told what happened, not taught the glossary — but the domain term is
- * named here so a reader of this code can find the entry that governs it.
+ * The `garmin` origin is a **History Upload** in `CONTEXT.md`'s terms — the
+ * only writer of it (`history-import-service.ts`); a Detected Activity accept
+ * keeps the session's own origin. The label stays plain language for the same
+ * reason the others do — the model is being told what happened, not taught the
+ * glossary — but the domain term is named here so a reader of this code can
+ * find the entry that governs it.
  */
 const ORIGIN_LABEL: Record<SessionOrigin, string> = {
   coach: 'you planned this',
   arithmetic: 'the plan structure put this here',
   head_coach: "the athlete's coach set this",
   athlete: 'the athlete added this themselves',
-  garmin: "logged from the athlete's watch",
+  garmin: "imported from the athlete's watch, no rating expected",
 };
 
 /**

@@ -56,6 +56,7 @@ describe('prescribedSessionOf', () => {
       status: 'planned',
       parked: false,
       sport: null,
+      summary: null,
       dayOrder: 0,
       origin: 'head_coach',
       feedbackBody: null,

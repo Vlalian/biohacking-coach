@@ -148,7 +148,9 @@ function recentWeekLine(week: WeekSummary): string {
   // The current week is only part-way through; say so, or its unfinished days read as a light week.
   const label = `- Week of ${week.weekStart}${week.soFar ? ' (this week, up to today)' : ''}`;
   if (isEmptyWeek(week)) return `${label}: empty — nothing planned, nothing done`;
-  const counts = `${week.completed} completed, ${week.skipped} skipped`;
+  // Imported history needs no rating (garmin-integration/07): say so, or weeks of unrated uploads read as an athlete who never reflects.
+  const imported = week.imported > 0 ? `, ${week.imported} imported from the athlete's device (no rating expected)` : '';
+  const counts = `${week.completed} completed, ${week.skipped} skipped${imported}`;
   const types = week.byType.map((t) => `${t.type} ${t.completed} (${hours(t.doneMinutes)})`).join(', ');
   return `${label}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}`;
 }

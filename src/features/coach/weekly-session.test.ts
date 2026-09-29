@@ -67,6 +67,7 @@ function session(overrides: Partial<Session> = {}): Session {
     feedbackComment: null,
     origin: 'coach',
     isTraining: true,
+    summary: null,
     ...overrides,
   };
 }
@@ -219,9 +220,9 @@ describe('fourWeekSummary', () => {
     expect(week).toMatchObject({ completed: 1, doneMinutes: 0, plannedMinutes: 0 });
   });
 
-  it('counts an imported session as done — the importer writes origin "athlete", not "garmin"', () => {
-    // `origin: 'garmin'` is legal in the schema and written nowhere in production
-    // (detected-activity.ts writes 'athlete'). Filtering on it would find nothing.
+  it('counts a session from a device as done, whichever origin wrote it', () => {
+    // A Detected Activity accept keeps 'athlete' (or the planned session's own
+    // origin); a History Upload writes 'garmin'. Both are done.
     const week = fourWeekSummary(
       [
         session({ date: '2026-09-21', status: 'completed', duration: 60, origin: 'athlete' }),
@@ -231,6 +232,19 @@ describe('fourWeekSummary', () => {
       DRAFTED_ON_THE_MONDAY,
     )[3];
     expect(week).toMatchObject({ completed: 2, doneMinutes: 90 });
+  });
+
+  it('counts imported sessions as done and imported, never as unrated (garmin-integration/07)', () => {
+    const week = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', origin: 'garmin', feedbackBody: null }),
+        session({ date: '2026-09-22', status: 'completed', origin: 'coach', feedbackBody: null }),
+      ],
+      '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
+    )[3];
+    expect(week.completed).toBe(2);
+    expect(week.imported).toBe(1);
   });
 
   it('splits the week by Session Type, listing only the types that happened', () => {
