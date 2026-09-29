@@ -15,7 +15,6 @@ import {
   clampToBand,
   isAdjusted,
   volumeReasonFrom,
-  sportOf,
   withArithmeticSports,
   withSwaps,
   type ProposedSession,
@@ -1028,18 +1027,33 @@ describe('sport, sportReason and cue (training-architecture/26)', () => {
     expect(plain).not.toHaveProperty('howTo');
   });
 
+  /** The one session's sport once held to the arithmetic's day. */
+  const heldSport = (session: Partial<ProposedSession>, day: { sport: string }[]) =>
+    withArithmeticSports([{ ...ROW, ...session } as ProposedSession], day.map((x) => ({ ...x, date: ROW.date }))).sessions[0].sport;
+
   it('reverts an unexplained sport swap to the arithmetic\'s sport, and keeps an explained one', () => {
-    expect(sportOf({ sport: 'bike' }, ARITH_RUN_DAY)).toBe('run');
-    expect(sportOf({ sport: 'bike', sportReason: 'knee' }, ARITH_RUN_DAY)).toBe('bike');
-    expect(sportOf({ sport: 'run' }, ARITH_RUN_DAY)).toBe('run');
+    expect(heldSport({ sport: 'bike' }, ARITH_RUN_DAY)).toBe('run');
+    expect(heldSport({ sport: 'bike', sportReason: 'knee' }, ARITH_RUN_DAY)).toBe('bike');
+    expect(heldSport({ sport: 'run' }, ARITH_RUN_DAY)).toBe('run');
   });
 
   it('takes the arithmetic\'s sport when Momentum gave none, and Momentum\'s own on a day the arithmetic left empty', () => {
-    expect(sportOf({}, ARITH_RUN_DAY)).toBe('run');
-    expect(sportOf({ sport: 'swim' }, [])).toBe('swim');
-    expect(sportOf({}, [])).toBeUndefined();
+    expect(heldSport({}, ARITH_RUN_DAY)).toBe('run');
+    expect(heldSport({ sport: 'swim' }, [])).toBe('swim');
+    expect(heldSport({}, [])).toBeUndefined();
     // A day the arithmetic wrote no known sport for holds nothing to revert to.
-    expect(sportOf({ sport: 'swim' }, [{ sport: '' }])).toBe('swim');
+    expect(heldSport({ sport: 'swim' }, [{ sport: '' }])).toBe('swim');
+  });
+
+  it('drops a sport reason carrying an identifier, so the swap reverts and no staged week can fail a chat turn', () => {
+    // The staged proposal is walked by the prompt's identifier assertion
+    // (`prompts.ts`, chatPlanningBlocks): a reason kept here would refuse every
+    // later chat turn until the athlete decided on the week. Dropped, like a cue.
+    const [p] = validated({ ...ROW, sport: 'bike', sportReason: 'knee, ask the physio at a@b.dk' });
+    expect(p).toEqual({ ...ROW, sport: 'bike' });
+    expect(validated({ ...ROW, sport: 'bike', sportReason: 'call +45 12345678' })[0]).not.toHaveProperty('sportReason');
+    const held = withArithmeticSports([p], ARITH_RUN_DAY);
+    expect(held).toEqual({ sessions: [{ ...ROW, sport: 'run' }], swaps: [] });
   });
 
   it('holds a week to the arithmetic\'s sports day by day, and names each explained swap', () => {

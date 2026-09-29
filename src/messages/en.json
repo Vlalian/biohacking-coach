@@ -1033,6 +1033,12 @@
     "minutes": "min",
     "focus": "Focus",
     "momentumCue": "From Momentum",
-    "byCoach": "Written by the coach"
+    "byCoach": "Written by the coach",
+    "sports": {
+      "swim": "swim",
+      "bike": "bike",
+      "run": "run",
+      "brick": "brick"
+    }
   }
 }

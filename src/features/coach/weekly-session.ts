@@ -2,6 +2,7 @@ import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
 import { isImportedHistory, isUnrecorded, type Session } from '@/features/session/session';
 import { coachHowToFrom, cueFrom, type HowTo, type StoredHowTo } from '@/features/session/how-to';
+import { isFreeOfShapedIdentifiers } from '@/lib/identifiers';
 import { HOW_TO_SPORTS, type HowToSport } from '@/features/session/how-to-templates';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
@@ -741,7 +742,18 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow, coachHowTo:
 
 /** Momentum's sport, its reason and its cue, each only when it has a usable value (`training-architecture/26`). */
 function howToFieldsOf(s: Record<string, unknown>): Pick<ProposedSession, 'sport' | 'sportReason' | 'cue'> {
-  return presentOnly({ sport: howToSportOf(s.sport), sportReason: optionalString(s.sportReason)?.trim(), cue: cueFrom(s.cue) });
+  return presentOnly({ sport: howToSportOf(s.sport), sportReason: sportReasonFrom(s.sportReason), cue: cueFrom(s.cue) });
+}
+
+/**
+ * Momentum's reason for a sport swap, trimmed, or null. A reason carrying a
+ * shaped identifier is dropped like a cue, and the swap reverts with it: a
+ * staged week is walked by the chat prompt's identifier assertion, and a
+ * reason kept here would refuse every later chat turn.
+ */
+function sportReasonFrom(value: unknown): string | null {
+  const reason = optionalString(value)?.trim() ?? null;
+  return isFreeOfShapedIdentifiers(reason) ? reason : null;
 }
 
 /**
@@ -775,7 +787,7 @@ function howToSportOf(value: unknown): HowToSport | null {
  * matches one of the arithmetic's sessions that day, when it gave a reason, or
  * on a day the arithmetic wrote no known sport for.
  */
-export function sportOf(
+function sportOf(
   session: Pick<ProposedSession, 'sport' | 'sportReason'>,
   arithmeticDay: readonly { sport: string }[],
 ): HowToSport | undefined {

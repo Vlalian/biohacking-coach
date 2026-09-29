@@ -145,7 +145,8 @@ describe('WeekDraftReview', () => {
     it('shows the sport, and Momentum’s reason and cue when it gave them', () => {
       const sessions = [{ ...DRAFT.sessions[0], sport: 'bike' as const, sportReason: 'knee', cue: 'Spin light.' }];
       const [card] = cards(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions }} />));
-      expect(card).toContain('sport(sport=bike)');
+      // The sport by its name in the viewer's language, never the stored key.
+      expect(card).toContain('sport(sport=sports.bike())');
       expect(card).toContain('sportReason(reason=knee)');
       expect(card).toContain('Spin light.');
       expect(card).toContain('momentumCue()');
@@ -162,6 +163,8 @@ describe('WeekDraftReview', () => {
       const sessions = [{ ...DRAFT.sessions[0], coachHowTo }];
       const [card] = cards(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions }} />));
       expect(card?.match(/data-edit-segment=/g)).toHaveLength(2);
+      // Each segment labelled in the viewer's language, as the read-only block labels it.
+      expect(card).toMatch(/data-edit-segment="warmUp"[^>]*><span[^>]*>warmUp\(\)<\/span>/);
       expect(card).toContain('value="Hills"');
       expect(card).toContain('howToSum(sum=55,total=60)');
       expect(card).toMatch(/<textarea[^>]*rows="2"[^>]*>Seated\nSteady<\/textarea>/);

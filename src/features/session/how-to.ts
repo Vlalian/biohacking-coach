@@ -32,7 +32,7 @@ import {
 export const ZONES = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] as const;
 export type Zone = (typeof ZONES)[number];
 
-export const SEGMENT_NAMES = ['warmUp', 'steady', 'main', 'coolDown'] as const;
+const SEGMENT_NAMES = ['warmUp', 'steady', 'main', 'coolDown'] as const;
 export type SegmentName = (typeof SEGMENT_NAMES)[number];
 
 /** One part of a session: its minutes, its zone, and what to do in it when that is more than the zone. */
@@ -95,7 +95,7 @@ const EASY_ZONE: Zone = 'Z2';
 const REST_ZONE: Zone = 'Z1';
 /** Under this, a session is one block: a warm-up and cool-down would leave no main part worth the name. */
 const SHORTEST_SPLIT = 20;
-/** §07: an hour or more asks for fuelling practice (corpus #5–#7). */
+/** Over an hour asks for fuelling practice: corpus #5's territory is carbohydrate rates for >60 min efforts (#6–#7 the rates and the gut). */
 const FUELLING_OVER = 60;
 
 /** §07 swim warm-up and cool-down, in metres: the corpus's most uniform number. */

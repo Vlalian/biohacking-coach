@@ -1033,6 +1033,12 @@
     "minutes": "min",
     "focus": "Fokus",
     "momentumCue": "Fra Momentum",
-    "byCoach": "Skrevet af træneren"
+    "byCoach": "Skrevet af træneren",
+    "sports": {
+      "swim": "svøm",
+      "bike": "cykel",
+      "run": "løb",
+      "brick": "brick-session"
+    }
   }
 }

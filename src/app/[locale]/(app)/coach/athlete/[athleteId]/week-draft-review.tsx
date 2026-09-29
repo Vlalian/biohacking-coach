@@ -212,6 +212,8 @@ function RowHowTo({
   onChange: (howTo: HowTo | null) => void;
 }) {
   const t = useTranslations('WeekDraftReview');
+  // The sport and the segment names as the read-only block names them, never the stored key.
+  const names = useTranslations('HowTo');
   const view = howToOfRow(row, locale);
   const label = 'flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground';
   const button = 'inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal';
@@ -221,14 +223,14 @@ function RowHowTo({
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3" data-row-how-to>
       <p className="font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">{t('howTo')}</p>
-      {row.sport && <p className="font-body text-sm text-foreground">{t('sport', { sport: row.sport })}</p>}
+      {row.sport && <p className="font-body text-sm text-foreground">{t('sport', { sport: names(`sports.${row.sport}`) })}</p>}
       {row.sportReason && <p className="font-body text-sm text-muted-foreground">{t('sportReason', { reason: row.sportReason })}</p>}
       {view && !editing && <HowToBlock howTo={view} />}
       {editing ? (
         <div className="flex flex-col gap-3">
           {editing.segments.map((segment, i) => (
             <div key={i} className="flex flex-wrap items-end gap-3" data-edit-segment={segment.name}>
-              <span className="w-full font-body text-sm font-semibold text-foreground sm:w-28">{segment.name}</span>
+              <span className="w-full font-body text-sm font-semibold text-foreground sm:w-28">{names(segment.name)}</span>
               <label className={label}>
                 {t('segmentMinutes')}
                 <input
