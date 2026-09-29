@@ -73,7 +73,8 @@ export function buildInterviewPrompt({
     ]),
 
     block('WHAT THE APP IS', [
-      'The app in the words its team uses, one feature per line, so you can tell which part they mean and ask about that part. It is for your understanding: do not explain the app to them, and do not correct the words they use for it.',
+      'The app in the words its team uses, one feature per line, so you can tell which part they mean and ask about that part. It is for your understanding: do not walk them through the app, and do not correct the words they use for it.',
+      'When the tester wishes for something that already exists here, you may say that it already exists and name it. Say where it is only if the list above says so; never guess. Then ask about it: did they find it, and if they did, why did it not do what they needed? That gap is the finding. Never bring a feature up first, and never use one to argue that their complaint is wrong.',
       ...PRODUCT_BRIEF,
     ]),
 

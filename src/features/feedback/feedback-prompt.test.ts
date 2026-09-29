@@ -93,6 +93,12 @@ describe('the interviewer knows the app, and does not steer (showable-version/58
     for (const line of PLANNED_FEATURES) expect(p.indexOf(line)).toBeGreaterThan(planned);
   });
 
+  it('may say a feature the tester asks for already exists, but never brings one up first (Mads, 2026-09-29)', () => {
+    expect(p).toMatch(/already exists/i);
+    expect(p).toMatch(/did they find it/i);
+    expect(p).toMatch(/never bring a feature up first/i);
+  });
+
   it('never promises a planned feature', () => {
     expect(p).toMatch(/never promise/i);
   });
