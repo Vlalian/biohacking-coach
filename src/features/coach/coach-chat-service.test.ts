@@ -14,7 +14,9 @@ const {
   getOwnedSession,
   getSessionsForWeek,
   logCoachFailure,
+  getArithmeticSessionsForWeek,
 } = vi.hoisted(() => ({
+  getArithmeticSessionsForWeek: vi.fn(async (): Promise<unknown[]> => []),
   callCoach: vi.fn(),
   createConversation: vi.fn(),
   getOwnedConversation: vi.fn(),
@@ -28,7 +30,8 @@ const {
 
 vi.mock('./coach-client', () => ({ callCoach }));
 const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
+const { logWeekDraftClamped } = vi.hoisted(() => ({ logWeekDraftClamped: vi.fn() }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift, logWeekDraftClamped }));
 const { capacityFor } = vi.hoisted(() => ({ capacityFor: vi.fn<() => Promise<string | null>>(async () => null) }));
 // The structured injury read and the week's moves (`training-architecture/52`):
 // boundaries, none open and none moved by default.
@@ -100,6 +103,7 @@ vi.mock('@/features/session/session-repository', () => ({
   getSessionsForWeek,
   // The recent weeks Chat reads since `training-architecture/52`. None by default.
   getSessionsInRange: vi.fn(async () => []),
+  getArithmeticSessionsForWeek,
 }));
 
 const { sendCoachChatMessage, getOpenCoachChat } = await import('./coach-chat-service');
@@ -477,6 +481,72 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(recordProposal).not.toHaveBeenCalled();
   });
 
+  describe('holds the week to the band around the arithmetic (training-architecture/48, ruling 2026-09-29)', () => {
+    // Two arithmetic sessions inside this week's remainder (200 min) and one
+    // on Monday, before the window, which the band must not count.
+    const ARITHMETIC = [
+      { date: '2026-09-15', sport: 'run', type: 'Endurance', durationMinutes: 1000, zone: 'Z2', title: 'Before' },
+      { date: '2026-09-17', sport: 'bike', type: 'Endurance', durationMinutes: 100, zone: 'Z2', title: 'Ride' },
+      { date: '2026-09-18', sport: 'run', type: 'Endurance', durationMinutes: 100, zone: 'Z2', title: 'Run' },
+    ];
+    const week = (minutes: number, volumeReason?: string) => ({
+      sessions: [
+        { date: '2026-09-17', type: 'Endurance', durationMinutes: minutes, zone: 'Z2', note: null },
+        { date: '2026-09-18', type: 'Endurance', durationMinutes: minutes, zone: 'Z2', note: null },
+      ],
+      ...(volumeReason ? { volumeReason } : {}),
+    });
+    const stagedMinutes = () =>
+      ((recordProposal.mock.calls[0] as unknown[])[2] as { durationMinutes: number }[]).map((x) => x.durationMinutes);
+
+    beforeEach(() => {
+      getArithmeticSessionsForWeek.mockReset().mockResolvedValue(ARITHMETIC);
+      logWeekDraftClamped.mockClear();
+    });
+
+    it('pulls a week 35 % under the arithmetic, with no reason, back to −10 %', async () => {
+      callCoach.mockResolvedValue({ text: 'Lighter.', toolCalls: [{ name: 'propose_week_plan', input: week(65) }] });
+
+      const result = await sendCoachChatMessage(ATHLETE, 'c1', 'lighter', TODAY);
+
+      expect(getArithmeticSessionsForWeek).toHaveBeenCalledWith('athlete_1', '2026-09-14');
+      expect(stagedMinutes()).toEqual([90, 90]);
+      expect(logWeekDraftClamped).toHaveBeenCalledWith('athlete_1', { drafted: 130, clampedTo: 180, baseline: 200, reasoned: false });
+      expect(result).toMatchObject({ ok: true, proposal: { sessions: [{ durationMinutes: 90 }, { durationMinutes: 90 }] } });
+    });
+
+    it('with a stated reason, pulls it only to −30 %', async () => {
+      callCoach.mockResolvedValue({
+        text: 'Lighter.',
+        toolCalls: [{ name: 'propose_week_plan', input: week(65, 'she is sick') }],
+      });
+
+      await sendCoachChatMessage(ATHLETE, 'c1', 'I am ill', TODAY);
+
+      expect(stagedMinutes()).toEqual([70, 70]);
+    });
+
+    it('clamps a week over +10 % down to +10 %, reason or not', async () => {
+      callCoach.mockResolvedValue({
+        text: 'More.',
+        toolCalls: [{ name: 'propose_week_plan', input: week(150, 'she feels great') }],
+      });
+
+      await sendCoachChatMessage(ATHLETE, 'c1', 'more', TODAY);
+
+      expect(stagedMinutes()).toEqual([110, 110]);
+    });
+
+    it('leaves a week inside ±10 % as the Coach wrote it', async () => {
+      callCoach.mockResolvedValue({ text: 'Fine.', toolCalls: [{ name: 'propose_week_plan', input: week(95) }] });
+
+      await sendCoachChatMessage(ATHLETE, 'c1', 'ok', TODAY);
+
+      expect(stagedMinutes()).toEqual([95, 95]);
+      expect(logWeekDraftClamped).not.toHaveBeenCalled();
+    });
+  });
+
   it('stages nothing, but still stores the turn, when the plan falls outside the window', async () => {
     // Next week, and no draft was brought in to discuss: not this chat's to write.
     const outside = { sessions: [{ ...PLAN.sessions[0], date: '2026-09-23' }] };
@@ -487,6 +557,8 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(result).toMatchObject({ ok: true, proposal: null });
     expect(recordProposal).not.toHaveBeenCalled();
     expect(appendMessages).toHaveBeenCalledTimes(1);
+    // Refused cleanly, not by a throw after the store.
+    expect(logCoachFailure).not.toHaveBeenCalled();
   });
 });
 

@@ -1,4 +1,4 @@
-import { logCoachFailure, logWeekDraftClamped } from '@/lib/coach-log';
+import { logCoachFailure } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
@@ -8,6 +8,7 @@ import { openAiEmbedder } from '@/features/knowledge-oracle/embedder';
 import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repository';
 import { retrievePassages, type RetrievalResult } from '@/features/knowledge-oracle/retrieval';
 import type { PlanningWindow } from './planning-window';
+import { arithmeticInWindow, heldToBand } from './volume-band';
 import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
 import { buildWeeklyContext, renderWeekDraftPrompt, type BaselineSession } from './prompts';
 import { draftContextOf, draftInclude, readAthleteContext } from './athlete-context';
@@ -20,9 +21,7 @@ import {
   validateProposedPlan,
   whatChangedFrom,
   volumeReasonFrom,
-  clampToBand,
   isAdjusted,
-  isPlannableDay,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -426,26 +425,6 @@ async function askCoach(
   };
 }
 
-/**
- * The drafted sessions held to the band around the arithmetic's minutes
- * (`training-architecture/48`, R1/R2), with one log line when the clamp moved
- * them. The draft is never refused for its volume.
- */
-function heldToBand(
-  athleteId: string,
-  sessions: ProposedSession[],
-  baseline: BaselineSession[],
-  volumeReason: string | null,
-): ProposedSession[] {
-  const baselineMinutes = baseline.reduce((sum, x) => sum + (x.durationMinutes ?? 0), 0);
-  const held = clampToBand(sessions, baselineMinutes, volumeReason);
-  if (held.clamped) {
-    const drafted = sessions.reduce((sum, x) => sum + (x.durationMinutes ?? 0), 0);
-    logWeekDraftClamped(athleteId, { drafted, clampedTo: held.total, baseline: baselineMinutes, reasoned: volumeReason !== null });
-  }
-  return held.sessions;
-}
-
 /** Runs one step of the draft; a throw is logged as this surface's failure and named, never rethrown. */
 async function guarded<T>(athleteId: string, step: () => Promise<T>): Promise<T | 'coach-failed'> {
   try {
@@ -529,8 +508,7 @@ async function gatherContext(
   };
   // The band and the adjusted flag (`training-architecture/48`) compare the
   // draft with the arithmetic's sessions it could have kept: the window's days.
-  const inWindow = baseline.filter((x) => isPlannableDay(x.date, window));
-  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, baseline: inWindow };
+  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, baseline: arithmeticInWindow(baseline, window) };
 }
 
 const NO_GROUNDING: RetrievalResult = { passages: [], citations: [] };

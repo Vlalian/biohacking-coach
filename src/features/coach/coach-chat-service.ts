@@ -1,5 +1,5 @@
 import type { Athlete } from '@/features/athlete/athlete';
-import { getOwnedSession } from '@/features/session/session-repository';
+import { getArithmeticSessionsForWeek, getOwnedSession } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
 import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
@@ -16,6 +16,7 @@ import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import {
   fixedConstraintsOf,
   validateProposedPlan,
+  volumeReasonFrom,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   type ProposedSession,
 } from './weekly-session';
@@ -23,6 +24,7 @@ import { getPendingProposal, recordProposal } from './plan-proposal-repository';
 import { getDiscussedWeek } from './week-draft-repository';
 import { conversationWindow } from './week-draft';
 import type { PlanningWindow } from './planning-window';
+import { arithmeticInWindow, heldToBand } from './volume-band';
 import type { CoachReply } from './coach-client';
 
 /**
@@ -173,8 +175,13 @@ async function stageChatProposal(
   if (!call) return null;
   const validated = validateProposedPlan(call.input, window);
   if (!validated.ok) return null;
-  await recordProposal(athleteId, conversationId, validated.sessions);
-  return { sessions: validated.sessions };
+  // The same band as the week draft (`training-architecture/48`, extended to
+  // Chat by Mads's ruling of 2026-09-29): held against the arithmetic's
+  // sessions inside this window only.
+  const baseline = await getArithmeticSessionsForWeek(athleteId, weekStartOf(window.start));
+  const sessions = heldToBand(athleteId, validated.sessions, arithmeticInWindow(baseline, window), volumeReasonFrom(call.input));
+  await recordProposal(athleteId, conversationId, sessions);
+  return { sessions };
 }
 
 export interface CoachChatState {
