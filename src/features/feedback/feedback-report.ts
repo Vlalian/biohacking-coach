@@ -66,6 +66,10 @@ function indent(text: string): string {
     .join('\n');
 }
 
+function renderTrustSignal(row: ReportFeedbackRow, note = ''): string[] {
+  return [`  Trust Signal (${stamp(row.createdAt)}${note}):`, indent(row.body)];
+}
+
 function renderInterview(interview: ReportInterview, trustSignal: ReportFeedbackRow | undefined): string[] {
   const lines = [
     `  Interview ${interview.conversationId} — started ${stamp(interview.startedAt)}, ${interview.turns.length} turn(s)`,
@@ -76,10 +80,7 @@ function renderInterview(interview: ReportInterview, trustSignal: ReportFeedback
   }
   // The Trust Signal is shown with the interview it was asked in, because the
   // reason is the valuable half and the reason is in the turns around it.
-  if (trustSignal) {
-    lines.push(`  Trust Signal (${stamp(trustSignal.createdAt)}):`);
-    lines.push(indent(trustSignal.body));
-  }
+  if (trustSignal) lines.push(...renderTrustSignal(trustSignal));
   return lines;
 }
 
@@ -131,7 +132,7 @@ export function renderFeedbackReport(input: FeedbackReportInput): string {
     const shown = new Set<string>();
     for (const interview of interviews) {
       const answer = trustSignals.find((t) => t.conversationId === interview.conversationId);
-      if (answer) shown.add(answer.conversationId!);
+      if (answer) shown.add(interview.conversationId);
       lines.push(...renderInterview(interview, answer));
     }
 
@@ -142,8 +143,7 @@ export function renderFeedbackReport(input: FeedbackReportInput): string {
     for (const orphan of trustSignals
       .filter((t) => t.athleteId === athleteId && !(t.conversationId && shown.has(t.conversationId)))
       .sort(byTime)) {
-      lines.push(`  Trust Signal (${stamp(orphan.createdAt)}, interview not found):`);
-      lines.push(indent(orphan.body));
+      lines.push(...renderTrustSignal(orphan, ', interview not found'));
     }
 
     lines.push('');

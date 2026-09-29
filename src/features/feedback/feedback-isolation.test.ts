@@ -168,6 +168,16 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
     ]);
   });
 
+  it('keeps the cross-athlete readout out of every page and action', () => {
+    // The list above names `feedback-report-repository.ts` as a reader, but it
+    // cannot catch a page that imports *it*: that path does not contain
+    // `/feedback-repository`. This is the guard on its callers. The readout
+    // reads every athlete's interview at once, and its one caller is
+    // `scripts/feedback.ts`, which is outside src/ — so nothing in src/ may
+    // import it.
+    expect(readersOf(/from ['"][^'"]*feedback-report-repository['"]/)).toEqual([]);
+  });
+
   it('keeps the thumbs equally out of every Head Coach surface', () => {
     // `showable-version/05` item 3: a flag is "never shown to the Head Coach".
     // Same guard, same reason - the Roster, the Coach Briefing and the athlete
