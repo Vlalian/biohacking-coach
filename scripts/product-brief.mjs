@@ -74,6 +74,9 @@ const BRIEF_CAP = 4000;
 /** An email address, an international number, or a run of eight digits: personal data, never prompt text. */
 const PERSONAL = /@|\+\d|\d(?:[\s-]?\d){7,}/;
 
+/** A planned-features item: `- **Name**: what it is.` */
+const PLANNED_ITEM = /^- \*\*([^*]+)\*\*:\s*(.*\S)/;
+
 /** Internal provenance in a parenthesis: a decision date, a file path, an ADR. */
 const PROVENANCE = /\d{4}-\d{2}-\d{2}|`|\bADR\b/i;
 
@@ -118,11 +121,31 @@ export function missingTerms(contextBrief) {
 // checked-in module. `main` is the non-test caller.
 /** The chosen terms as `Term: definition` lines, joined by newlines. */
 export function condenseBrief(contextBrief) {
-  const have = glossaryLines(contextBrief);
-  return BRIEF_TERMS.filter((term) => have.has(term))
-    .map((term) => `${term}: ${plainDefinition(have.get(term))}`)
-    .filter((line) => !PERSONAL.test(line))
+  return briefEntries(contextBrief)
+    .filter(({ line }) => !PERSONAL.test(line))
+    .map(({ line }) => line)
     .join('\n');
+}
+
+// Export-for-test: the script's interface is its CLI, and running that rewrites the
+// checked-in module. `main` is the non-test caller.
+/**
+ * The chosen terms {@link condenseBrief} dropped for carrying personal data. Named by
+ * term, a fixed constant, so the report never repeats what the filter kept out.
+ */
+export function personalTerms(contextBrief) {
+  return briefEntries(contextBrief)
+    .filter(({ line }) => PERSONAL.test(line))
+    .map(({ term }) => term);
+}
+
+/** Each chosen term the source defines, with its brief line. */
+function briefEntries(contextBrief) {
+  const have = glossaryLines(contextBrief);
+  return BRIEF_TERMS.filter((term) => have.has(term)).map((term) => ({
+    term,
+    line: `${term}: ${plainDefinition(have.get(term))}`,
+  }));
 }
 
 // Export-for-test: the script's interface is its CLI, and running that rewrites the
@@ -131,9 +154,20 @@ export function condenseBrief(contextBrief) {
 export function plannedFeaturesFrom(markdown) {
   const out = [];
   for (const line of markdown.split(/\r?\n/)) {
-    const m = line.match(/^- \*\*([^*]+)\*\*:\s*(.*\S)/);
+    const m = line.match(PLANNED_ITEM);
     if (m && !PERSONAL.test(line)) out.push(`${m[1]}: ${m[2]}`);
   }
+  return out;
+}
+
+// Export-for-test: the script's interface is its CLI, and running that rewrites the
+// checked-in module. `main` is the non-test caller.
+/** The 1-based source line of each planned item {@link plannedFeaturesFrom} dropped for personal data. */
+export function personalPlannedLines(markdown) {
+  const out = [];
+  markdown.split(/\r?\n/).forEach((line, i) => {
+    if (PLANNED_ITEM.test(line) && PERSONAL.test(line)) out.push(i + 1);
+  });
   return out;
 }
 
@@ -180,12 +214,22 @@ function main(argv) {
     console.error(`product-brief: CONTEXT-BRIEF.md no longer defines ${missing.join(', ')} — update BRIEF_TERMS.`);
     process.exit(1);
   }
+  const personal = personalTerms(contextBrief);
+  if (personal.length > 0) {
+    console.error(`product-brief: the definition of ${personal.join(', ')} looks like personal data and was left out — fix it in CONTEXT.md or drop the term from BRIEF_TERMS.`);
+    process.exit(1);
+  }
   const brief = condenseBrief(contextBrief);
   if (brief.length >= BRIEF_CAP) {
     console.error(`product-brief: the brief is ${brief.length} chars, over the ${BRIEF_CAP} cap — choose fewer terms.`);
     process.exit(1);
   }
-  const planned = plannedFeaturesFrom(readFileSync(plannedPath, 'utf8'));
+  const plannedSource = readFileSync(plannedPath, 'utf8');
+  const planned = plannedFeaturesFrom(plannedSource);
+  const skipped = personalPlannedLines(plannedSource);
+  if (skipped.length > 0) {
+    console.warn(`product-brief: left out planned-features.md line ${skipped.join(', ')}: it looks like personal data.`);
+  }
   const outPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'features', 'feedback', 'product-brief.generated.ts');
   writeFileSync(outPath, renderGeneratedModule(brief, planned), 'utf8');
   console.log(`product-brief: wrote ${outPath} — ${brief.split('\n').length} terms (${brief.length} chars), ${planned.length} planned features`);

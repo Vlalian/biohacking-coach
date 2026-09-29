@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { condenseBrief, missingTerms, plannedFeaturesFrom, renderGeneratedModule } from './product-brief.mjs';
+import {
+  condenseBrief,
+  missingTerms,
+  personalPlannedLines,
+  personalTerms,
+  plannedFeaturesFrom,
+  renderGeneratedModule,
+} from './product-brief.mjs';
 
 /**
  * `showable-version/58` — the Feedback Interview is told what the app is.
@@ -93,6 +100,12 @@ describe('product-brief — condensing CONTEXT-BRIEF.md', () => {
     expect(out).not.toMatch(/Thomas/);
   });
 
+  it('names the chosen terms it dropped for personal data, by term and never by content', () => {
+    const dropped = personalTerms(FIXTURE_CONTEXT_BRIEF);
+    expect(dropped).toEqual(['Injury', 'Head Coach']);
+    expect(dropped.join(' ')).not.toMatch(/@|\d/);
+  });
+
   it('names the chosen terms the source no longer has, so a rename fails the script', () => {
     const missing = missingTerms(FIXTURE_CONTEXT_BRIEF);
     expect(missing).toContain('Glossary');
@@ -130,6 +143,12 @@ describe('product-brief — the planned-features list', () => {
   it('keeps a seven-digit figure, which is one digit short of a phone number', () => {
     const md = '- **E**: a 1 000 000 m season.\n';
     expect(plannedFeaturesFrom(md)).toEqual(['E: a 1 000 000 m season.']);
+  });
+
+  it('names the source line of each item it dropped, and nothing of its content', () => {
+    const md = '# Planned\n\n- **Kept**: fine.\n- **Invite**: ask mads@example.com.\n- **Call**: ring 12 34 56 78.\n';
+    expect(personalPlannedLines(md)).toEqual([4, 5]);
+    expect(personalPlannedLines('- **Kept**: fine.\n')).toEqual([]);
   });
 
   it('drops an item that carries an email or a phone number', () => {
