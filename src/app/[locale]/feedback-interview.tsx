@@ -12,11 +12,12 @@ import { Thinking } from '@/components/ui/thinking';
 /**
  * The Feedback Interview surface (`showable-version/07`).
  *
- * Two ways to say something, in one page, and the second one is not a fallback
- * in the apologetic sense — it is the guarantee. The conversation needs a model
- * call; the textarea below it needs nothing but a form post, so a tester whose
- * Coach is broken can still tell someone, and their submission is *tagged* with
- * why they ended up there rather than being logged as an ordinary note.
+ * One way to say something: the interview (`showable-version/58`, Mads
+ * 2026-09-26). The plain box is its fallback and nothing more. It appears only
+ * once the interviewer has failed to answer, or cannot run without the AI
+ * consent the tester has not given, and it needs nothing but a form post, so a
+ * tester whose AI is broken can still tell someone. Their submission is
+ * *tagged* with why they ended up there rather than logged as an ordinary note.
  *
  * The interviewer's rows are visually distinct from the Coach's on purpose: this
  * is explicitly not the Coach, and the one thing the tester must not have to
@@ -29,13 +30,14 @@ export interface FeedbackInterviewInitial {
 }
 
 type Notice = { kind: 'none' } | { kind: 'error' } | { kind: 'consentRequired' };
+type NoticeKind = Notice['kind'];
 
 /**
  * What the notice says happened, in the terms the fallback row records — from
  * {@link FALLBACK_FAILURE_REASONS}, so the client cannot tag a submission with a
  * reason the server would then throw away.
  */
-const NOTICE_REASON: Record<Notice['kind'], FallbackFailureReason | null> = {
+const NOTICE_REASON: Record<NoticeKind, FallbackFailureReason | null> = {
   none: null,
   error: 'coach-unavailable',
   consentRequired: 'consent-required',
@@ -44,10 +46,16 @@ const NOTICE_REASON: Record<Notice['kind'], FallbackFailureReason | null> = {
 export function FeedbackInterview({
   initial,
   openedFrom,
+  initialNotice = 'none',
 }: {
   initial: FeedbackInterviewInitial | null;
   /** The View the escape hatch was opened from, resolved by the page. */
   openedFrom: string | null;
+  /**
+   * The notice to open on. The page never passes it; a static render has no
+   * way to fail a turn, so this is how a test puts the page in its failed state.
+   */
+  initialNotice?: NoticeKind;
 }) {
   const t = useTranslations('FeedbackInterview');
   const [pending, startTransition] = useTransition();
@@ -58,7 +66,13 @@ export function FeedbackInterview({
   );
   const [messages, setMessages] = useState<UiMessage[]>(initial?.messages ?? []);
   const [draft, setDraft] = useState('');
-  const [notice, setNotice] = useState<Notice>({ kind: 'none' });
+  const [notice, setNotice] = useState<Notice>({ kind: initialNotice });
+  // Why the box is on the page, or null while it is not. Set by a failure and
+  // never cleared: a later turn that goes through must not take away a note the
+  // tester had started writing in the box.
+  const [fallbackReason, setFallbackReason] = useState<FallbackFailureReason | null>(
+    NOTICE_REASON[initialNotice],
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -82,9 +96,10 @@ export function FeedbackInterview({
         // at all until they think to reload. Dropping it starts a fresh
         // interview on their next send, which is the outcome they wanted.
         if (result.reason === 'not-owner') setConversationId(null);
-        setNotice(
-          result.reason === 'consent-required' ? { kind: 'consentRequired' } : { kind: 'error' },
-        );
+        const failed: NoticeKind =
+          result.reason === 'consent-required' ? 'consentRequired' : 'error';
+        setNotice({ kind: failed });
+        setFallbackReason(NOTICE_REASON[failed]);
         // Hand it back — a failure must never eat what they typed, least of all
         // on the surface they came to because something already failed.
         setDraft(content);
@@ -174,20 +189,18 @@ export function FeedbackInterview({
         </form>
       </section>
 
-      <FallbackBox
-        view={openedFrom}
-        coachFailureReason={NOTICE_REASON[notice.kind]}
-        t={t}
-      />
+      {fallbackReason !== null && (
+        <FallbackBox view={openedFrom} coachFailureReason={fallbackReason} t={t} />
+      )}
     </div>
   );
 }
 
 /**
  * The plain box. No model call, no consent gate, no conversation — it posts and
- * it stores, and it is deliberately always on the page rather than appearing
- * when something breaks. A tester who simply prefers to type is not a degraded
- * case, and a box that only appears after a failure is a box nobody finds.
+ * it stores. It used to sit on the page all the time, as a second way in; since
+ * `showable-version/58` the interview is the one way, and this is only what is
+ * left when the interviewer cannot answer. The notice above it says so.
  */
 function FallbackBox({
   view,
@@ -195,7 +208,7 @@ function FallbackBox({
   t,
 }: {
   view: string | null;
-  coachFailureReason: FallbackFailureReason | null;
+  coachFailureReason: FallbackFailureReason;
   t: ReturnType<typeof useTranslations<'FeedbackInterview'>>;
 }) {
   const [pending, startTransition] = useTransition();
@@ -214,7 +227,10 @@ function FallbackBox({
   }
 
   return (
-    <section className="flex flex-col gap-2 border border-border bg-panel p-5">
+    <section
+      data-fallback={coachFailureReason}
+      className="flex flex-col gap-2 border border-border bg-panel p-5"
+    >
       <h2 className="font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">
         {t('fallbackTitle')}
       </h2>

@@ -1,4 +1,5 @@
 import { assemble, block, languageDirective } from '@/features/coach/prompt-blocks';
+import { PLANNED_FEATURES, PRODUCT_BRIEF } from './product-brief.generated';
 
 /**
  * The Feedback Interview's system prompt.
@@ -16,6 +17,12 @@ import { assemble, block, languageDirective } from '@/features/coach/prompt-bloc
  * follow up — and has one job and no authority. `CONTEXT.md`: "It gives no
  * training advice, never defends the Coach, proposes no plan change, and holds
  * no tools."
+ *
+ * Since `showable-version/58` it also knows what the app is and what is
+ * planned, from `product-brief.generated.ts` (condensed from the docs by
+ * `scripts/product-brief.mjs`). That knowledge is for asking sharper questions,
+ * not for explaining: the posture explores without assumptions, and a planned
+ * feature is only ever mentioned back to a tester who raised something like it.
  *
  * Pure: options in, a string out. No DB, no HTTP, no Anthropic client.
  */
@@ -62,6 +69,17 @@ export function buildInterviewPrompt({
       'No training advice, no opinion on their plan, no proposal to change anything. You hold no tools and can change nothing in the app.',
       'Asked a coaching question — what should I do tomorrow, is this session right, how do I fuel — say that Momentum is the other thread, in its own chat, and get back to the interview.',
       'Plain, curious and brief. No markdown, no lists, no bullet points. One question at a time.',
+      'Explore without assumptions: ask what happened and what they expected before explaining anything; never steer toward a known feature.',
+    ]),
+
+    block('WHAT THE APP IS', [
+      'The app in the words its team uses, one feature per line, so you can tell which part they mean and ask about that part. It is for your understanding: do not explain the app to them, and do not correct the words they use for it.',
+      ...PRODUCT_BRIEF,
+    ]),
+
+    block('SIMILAR PLANNED FEATURES', [
+      'Features the team plans and has not built. Use them only when the tester raises something that matches one: say that something similar is planned, and ask what they think it should include. Never bring these up first. Never promise that any of them will come, or when.',
+      ...PLANNED_FEATURES,
     ]),
 
     block('HOW TO INTERVIEW', [

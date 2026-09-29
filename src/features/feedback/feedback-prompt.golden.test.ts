@@ -20,6 +20,11 @@ import { buildInterviewPrompt } from './feedback-prompt';
  * and read the diff as the review artifact — it is the whole of what the
  * interviewer will now say, and whether it still sounds like an interviewer
  * rather than a second Coach is the one thing no test here can tell you.
+ *
+ * The WHAT THE APP IS and SIMILAR PLANNED FEATURES blocks come from
+ * `product-brief.generated.ts` (`showable-version/58`), so rerunning
+ * `scripts/product-brief.mjs` changes these snapshots as well. Update them the
+ * same way and read that diff too.
  */
 
 describe('the interviewer prompt, rendered', () => {

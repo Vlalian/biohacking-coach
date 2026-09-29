@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { buildInterviewPrompt, TRUST_SIGNAL_QUESTION } from './feedback-prompt';
+import { PLANNED_FEATURES, PRODUCT_BRIEF } from './product-brief.generated';
 
 /**
  * The interviewer prompt is prose, and prose passes tests. What is asserted here
@@ -66,6 +67,34 @@ describe('buildInterviewPrompt', () => {
     const danish = buildInterviewPrompt({ askTrustSignal: false, language: 'Dansk' });
 
     expect(danish).toMatch(/Respond in Danish/);
+  });
+});
+
+describe('the interviewer knows the app, and does not steer (showable-version/58)', () => {
+  const p = buildInterviewPrompt({ askTrustSignal: false, language: 'en' });
+
+  it("grounds the interviewer in the app and frames planned features as ask-don't-steer", () => {
+    expect(p).toContain('WHAT THE APP IS');
+    expect(p).toContain('SIMILAR PLANNED FEATURES');
+    expect(p).toMatch(/never bring these up first/i);
+    expect(p).toMatch(/without assumptions/i);
+    expect(p).toContain('You are NOT Momentum');
+  });
+
+  it('carries every line of the generated brief and of the planned list', () => {
+    for (const line of [...PRODUCT_BRIEF, ...PLANNED_FEATURES]) expect(p).toContain(line);
+  });
+
+  it('keeps the planned list inside its own block, after the brief', () => {
+    const brief = p.indexOf('WHAT THE APP IS');
+    const planned = p.indexOf('SIMILAR PLANNED FEATURES');
+    expect(brief).toBeLessThan(planned);
+    // Every planned feature sits under the planned heading, never under the brief.
+    for (const line of PLANNED_FEATURES) expect(p.indexOf(line)).toBeGreaterThan(planned);
+  });
+
+  it('never promises a planned feature', () => {
+    expect(p).toMatch(/never promise/i);
   });
 });
 
