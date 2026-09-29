@@ -73,14 +73,17 @@ export interface HowToInput {
   zone: string | null;
 }
 
-/** The fields of a stored session {@link howToOf} reads. `Session` satisfies it. */
+/**
+ * The fields of a session {@link howToOf} reads. `Session` satisfies it, and
+ * so does a row of the coach's review, whose unwritten parts are null.
+ */
 export interface PlannedForHowTo {
   origin: string;
   type: string;
   sport: string | null;
   duration: number | null;
   zone: string | null;
-  howTo: StoredHowTo | null;
+  howTo: { cue?: string | null; coach?: HowTo | null } | null;
 }
 
 /** Each type's zone when the session names none this can use (`block-sessions.ts`, plan 34 D9). */
