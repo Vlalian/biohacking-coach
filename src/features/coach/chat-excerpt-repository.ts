@@ -3,7 +3,7 @@ import { getDb } from '@/db';
 import { conversations, messages } from '@/db/schema';
 
 /** How many of the athlete's own lines the draft reads (E2). */
-export const CHAT_EXCERPT_LINES = 5;
+const CHAT_EXCERPT_LINES = 5;
 
 /**
  * The athlete's own most recent Coach Chat lines on or after `sinceKey`

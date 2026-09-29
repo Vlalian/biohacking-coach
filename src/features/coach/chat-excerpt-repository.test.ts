@@ -10,7 +10,7 @@ const select = vi.fn((_columns: Record<string, unknown>) => ({ from: () => ({ in
 
 vi.mock('@/db', () => ({ getDb: () => ({ select }) }));
 
-const { getRecentAthleteChatLines, CHAT_EXCERPT_LINES } = await import('./chat-excerpt-repository');
+const { getRecentAthleteChatLines } = await import('./chat-excerpt-repository');
 
 /**
  * What the athlete said in Coach Chat lately, for the week draft (Mads's ruling
@@ -34,8 +34,7 @@ describe('getRecentAthleteChatLines', () => {
     expect(params.slice(0, 3)).toEqual(['athlete_1', 'coach_chat', 'athlete']);
     expect(params[3]).toBe(new Date('2026-09-22T00:00:00').toISOString());
     expect(Object.keys(select.mock.calls[0][0])).toEqual(['content']);
-    expect(limit).toHaveBeenCalledWith(CHAT_EXCERPT_LINES);
-    expect(CHAT_EXCERPT_LINES).toBe(5);
+    expect(limit).toHaveBeenCalledWith(5);
   });
 
   it('gives the lines back oldest first', async () => {

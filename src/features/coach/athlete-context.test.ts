@@ -273,6 +273,20 @@ describe('Session Moves, reflection comments and what the athlete said lately (t
     expect(chat).toEqual(['legs heavy', `${'x'.repeat(159)}…`, 'y'.repeat(160)]);
   });
 
+  // An 18-digit run is no phone shape; cut at 159 characters it leaves eight
+  // digits before the ellipsis, which is. The check must see what is sent, or
+  // the prompt builder's assertion throws on a line this was meant to drop.
+  const CUT_TO_A_PHONE = `${'x'.repeat(150)} ${'1'.repeat(18)}`;
+
+  it('checks the shortened line, not the stored one, so a cut that leaves a phone shape is dropped', async () => {
+    repo.getRecentAthleteChatLines.mockResolvedValue([CUT_TO_A_PHONE, 'legs heavy']);
+    repo.getSessionsInRange.mockResolvedValue([session({ date: '2026-09-22', feedbackComment: CUT_TO_A_PHONE })]);
+    const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    const { chat, comments } = draftContextOf(ctx, ATHLETE, { today: TODAY, draftedWeek: NEXT_WEEK });
+    expect(chat).toEqual(['legs heavy']);
+    expect(comments).toEqual([]);
+  });
+
   it('carries the reflection comments of the two weeks before the drafted one, shortened, and drops one carrying an identifier', async () => {
     repo.getSessionsInRange.mockResolvedValue([
       session({ date: '2026-09-20', feedbackComment: 'too old' }),

@@ -558,8 +558,11 @@ function fitMinutes(minutes: number): number {
  * stated reason, and never above +10 %, reason or not. Outside the band every
  * session's minutes are scaled by the same factor back to the nearest edge,
  * rounded to five minutes and kept at fifteen or more — so the draft is never
- * lost, only its volume is brought back. A week the arithmetic wrote nothing
- * for has no band.
+ * lost, only its volume is brought back. The edge is taken at the five-minute
+ * mark inside the band, and the longest session absorbs what the rounding and
+ * the fifteen-minute floor added or took, so the week lands on that mark
+ * rather than just outside it. A week the arithmetic wrote nothing for has no
+ * band, and a week with no minutes has nothing to scale.
  */
 export function clampToBand(
   sessions: ProposedSession[],
@@ -568,13 +571,31 @@ export function clampToBand(
 ): { sessions: ProposedSession[]; total: number; clamped: boolean } {
   const total = totalMinutes(sessions);
   const floor = baselineMinutes * (reason ? BAND.belowWithReason : BAND.below);
-  const target = Math.min(Math.max(total, floor), baselineMinutes * BAND.above);
-  if (baselineMinutes === 0 || target === total) return { sessions, total, clamped: false };
-  const factor = target / total;
+  const ceiling = baselineMinutes * BAND.above;
+  if (standsAsIs(total, baselineMinutes, floor, ceiling)) return { sessions, total, clamped: false };
+  const goal = Math.min(Math.max(total, Math.ceil(floor / 5) * 5), Math.floor(ceiling / 5) * 5);
   const scaled = sessions.map((x) =>
-    x.durationMinutes === null ? x : { ...x, durationMinutes: fitMinutes(x.durationMinutes * factor) },
+    x.durationMinutes === null ? x : { ...x, durationMinutes: fitMinutes(x.durationMinutes * (goal / total)) },
   );
-  return { sessions: scaled, total: totalMinutes(scaled), clamped: true };
+  const held = settledOn(goal, scaled);
+  return { sessions: held, total: totalMinutes(held), clamped: true };
+}
+
+/** No arithmetic to hold it to, no minutes to scale, or already inside the band. */
+function standsAsIs(total: number, baselineMinutes: number, floor: number, ceiling: number): boolean {
+  return baselineMinutes === 0 || total === 0 || (total >= floor && total <= ceiling);
+}
+
+/**
+ * The scaled week with the rounding given back on its longest session, so the
+ * total is `goal` — unless that would take the session under fifteen minutes,
+ * where the floor (R2) wins.
+ */
+function settledOn(goal: number, sessions: ProposedSession[]): ProposedSession[] {
+  const minutes = sessions.map((x) => x.durationMinutes ?? 0);
+  const longest = minutes.indexOf(Math.max(...minutes));
+  const rest = goal - totalMinutes(sessions);
+  return sessions.map((x, i) => (i === longest ? { ...x, durationMinutes: fitMinutes(minutes[i] + rest) } : x));
 }
 
 /** The (date, Session Type) pairs of a week, in date order, as one comparable key. */

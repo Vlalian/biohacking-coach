@@ -431,6 +431,13 @@ describe('the athlete signals the draft now reads (training-architecture/52)', (
     ).toThrow();
   });
 
+  it('asserts on the health facts and the moves as well, as Coach Chat does', () => {
+    expect(() =>
+      renderWeekDraftPrompt(ctx({ health: { injuries: [], illnesses: [{ since: 'a@b.dk', botherRating: null }] } })),
+    ).toThrow();
+    expect(() => renderWeekDraftPrompt(ctx({ moves: [{ from: '2026-09-15', to: 'a@b.dk', by: 'athlete' }] }))).toThrow();
+  });
+
   it('renders identically with every signal (golden)', () => {
     expect(
       renderWeekDraftPrompt(

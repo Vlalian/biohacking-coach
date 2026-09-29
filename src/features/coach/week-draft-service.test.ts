@@ -728,8 +728,9 @@ describe('the draft is held to the band around the arithmetic (training-architec
     callCoach.mockResolvedValue(toolReply({ sessions: PROPOSED }));
     await ensureWeekDrafted(ATHLETE, TODAY);
     const recorded = recordWeekDraft.mock.calls[0][0];
-    expect(recorded.sessions.map((x: { durationMinutes: number }) => x.durationMinutes)).toEqual([65, 50, 160]);
-    expect(logWeekDraftClamped).toHaveBeenCalledWith(ATHLETE, { drafted: 255, clampedTo: 275, baseline: 300, reasoned: false });
+    // −10% of 300 is 270 exactly; the rounding alone would have made it 275.
+    expect(recorded.sessions.map((x: { durationMinutes: number }) => x.durationMinutes)).toEqual([65, 50, 155]);
+    expect(logWeekDraftClamped).toHaveBeenCalledWith(ATHLETE, { drafted: 255, clampedTo: 270, baseline: 300, reasoned: false });
   });
 
   it('lets a reasoned cut stand inside −30%, and logs nothing', async () => {

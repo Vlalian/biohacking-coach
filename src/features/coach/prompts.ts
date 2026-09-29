@@ -1118,10 +1118,13 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
   assertNoDirectIdentifier(ctx.checkIn);
   assertNoDirectIdentifier(ctx.recentWeeks);
   assertNoDirectIdentifier(ctx.declined);
-  // The health facts are structure — disciplines, dates, a 1–5 rating — with no
-  // free text to walk, so only the two athlete-worded inputs are asserted.
+  // Every input `training-architecture/52` added, as Coach Chat asserts its
+  // own: the two in the athlete's words, and the health facts and moves, which
+  // carry dates read back from stored rows and event payloads.
   assertNoDirectIdentifier(ctx.comments);
   assertNoDirectIdentifier(ctx.chat);
+  assertNoDirectIdentifier(ctx.health);
+  assertNoDirectIdentifier(ctx.moves);
 
   const { feedbackSummary, feedbackWeek, unavailableDates, today, window, skeleton, baseline, recentWeeks, declined, passages, citations } =
     ctx;

@@ -37,6 +37,8 @@ function finiteOrNull(value: unknown): number | null {
 
 /** Narrows the stored `summary` JSONB to the facts a session shows. A value
  *  that is not an object, or an object holding neither fact, is no summary. */
+// Export-for-test: reaching each stored JSONB shape through `toSession` needs a
+// full SessionRow per case. Delete freely if this is inlined into `toSession`.
 export function toDeviceSummary(value: unknown): DeviceSummary | null {
   if (value === null || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;

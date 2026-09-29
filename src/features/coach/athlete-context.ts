@@ -307,18 +307,21 @@ function shorten(text: string): string {
 /**
  * Athlete free text a prompt may carry: shortened, and a line that carries an
  * email or phone shape dropped — never sent, and never fatal to the prompt it
- * would have joined (the same shape guard as `assertNoDirectIdentifier`).
+ * would have joined (the same shape guard as `assertNoDirectIdentifier`). The
+ * guard reads the shortened line, because that is what the prompt asserts on:
+ * a cut can turn a digit run too long to be a phone number into one that is.
  */
 function speakable(lines: string[]): string[] {
-  return lines.filter(isFreeOfShapedIdentifiers).map(shorten);
+  return lines.map(shorten).filter(isFreeOfShapedIdentifiers);
 }
 
 /** The reflection comments of the two weeks before `before`, oldest first. */
 function reflectionCommentsOf(pastSessions: Session[], before: string): ReflectionComment[] {
   const from = addDays(before, -14);
   return pastSessions
-    .filter((s) => s.date >= from && s.feedbackComment !== null && isFreeOfShapedIdentifiers(s.feedbackComment))
-    .map((s) => ({ date: s.date, sessionType: s.type, comment: shorten(s.feedbackComment as string) }));
+    .filter((s) => s.date >= from && s.feedbackComment !== null)
+    .map((s) => ({ date: s.date, sessionType: s.type, comment: shorten(s.feedbackComment as string) }))
+    .filter((c) => isFreeOfShapedIdentifiers(c.comment));
 }
 
 function lastWeekFeedbackOf(pastSessions: Session[], draftedWeek: string): DraftSlice['lastWeekFeedback'] {

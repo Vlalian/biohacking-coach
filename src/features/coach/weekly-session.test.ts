@@ -874,7 +874,35 @@ describe('clampToBand', () => {
     const out = clampToBand([s(300), s(60), s(30)], 600, null);
     expect(out.sessions.map((x) => x.durationMinutes)).toEqual([415, 85, 40]);
     expect(out.total).toBe(540);
-    expect(clampToBand([s(900), s(10)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([655, 15]);
+    // The fifteen-minute floor lifts the short one; the long one gives the
+    // rounding back, so the week still lands on the band's edge.
+    expect(clampToBand([s(900), s(10)], 600, null)).toMatchObject({ total: 660 });
+    expect(clampToBand([s(900), s(10)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([645, 15]);
+    expect(clampToBand([s(10), s(null), s(900)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([15, null, 645]);
+  });
+
+  it('never lands outside the band because of the rounding', () => {
+    // Seven sessions of 103 min (721) against 600: each scales to 94.3 and
+    // rounds up to 95, which alone would make 665 — above the +10% edge.
+    const down = clampToBand(week(103, 7), 600, null);
+    expect(down.total).toBe(660);
+    expect(down.sessions.map((x) => x.durationMinutes)).toEqual([90, 95, 95, 95, 95, 95, 95]);
+    // Seven of 67 min (469) up to −10% of 600 (540): each scales to 77.1 and
+    // rounds down to 75, which alone would make 525 — below the edge.
+    const up = clampToBand(week(67, 7), 600, null);
+    expect(up.total).toBe(540);
+    expect(up.sessions.map((x) => x.durationMinutes)).toEqual([90, 75, 75, 75, 75, 75, 75]);
+  });
+
+  it('lands on the five-minute mark inside an edge that is not one', () => {
+    // 613 × 1.1 = 674.3: the week lands on 670, not 675.
+    expect(clampToBand(week(120), 613, null).total).toBe(670);
+    // 613 × 0.9 = 551.7: the week lands on 555, not 550.
+    expect(clampToBand(week(60), 613, null).total).toBe(555);
+  });
+
+  it('does not claim a clamp when no session carries minutes to scale', () => {
+    expect(clampToBand([s(null), s(null)], 600, null)).toMatchObject({ total: 0, clamped: false });
   });
 
   it('keeps a session with no duration as it is', () => {
