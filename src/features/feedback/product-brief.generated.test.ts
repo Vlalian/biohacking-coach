@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { renderGeneratedModule } from '../../../scripts/product-brief.mjs';
+import { missingTerms, renderGeneratedModule } from '../../../scripts/product-brief.mjs';
 import { PLANNED_FEATURES, PRODUCT_BRIEF } from './product-brief.generated';
 
 /**
@@ -38,6 +38,14 @@ describe.skipIf(instrumented)('product-brief.generated.ts, as bytes on disk', ()
 });
 
 describe('product-brief.generated.ts', () => {
+  it('carries exactly the terms the script chooses, in its order', () => {
+    // Against an empty source every chosen term is missing, so this is the
+    // script's own list. A term added to or dropped from it without rerunning
+    // the script against the docs fails here.
+    const terms = PRODUCT_BRIEF.map((line) => line.slice(0, line.indexOf(': ')));
+    expect(terms).toEqual(missingTerms(''));
+  });
+
   it('fits the prompt budget', () => {
     expect(PRODUCT_BRIEF.join('\n').length).toBeLessThan(4000);
   });

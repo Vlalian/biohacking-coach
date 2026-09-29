@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from 'reac
 import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, CornerDownLeft } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
-import type { FallbackFailureReason } from '@/features/feedback/feedback';
+import { fallbackAfterTurn, type FallbackFailureReason } from '@/features/feedback/feedback';
 import { sendFeedbackTurnAction, submitFallbackFeedbackAction } from './feedback-actions';
 import type { UiMessage } from './ui-message';
 import { Thinking } from '@/components/ui/thinking';
@@ -67,9 +67,8 @@ export function FeedbackInterview({
   const [messages, setMessages] = useState<UiMessage[]>(initial?.messages ?? []);
   const [draft, setDraft] = useState('');
   const [notice, setNotice] = useState<Notice>({ kind: initialNotice });
-  // Why the box is on the page, or null while it is not. Set by a failure and
-  // never cleared: a later turn that goes through must not take away a note the
-  // tester had started writing in the box.
+  // Why the box is on the page, or null while it is not. `fallbackAfterTurn`
+  // decides it after every turn: set by a failure, never cleared by a success.
   const [fallbackReason, setFallbackReason] = useState<FallbackFailureReason | null>(
     NOTICE_REASON[initialNotice],
   );
@@ -88,6 +87,7 @@ export function FeedbackInterview({
 
     startTransition(async () => {
       const result = await sendFeedbackTurnAction({ conversationId, content });
+      setFallbackReason((current) => fallbackAfterTurn(current, result));
 
       if (!result.ok) {
         // A refused id never becomes valid again — the interview was ended, or
@@ -99,7 +99,6 @@ export function FeedbackInterview({
         const failed: NoticeKind =
           result.reason === 'consent-required' ? 'consentRequired' : 'error';
         setNotice({ kind: failed });
-        setFallbackReason(NOTICE_REASON[failed]);
         // Hand it back — a failure must never eat what they typed, least of all
         // on the surface they came to because something already failed.
         setDraft(content);

@@ -106,12 +106,16 @@ function plainDefinition(definition) {
     .replace(/(?<!Head )\bCoach\b(?! [A-Z])/g, 'Momentum');
 }
 
+// Export-for-test: the script's interface is its CLI, and running that rewrites the
+// checked-in module. `main` is the non-test caller.
 /** The {@link BRIEF_TERMS} the source does not define — a rename there, to be fixed here. */
 export function missingTerms(contextBrief) {
   const have = glossaryLines(contextBrief);
   return BRIEF_TERMS.filter((term) => !have.has(term));
 }
 
+// Export-for-test: the script's interface is its CLI, and running that rewrites the
+// checked-in module. `main` is the non-test caller.
 /** The chosen terms as `Term: definition` lines, joined by newlines. */
 export function condenseBrief(contextBrief) {
   const have = glossaryLines(contextBrief);
@@ -121,6 +125,8 @@ export function condenseBrief(contextBrief) {
     .join('\n');
 }
 
+// Export-for-test: the script's interface is its CLI, and running that rewrites the
+// checked-in module. `main` is the non-test caller.
 /** `- **Name**: what it is.` items out of the planned-features list, as `Name: what it is.` */
 export function plannedFeaturesFrom(markdown) {
   const out = [];
@@ -135,6 +141,8 @@ function literalArray(lines) {
   return ['[', ...lines.map((l) => `  ${JSON.stringify(l)},`), '];'].join('\n');
 }
 
+// Export-for-test: the script's interface is its CLI, and running that rewrites the
+// checked-in module. `main` is the non-test caller.
 /** The source of the generated module. */
 export function renderGeneratedModule(brief, plannedFeatures) {
   return [

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Message } from '@/features/coach/conversation';
 import { TRUST_SIGNAL_QUESTION } from './feedback-prompt';
 import {
+  fallbackAfterTurn,
   knownFailureReason,
   submittedFromView,
   trustSignalState,
@@ -173,6 +174,35 @@ describe('knownFailureReason', () => {
     expect(knownFailureReason('unsafe-content')).toBeNull();
     expect(knownFailureReason('anything at all')).toBeNull();
     expect(knownFailureReason(null)).toBeNull();
+  });
+});
+
+describe('fallbackAfterTurn (showable-version/58)', () => {
+  it('keeps the box off the page while every turn goes through', () => {
+    expect(fallbackAfterTurn(null, { ok: true })).toBeNull();
+  });
+
+  it('puts the box on the page after a failed turn, tagged with why', () => {
+    expect(fallbackAfterTurn(null, { ok: false, reason: 'coach-unavailable' })).toBe('coach-unavailable');
+    expect(fallbackAfterTurn(null, { ok: false, reason: 'consent-required' })).toBe('consent-required');
+  });
+
+  it('tags every other refusal as the interviewer being unavailable', () => {
+    // A refused id or a lost session also means the interviewer did not answer.
+    expect(fallbackAfterTurn(null, { ok: false, reason: 'not-owner' })).toBe('coach-unavailable');
+    expect(fallbackAfterTurn(null, { ok: false, reason: 'not-authenticated' })).toBe('coach-unavailable');
+  });
+
+  it('leaves the box, and its tag, in place when a later turn goes through', () => {
+    // Taking it away would take away a note the tester had started writing.
+    expect(fallbackAfterTurn('coach-unavailable', { ok: true })).toBe('coach-unavailable');
+    expect(fallbackAfterTurn('consent-required', { ok: true })).toBe('consent-required');
+  });
+
+  it('retags the box with the latest failure', () => {
+    expect(fallbackAfterTurn('coach-unavailable', { ok: false, reason: 'consent-required' })).toBe(
+      'consent-required',
+    );
   });
 });
 

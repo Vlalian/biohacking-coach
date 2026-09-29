@@ -51,6 +51,21 @@ export function knownFailureReason(reason: string | null): FallbackFailureReason
   return FALLBACK_FAILURE_REASONS.find((known) => known === reason) ?? null;
 }
 
+/**
+ * Why the interview page's plain box is showing after a turn, or null while it
+ * is not (`showable-version/58`). The interview is the one way to give
+ * feedback; the box is only for when the interviewer could not answer. A failed
+ * turn puts it on the page, tagged with the failure. A turn that goes through
+ * leaves it as it was, so a note half-written in the box is never taken away.
+ */
+export function fallbackAfterTurn(
+  current: FallbackFailureReason | null,
+  turn: { ok: true } | { ok: false; reason: string },
+): FallbackFailureReason | null {
+  if (turn.ok) return current;
+  return turn.reason === 'consent-required' ? 'consent-required' : 'coach-unavailable';
+}
+
 /** A path shape, and nothing longer or stranger than one. */
 const VIEW_PATH_SHAPED = /^\/[A-Za-z0-9/_-]{0,63}$/;
 

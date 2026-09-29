@@ -127,6 +127,11 @@ describe('product-brief — the planned-features list', () => {
     expect(plannedFeaturesFrom(md)).toEqual(['D: a "+" on any day, 7-day weeks, a 1–10 scale, 20 x 400 m.']);
   });
 
+  it('keeps a seven-digit figure, which is one digit short of a phone number', () => {
+    const md = '- **E**: a 1 000 000 m season.\n';
+    expect(plannedFeaturesFrom(md)).toEqual(['E: a 1 000 000 m season.']);
+  });
+
   it('drops an item that carries an email or a phone number', () => {
     expect(plannedFeaturesFrom('- **Invite**: ask mads@example.com.\n- **Call**: ring +45 12 34 56 78.\n')).toEqual([]);
   });
