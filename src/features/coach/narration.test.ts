@@ -648,6 +648,18 @@ describe('composeNarration — a race the athlete added (training-architecture/3
     ]);
   });
 
+  it('asks about a new Target Race as the target it was chosen as, never as a tune-up', () => {
+    // The athlete picked Target in the form: asking whether it is a tune-up
+    // would put back a question they already answered (Mads, 2026-09-29).
+    expect(composeNarration([raceAdded({ ...AARHUS, isTarget: true })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAddedTarget(name=Aarhus 70.3,date=2027-02-27))',
+    );
+    // Only a literal true: a payload that does not say is the tune-up question.
+    expect(composeNarration([raceAdded({ ...AARHUS, isTarget: 'yes' })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAdded(name=Aarhus 70.3,date=2027-02-27))',
+    );
+  });
+
   it('degrades to a plainer question when the payload lacks the race', () => {
     expect(composeNarration([raceAdded({ date: '2027-02-27' })], NAMES, t, weekday)).toBe(
       'singleQuestion(clause=raceAddedNoDetail)',
@@ -669,5 +681,23 @@ describe('composeNarration — a race the athlete added (training-architecture/3
       );
     expect(say('en', en)).toMatch(/Aarhus 70\.3 on 2027-02-27.*a tune-up in the plan, or just so I know\?$/);
     expect(say('da', da as unknown as typeof en)).toMatch(/Aarhus 70\.3.*2027-02-27.*\?$/);
+  });
+
+  it('asks about a new target in both languages, as a question', async () => {
+    const { createTranslator } = await import('next-intl');
+    const da = (await import('@/messages/da.json')).default;
+    const say = (locale: 'en' | 'da', messages: typeof en) =>
+      composeNarration(
+        [raceAdded({ ...AARHUS, isTarget: true })],
+        {},
+        createTranslator({ locale, messages, namespace: 'Narration' }) as unknown as Parameters<typeof composeNarration>[2],
+        weekday,
+      );
+    expect(say('en', en)).toBe(
+      'You’ve made Aarhus 70.3 on 2027-02-27 your target race: shall we go through what that changes in your plan?',
+    );
+    expect(say('da', da as unknown as typeof en)).toBe(
+      'Du har gjort Aarhus 70.3 den 2027-02-27 til dit mål-løb: skal vi gå igennem, hvad det ændrer i din plan?',
+    );
   });
 });

@@ -701,6 +701,7 @@
     "singleQuestion": "{clause}?",
     "itemQuestion": "• {clause}?",
     "raceAdded": "You’ve added {name} on {date}: a tune-up in the plan, or just so I know",
+    "raceAddedTarget": "You’ve made {name} on {date} your target race: shall we go through what that changes in your plan",
     "raceAddedNoDetail": "You’ve added a race: a tune-up in the plan, or just so I know",
     "item": "• {clause}",
     "multiLead": "A few things changed in your plan while you were away:",

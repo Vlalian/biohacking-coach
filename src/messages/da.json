@@ -701,6 +701,7 @@
     "singleQuestion": "{clause}?",
     "itemQuestion": "• {clause}?",
     "raceAdded": "Du har tilføjet {name} den {date}: et tune-up i planen, eller bare så jeg ved det",
+    "raceAddedTarget": "Du har gjort {name} den {date} til dit mål-løb: skal vi gå igennem, hvad det ændrer i din plan",
     "raceAddedNoDetail": "Du har tilføjet et løb: et tune-up i planen, eller bare så jeg ved det",
     "item": "• {clause}",
     "multiLead": "Der er sket et par ting i din plan, siden du sidst var her:",

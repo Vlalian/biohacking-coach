@@ -1,4 +1,4 @@
-import { addDays } from '@/lib/date';
+import { addDays, daysBetween } from '@/lib/date';
 import type { BlockPurpose, TrainingBlock } from './training-blocks';
 
 /**
@@ -15,14 +15,6 @@ import type { BlockPurpose, TrainingBlock } from './training-blocks';
  * Pure, like `training-blocks.ts`: no clock, no database. Every caller passes
  * `today` and the facts the start is read from.
  */
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / DAY_MS,
-  );
-}
 
 /** The arc: six months, the lead a race commonly needs (Mads, 2026-09-10). */
 const ARC_DAYS = 26 * 7;

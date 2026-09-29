@@ -155,6 +155,27 @@ export interface BriefingBlocks {
    * or null when the set fits or there is none.
    */
   staleSet?: { lastBlockName: string; endsOn: string } | null;
+  /**
+   * What the blocks hang off when it is not a race to build toward
+   * (`training-architecture/13`), as the Check-in carries it: `open` is the
+   * Open Horizon of an athlete with no race still ahead, `race-too-close` a
+   * Target Race under eight weeks away that keeps them on it. Absent on a race
+   * horizon.
+   */
+  horizonNote?: 'open' | 'race-too-close';
+}
+
+/**
+ * The note for {@link BriefingBlocks}, from the resolved blocks. A resolution
+ * that does not say what it is anchored to is read as a race horizon, the
+ * shape every set had before the Open Horizon existed.
+ */
+export function briefingHorizonNote(resolved: {
+  horizon?: 'race' | 'open';
+  raceTooClose?: boolean;
+}): BriefingBlocks['horizonNote'] {
+  if (resolved.horizon !== 'open') return undefined;
+  return resolved.raceTooClose ? 'race-too-close' : 'open';
 }
 
 export interface BriefingContext {
@@ -349,7 +370,28 @@ function blocksBlock(blocks: BriefingBlocks | null | undefined): string {
   if (blocks.raceUnrealistic) {
     lines.push(`Momentum has flagged the Target Race as unrealistic: ${blocks.raceUnrealistic}`);
   }
-  return `TRAINING BLOCKS (the horizon toward the Target Race, always visible):\n${lines.join('\n')}`;
+  return `${blocksHeading(blocks.horizonNote)}\n${lines.join('\n')}`;
+}
+
+/**
+ * What the block list is said to be. An Open Horizon's blocks are a default,
+ * not a build to a start line, and the Coach tells the Head Coach so in the
+ * words it tells the athlete (`training-architecture/13`): under the race
+ * heading, a too-close race would read as one the blocks were built toward.
+ */
+const BLOCKS_HEADING: Record<'race' | 'open' | 'race-too-close', string> = {
+  race: 'TRAINING BLOCKS (the horizon toward the Target Race, always visible):',
+  open:
+    'TRAINING BLOCKS (a six-month default arc, always visible — the athlete has no race to build toward: ' +
+    'these blocks are not a build to any start line, and nothing happens at their end):',
+  'race-too-close':
+    'TRAINING BLOCKS (a six-month default arc, always visible — the Target Race is under eight weeks away, ' +
+    'too close to build Training Blocks toward: these blocks are not a build to it, so say plainly it has not been built toward):',
+};
+
+/** The heading for the block list; no note is a race horizon. */
+function blocksHeading(note: BriefingBlocks['horizonNote']): string {
+  return BLOCKS_HEADING[note ?? 'race'];
 }
 
 /**

@@ -372,12 +372,20 @@ function weekClause(event: NarratableEvent, coachFirstNames: Record<string, stri
  * A race the athlete added, as the Coach's question about it. The date is the
  * key itself, as a block's end is: a race is months out and its weekday says
  * nothing. Without both name and date it is the plainer question, never a
- * guessed race.
+ * guessed race. A race added as the Target Race is asked about as the target
+ * it was chosen as: asking whether it is a tune-up would re-ask what the
+ * athlete just answered in the form.
  */
 function raceAddedClause(payload: unknown, t: Translate): string {
   const name = field(payload, 'name');
   const date = field(payload, 'date');
-  return name && date ? t('raceAdded', { name, date }) : t('raceAddedNoDetail');
+  if (!name || !date) return t('raceAddedNoDetail');
+  return t(isTargetPayload(payload) ? 'raceAddedTarget' : 'raceAdded', { name, date });
+}
+
+/** Whether a `race_added` payload says the race became the Target Race; only a literal `true` does. */
+function isTargetPayload(payload: unknown): boolean {
+  return (payload as { isTarget?: unknown }).isTarget === true;
 }
 
 /** One plan change's unpunctuated clause, by whose hand it was. */
