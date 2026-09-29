@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { COACH_IDENTITY, groundingBlock, onboardingBlock, openingBlock, recentWeeksBlock } from './prompt-blocks';
+import { COACH_IDENTITY, groundingBlock, healthFactsBlock, onboardingBlock, openingBlock, recentWeeksBlock } from './prompt-blocks';
 
 describe('groundingBlock', () => {
   it('GROUNDING: asked what it knows, the Coach looks up before answering and never describes the tool as its scope (knowledge-oracle/07)', () => {
@@ -36,6 +36,8 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
         byType: [{ type: 'Endurance', completed: 1, doneMinutes: 60 }],
         soFar: false,
         imported: 0,
+        unrecorded: 0,
+        device: null,
       },
     ]);
     expect(rendered).toContain('RECENT WEEKS:');
@@ -52,6 +54,8 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     byType: [],
     soFar: false,
     imported: 0,
+    unrecorded: 0,
+    device: null,
   });
 
   it('is null when there is no history, so assemble drops it', () => {
@@ -88,6 +92,27 @@ describe('recentWeeksBlock (training-architecture/44)', () => {
     expect(recentWeeksBlock([{ ...empty('2026-09-21'), completed: 1 }])).not.toContain('imported');
   });
 
+  it('says how many past planned sessions nobody recorded (training-architecture/45)', () => {
+    const rendered = recentWeeksBlock([{ ...empty('2026-09-21'), plannedMinutes: 120, completed: 1, unrecorded: 2 }]);
+    expect(rendered).toContain('1 completed, 0 skipped, 2 not recorded');
+    expect(recentWeeksBlock([{ ...empty('2026-09-21'), completed: 1 }])).not.toContain('not recorded');
+  });
+
+  it('counts a week that holds only unrecorded sessions as history', () => {
+    expect(recentWeeksBlock([{ ...empty('2026-09-21'), unrecorded: 1 }])).toContain('- Week of 2026-09-21: 0.0h done of');
+  });
+
+  it('says what the device recorded, and only what it has (training-architecture/52)', () => {
+    const week = { ...empty('2026-09-21'), completed: 2, doneMinutes: 120, plannedMinutes: 120 };
+    expect(recentWeeksBlock([{ ...week, device: { distanceKm: 43.5, avgHr: 140 } }])).toContain('; device: 43.5 km, avg HR 140');
+    expect(recentWeeksBlock([{ ...week, device: { distanceKm: 0, avgHr: 140 } }])).toContain('; device: avg HR 140');
+    expect(recentWeeksBlock([{ ...week, device: { distanceKm: 12, avgHr: null } }])).toContain('; device: 12.0 km');
+    expect(recentWeeksBlock([{ ...week, device: { distanceKm: 12, avgHr: null } }])).not.toContain('avg HR');
+    expect(recentWeeksBlock([week])).not.toContain('device');
+    // Nothing to say is nothing appended: the line ends where it did.
+    expect(recentWeeksBlock([{ ...week, device: { distanceKm: 0, avgHr: null } }])).toMatch(/2 completed, 0 skipped$/m);
+  });
+
   it('says the current week is only up to today, empty or not', () => {
     const rendered = recentWeeksBlock([
       { ...empty('2026-09-14'), plannedMinutes: 60, doneMinutes: 60, completed: 1 },
@@ -110,5 +135,28 @@ describe('the identity the model is given (showable-version/46)', () => {
 
   it('splices the language directive in after the identity', () => {
     expect(openingBlock('da', 'Coach Chat.')).toMatch(/^You are Momentum, the AI coach in a luxury Ironman training app\.\nLANGUAGE: Respond in Danish\.[\s\S]* Coach Chat\.$/);
+  });
+});
+
+describe('healthFactsBlock (E1, training-architecture/52)', () => {
+  it('lists each open injury by what it prevents, since when, and how much it bothers them', () => {
+    const rendered = healthFactsBlock({
+      injuries: [{ prevents: { swim: 'full', bike: 'easy', run: 'none' }, since: '2026-09-20', botherRating: 3 }],
+      illnesses: [{ since: '2026-09-27', botherRating: null }],
+    });
+    expect(rendered).toContain('OPEN INJURIES AND ILLNESS');
+    expect(rendered).toContain('- Injury since 2026-09-20: swim full, bike easy only, run none; bothering them 3/5');
+    expect(rendered).toContain('- Illness since 2026-09-27');
+    expect(rendered).not.toContain('2026-09-27; bothering');
+  });
+
+  it('says how much an illness bothers them when they said', () => {
+    expect(healthFactsBlock({ injuries: [], illnesses: [{ since: '2026-09-27', botherRating: 2 }] })).toContain(
+      '- Illness since 2026-09-27; bothering them 2/5',
+    );
+  });
+
+  it('is absent when nothing is open', () => {
+    expect(healthFactsBlock({ injuries: [], illnesses: [] })).toBeNull();
   });
 });

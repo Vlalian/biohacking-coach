@@ -247,6 +247,50 @@ describe('fourWeekSummary', () => {
     expect(week.imported).toBe(1);
   });
 
+  it('counts a past planned session as not recorded, and one from today on as still to come (training-architecture/45)', () => {
+    const summary = fourWeekSummary(
+      [
+        session({ date: '2026-09-14', status: 'planned', duration: 60 }),
+        session({ date: '2026-09-22', status: 'planned', duration: 45 }),
+        session({ date: '2026-09-23', status: 'planned', duration: 30 }),
+      ],
+      '2026-09-28',
+      '2026-09-23',
+    );
+    expect(summary[2].unrecorded).toBe(1);
+    expect(summary[3].unrecorded).toBe(1);
+    expect(summary[1].unrecorded).toBe(0);
+  });
+
+  it("adds up what the device recorded on the week's completed sessions (training-architecture/52)", () => {
+    const [, , , week] = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', summary: { distanceM: 42000, avgHr: 130 } }),
+        session({ date: '2026-09-22', status: 'completed', summary: { distanceM: 1500, avgHr: null } }),
+        session({ date: '2026-09-23', status: 'completed', summary: { distanceM: null, avgHr: 150 } }),
+        session({ date: '2026-09-24', status: 'skipped', summary: { distanceM: 9000, avgHr: 170 } }),
+        session({ date: '2026-09-25', status: 'completed', summary: null }),
+      ],
+      '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
+    );
+    expect(week.device).toEqual({ distanceKm: 43.5, avgHr: 140 });
+  });
+
+  it('gives no average heart rate when no session recorded one', () => {
+    const [, , , week] = fourWeekSummary(
+      [session({ date: '2026-09-21', status: 'completed', summary: { distanceM: 1500, avgHr: null } })],
+      '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
+    );
+    expect(week.device).toEqual({ distanceKm: 1.5, avgHr: null });
+  });
+
+  it('says nothing about the device for a week with no device data', () => {
+    const [, , , week] = fourWeekSummary([session({ date: '2026-09-21', status: 'completed' })], '2026-09-28', DRAFTED_ON_THE_MONDAY);
+    expect(week.device).toBeNull();
+  });
+
   it('splits the week by Session Type, listing only the types that happened', () => {
     const week = fourWeekSummary(
       [

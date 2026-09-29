@@ -8,12 +8,15 @@ import {
   getSessionsForWeek,
   getSessionsInRange,
 } from '@/features/session/session-repository';
-import type { Session } from '@/features/session/session';
-import { capacityFor } from '@/features/health/health-repository';
+import { isUnrecorded, type Session } from '@/features/session/session';
+import { capacityFor, getOpenIllnesses, getOpenInjuries } from '@/features/health/health-repository';
 import { getRaces } from '@/features/race/race-repository';
-import type { RaceRow } from '@/db/schema';
+import type { IllnessRow, InjuryRow, RaceRow } from '@/db/schema';
 import { getLanguageForAthlete } from '@/features/user-prefs/user-prefs-repository';
-import { addDays, weekStartOf } from '@/lib/date';
+import { addDays, dateKey, weekStartOf } from '@/lib/date';
+import { isFreeOfShapedIdentifiers } from '@/lib/identifiers';
+import { getSessionMovesSince, type SessionMoveFact } from '@/features/session/session-move-repository';
+import { getRecentAthleteChatLines } from './chat-excerpt-repository';
 import { getCheckInForWeek } from './check-in-repository';
 import { getPresenceStage } from './presence-repository';
 import { getResolvedBlocks } from './training-block-service';
@@ -23,6 +26,7 @@ import type { PresenceStage } from './presence';
 import { notableSignalFrom, readinessFrom, type CheckIn } from './check-in';
 import { buildWeeklyCheckIn, fourWeekSummary, RECENT_WEEKS, weekFeedbackFrom, type WeekSummary } from './weekly-session';
 import type { WeekFeedbackEntry } from './check-in';
+import type { HealthFacts, ReflectionComment } from './prompt-blocks';
 import { briefingRaces, toBriefingReflection, type BriefingReports, type BriefingTranscript } from './briefing';
 
 /**
@@ -55,7 +59,13 @@ export type ContextSignal =
   | 'presence'
   | 'unavailable'
   | 'week'
-  | 'reflections';
+  | 'reflections'
+  /** Open Injuries and Illnesses as structure (E1) — the draft and Chat only. */
+  | 'health'
+  /** This week's Session Moves. */
+  | 'moves'
+  /** The athlete's own recent Coach Chat lines (E2) — the draft only. */
+  | 'chat';
 
 /**
  * Which signals to read. A signal left out is not fetched. `historyBefore` is
@@ -89,20 +99,33 @@ export interface AthleteContext {
   reflections: Awaited<ReturnType<typeof getBriefingReflections>> | null;
   /** The shared transcripts — null when the link withholds them. */
   transcripts: Awaited<ReturnType<typeof getSharedTranscripts>>;
+  /** Open Injuries and Illnesses, structure only: never a name, never the detail thread. */
+  health: HealthFacts;
+  /** The Session Moves recorded this week. */
+  moves: SessionMoveFact[];
+  /** The athlete's own Coach Chat lines of the last seven days, as stored. */
+  chatLines: string[];
 }
 
 /** The draft's signals: everything it plans from except the unavailable dates, which its gate already read. */
 export function draftInclude(draftedWeek: string): ContextInclude {
   return {
-    signals: ['profile', 'language', 'equipment', 'checkIn', 'body', 'races', 'presence', 'week'],
+    signals: ['profile', 'language', 'equipment', 'checkIn', 'body', 'races', 'presence', 'health', 'moves', 'chat'],
     historyBefore: draftedWeek,
   };
 }
 
-/** Coach Chat's signals. The athlete row and language arrive from the signed-in action. */
-export const CHAT_INCLUDE: ContextInclude = {
-  signals: ['equipment', 'checkIn', 'body', 'races', 'presence', 'unavailable', 'week'],
-};
+/**
+ * Coach Chat's signals. The athlete row and language arrive from the signed-in
+ * action; the conversation itself is Chat's own. Its history runs through the
+ * end of this week, so this week's so-far reads beside the three before it.
+ */
+export function chatInclude(today: string): ContextInclude {
+  return {
+    signals: ['equipment', 'checkIn', 'body', 'races', 'presence', 'unavailable', 'week', 'health', 'moves'],
+    historyBefore: nextWeekOf(today),
+  };
+}
 
 /**
  * The Briefing's signals: the athlete's reports — profile, capacity, races,
@@ -126,6 +149,25 @@ function historyBefore(athleteId: string, week: string | undefined): Promise<Ses
   return getSessionsInRange(athleteId, addDays(week, -7 * RECENT_WEEKS), week);
 }
 
+/**
+ * The open Injuries and Illnesses as the Coach may read them (E1): the rows
+ * are mapped to structure the moment they are read, so the injury's name —
+ * free text for human eyes — never enters the context at all.
+ */
+async function openHealth(athleteId: string): Promise<HealthFacts> {
+  const [injuries, illnesses] = await Promise.all([getOpenInjuries(athleteId), getOpenIllnesses(athleteId)]);
+  return {
+    injuries: injuries.map((i: InjuryRow) => ({
+      prevents: { swim: i.swim, bike: i.bike, run: i.run } as HealthFacts['injuries'][number]['prevents'],
+      since: dateKey(i.openedAt),
+      botherRating: i.bother,
+    })),
+    illnesses: illnesses.map((i: IllnessRow) => ({ since: dateKey(i.openedAt), botherRating: i.bother })),
+  };
+}
+
+const NO_HEALTH: HealthFacts = { injuries: [], illnesses: [] };
+
 /** Every included signal, in one round of reads. */
 export async function readAthleteContext(
   athleteId: string,
@@ -148,6 +190,9 @@ export async function readAthleteContext(
     pastSessions,
     reflections,
     transcripts,
+    health,
+    moves,
+    chatLines,
   ] = await Promise.all([
     when(has('profile'), () => getAthleteById(athleteId), null),
     when(has('language'), () => getLanguageForAthlete(athleteId), null),
@@ -163,6 +208,9 @@ export async function readAthleteContext(
     historyBefore(athleteId, include.historyBefore),
     when(has('reflections'), () => getBriefingReflections(athleteId), null),
     include.link ? getSharedTranscripts(include.link) : Promise.resolve(null),
+    when(has('health'), () => openHealth(athleteId), NO_HEALTH),
+    when(has('moves'), () => getSessionMovesSince(athleteId, thisWeek), []),
+    when(has('chat'), () => getRecentAthleteChatLines(athleteId, addDays(today, -7)), []),
   ]);
   return {
     athlete: athlete ?? null,
@@ -178,6 +226,9 @@ export async function readAthleteContext(
     pastSessions,
     reflections,
     transcripts,
+    health,
+    moves,
+    chatLines,
   };
 }
 
@@ -213,11 +264,23 @@ function checkInOf(
 /** What the draft prompt reads from the context. */
 export interface DraftSlice {
   checkIn: CheckIn;
-  weekFeedback: WeekFeedbackEntry[];
+  /**
+   * The Session Reflections of the week before the drafted one
+   * (`training-architecture/46`): the week that just ended when drafting on a
+   * Monday, this week when drafting next. Named by its Monday, so the prompt's
+   * heading says which week it is.
+   */
+  lastWeekFeedback: { weekStart: string; entries: WeekFeedbackEntry[] };
   recentWeeks: WeekSummary[];
+  health: HealthFacts;
+  moves: SessionMoveFact[];
+  /** The athlete's reflection comments of the two weeks before the drafted one. */
+  comments: ReflectionComment[];
+  /** What the athlete said in Coach Chat lately (E2), shortened, identifier-free. */
+  chat: string[];
 }
 
-/** The draft's slice: the Check-in, this week's reflections and the four weeks before the drafted one. */
+/** The draft's slice: the Check-in, the ratings of the week before the drafted one, and the four weeks before it. */
 export function draftContextOf(
   ctx: AthleteContext,
   athlete: Athlete,
@@ -225,15 +288,57 @@ export function draftContextOf(
 ): DraftSlice {
   return {
     checkIn: checkInOf(ctx, athlete, opts.today, ctx.language ?? undefined, null),
-    weekFeedback: weekFeedbackFrom(ctx.weekSessions),
+    lastWeekFeedback: lastWeekFeedbackOf(ctx.pastSessions, opts.draftedWeek),
     recentWeeks: fourWeekSummary(ctx.pastSessions, opts.draftedWeek, opts.today),
+    health: ctx.health,
+    moves: ctx.moves,
+    comments: reflectionCommentsOf(ctx.pastSessions, opts.draftedWeek),
+    chat: speakable(ctx.chatLines),
   };
 }
+
+/** The longest an athlete's line or comment reaches a prompt (E2). */
+const MAX_LINE = 160;
+
+function shorten(text: string): string {
+  return text.length > MAX_LINE ? `${text.slice(0, MAX_LINE - 1)}…` : text;
+}
+
+/**
+ * Athlete free text a prompt may carry: shortened, and a line that carries an
+ * email or phone shape dropped — never sent, and never fatal to the prompt it
+ * would have joined (the same shape guard as `assertNoDirectIdentifier`).
+ */
+function speakable(lines: string[]): string[] {
+  return lines.filter(isFreeOfShapedIdentifiers).map(shorten);
+}
+
+/** The reflection comments of the two weeks before `before`, oldest first. */
+function reflectionCommentsOf(pastSessions: Session[], before: string): ReflectionComment[] {
+  const from = addDays(before, -14);
+  return pastSessions
+    .filter((s) => s.date >= from && s.feedbackComment !== null && isFreeOfShapedIdentifiers(s.feedbackComment))
+    .map((s) => ({ date: s.date, sessionType: s.type, comment: shorten(s.feedbackComment as string) }));
+}
+
+function lastWeekFeedbackOf(pastSessions: Session[], draftedWeek: string): DraftSlice['lastWeekFeedback'] {
+  const weekStart = addDays(draftedWeek, -7);
+  return { weekStart, entries: weekFeedbackFrom(pastSessions.filter((s) => weekStartOf(s.date) === weekStart)) };
+}
+
+const nextWeekOf = (today: string): string => addDays(weekStartOf(today), 7);
 
 /** What Coach Chat's prompt reads from the context. */
 export interface ChatSlice {
   checkIn: CheckIn;
   weekSessions: Session[];
+  /** What Chat now reads beside the week (`training-architecture/52`). */
+  signals: {
+    recentWeeks: WeekSummary[];
+    health: HealthFacts;
+    moves: SessionMoveFact[];
+    comments: ReflectionComment[];
+  };
 }
 
 /** Coach Chat's slice: the Check-in (with when this week's plan was written) and the week. */
@@ -244,7 +349,15 @@ export function chatContextOf(
 ): ChatSlice {
   return {
     checkIn: checkInOf(ctx, athlete, opts.today, opts.language, opts.planWrittenAt),
-    weekSessions: ctx.weekSessions,
+    // A past planned session nobody ticked reads as such, not as one still to
+    // come (`training-architecture/45`). The row itself is left alone.
+    weekSessions: ctx.weekSessions.map((s) => (isUnrecorded(s, opts.today) ? { ...s, status: 'not recorded' } : s)),
+    signals: {
+      recentWeeks: fourWeekSummary(ctx.pastSessions, nextWeekOf(opts.today), opts.today),
+      health: ctx.health,
+      moves: ctx.moves,
+      comments: reflectionCommentsOf(ctx.pastSessions, nextWeekOf(opts.today)),
+    },
   };
 }
 

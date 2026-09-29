@@ -16,6 +16,10 @@ const repo = vi.hoisted(() => ({
   getSessionsInRange: vi.fn(),
   getBriefingReflections: vi.fn(),
   getSharedTranscripts: vi.fn(),
+  getOpenInjuries: vi.fn(),
+  getOpenIllnesses: vi.fn(),
+  getSessionMovesSince: vi.fn(),
+  getRecentAthleteChatLines: vi.fn(),
 }));
 
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById: repo.getAthleteById }));
@@ -23,7 +27,11 @@ vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getLanguageForAt
 vi.mock('./training-block-service', () => ({ getResolvedBlocks: repo.getResolvedBlocks }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems: repo.getEquipmentItems }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek: repo.getCheckInForWeek }));
-vi.mock('@/features/health/health-repository', () => ({ capacityFor: repo.capacityFor }));
+vi.mock('@/features/health/health-repository', () => ({
+  capacityFor: repo.capacityFor,
+  getOpenInjuries: repo.getOpenInjuries,
+  getOpenIllnesses: repo.getOpenIllnesses,
+}));
 vi.mock('@/features/race/race-repository', () => ({ getRaces: repo.getRaces }));
 vi.mock('./presence-repository', () => ({ getPresenceStage: repo.getPresenceStage }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates: repo.getUnavailableDates }));
@@ -33,11 +41,13 @@ vi.mock('@/features/session/session-repository', () => ({
   getBriefingReflections: repo.getBriefingReflections,
 }));
 vi.mock('./coach-repository', () => ({ getSharedTranscripts: repo.getSharedTranscripts }));
+vi.mock('@/features/session/session-move-repository', () => ({ getSessionMovesSince: repo.getSessionMovesSince }));
+vi.mock('./chat-excerpt-repository', () => ({ getRecentAthleteChatLines: repo.getRecentAthleteChatLines }));
 
 const {
   readAthleteContext,
   draftInclude,
-  CHAT_INCLUDE,
+  chatInclude,
   briefingInclude,
   draftContextOf,
   chatContextOf,
@@ -102,6 +112,10 @@ beforeEach(() => {
   repo.getSessionsInRange.mockResolvedValue([]);
   repo.getBriefingReflections.mockResolvedValue([]);
   repo.getSharedTranscripts.mockResolvedValue(null);
+  repo.getOpenInjuries.mockResolvedValue([]);
+  repo.getOpenIllnesses.mockResolvedValue([]);
+  repo.getSessionMovesSince.mockResolvedValue([]);
+  repo.getRecentAthleteChatLines.mockResolvedValue([]);
 });
 
 describe('readAthleteContext — one round of reads, and nothing it was not asked for', () => {
@@ -116,6 +130,9 @@ describe('readAthleteContext — one round of reads, and nothing it was not aske
     unavailable: () => repo.getUnavailableDates,
     week: () => repo.getSessionsForWeek,
     reflections: () => repo.getBriefingReflections,
+    health: () => repo.getOpenInjuries,
+    moves: () => repo.getSessionMovesSince,
+    chat: () => repo.getRecentAthleteChatLines,
   };
 
   it('reads each included signal once, and no other', async () => {
@@ -156,7 +173,7 @@ describe('readAthleteContext — one round of reads, and nothing it was not aske
     repo.getLanguageForAthlete.mockResolvedValue('da');
     repo.capacityFor.mockResolvedValue('no run');
     repo.getUnavailableDates.mockResolvedValue(['2026-10-01']);
-    const ctx = await readAthleteContext('a1', TODAY, CHAT_INCLUDE);
+    const ctx = await readAthleteContext('a1', TODAY, chatInclude(TODAY));
     expect(ctx).toMatchObject({ capacity: 'no run', unavailableDates: ['2026-10-01'], language: null, athlete: null });
   });
 
@@ -175,12 +192,119 @@ describe('readAthleteContext — one round of reads, and nothing it was not aske
       pastSessions: [],
       reflections: null,
       transcripts: null,
+      moves: [],
+      chatLines: [],
     });
   });
 
   it('reads a missing athlete row as none', async () => {
     repo.getAthleteById.mockResolvedValue(undefined);
     expect((await readAthleteContext('a1', TODAY, { signals: ['profile'] })).athlete).toBeNull();
+  });
+});
+
+describe('injuries and illness, as structure only (E1)', () => {
+  // The detail thread is not reachable from here at all: nothing on this path
+  // imports its reader, which `detail-thread-never-prompts.test.ts` pins.
+  it('carries what each prevents, since when and the Bother Rating — never the name', async () => {
+    repo.getOpenInjuries.mockResolvedValue([
+      { id: 'i1', athleteId: 'a1', swim: 'full', bike: 'easy', run: 'none', name: 'left knee', openedAt: new Date('2026-09-20T08:00:00'), closedAt: null, bother: 3 },
+    ]);
+    repo.getOpenIllnesses.mockResolvedValue([
+      { id: 'x1', athleteId: 'a1', openedAt: new Date('2026-09-27T08:00:00'), closedAt: null, bother: null },
+    ]);
+
+    const ctx = await readAthleteContext('a1', TODAY, { signals: ['health'] });
+
+    expect(ctx.health).toEqual({
+      injuries: [{ prevents: { swim: 'full', bike: 'easy', run: 'none' }, since: '2026-09-20', botherRating: 3 }],
+      illnesses: [{ since: '2026-09-27', botherRating: null }],
+    });
+    expect(JSON.stringify(ctx.health)).not.toContain('knee');
+    expect(repo.getOpenIllnesses).toHaveBeenCalledWith('a1');
+  });
+
+  it('reads none when health is not included', async () => {
+    const ctx = await readAthleteContext('a1', TODAY, { signals: [] });
+    expect(ctx.health).toEqual({ injuries: [], illnesses: [] });
+    expect(repo.getOpenIllnesses).not.toHaveBeenCalled();
+  });
+
+  it('is read for the draft and Coach Chat, never for the Briefing', async () => {
+    await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    await readAthleteContext('a1', TODAY, chatInclude(TODAY));
+    expect(repo.getOpenInjuries).toHaveBeenCalledTimes(2);
+    vi.clearAllMocks();
+    await readAthleteContext('a1', TODAY, briefingInclude(link(true, true), true));
+    expect(repo.getOpenInjuries).not.toHaveBeenCalled();
+  });
+});
+
+describe('Session Moves, reflection comments and what the athlete said lately (training-architecture/52)', () => {
+  it("reads this week's Session Moves and the last seven days of the athlete's own chat", async () => {
+    await readAthleteContext('a1', TODAY, { signals: ['moves', 'chat'] });
+    expect(repo.getSessionMovesSince).toHaveBeenCalledWith('a1', THIS_WEEK);
+    expect(repo.getRecentAthleteChatLines).toHaveBeenCalledWith('a1', '2026-09-22');
+  });
+
+  it('the draft reads both; Coach Chat reads the moves and not its own conversation; the Briefing neither', async () => {
+    await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    expect(repo.getSessionMovesSince).toHaveBeenCalledTimes(1);
+    expect(repo.getRecentAthleteChatLines).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+    await readAthleteContext('a1', TODAY, chatInclude(TODAY));
+    expect(repo.getSessionMovesSince).toHaveBeenCalledTimes(1);
+    expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+    await readAthleteContext('a1', TODAY, briefingInclude(link(true, true), true));
+    expect(repo.getSessionMovesSince).not.toHaveBeenCalled();
+    expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
+  });
+
+  it('Coach Chat reads the four weeks up to the end of this one', async () => {
+    await readAthleteContext('a1', TODAY, chatInclude(TODAY));
+    expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', '2026-09-07', NEXT_WEEK);
+  });
+
+  it("drops a chat line carrying an identifier instead of failing the draft, and shortens a long one", async () => {
+    repo.getRecentAthleteChatLines.mockResolvedValue(['mail me at a@b.dk', 'legs heavy', 'x'.repeat(200), 'y'.repeat(160)]);
+    const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    const { chat } = draftContextOf(ctx, ATHLETE, { today: TODAY, draftedWeek: NEXT_WEEK });
+    expect(chat).toEqual(['legs heavy', `${'x'.repeat(159)}…`, 'y'.repeat(160)]);
+  });
+
+  it('carries the reflection comments of the two weeks before the drafted one, shortened, and drops one carrying an identifier', async () => {
+    repo.getSessionsInRange.mockResolvedValue([
+      session({ date: '2026-09-20', feedbackComment: 'too old' }),
+      session({ date: '2026-09-21', type: 'Swim', feedbackComment: 'first day in' }),
+      session({ date: '2026-09-22', type: 'Intensity', feedbackComment: 'hard but good' }),
+      session({ date: '2026-09-23', feedbackComment: 'call +45 12 34 56 78' }),
+      session({ date: '2026-09-29', feedbackComment: 'c'.repeat(170) }),
+      session({ date: '2026-09-30', feedbackComment: null }),
+    ]);
+    const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    const { comments } = draftContextOf(ctx, ATHLETE, { today: TODAY, draftedWeek: NEXT_WEEK });
+    expect(comments).toEqual([
+      { date: '2026-09-21', sessionType: 'Swim', comment: 'first day in' },
+      { date: '2026-09-22', sessionType: 'Intensity', comment: 'hard but good' },
+      { date: '2026-09-29', sessionType: 'Endurance', comment: `${'c'.repeat(159)}…` },
+    ]);
+  });
+
+  it('hands the draft and Coach Chat the health facts and the moves', async () => {
+    const moves = [{ from: '2026-09-29', to: '2026-10-01', by: 'athlete' }];
+    repo.getSessionMovesSince.mockResolvedValue(moves);
+    const draftCtx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    const draft = draftContextOf(draftCtx, ATHLETE, { today: TODAY, draftedWeek: NEXT_WEEK });
+    expect(draft.moves).toEqual(moves);
+    expect(draft.health).toEqual({ injuries: [], illnesses: [] });
+
+    const chatCtx = await readAthleteContext('a1', TODAY, chatInclude(TODAY));
+    const chat = chatContextOf(chatCtx, ATHLETE, { today: TODAY, planWrittenAt: null });
+    expect(chat.signals.moves).toEqual(moves);
+    expect(chat.signals.health).toEqual({ injuries: [], illnesses: [] });
+    expect(chat.signals.recentWeeks.map((w) => w.weekStart)).toEqual(['2026-09-07', '2026-09-14', '2026-09-21', THIS_WEEK]);
+    expect(chat.signals.comments).toEqual([]);
   });
 });
 
@@ -195,17 +319,18 @@ describe('what each purpose reads', () => {
       repo.capacityFor,
       repo.getRaces,
       repo.getPresenceStage,
-      repo.getSessionsForWeek,
     ]) {
       expect(reader).toHaveBeenCalledTimes(1);
     }
     expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', '2026-09-07', NEXT_WEEK);
+    // Its ratings come from the history, as the week before the drafted one (/46).
+    expect(repo.getSessionsForWeek).not.toHaveBeenCalled();
     expect(repo.getUnavailableDates).not.toHaveBeenCalled();
     expect(repo.getBriefingReflections).not.toHaveBeenCalled();
   });
 
   it('Coach Chat reads the unavailable dates and not the athlete row it already has', async () => {
-    await readAthleteContext('a1', TODAY, CHAT_INCLUDE);
+    await readAthleteContext('a1', TODAY, chatInclude(TODAY));
     for (const reader of [
       repo.getEquipmentItems,
       repo.getCheckInForWeek,
@@ -240,10 +365,31 @@ describe('what each purpose reads', () => {
   });
 });
 
+describe('the ratings the draft reads (training-architecture/46)', () => {
+  const rated = [
+    session({ date: '2026-09-22', feedbackBody: 2, feedbackMind: 2 }),
+    session({ date: '2026-09-29', feedbackBody: 4, feedbackMind: 4 }),
+  ];
+
+  it('drafts on a Monday with the ratings of the week that just ended', async () => {
+    repo.getSessionsInRange.mockResolvedValue(rated.slice(0, 1));
+    const ctx = await readAthleteContext('a1', THIS_WEEK, draftInclude(THIS_WEEK));
+    const { lastWeekFeedback } = draftContextOf(ctx, ATHLETE, { today: THIS_WEEK, draftedWeek: THIS_WEEK });
+    expect(lastWeekFeedback.weekStart).toBe('2026-09-21');
+    expect(lastWeekFeedback.entries.map((f) => f.dateKey)).toEqual(['2026-09-22']);
+  });
+
+  it("drafts next week with this week's ratings", async () => {
+    repo.getSessionsInRange.mockResolvedValue(rated);
+    const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    const { lastWeekFeedback } = draftContextOf(ctx, ATHLETE, { today: TODAY, draftedWeek: NEXT_WEEK });
+    expect(lastWeekFeedback.weekStart).toBe(THIS_WEEK);
+    expect(lastWeekFeedback.entries.map((f) => f.dateKey)).toEqual(['2026-09-29']);
+  });
+});
+
 describe('the slices', () => {
-  it("gives the draft the Check-in, this week's reflections and the four weeks before the drafted week", async () => {
-    repo.getEquipmentItems.mockResolvedValue([{ id: 'e1', category: 'bike', name: 'Canyon', notes: null }]);
-    repo.getSessionsForWeek.mockResolvedValue([session({ date: '2026-09-28', feedbackBody: 2, feedbackMind: 3 })]);
+  it('gives the draft the Check-in and the four weeks before the drafted week', async () => {
     repo.getSessionsInRange.mockResolvedValue([session({ date: '2026-09-22', duration: 90 })]);
     const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
 
@@ -251,7 +397,6 @@ describe('the slices', () => {
 
     expect(slice.checkIn.language).toBe('da');
     expect(slice.checkIn.presenceStage).toBe('building');
-    expect(slice.weekFeedback.map((f) => f.dateKey)).toEqual(['2026-09-28']);
     expect(slice.recentWeeks.map((w) => w.weekStart)).toEqual(['2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28']);
     expect(slice.recentWeeks[2].doneMinutes).toBe(90);
   });
@@ -259,17 +404,34 @@ describe('the slices', () => {
   it("gives Coach Chat the Check-in in the signed-in athlete's language, and the week", async () => {
     const week = [session({ date: '2026-09-30', status: 'planned' })];
     repo.getSessionsForWeek.mockResolvedValue(week);
-    const ctx = await readAthleteContext('a1', TODAY, CHAT_INCLUDE);
+    const ctx = await readAthleteContext('a1', TODAY, chatInclude(TODAY));
 
     const slice = chatContextOf(ctx, ATHLETE, { today: TODAY, language: 'English', planWrittenAt: null });
 
     expect(slice.checkIn.language).toBe('English');
-    expect(slice.weekSessions).toBe(week);
+    expect(slice.weekSessions).toEqual(week);
   });
 
   it('puts a Coach with no presence evidence at cold start', async () => {
     const ctx = await readAthleteContext('a1', TODAY, { signals: [] });
     expect(chatContextOf(ctx, ATHLETE, { today: TODAY, planWrittenAt: null }).checkIn.presenceStage).toBe('cold_start');
+  });
+
+  it("says 'not recorded' for a past planned session in Coach Chat's week, and 'planned' for today's (training-architecture/45)", async () => {
+    repo.getSessionsForWeek.mockResolvedValue([
+      session({ id: 'mon', date: '2026-09-28', status: 'planned' }),
+      session({ id: 'tue', date: TODAY, status: 'planned' }),
+      session({ id: 'done', date: '2026-09-28', status: 'completed' }),
+    ]);
+    const ctx = await readAthleteContext('a1', TODAY, chatInclude(TODAY));
+
+    const { weekSessions } = chatContextOf(ctx, ATHLETE, { today: TODAY, planWrittenAt: null });
+
+    expect(weekSessions.map((s) => [s.id, s.status])).toEqual([
+      ['mon', 'not recorded'],
+      ['tue', 'planned'],
+      ['done', 'completed'],
+    ]);
   });
 
   it('gives the Briefing no reports and no transcripts when the link shares neither', async () => {

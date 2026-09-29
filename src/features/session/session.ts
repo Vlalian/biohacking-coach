@@ -106,6 +106,16 @@ export function isImportedHistory(session: Pick<Session, 'origin' | 'status'>): 
   return session.origin === 'garmin' && session.status === 'completed';
 }
 
+/**
+ * A past Planned Session nobody recorded (`training-architecture/45`): its day
+ * is behind today and it was never completed or skipped. The row is left as it
+ * is — nothing writes a status for it — and the Coach reads it as "not
+ * recorded" rather than as a plan still to come. Today's session is not past.
+ */
+export function isUnrecorded(session: Pick<Session, 'status' | 'date'>, today: string): boolean {
+  return session.status === 'planned' && session.date < today;
+}
+
 /** The one place a stored session row becomes a domain object. */
 export function toSession(row: SessionRow): Session {
   return {

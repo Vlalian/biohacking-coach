@@ -482,11 +482,16 @@ async function gatherContext(
   const grounding = await ground(athleteId, groundingFacts(athlete, context.horizon.blocks, today));
 
   const ctx = {
-    ...buildWeeklyContext(slice.checkIn, slice.weekFeedback, unavailableDates, today),
+    ...buildWeeklyContext(slice.checkIn, slice.lastWeekFeedback.entries, unavailableDates, today),
+    feedbackWeek: slice.lastWeekFeedback.weekStart,
     window,
     skeleton,
     baseline,
     recentWeeks: slice.recentWeeks,
+    health: slice.health,
+    moves: slice.moves,
+    comments: slice.comments,
+    chat: slice.chat,
     declined,
     passages: grounding.passages,
     citations: grounding.citations,

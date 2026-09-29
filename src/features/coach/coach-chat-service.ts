@@ -5,7 +5,7 @@ import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
 import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
-import { CHAT_INCLUDE, chatContextOf, readAthleteContext } from './athlete-context';
+import { chatContextOf, chatInclude, readAthleteContext } from './athlete-context';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
@@ -95,7 +95,7 @@ async function renderSystem(
   // never contradicts the week the athlete was just drafted. The Reference,
   // when this plan was written and the conversation's own facts are Chat's.
   const [context, reference, planWrittenAt, facts] = await Promise.all([
-    readAthleteContext(athlete.id, today, CHAT_INCLUDE),
+    readAthleteContext(athlete.id, today, chatInclude(today)),
     referenceSessionId
       ? getOwnedSession(athlete.id, referenceSessionId)
       : Promise.resolve(undefined),
@@ -115,7 +115,7 @@ async function renderSystem(
     chosenFirstDay(athlete.profile, today),
   );
 
-  const { checkIn, weekSessions } = chatContextOf(context, athlete, { today, language, planWrittenAt });
+  const { checkIn, weekSessions, signals } = chatContextOf(context, athlete, { today, language, planWrittenAt });
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.
@@ -130,6 +130,7 @@ async function renderSystem(
       // resolved at the user seam by the action and threaded here as plain
       // data, beside the language and for the same reason.
       preferredName,
+      signals,
     ),
     window,
   };

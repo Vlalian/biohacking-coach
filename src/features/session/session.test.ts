@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SESSION_ORIGINS, isImportedHistory, toDeviceSummary, toSessionOrigin } from './session';
+import { SESSION_ORIGINS, isImportedHistory, isUnrecorded, toDeviceSummary, toSessionOrigin } from './session';
 
 /**
  * `training-architecture/34` — the structure writes sessions of its own, and
@@ -50,5 +50,19 @@ describe('imported history', () => {
     expect(isImportedHistory({ origin: 'coach', status: 'completed' })).toBe(false);
     expect(isImportedHistory({ origin: 'athlete', status: 'completed' })).toBe(false);
     expect(isImportedHistory({ origin: 'garmin', status: 'planned' })).toBe(false);
+  });
+});
+
+/** `training-architecture/45` — a past Planned Session nobody ticked. */
+describe('unrecorded', () => {
+  it("names a past planned session unrecorded, and today's not", () => {
+    expect(isUnrecorded({ status: 'planned', date: '2026-09-28' }, '2026-09-29')).toBe(true);
+    expect(isUnrecorded({ status: 'planned', date: '2026-09-29' }, '2026-09-29')).toBe(false);
+  });
+
+  it('is never a session that was completed, skipped or made unavailable', () => {
+    for (const status of ['completed', 'skipped', 'unavailable']) {
+      expect(isUnrecorded({ status, date: '2026-09-20' }, '2026-09-29')).toBe(false);
+    }
   });
 });

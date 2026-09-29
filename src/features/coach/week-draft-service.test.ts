@@ -38,7 +38,15 @@ vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems }));
 vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForWeek, getArithmeticSessionsForWeek, getSessionsInRange }));
-vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
+// The structured injury read, the week's moves and the chat excerpt
+// (`training-architecture/52`): boundaries, empty by default.
+vi.mock('@/features/health/health-repository', () => ({
+  capacityFor,
+  getOpenInjuries: vi.fn(async () => []),
+  getOpenIllnesses: vi.fn(async () => []),
+}));
+vi.mock('@/features/session/session-move-repository', () => ({ getSessionMovesSince: vi.fn(async () => []) }));
+vi.mock('./chat-excerpt-repository', () => ({ getRecentAthleteChatLines: vi.fn(async () => []) }));
 vi.mock('@/features/consent/consent-gate', () => ({ assertAiCoachingConsent }));
 vi.mock('@/features/knowledge-oracle/embedder', () => ({ openAiEmbedder }));
 vi.mock('@/features/knowledge-oracle/knowledge-repository', () => ({ knowledgeSearch }));

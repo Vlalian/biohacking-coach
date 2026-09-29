@@ -30,7 +30,14 @@ vi.mock('./coach-client', () => ({ callCoach }));
 const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
 vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
 const { capacityFor } = vi.hoisted(() => ({ capacityFor: vi.fn<() => Promise<string | null>>(async () => null) }));
-vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
+// The structured injury read and the week's moves (`training-architecture/52`):
+// boundaries, none open and none moved by default.
+vi.mock('@/features/health/health-repository', () => ({
+  capacityFor,
+  getOpenInjuries: vi.fn(async () => []),
+  getOpenIllnesses: vi.fn(async () => []),
+}));
+vi.mock('@/features/session/session-move-repository', () => ({ getSessionMovesSince: vi.fn(async () => []) }));
 
 // One grounding per turn (knowledge-oracle/05). Faked at the module seam so
 // these tests assert the wiring — which tools the Coach is offered, where the
@@ -91,6 +98,8 @@ vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems 
 vi.mock('@/features/session/session-repository', () => ({
   getOwnedSession,
   getSessionsForWeek,
+  // The recent weeks Chat reads since `training-architecture/52`. None by default.
+  getSessionsInRange: vi.fn(async () => []),
 }));
 
 const { sendCoachChatMessage, getOpenCoachChat } = await import('./coach-chat-service');

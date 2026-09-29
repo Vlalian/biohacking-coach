@@ -1,6 +1,6 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
-import { isImportedHistory, type Session } from '@/features/session/session';
+import { isImportedHistory, isUnrecorded, type Session } from '@/features/session/session';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
@@ -322,6 +322,18 @@ export interface WeekSummary {
    * `completed`, so the Coach reads them as done and never as unrated.
    */
   imported: number;
+  /**
+   * Past Planned Sessions nobody recorded (`training-architecture/45`) — in
+   * `plannedMinutes`, never in `completed` or `skipped`, and said as such so
+   * the Coach does not read them as done or as dropped.
+   */
+  unrecorded: number;
+  /**
+   * What a device recorded on the week's completed sessions
+   * (`training-architecture/52`): distance summed, average heart rate the mean
+   * of the sessions that had one. Null when none of them came with a summary.
+   */
+  device: { distanceKm: number; avgHr: number | null } | null;
 }
 
 /** How many weeks before the drafted one the draft reads. */
@@ -345,11 +357,11 @@ export function fourWeekSummary(sessions: Session[], targetWeekStart: string, to
   return Array.from({ length: RECENT_WEEKS }, (_, i) => {
     const weekStart = addDays(targetWeekStart, (i - RECENT_WEEKS) * 7);
     const week = decided.filter((s) => weekStartOf(s.date) === weekStart);
-    return summariseWeek(weekStart, week, weekStart === weekStartOf(today));
+    return summariseWeek(weekStart, week, weekStart === weekStartOf(today), today);
   });
 }
 
-function summariseWeek(weekStart: string, week: Session[], soFar: boolean): WeekSummary {
+function summariseWeek(weekStart: string, week: Session[], soFar: boolean, today: string): WeekSummary {
   const done = week.filter((s) => s.status === 'completed');
   return {
     weekStart,
@@ -360,6 +372,20 @@ function summariseWeek(weekStart: string, week: Session[], soFar: boolean): Week
     byType: typeSplit(done),
     soFar,
     imported: done.filter(isImportedHistory).length,
+    unrecorded: week.filter((s) => isUnrecorded(s, today)).length,
+    device: deviceOf(done),
+  };
+}
+
+/** The device facts of a week's completed sessions, or null when none carried any. */
+function deviceOf(done: Session[]): WeekSummary['device'] {
+  const summaries = done.flatMap((s) => (s.summary ? [s.summary] : []));
+  if (summaries.length === 0) return null;
+  const metres = summaries.reduce((sum, x) => sum + (x.distanceM ?? 0), 0);
+  const rates = summaries.flatMap((x) => (x.avgHr === null ? [] : [x.avgHr]));
+  return {
+    distanceKm: Math.round(metres / 100) / 10,
+    avgHr: rates.length === 0 ? null : Math.round(rates.reduce((a, b) => a + b, 0) / rates.length),
   };
 }
 
