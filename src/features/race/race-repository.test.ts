@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { events as eventsTable, pastRace as pastRaceTable, race as raceTable, type RaceRow } from '@/db/schema';
+import {
+  athlete as athleteTable,
+  events as eventsTable,
+  pastRace as pastRaceTable,
+  race as raceTable,
+  type RaceRow,
+} from '@/db/schema';
 
 const rows: RaceRow[] = [];
 
@@ -16,6 +22,7 @@ const insertValues = vi.fn((v: unknown) => {
 });
 
 const updates: { set: unknown; where: unknown }[] = [];
+const updateTables: unknown[] = [];
 const updateWhere = vi.fn((w: unknown) => {
   updates[updates.length - 1].where = w;
   return Promise.resolve();
@@ -40,7 +47,10 @@ vi.mock('@/db', () => ({
       insertTables.push(table);
       return { values: insertValues };
     },
-    update: () => ({ set }),
+    update: (table: unknown) => {
+      updateTables.push(table);
+      return { set };
+    },
     delete: () => ({ where: deleteWhere }),
     batch,
   }),
@@ -58,7 +68,7 @@ const {
   getPastRaces,
   addPastRace,
   deletePastRace,
-  recordRaceAdded,
+  addRace,
 } = await import('./race-repository');
 
 function race(overrides: Partial<RaceRow> = {}): RaceRow {
@@ -78,6 +88,7 @@ beforeEach(() => {
   rows.length = 0;
   inserted.length = 0;
   updates.length = 0;
+  updateTables.length = 0;
   deletes.length = 0;
   batch.mockClear();
 });
@@ -259,18 +270,55 @@ describe('past races — the races the athlete has finished (training-architectu
   });
 });
 
-describe('recordRaceAdded (training-architecture/37)', () => {
+describe('addRace: the race, its target flag, the mirror and the event in one batch (CodeRabbit, PR #115)', () => {
+  const kbh = { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' as const };
+
   beforeEach(() => {
     inserted.length = 0;
     insertTables.length = 0;
   });
 
-  it('writes a race_added event in the athlete\'s own hand, un-narrated, carrying what they chose', async () => {
-    const payload = { raceId: 'r1', name: 'Aarhus 70.3', date: '2027-02-27', distance: 'Half' as const, isTarget: false };
-    await recordRaceAdded('athlete_1', payload);
-    expect(insertTables).toEqual([eventsTable]);
-    expect(inserted).toEqual([
-      { athleteId: 'athlete_1', actorType: 'athlete', actorId: 'athlete_1', type: 'race_added', payload },
-    ]);
+  it('writes a tune-up and its race_added event together, and touches no target', async () => {
+    const id = await addRace('athlete_1', kbh, 'none');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(2);
+    expect(insertTables).toEqual([raceTable, eventsTable]);
+    expect(inserted[0]).toEqual({ id, athleteId: 'athlete_1', ...kbh, isTarget: false });
+    expect(inserted[1]).toEqual({
+      athleteId: 'athlete_1',
+      actorType: 'athlete',
+      actorId: 'athlete_1',
+      type: 'race_added',
+      payload: { raceId: id, ...kbh, isTarget: false },
+    });
+    expect(updates).toEqual([]);
+  });
+
+  it('writes a first race as the target, with the mirror, in the same batch', async () => {
+    const id = await addRace('athlete_1', kbh, 'first');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(3);
+    expect(inserted[0]).toMatchObject({ id, isTarget: true });
+    expect(updateTables).toEqual([athleteTable]);
+    expect(updates[0].set).toMatchObject({ raceTarget: 'IM Kbh' });
+    expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
+  });
+
+  it('replaces a target by clearing the old flag before the new race is inserted flagged', async () => {
+    const id = await addRace('athlete_1', kbh, 'replace');
+    expect(batch).toHaveBeenCalledTimes(1);
+    const statements = batch.mock.calls[0][0];
+    expect(statements).toHaveLength(4);
+    expect(updateTables).toEqual([raceTable, athleteTable]);
+    expect(updates[0]).toEqual({ set: { isTarget: false }, where: eq(raceTable.athleteId, 'athlete_1') });
+    expect(inserted[0]).toMatchObject({ id, isTarget: true });
+    expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
+  });
+
+  it('gives the race a fresh id each time, the same one the event carries', async () => {
+    const a = await addRace('athlete_1', kbh, 'none');
+    const b = await addRace('athlete_1', kbh, 'none');
+    expect(a).not.toBe(b);
+    expect(a).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

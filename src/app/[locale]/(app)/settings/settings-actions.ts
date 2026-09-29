@@ -5,7 +5,6 @@ import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
 import { isCalendarDate } from '@/lib/calendar-date';
 import {
   clearTargetRace,
-  createRace,
   deleteRace,
   getRaces,
   getTargetRace,
@@ -14,7 +13,7 @@ import {
   addPastRace,
   deletePastRace,
   getPastRaces,
-  recordRaceAdded,
+  addRace,
   type NewRace,
 } from '@/features/race/race-repository';
 import { experienceFromCount, parsePastRace } from '@/features/onboarding/past-races';
@@ -227,7 +226,7 @@ export async function updateTargetRaceAction(
  * there is nothing else it could be — and its name goes to the mirror column
  * for the same reason `updateTargetRaceAction` writes it. Asked for as the
  * target beside an existing one, it **replaces** it: created as a non-target,
- * then the flag moves in `setTargetRace`'s one batch, because the partial
+ * the old flag cleared first in `addRace`'s one batch, because the partial
  * unique index allows one target per athlete. The old target stays a race —
  * a Tune-up Race if it falls before the new one (derived, `races.ts`), a later
  * race otherwise. Asked for as a Tune-up, it is simply a non-target. Each Race
@@ -247,28 +246,10 @@ export async function addRaceAction(
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
   const first = (await getTargetRace(athlete.id)) === null;
-  const raceId = await createRace(athlete.id, newRace, { asTarget: first });
-  const isTarget = await settleTarget(athlete.id, raceId, newRace.name, { first, asTarget });
-  // Told, never acted on: the Coach raises it once in chat (ruling 3).
-  await recordRaceAdded(athlete.id, { raceId, ...newRace, isTarget });
+  // One batch: the race, the moved flag, the mirror and the race_added event the
+  // Coach raises once in chat (ruling 3) all land, or none do.
+  const raceId = await addRace(athlete.id, newRace, first ? 'first' : asTarget ? 'replace' : 'none');
   return { ok: true, raceId };
-}
-
-/**
- * Makes a just-added race the Target Race when it is to be one, keeping the
- * mirror column in step; true when it is. A first race was created flagged;
- * one asked for as the target beside an existing one has the flag moved to it.
- */
-async function settleTarget(
-  athleteId: string,
-  raceId: string,
-  name: string,
-  { first, asTarget }: { first: boolean; asTarget: boolean },
-): Promise<boolean> {
-  if (!first && !asTarget) return false;
-  if (!first) await setTargetRace(athleteId, raceId);
-  await updateRaceTarget(athleteId, name);
-  return true;
 }
 
 /** A Race as the form typed it, or null when any part of it is not one. */

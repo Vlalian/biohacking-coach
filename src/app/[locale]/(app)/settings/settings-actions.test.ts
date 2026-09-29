@@ -24,7 +24,7 @@ const {
   addPastRace,
   deletePastRace,
   getPastRaces,
-  recordRaceAdded,
+  addRace,
   updateExperienceLevel,
   updateHoursPerWeek,
   refillWeeksFromHours,
@@ -52,7 +52,7 @@ const {
   addPastRace: vi.fn(() => Promise.resolve('pr_new')),
   deletePastRace: vi.fn(() => Promise.resolve()),
   getPastRaces: vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([])),
-  recordRaceAdded: vi.fn(() => Promise.resolve()),
+  addRace: vi.fn(() => Promise.resolve('race_new')),
   updateExperienceLevel: vi.fn(() => Promise.resolve()),
   updateHoursPerWeek: vi.fn(() => Promise.resolve()),
   refillWeeksFromHours: vi.fn(() => Promise.resolve({ outcome: 'nothing-due', weeks: [] as string[] })),
@@ -93,7 +93,7 @@ vi.mock('@/features/race/race-repository', () => ({
   addPastRace,
   deletePastRace,
   getPastRaces,
-  recordRaceAdded,
+  addRace,
 }));
 
 const {
@@ -458,95 +458,55 @@ describe('races beyond the first (training-architecture/09)', () => {
   });
 
   describe('addRaceAction', () => {
-    it('adds a non-target race when the athlete already has a target', async () => {
+    const kbh = { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' };
+
+    it('adds a tune-up beside an existing target, touching no target', async () => {
       getTargetRace.mockResolvedValue(target);
-      await expect(addRaceAction('Olympic Odense', '2027-03-01', 'Olympic')).resolves.toEqual({
+      await expect(addRaceAction('IM Kbh', '2027-09-15', 'Full', false)).resolves.toEqual({
         ok: true,
         raceId: 'race_new',
       });
-      expect(createRace).toHaveBeenCalledWith(
-        'athlete_1',
-        { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' },
-        { asTarget: false },
-      );
-      expect(updateRaceTarget).not.toHaveBeenCalled();
+      expect(addRace).toHaveBeenCalledWith('athlete_1', kbh, 'none');
     });
 
-    it('adds the race as the target, and writes the mirror, when the athlete has none', async () => {
-      getTargetRace.mockResolvedValue(null);
-      await expect(addRaceAction('Ironman Copenhagen', '2027-08-15', 'Full')).resolves.toEqual({
-        ok: true,
-        raceId: 'race_new',
-      });
-      expect(createRace).toHaveBeenCalledWith(
-        'athlete_1',
-        { name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full' },
-        { asTarget: true },
-      );
-      expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'Ironman Copenhagen');
+    it('adds a tune-up when the kind is not given at all', async () => {
+      getTargetRace.mockResolvedValue(target);
+      await addRaceAction('IM Kbh', '2027-09-15', 'Full');
+      expect(addRace).toHaveBeenCalledWith('athlete_1', kbh, 'none');
     });
 
-    it('adds a tune-up without touching the target, and a target that replaces the old one (training-architecture/37)', async () => {
+    it('adds a race asked for as the target beside an existing one as its replacement (training-architecture/37)', async () => {
       getTargetRace.mockResolvedValue(target);
-      await addRaceAction('Aarhus 70.3', '2027-02-27', 'Half', false);
-      expect(createRace).toHaveBeenCalledWith(
-        'athlete_1',
-        { name: 'Aarhus 70.3', date: '2027-02-27', distance: 'Half' },
-        { asTarget: false },
-      );
-      expect(setTargetRace).not.toHaveBeenCalled();
-      expect(updateRaceTarget).not.toHaveBeenCalled();
-
-      vi.clearAllMocks();
-      getSession.mockResolvedValue({ user: { id: 'user_1' } });
-      getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
-      getTargetRace.mockResolvedValue(target);
-      createRace.mockResolvedValueOnce('race_kbh');
+      addRace.mockResolvedValueOnce('race_kbh');
       await expect(addRaceAction('IM Kbh', '2027-09-15', 'Full', true)).resolves.toEqual({
         ok: true,
         raceId: 'race_kbh',
       });
-      // Created as a non-target first: the partial unique index allows one
-      // target per athlete, so the flag moves in setTargetRace's one batch.
-      expect(createRace).toHaveBeenCalledWith(
-        'athlete_1',
-        { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' },
-        { asTarget: false },
-      );
-      expect(setTargetRace).toHaveBeenCalledWith('athlete_1', 'race_kbh');
-      expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'IM Kbh');
+      expect(addRace).toHaveBeenCalledWith('athlete_1', kbh, 'replace');
     });
 
-    it('a first race is the target whichever kind was asked for', async () => {
+    it('makes a first race the target whichever kind was asked for', async () => {
       getTargetRace.mockResolvedValue(null);
-      await addRaceAction('Aarhus 70.3', '2027-02-27', 'Half', false);
-      expect(createRace).toHaveBeenCalledWith('athlete_1', expect.anything(), { asTarget: true });
-      expect(setTargetRace).not.toHaveBeenCalled();
-      expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'Aarhus 70.3');
+      await addRaceAction('IM Kbh', '2027-09-15', 'Full', false);
+      expect(addRace).toHaveBeenLastCalledWith('athlete_1', kbh, 'first');
+      await addRaceAction('IM Kbh', '2027-09-15', 'Full', true);
+      expect(addRace).toHaveBeenLastCalledWith('athlete_1', kbh, 'first');
     });
 
-    it('records race_added for the Coach to raise, with what the athlete chose (training-architecture/37)', async () => {
+    it('writes through the one batched call only, so a failure leaves nothing half-done (CodeRabbit, PR #115)', async () => {
       getTargetRace.mockResolvedValue(target);
-      createRace.mockResolvedValueOnce('race_aarhus');
-      await addRaceAction('Aarhus 70.3', '2027-02-27', 'Half', false);
-      expect(recordRaceAdded).toHaveBeenCalledWith('athlete_1', {
-        raceId: 'race_aarhus',
-        name: 'Aarhus 70.3',
-        date: '2027-02-27',
-        distance: 'Half',
-        isTarget: false,
-      });
-
       await addRaceAction('IM Kbh', '2027-09-15', 'Full', true);
-      expect(recordRaceAdded).toHaveBeenLastCalledWith('athlete_1', expect.objectContaining({ isTarget: true }));
+      expect(addRace).toHaveBeenCalledTimes(1);
+      expect(createRace).not.toHaveBeenCalled();
+      expect(setTargetRace).not.toHaveBeenCalled();
+      expect(updateRaceTarget).not.toHaveBeenCalled();
     });
 
     it('refuses a bad date, an unknown distance, and an empty name', async () => {
       await expect(addRaceAction('X', '2027-02-30', 'Full')).resolves.toEqual({ ok: false, reason: 'invalid' });
       await expect(addRaceAction('X', '2027-03-01', 'Marathon')).resolves.toEqual({ ok: false, reason: 'invalid' });
       await expect(addRaceAction('   ', '2027-03-01', 'Full')).resolves.toEqual({ ok: false, reason: 'invalid' });
-      expect(createRace).not.toHaveBeenCalled();
-      expect(recordRaceAdded).not.toHaveBeenCalled();
+      expect(addRace).not.toHaveBeenCalled();
     });
   });
 

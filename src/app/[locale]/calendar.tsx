@@ -795,8 +795,9 @@ function WeekRow({
                 </div>
               </div>
 
-              {day.races.map((race) => (
-                <RaceBlock key={`${race.name}:${race.kind}`} race={race} t={t} />
+              {day.races.map((race, i) => (
+                // A race has no id here, and two may share a name and kind on one day.
+                <RaceBlock key={`${race.name}:${race.kind}:${i}`} race={race} t={t} />
               ))}
 
               <div className="mt-2 space-y-2">
