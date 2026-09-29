@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { pastRace as pastRaceTable, race as raceTable, type RaceRow } from '@/db/schema';
+import { events as eventsTable, pastRace as pastRaceTable, race as raceTable, type RaceRow } from '@/db/schema';
 
 const rows: RaceRow[] = [];
 
@@ -8,6 +8,7 @@ const orderBy = vi.fn(() => Promise.resolve(rows));
 const selectWhere = vi.fn(() => ({ orderBy }));
 
 const inserted: unknown[] = [];
+const insertTables: unknown[] = [];
 const returning = vi.fn(() => Promise.resolve([{ id: 'race_new' }]));
 const insertValues = vi.fn((v: unknown) => {
   inserted.push(v);
@@ -35,7 +36,10 @@ const deleteWhere = vi.fn((w: unknown) => {
 vi.mock('@/db', () => ({
   getDb: () => ({
     select: () => ({ from: () => ({ where: selectWhere }) }),
-    insert: () => ({ values: insertValues }),
+    insert: (table: unknown) => {
+      insertTables.push(table);
+      return { values: insertValues };
+    },
     update: () => ({ set }),
     delete: () => ({ where: deleteWhere }),
     batch,
@@ -54,6 +58,7 @@ const {
   getPastRaces,
   addPastRace,
   deletePastRace,
+  recordRaceAdded,
 } = await import('./race-repository');
 
 function race(overrides: Partial<RaceRow> = {}): RaceRow {
@@ -251,5 +256,21 @@ describe('past races — the races the athlete has finished (training-architectu
     expect(returning).toHaveBeenCalledWith({ id: pastRaceTable.id });
     await deletePastRace('athlete_1', 'pr_2');
     expect(deletes).toEqual([and(eq(pastRaceTable.athleteId, 'athlete_1'), eq(pastRaceTable.id, 'pr_2'))]);
+  });
+});
+
+describe('recordRaceAdded (training-architecture/37)', () => {
+  beforeEach(() => {
+    inserted.length = 0;
+    insertTables.length = 0;
+  });
+
+  it('writes a race_added event in the athlete\'s own hand, un-narrated, carrying what they chose', async () => {
+    const payload = { raceId: 'r1', name: 'Aarhus 70.3', date: '2027-02-27', distance: 'Half' as const, isTarget: false };
+    await recordRaceAdded('athlete_1', payload);
+    expect(insertTables).toEqual([eventsTable]);
+    expect(inserted).toEqual([
+      { athleteId: 'athlete_1', actorType: 'athlete', actorId: 'athlete_1', type: 'race_added', payload },
+    ]);
   });
 });

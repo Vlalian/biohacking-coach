@@ -245,6 +245,24 @@ describe('getPendingNarrationEvents', () => {
     expect(bound).not.toContain('lookup_performed');
   });
 
+  it('admits the athlete\'s own race_added, and no other athlete event (training-architecture/37)', async () => {
+    // An athlete's own Session Moves and Athlete Sessions stay silent by
+    // design (CONTEXT.md). A race they added is the one athlete act the Coach
+    // raises, so the pair is (athlete, race_added) — never the actor alone.
+    nextRows = [];
+
+    await getPendingNarrationEvents('a1');
+
+    const { sql, params } = new PgDialect().sqlToQuery(whereArgs[0] as SQL);
+    expect(params).toContain('athlete');
+    expect(params).toContain('race_added');
+    expect(params).not.toContain('session_moved_by_athlete');
+    expect(params).not.toContain('athlete_session_created');
+    expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" = \$\d+\)\)\)$/);
+    const athleteAt = params.indexOf('athlete');
+    expect(params[athleteAt + 1]).toBe('race_added');
+  });
+
   it('returns an empty list when nothing is pending', async () => {
     nextRows = [];
     expect(await getPendingNarrationEvents('a1')).toEqual([]);

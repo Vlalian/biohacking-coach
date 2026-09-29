@@ -64,4 +64,11 @@ describe('RacesSection', () => {
     expect(html).toContain('racesNone');
     expect(html).not.toContain('racesTargetBadge');
   });
+
+  it('adds through the shared race form, Target or Tune-up, a tune-up beside an existing target (training-architecture/37)', () => {
+    const html = render();
+    expect(html).toContain('data-race-kind-choice="target"');
+    expect(html).toMatch(/data-race-kind-choice="tune-up"[^>]*aria-pressed="true"/);
+    expect(render([])).toMatch(/data-race-kind-choice="target"[^>]*aria-pressed="true"/);
+  });
 });

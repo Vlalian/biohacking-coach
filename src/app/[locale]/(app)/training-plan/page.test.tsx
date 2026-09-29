@@ -69,6 +69,9 @@ const WeeklySessionDayLine = vi.fn(() => null);
 vi.mock('../../weekly-session-day-line', () => ({ WeeklySessionDayLine }));
 const getLinkForAthlete = vi.fn(async (): Promise<unknown> => undefined);
 vi.mock('@/features/coach/coach-repository', () => ({ getLinkForAthlete }));
+// The athlete's races, drawn on their days (training-architecture/37).
+const getRaces = vi.fn(async (): Promise<unknown[]> => []);
+vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 
 const { default: TrainingPlanPage } = await import('./page');
 
@@ -263,5 +266,29 @@ describe('TrainingPlanPage — the reads run together (code-health/09)', () => {
     reads().forEach((m, i) =>
       (m as unknown as { mockImplementation: (f: unknown) => void }).mockImplementation(saved[i]),
     );
+  });
+});
+
+describe('TrainingPlanPage — races in the calendar (training-architecture/37)', () => {
+  it('reads the athlete\'s own races and hands the calendar only what a day block shows', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', profile: {} });
+    getRaces.mockResolvedValue([
+      { id: 'r1', athleteId: 'athlete_1', name: 'IM Kbh', date: '2027-08-16', distance: 'Full', isTarget: true, createdAt: new Date() },
+    ]);
+    const tree = await render();
+    expect(getRaces).toHaveBeenCalledWith('athlete_1');
+    expect(findElement(tree, Calendar)?.props.races).toEqual([
+      { name: 'IM Kbh', date: '2027-08-16', distance: 'Full', isTarget: true },
+    ]);
+  });
+
+  it('passes no races for a user with no athlete row', async () => {
+    getRaces.mockClear();
+    getSession.mockResolvedValue({ user: { id: 'user_abc' } });
+    getAthleteByUserId.mockResolvedValue(undefined);
+    const tree = await render();
+    expect(getRaces).not.toHaveBeenCalled();
+    expect(findElement(tree, Calendar)?.props.races).toEqual([]);
   });
 });

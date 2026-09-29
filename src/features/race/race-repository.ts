@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { pastRace, race, type PastRaceRow, type RaceRow } from '@/db/schema';
+import { events, pastRace, race, type PastRaceRow, type RaceRow } from '@/db/schema';
 import type { RaceDistance } from '@/lib/race-distances';
 import type { PastRace } from '@/features/onboarding/past-races';
 
@@ -141,6 +141,30 @@ export async function deleteRace(athleteId: string, raceId: string): Promise<voi
   await getDb()
     .delete(race)
     .where(and(eq(race.athleteId, athleteId), eq(race.id, raceId)));
+}
+
+/** What a `race_added` event carries: the race as the athlete entered it. */
+export interface RaceAdded extends NewRace {
+  raceId: string;
+  isTarget: boolean;
+}
+
+/**
+ * Records that the athlete added a Race (`training-architecture/37`, ruling 3).
+ *
+ * An `events` row in the athlete's own hand, for narration to raise once in
+ * the Coach Chat ("a tune-up in the plan, or just so I know?"). It is the
+ * whole of what adding a race does to the plan: no session is written and
+ * nothing is re-planned until the athlete accepts a proposal.
+ */
+export async function recordRaceAdded(athleteId: string, payload: RaceAdded): Promise<void> {
+  await getDb().insert(events).values({
+    athleteId,
+    actorType: 'athlete',
+    actorId: athleteId,
+    type: 'race_added',
+    payload,
+  });
 }
 
 // ── Past races — what the athlete has finished (training-architecture/35) ────

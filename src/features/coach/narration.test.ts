@@ -622,3 +622,52 @@ describe('composeNarration — a moved race is re-pinned (training-architecture/
     ).toBe('single(clause=blocksRefittedNoDetail)');
   });
 });
+
+describe('composeNarration — a race the athlete added (training-architecture/37)', () => {
+  const raceAdded = (payload: unknown, id = 'ev_r'): NarratableEvent => ({
+    id,
+    actorId: 'athlete_1',
+    type: 'race_added',
+    payload,
+    createdAt: new Date('2026-09-29T08:00:00Z'),
+  });
+  const AARHUS = { raceId: 'r1', name: 'Aarhus 70.3', date: '2027-02-27', distance: 'Half', isTarget: false };
+
+  it('asks about it, naming the race and its date — a question, never a plan change', () => {
+    expect(composeNarration([raceAdded(AARHUS)], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAdded(name=Aarhus 70.3,date=2027-02-27))',
+    );
+  });
+
+  it('stays a question inside a batch, and names no Head Coach — the athlete added it', () => {
+    const out = composeNarration([prescribed(), raceAdded(AARHUS)], NAMES, t, weekday) ?? '';
+    expect(out.split('\n')).toEqual([
+      'multiLead',
+      'item(clause=prescribed(coach=Lars,day=day:2026-08-20,type=Endurance))',
+      'itemQuestion(clause=raceAdded(name=Aarhus 70.3,date=2027-02-27))',
+    ]);
+  });
+
+  it('degrades to a plainer question when the payload lacks the race', () => {
+    expect(composeNarration([raceAdded({ date: '2027-02-27' })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAddedNoDetail)',
+    );
+    expect(composeNarration([raceAdded({ name: 'Aarhus 70.3' })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAddedNoDetail)',
+    );
+  });
+
+  it('reads as the ruling wrote it, in English and in Danish', async () => {
+    const { createTranslator } = await import('next-intl');
+    const da = (await import('@/messages/da.json')).default;
+    const say = (locale: 'en' | 'da', messages: typeof en) =>
+      composeNarration(
+        [raceAdded(AARHUS)],
+        {},
+        createTranslator({ locale, messages, namespace: 'Narration' }) as unknown as Parameters<typeof composeNarration>[2],
+        weekday,
+      );
+    expect(say('en', en)).toMatch(/Aarhus 70\.3 on 2027-02-27.*a tune-up in the plan, or just so I know\?$/);
+    expect(say('da', da as unknown as typeof en)).toMatch(/Aarhus 70\.3.*2027-02-27.*\?$/);
+  });
+});

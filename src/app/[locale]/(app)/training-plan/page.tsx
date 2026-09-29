@@ -17,6 +17,7 @@ import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
 import { getLinkForAthlete } from '@/features/coach/coach-repository';
 import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
+import { getRaces } from '@/features/race/race-repository';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
 import { Calendar } from '../../calendar';
@@ -34,7 +35,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Every read the calendar needs, together (`code-health/09`): none depends on
  * another, only on the athlete, so they share one round of waiting instead of
- * seven in a row.
+ * nine in a row.
  */
 function readCalendar(athleteId: string, todayKey: string) {
   return Promise.all([
@@ -67,6 +68,11 @@ function readCalendar(athleteId: string, todayKey: string) {
     // The athlete's Coaching Link, when one is active: the cycle line names
     // the Head Coach instead of pointing at Settings (training-architecture/42).
     getLinkForAthlete(athleteId),
+    // Their Races, each drawn on its day (training-architecture/37) — only
+    // what the day block shows, never the row.
+    getRaces(athleteId).then((rows) =>
+      rows.map(({ name, date, distance, isTarget }) => ({ name, date, distance, isTarget })),
+    ),
   ]);
 }
 
@@ -80,6 +86,7 @@ const NO_ATHLETE: Awaited<ReturnType<typeof readCalendar>> = [
   null,
   [],
   undefined,
+  [],
 ];
 
 /**
@@ -116,6 +123,7 @@ export default async function TrainingPlanPage({
     proposal,
     health,
     link,
+    races,
   ] = await timed('plan.reads', () =>
     athlete ? readCalendar(athlete.id, todayKey) : Promise.resolve(NO_ATHLETE),
   );
@@ -179,6 +187,7 @@ export default async function TrainingPlanPage({
         proposal={proposal}
         health={health}
         phase={phase}
+        races={races}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />
       <GarminUpload />
