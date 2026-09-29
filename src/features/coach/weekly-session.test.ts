@@ -894,6 +894,27 @@ describe('clampToBand', () => {
     expect(up.sessions.map((x) => x.durationMinutes)).toEqual([90, 75, 75, 75, 75, 75, 75]);
   });
 
+  it('spreads the rounding over several sessions when one alone would hit the floor (CodeRabbit, PR #116)', () => {
+    // Seven of 40 (280) against 115: the goal is 125. Each scales to 17.9 and
+    // rounds to 20 (140); taking all 15 from one session would floor it at 15
+    // and land on 135, above the 126.5 edge.
+    const out = clampToBand(week(40, 7), 115, null);
+    expect(out.total).toBe(125);
+    expect(out.sessions.map((x) => x.durationMinutes)).toEqual([15, 15, 15, 20, 20, 20, 20]);
+  });
+
+  it('gives minutes the rounding took back to the longest session', () => {
+    // 20, 44 and 25 (89) up to 540 scale to 120, 265 and 150 (535): the 5 go on the 265.
+    expect(clampToBand([s(20), s(44), s(25)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([120, 270, 150]);
+  });
+
+  it('stops every session at fifteen when even that is more than the band allows (R2: the draft is never lost)', () => {
+    // Seven sessions can't go under 105 minutes; the edge is 55.
+    const out = clampToBand(week(40, 7), 50, null);
+    expect(out.sessions.every((x) => x.durationMinutes === 15)).toBe(true);
+    expect(out.total).toBe(105);
+  });
+
   it('lands on the five-minute mark inside an edge that is not one', () => {
     // 613 × 1.1 = 674.3: the week lands on 670, not 675.
     expect(clampToBand(week(120), 613, null).total).toBe(670);
