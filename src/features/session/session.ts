@@ -1,4 +1,5 @@
 import type { SessionRow } from '@/db/schema';
+import { storedHowToFrom, type StoredHowTo } from './how-to';
 
 /**
  * Who authored a session. A closed set, enforced at the database by the
@@ -91,6 +92,9 @@ export type Session = {
   /** What the device recorded, on a session that came from one; null on
    *  everything the app itself wrote. */
   summary: DeviceSummary | null;
+  /** What Momentum or the Head Coach wrote about how to do it (`how-to.ts`);
+   *  null when nobody wrote anything. The how-to shown is computed from it. */
+  howTo: StoredHowTo | null;
   /** The row version this view was read at. A write sends it back so a change
    *  that landed in between is refused rather than overwritten
    *  (`versioned-write.ts`). Rendered by nothing; carried by every editor. */
@@ -140,6 +144,7 @@ export function toSession(row: SessionRow): Session {
     origin: toSessionOrigin(row.origin),
     isTraining: row.isTraining,
     summary: toDeviceSummary(row.summary),
+    howTo: storedHowToFrom(row.howTo),
     version: row.version,
   };
 }

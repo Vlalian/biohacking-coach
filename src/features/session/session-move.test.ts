@@ -47,6 +47,7 @@ function sessionRow(overrides: Partial<SessionRow> = {}): SessionRow {
     startTime: null,
     sport: null,
     summary: null,
+    howTo: null,
     externalId: null,
     feedbackBody: null,
     feedbackMind: null,

@@ -93,6 +93,7 @@ function session(overrides: Partial<Session> = {}): Session {
     origin: 'coach',
     isTraining: true,
     summary: null,
+    howTo: null,
     ...overrides,
   };
 }

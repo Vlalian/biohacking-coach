@@ -676,6 +676,7 @@ describe('Coach Chat sees the week', () => {
     origin: 'coach',
     isTraining: true,
     summary: null,
+    howTo: null,
     ...over,
   });
 
