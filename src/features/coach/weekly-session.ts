@@ -618,15 +618,28 @@ function standsAsIs(total: number, baselineMinutes: number, floor: number, ceili
 }
 
 /**
- * The scaled week with the rounding given back on its longest session, so the
- * total is `goal` — unless that would take the session under fifteen minutes,
- * where the floor (R2) wins.
+ * The scaled week brought to `goal`. Minutes the rounding took are given back to
+ * the longest session. Minutes it added are taken back five at a time, each from
+ * the longest session still over fifteen, so no single session is floored while
+ * others could give (CodeRabbit, PR #116). When every session is already at
+ * fifteen the floor (R2) wins and the week stays over: the draft is never lost.
  */
 function settledOn(goal: number, sessions: ProposedSession[]): ProposedSession[] {
   const minutes = sessions.map((x) => x.durationMinutes ?? 0);
-  const longest = minutes.indexOf(Math.max(...minutes));
   const rest = goal - totalMinutes(sessions);
-  return sessions.map((x, i) => (i === longest ? { ...x, durationMinutes: fitMinutes(minutes[i] + rest) } : x));
+  // Stryker disable next-line EqualityOperator — at rest 0 adding 0 and trimming 0 are the same.
+  if (rest > 0) minutes[minutes.indexOf(Math.max(...minutes))] += rest;
+  else trimFromLongest(minutes, -rest);
+  return sessions.map((x, i) => (x.durationMinutes === null ? x : { ...x, durationMinutes: minutes[i] }));
+}
+
+/** Takes `over` minutes off, five at a time from the longest session above fifteen. */
+function trimFromLongest(minutes: number[], over: number): void {
+  for (let left = over; left > 0; left -= 5) {
+    const longest = Math.max(...minutes);
+    if (longest <= 15) return;
+    minutes[minutes.indexOf(longest)] -= 5;
+  }
 }
 
 /** The (date, Session Type) pairs of a week, in date order, as one comparable key. */
