@@ -1,32 +1,24 @@
 import type { Athlete } from '@/features/athlete/athlete';
-import { getEquipmentItems } from '@/features/equipment/equipment-repository';
-import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
+import { getOwnedSession } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
 import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
 import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
+import { CHAT_INCLUDE, chatContextOf, readAthleteContext } from './athlete-context';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { getRaces } from '@/features/race/race-repository';
 import { getLatestPlanWrittenAt } from './plan-proposal-repository';
 import { productionGrounding } from './grounding';
 import { proposalTurnTools } from './proposal-tools';
-import { capacityFor } from '@/features/health/health-repository';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
-import { getResolvedBlocks } from './training-block-service';
-import { getCheckInForWeek } from './check-in-repository';
-import { getPresenceStage } from './presence-repository';
-import { notableSignalFrom, readinessFrom } from './check-in';
 import {
-  buildWeeklyCheckIn,
   fixedConstraintsOf,
   validateProposedPlan,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   type ProposedSession,
 } from './weekly-session';
-import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { getPendingProposal, recordProposal } from './plan-proposal-repository';
 import { getDiscussedWeek } from './week-draft-repository';
 import { conversationWindow } from './week-draft';
@@ -97,49 +89,18 @@ async function renderSystem(
   conversationId: string | null = null,
   preferredName: string | null = null,
 ): Promise<{ system: string; window: PlanningWindow }> {
-  const [
-    equipmentItems,
-    weekSessions,
-    reference,
-    horizon,
-    checkInRow,
-    races,
-    planWrittenAt,
-    capacity,
-    unavailableDates,
-    facts,
-    presenceStage,
-  ] = await Promise.all([
-    getEquipmentItems(athlete.id),
-    getSessionsForWeek(athlete.id, weekStartOf(today)),
+  // One round of reads, shared with the draft and the Briefing
+  // (`training-architecture/52`): the same horizon, Check-in, capacity, races,
+  // presence, equipment and unavailable days the draft plans with, so Chat
+  // never contradicts the week the athlete was just drafted. The Reference,
+  // when this plan was written and the conversation's own facts are Chat's.
+  const [context, reference, planWrittenAt, facts] = await Promise.all([
+    readAthleteContext(athlete.id, today, CHAT_INCLUDE),
     referenceSessionId
       ? getOwnedSession(athlete.id, referenceSessionId)
       : Promise.resolve(undefined),
-    // The same horizon the Weekly Session reads. Chat is where "should I do
-    // tomorrow's intervals?" gets asked, and the answer depends on how far out
-    // the race is — a Coach with no horizon here would contradict the one the
-    // athlete just planned a week with.
-    getResolvedBlocks(athlete.id, today),
-    // The same Check-in the Weekly Session reads. Chat is where "should I do
-    // tomorrow's intervals?" gets asked, and an athlete who reported low energy
-    // on Monday should not have to say it again on Wednesday.
-    getCheckInForWeek(athlete.id, weekStartOf(today)),
-    // Slice 09: the same tune-up and late-race lines the Weekly Session renders.
-    getRaces(athlete.id),
     getLatestPlanWrittenAt(athlete.id, weekStartOf(today)),
-    // What the athlete's body currently allows — the capacity half only, as
-    // the Weekly Session reads it (training-architecture/06; CodeRabbit on PR
-    // #60 found Chat knew nothing of it). The detail thread has no reader here.
-    capacityFor(athlete.id),
-    // The window the chat may write into needs the athlete's days off, the same
-    // list the Weekly Session reads (`training-architecture/20`).
-    getUnavailableDates(athlete.id),
     conversationFacts(athlete.id, conversationId),
-    // How much the Coach may claim to know: the Presence Arc, read from weeks
-    // of Session Reflections and Check-ins filed (`training-architecture/21`).
-    // A Check-in filed at any time — after the week was drafted, say — is
-    // simply the freshest signal for this, the next prompt that reads it.
-    getPresenceStage(athlete.id),
   ]);
 
   // The week this conversation may propose: the whole of a week brought in to
@@ -150,29 +111,11 @@ async function renderSystem(
     today,
     facts.discussedWeek,
     fixedConstraintsOf(athlete),
-    unavailableDates,
+    context.unavailableDates,
     chosenFirstDay(athlete.profile, today),
   );
 
-  const checkIn = buildWeeklyCheckIn(
-    athlete,
-    today,
-    readinessFrom(checkInRow),
-    presenceStage,
-    language,
-    equipmentItems,
-    horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
-    capacity,
-    // The athlete's own sentence, for the same reason Chat reads the Check-in at
-    // all: someone who wrote "calf tight since Tuesday" on Monday should not
-    // have to say it again on Wednesday.
-    notableSignalFrom(checkInRow),
-    races,
-    planWrittenAt,
-    // The same resolved blocks the Weekly Session plans inside, so Chat names
-    // the same phase the athlete just planned a week with.
-    horizon.blocks,
-  );
+  const { checkIn, weekSessions } = chatContextOf(context, athlete, { today, language, planWrittenAt });
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.

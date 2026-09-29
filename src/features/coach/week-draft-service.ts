@@ -1,10 +1,8 @@
 import { logCoachFailure } from '@/lib/coach-log';
-import { addDays, weekStartOf } from '@/lib/date';
+import { weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
-import { getEquipmentItems } from '@/features/equipment/equipment-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
-import { getArithmeticSessionsForWeek, getSessionsForWeek, getSessionsInRange } from '@/features/session/session-repository';
-import { capacityFor } from '@/features/health/health-repository';
+import { getArithmeticSessionsForWeek, getSessionsForWeek } from '@/features/session/session-repository';
 import { assertAiCoachingConsent } from '@/features/consent/consent-gate';
 import { openAiEmbedder } from '@/features/knowledge-oracle/embedder';
 import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repository';
@@ -12,23 +10,15 @@ import { retrievePassages, type RetrievalResult } from '@/features/knowledge-ora
 import type { PlanningWindow } from './planning-window';
 import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
 import { buildWeeklyContext, renderWeekDraftPrompt } from './prompts';
-import { getCheckInForWeek } from './check-in-repository';
-import { getPresenceStage } from './presence-repository';
-import { readinessFrom, notableSignalFrom } from './check-in';
-import { getResolvedBlocks } from './training-block-service';
-import { getRaces } from '@/features/race/race-repository';
+import { draftContextOf, draftInclude, readAthleteContext } from './athlete-context';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
 import type { Athlete } from '@/features/athlete/athlete';
 import {
-  buildWeeklyCheckIn,
   PROPOSE_WEEK_PLAN_TOOL,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   validateProposedPlan,
-  weekFeedbackFrom,
   whatChangedFrom,
-  fourWeekSummary,
-  RECENT_WEEKS,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -51,7 +41,6 @@ import {
   type ResolvedWeekDraftHistory,
 } from './week-draft-repository';
 import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
-import { getLanguageForAthlete } from '@/features/user-prefs/user-prefs-repository';
 
 /**
  * The Coach drafts next week on its own (`training-architecture/16`) — the
@@ -476,61 +465,28 @@ async function gatherContext(
   unavailableDates: string[],
   declined: DeclinedDraft | null,
 ): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; adjusted: boolean }> {
-  const weekStart = weekStartOf(today);
   // The drafted week, not this one: the history the draft reads counts back
   // from the week it is writing (`training-architecture/44`).
   const draftedWeek = weekStartOf(window.start);
-  const [athlete, weekSessions, equipmentItems, horizon, checkInRow, capacity, races, presenceStage, pastSessions, language] =
-    await Promise.all([
-      getAthleteById(athleteId),
-      getSessionsForWeek(athleteId, weekStart),
-      getEquipmentItems(athleteId),
-      getResolvedBlocks(athleteId, today),
-      getCheckInForWeek(athleteId, weekStart),
-      // The capacity half only; the detail thread has no reader here (ADR 0011).
-      capacityFor(athleteId),
-      // Every race, so the draft knows a tune-up from the target (slice 09). No
-      // plan-written-at: the draft is the plan being written, so nothing is late
-      // relative to it yet.
-      getRaces(athleteId),
-      // How much the Coach actually has on this athlete (`training-architecture/21`).
-      getPresenceStage(athleteId),
-      // What the athlete actually did in the four weeks before the drafted one.
-      getSessionsInRange(athleteId, addDays(draftedWeek, -7 * RECENT_WEEKS), draftedWeek),
-      // The Athlete Language, by this athlete's id: a Head Coach's app-open
-      // drafts too, so it cannot be whoever is signed in (showable-version/46).
-      getLanguageForAthlete(athleteId),
-    ]);
+  // One round of reads, shared with Coach Chat and the Briefing
+  // (`training-architecture/52`). The unavailable dates are the gate's.
+  const context = await readAthleteContext(athleteId, today, draftInclude(draftedWeek));
+  const athlete = context.athlete;
   if (!athlete) throw new Error('athlete row missing');
-
-  const checkIn = buildWeeklyCheckIn(
-    athlete,
-    today,
-    readinessFrom(checkInRow),
-    presenceStage,
-    language ?? undefined,
-    equipmentItems,
-    horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
-    capacity,
-    notableSignalFrom(checkInRow),
-    races,
-    null,
-    horizon.blocks,
-  );
-
+  const slice = draftContextOf(context, athlete, { today, draftedWeek });
   const skeleton = weekSkeleton(window);
   // The week the structure already wrote, if it wrote one
   // (`training-architecture/34`): the Coach adjusts what the athlete has seen
   // rather than inventing a week from a skeleton of roles.
   const baseline = await getArithmeticSessionsForWeek(athleteId, draftedWeek);
-  const grounding = await ground(athleteId, groundingFacts(athlete, horizon.blocks, today));
+  const grounding = await ground(athleteId, groundingFacts(athlete, context.horizon.blocks, today));
 
   const ctx = {
-    ...buildWeeklyContext(checkIn, weekFeedbackFrom(weekSessions), unavailableDates, today),
+    ...buildWeeklyContext(slice.checkIn, slice.weekFeedback, unavailableDates, today),
     window,
     skeleton,
     baseline,
-    recentWeeks: fourWeekSummary(pastSessions, draftedWeek, today),
+    recentWeeks: slice.recentWeeks,
     declined,
     passages: grounding.passages,
     citations: grounding.citations,
