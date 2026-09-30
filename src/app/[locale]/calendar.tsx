@@ -9,6 +9,7 @@ import {
   Check,
   Circle,
   Dumbbell,
+  Flag,
   Footprints,
   Gauge,
   Leaf,
@@ -47,6 +48,7 @@ import type { CalendarSlotState } from '@/features/coach/week-draft-service';
 import { HealthDrawer, type HealthDrawerState } from './health-drawer';
 import { marksFor, type HealthMark, type HealthSpan } from '@/features/health/health-layer';
 import { HEALTH_ICON, HealthStatusCard } from './health-status-card';
+import { raceDaysByDate, type CalendarRace, type RaceDay, type RaceKind } from '@/features/race/race-days';
 
 /**
  * The seven header labels are formatted from these — Monday 1 January 2024 at
@@ -175,6 +177,8 @@ type Day = {
   isPast: boolean;
   isUnavailableDate: boolean;
   sessions: Session[];
+  /** The races held this day (`training-architecture/37`); usually none. */
+  races: RaceDay[];
 };
 
 type Week = {
@@ -187,6 +191,7 @@ function buildWeeks(
   todayKey: string,
   byDate: Map<string, Session[]>,
   unavailable: Set<string>,
+  raceDays: Map<string, RaceDay[]>,
 ): Week[] {
   const year = reference.getFullYear();
   const month = reference.getMonth();
@@ -205,6 +210,7 @@ function buildWeeks(
       isPast: key < todayKey,
       isUnavailableDate: unavailable.has(key),
       sessions: byDate.get(key) ?? [],
+      races: raceDays.get(key) ?? [],
     });
   };
 
@@ -247,16 +253,24 @@ export function Calendar({
   proposal = null,
   health = [],
   phase = null,
+  races = [],
   addPanel,
 }: {
   sessions: Session[];
   /**
+   * The athlete's Races, each drawn on its date as a day block — the target
+   * distinct from a tune-up (`training-architecture/37`, ruling 2). Empty by
+   * default, so a calendar that passes none draws none.
+   */
+  races?: CalendarRace[];
+  /**
    * The two lines under the month (Mads, 2026-09-24, from the export's
    * Information header): the block today falls in with the week inside it,
    * and the race with the days to go. Null renders nothing — an athlete with
-   * no race or no block gets the month alone, not a placeholder.
+   * no block gets the month alone, not a placeholder. No race — the Open
+   * Horizon (`training-architecture/13`) — renders the block line alone.
    */
-  phase?: { blockName: string; week: number; weeks: number; raceName: string; daysToRace: number } | null;
+  phase?: { blockName: string; week: number; weeks: number; raceName?: string; daysToRace?: number } | null;
   unavailableDates: string[];
   /**
    * The athlete's Injuries and Illnesses, open and closed, drawn as a layer
@@ -363,7 +377,7 @@ export function Calendar({
   // The drafted week lives in the card above the grid and nowhere else
   // (training-architecture/25): a proposal is not a session, and a grid that
   // ghosted one taught the athlete it shows things it does not mean.
-  const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable);
+  const weeks = buildWeeks(viewedMonth, todayKey, byDate, unavailable, raceDaysByDate(races));
   const hasAnySession = shown.length > 0;
 
   // The real rule (also the server's, session-move.ts): this only decides
@@ -447,12 +461,14 @@ export function Calendar({
             {phase && (
               <div className="mt-3 flex flex-col gap-1 font-body text-sm uppercase tracking-[0.18em] text-muted-foreground" data-phase-line="">
                 <span>{t('phaseLine', { block: phase.blockName, week: phase.week, weeks: phase.weeks })}</span>
-                <span>
-                  {phase.raceName} ·{' '}
-                  <span className="text-signal">
-                    {t('raceLine', { days: phase.daysToRace })}
+                {phase.raceName !== undefined && (
+                  <span>
+                    {phase.raceName} ·{' '}
+                    <span className="text-signal">
+                      {t('raceLine', { days: phase.daysToRace ?? 0 })}
+                    </span>
                   </span>
-                </span>
+                )}
               </div>
             )}
           </div>
@@ -565,7 +581,8 @@ export function Calendar({
               t={t}
               rejectionFor={rejectionFor}
               onOpenSession={(s) => setDrawer({ open: true, mode: 'view', sessionId: s.id })}
-              onOpenCreate={(date) => setDrawer({ open: true, mode: 'create', date })}
+              // The "+" asks Session or Race first (training-architecture/37).
+              onOpenCreate={(date) => setDrawer({ open: true, mode: 'choose', date })}
               onDragStart={(s) => setDragging({ session: s, week: week.isoWeekStart })}
               onDragEnd={() => {
                 setDragging(null);
@@ -598,6 +615,10 @@ export function Calendar({
               setRatingSession(s);
             }}
             onEditRequest={(s) => setDrawer({ open: true, mode: 'edit', sessionId: s.id })}
+            onChoose={(kind, date) =>
+              setDrawer({ open: true, mode: kind === 'race' ? 'create-race' : 'create', date })
+            }
+            currentTargetRace={races.find((r) => r.isTarget) ?? null}
           />
         )}
 
@@ -774,6 +795,11 @@ function WeekRow({
                 </div>
               </div>
 
+              {day.races.map((race, i) => (
+                // A race has no id here, and two may share a name and kind on one day.
+                <RaceBlock key={`${race.name}:${race.kind}:${i}`} race={race} t={t} />
+              ))}
+
               <div className="mt-2 space-y-2">
                 {day.sessions.map((s) => (
                   <SessionCard
@@ -819,6 +845,41 @@ function WeekRow({
           {t(bounce.messageKey)}
         </p>
       )}
+    </div>
+  );
+}
+
+const RACE_BLOCK_CLASS: Record<RaceKind, string> = {
+  // The target stands out from everything else on the grid: solid signal.
+  target: 'border-2 border-signal bg-signal text-signal-foreground',
+  'tune-up': 'border-2 border-dashed border-signal bg-signal/10 text-foreground',
+  other: 'border border-border bg-background text-foreground',
+};
+
+const RACE_KIND_KEY: Record<RaceKind, string> = {
+  target: 'raceDayTarget',
+  'tune-up': 'raceDayTuneUp',
+  other: 'raceDayOther',
+};
+
+/**
+ * A race on its day (`training-architecture/37`, ruling 2): a day block with
+ * the name and distance, never a Session Chip. The kind is said in words as
+ * well as colour, so a target and a tune-up differ for everyone.
+ */
+function RaceBlock({ race, t }: { race: RaceDay; t: ReturnType<typeof useTranslations<'Calendar'>> }) {
+  return (
+    <div
+      data-race-day={race.date}
+      data-race-kind={race.kind}
+      className={`mt-2 flex flex-col gap-0.5 px-2 py-1.5 ${RACE_BLOCK_CLASS[race.kind]}`}
+    >
+      <span className="flex items-center gap-1 font-body text-[13px] font-semibold uppercase tracking-[0.16em]">
+        <Flag className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {t(RACE_KIND_KEY[race.kind])}
+      </span>
+      <span className="font-display text-base font-bold uppercase italic leading-tight">{race.name}</span>
+      <span className="font-body text-[13px] uppercase tracking-[0.16em]">{race.distance}</span>
     </div>
   );
 }

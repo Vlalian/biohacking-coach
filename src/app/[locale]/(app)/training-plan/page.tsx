@@ -17,6 +17,7 @@ import { blockPosition, currentBlock } from '@/features/coach/training-blocks';
 import { calendarSlotState } from '@/features/coach/week-draft-service';
 import { getLinkForAthlete } from '@/features/coach/coach-repository';
 import { getUiPrefs } from '@/features/user-prefs/user-prefs-repository';
+import { getRaces } from '@/features/race/race-repository';
 import { BlockStrip } from '../../block-strip';
 import { WeeklySessionDayLine } from '../../weekly-session-day-line';
 import { Calendar } from '../../calendar';
@@ -34,7 +35,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Every read the calendar needs, together (`code-health/09`): none depends on
  * another, only on the athlete, so they share one round of waiting instead of
- * seven in a row.
+ * nine in a row.
  */
 function readCalendar(athleteId: string, todayKey: string) {
   return Promise.all([
@@ -67,6 +68,11 @@ function readCalendar(athleteId: string, todayKey: string) {
     // The athlete's Coaching Link, when one is active: the cycle line names
     // the Head Coach instead of pointing at Settings (training-architecture/42).
     getLinkForAthlete(athleteId),
+    // Their Races, each drawn on its day (training-architecture/37) — only
+    // what the day block shows, never the row.
+    getRaces(athleteId).then((rows) =>
+      rows.map(({ name, date, distance, isTarget }) => ({ name, date, distance, isTarget })),
+    ),
   ]);
 }
 
@@ -76,10 +82,11 @@ const NO_ATHLETE: Awaited<ReturnType<typeof readCalendar>> = [
   [],
   [],
   [],
-  { race: null, set: null, blocks: [] },
+  { race: null, set: null, blocks: [], horizon: 'open', raceTooClose: false },
   null,
   [],
   undefined,
+  [],
 ];
 
 /**
@@ -116,22 +123,24 @@ export default async function TrainingPlanPage({
     proposal,
     health,
     link,
+    races,
   ] = await timed('plan.reads', () =>
     athlete ? readCalendar(athlete.id, todayKey) : Promise.resolve(NO_ATHLETE),
   );
 
   // The two lines under the month: the block and the race, from the same
   // resolved horizon the strip and the Coach read, so none of them disagree.
-  const block = horizon.race ? currentBlock(todayKey, horizon.blocks) : null;
-  const phase =
-    horizon.race && block
-      ? {
-          blockName: block.name,
-          ...blockPosition(todayKey, block),
-          raceName: horizon.race.name,
-          daysToRace: Math.max(0, daysBetween(todayKey, horizon.race.date)),
-        }
-      : null;
+  // The race only while it is ahead: an athlete on the Open Horizon with no
+  // race, or one already run, gets the block alone (training-architecture/13).
+  const block = currentBlock(todayKey, horizon.blocks);
+  const race = horizon.race && horizon.race.date >= todayKey ? horizon.race : null;
+  const phase = block
+    ? {
+        blockName: block.name,
+        ...blockPosition(todayKey, block),
+        ...(race ? { raceName: race.name, daysToRace: daysBetween(todayKey, race.date) } : {}),
+      }
+    : null;
 
   // Stage 2 runs here, **after the response is sent**. The page renders now;
   // the ~20 s Coach call runs once the athlete has their calendar, and the next
@@ -161,7 +170,7 @@ export default async function TrainingPlanPage({
     <div className="mx-auto flex w-full max-w-[1500px] flex-col items-center gap-6 px-4 py-6 lg:px-8 lg:py-8">
       <BlockStrip
         todayKey={todayKey}
-        race={horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null}
+        race={race ? { name: race.name, date: race.date } : null}
         blocks={horizon.blocks}
       />
       {/* One line on the athlete's own cycle (training-architecture/28); the day is changed in Settings. */}
@@ -179,6 +188,7 @@ export default async function TrainingPlanPage({
         proposal={proposal}
         health={health}
         phase={phase}
+        races={races}
       />
       <DetectedActivities activities={pendingActivities} locale={locale} />
       <GarminUpload />

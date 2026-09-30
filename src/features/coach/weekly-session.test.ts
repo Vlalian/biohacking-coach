@@ -19,6 +19,7 @@ import {
   type Readiness,
 } from './weekly-session';
 import { resolveBlocks, trainingBlocks } from './training-blocks';
+import { openHorizonBlocks } from './open-horizon';
 import { planningWindow } from './planning-window';
 
 // The Training Phase is derived from the horizon now rather than stored on the
@@ -783,6 +784,43 @@ describe('buildWeeklyCheckIn — the resolved Training Blocks (training-architec
     const checkIn = buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 'building', undefined, [], TARGET_RACE);
     expect(checkIn.raceTarget).toBe('Ironman Copenhagen');
     expect(checkIn.phase).toBeUndefined();
+  });
+});
+
+describe('buildWeeklyCheckIn — the Open Horizon (training-architecture/13)', () => {
+  const open = openHorizonBlocks('2026-08-20', TODAY_KEY);
+  const build = (race: { name: string; date: string } | null, blocks = open) =>
+    buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 'building', undefined, [], race, null, null, [], null, blocks);
+
+  it('carries the open arc\'s block and position for an athlete with no race, marked as the default arc', () => {
+    const checkIn = build(null);
+    expect(checkIn.phase).toBe('Base');
+    expect(checkIn.blockWeek).toBe('week 3 of 6');
+    expect(checkIn.horizonNote).toBe('open');
+    expect(checkIn).not.toHaveProperty('raceDate');
+  });
+
+  it('marks a target under eight weeks away as too close, keeping the race', () => {
+    const checkIn = build({ name: 'Aarhus 70.3', date: '2026-10-19' });
+    expect(checkIn).toMatchObject({ raceTarget: 'Aarhus 70.3', raceDate: '2026-10-19', horizonNote: 'race-too-close' });
+  });
+
+  it('a target already run leaves the athlete on the open arc', () => {
+    expect(build({ name: 'Aarhus 70.3', date: '2026-09-08' }).horizonNote).toBe('open');
+    // Race day itself is not run yet — it is too close, not over.
+    expect(build({ name: 'Aarhus 70.3', date: TODAY_KEY }).horizonNote).toBe('race-too-close');
+  });
+
+  it('a race horizon carries no note', () => {
+    const checkIn = build(TARGET_RACE, trainingBlocks(TODAY_KEY, TARGET_RACE.date));
+    expect(checkIn.phase).toBeDefined();
+    expect(checkIn).not.toHaveProperty('horizonNote');
+  });
+
+  it('with no race and no blocks there is nothing to be inside, and nothing is claimed', () => {
+    const checkIn = build(null, []);
+    expect(checkIn).not.toHaveProperty('phase');
+    expect(checkIn).not.toHaveProperty('horizonNote');
   });
 });
 

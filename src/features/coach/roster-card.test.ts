@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { initialsOf, rosterCardOf } from './roster-card';
 import { trainingBlocks } from './training-blocks';
+import { openHorizonBlocks } from './open-horizon';
 
 /**
  * What a Roster card says about one athlete (Mads, 2026-09-24): the race and
@@ -18,19 +19,24 @@ describe('rosterCardOf', () => {
     expect(card.block!.weeks).toBeGreaterThanOrEqual(1);
   });
 
-  it('counts a race that has passed as zero days, never negative', () => {
-    const card = rosterCardOf({ race: { name: 'Kalmar', date: '2026-09-20' }, blocks: [] }, TODAY);
-    expect(card.race).toEqual({ name: 'Kalmar', days: 0 });
+  // Changed by training-architecture/13: a race already run is no longer
+  // counted to as "0 days". The athlete's own Plan tab stops naming it the
+  // day after, and the card reveals nothing that page does not.
+  it('names no race once it has been run, and counts race day itself as zero', () => {
+    expect(rosterCardOf({ race: { name: 'Kalmar', date: '2026-09-20' }, blocks: [] }, TODAY).race).toBeNull();
+    expect(rosterCardOf({ race: { name: 'Kalmar', date: TODAY }, blocks: [] }, TODAY).race).toEqual({ name: 'Kalmar', days: 0 });
   });
 
-  it('says nothing about a block with no race, even if blocks were handed in', () => {
-    const blocks = trainingBlocks(TODAY, RACE.date);
-    expect(rosterCardOf({ race: null, blocks }, TODAY)).toEqual({ race: null, block: null });
+  // Changed by training-architecture/13: an athlete with no race has the Open
+  // Horizon's blocks, and the card shows the block they are in — no race.
+  it('shows the Open Horizon\'s block with no race', () => {
+    const blocks = openHorizonBlocks('2026-09-14', TODAY);
+    expect(rosterCardOf({ race: null, blocks }, TODAY)).toEqual({ race: null, block: { name: 'Base', week: 3, weeks: 6 } });
   });
 
   it('has a race but no block when today falls outside every block', () => {
-    const card = rosterCardOf({ race: RACE, blocks: trainingBlocks(TODAY, RACE.date) }, '2028-01-01');
-    expect(card.race).toEqual({ name: 'Ironman Copenhagen', days: 0 });
+    const card = rosterCardOf({ race: RACE, blocks: trainingBlocks('2026-09-01', '2026-09-20') }, TODAY);
+    expect(card.race).toEqual({ name: 'Ironman Copenhagen', days: 164 });
     expect(card.block).toBeNull();
   });
 });

@@ -287,6 +287,23 @@ describe('blockSessions — a whole block as rows (D11)', () => {
     ]);
   });
 
+  it('fills an open-horizon week with no taper and no race cut-off (training-architecture/13)', () => {
+    // The Open Horizon's last block: fourth of four, which the race ladder
+    // would call race prep. It carries its own purpose, and there is no race.
+    const consolidate = { ...BLOCK, name: 'Consolidate', purpose: 'base' as const };
+    const rows = blockSessions(consolidate, { ...CTX, raceDate: null });
+    const week = (start: string) =>
+      rows.filter((r) => weekStartOf(r.date) === start).reduce((m, r) => m + (r.durationMinutes ?? 0), 0);
+    // Sessions run to the block's last day: nothing is cut at a race day.
+    expect(rows.some((r) => r.date === '2026-11-01')).toBe(true);
+    // A base block's ramp and deload, never a taper's 0.3–0.4: the week before
+    // the block ends is the ramp's top, and the last week is the deload.
+    expect(week('2026-10-19')).toBeGreaterThanOrEqual(8 * 60 - 5);
+    expect(week('2026-10-26')).toBeGreaterThanOrEqual(Math.floor(8 * 60 * 0.6) - 5);
+    // Base, never race: no brick in any week.
+    expect(rows.every((r) => r.sport !== 'brick')).toBe(true);
+  });
+
   it('gives each week the factor its place in the block says, to the minute', () => {
     // The week's own factor, not a shared one: a wrong `weekIndex` or a dropped
     // argument shows up as the wrong number of minutes here.

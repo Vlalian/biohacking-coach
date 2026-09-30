@@ -319,7 +319,13 @@ const LOOKAHEAD_DAYS = 14;
  * days after it belong to whatever comes next.
  */
 export interface BlockContext {
-  raceDate: string;
+  /**
+   * Race day: the taper counts down to it and nothing is drawn on or after it.
+   * Null on an Open Horizon with no race (`training-architecture/13`) — no
+   * taper and no cut-off, because there is no start line, and inventing one is
+   * the defect that ticket exists to prevent.
+   */
+  raceDate: string | null;
   /** The Target Race's distance — how few sessions a week may hold (§03/§04). */
   distance?: RaceDistance | null;
   hours: number;
@@ -332,7 +338,8 @@ export interface BlockContext {
 export function blockSessions(block: TrainingBlock, ctx: BlockContext): ArithmeticSession[] {
   const from = later(block.startDate, ctx.firstDay);
   const weeks = weekStartsBetween(from, block.endDate);
-  const purpose = blockPurpose(block.index, block.total);
+  const purpose = block.purpose ?? blockPurpose(block.index, block.total);
+  const { raceDate } = ctx;
 
   return weeks.flatMap((weekStart, i) => {
     // One factor per week, read twice: it sets the week's minutes, and the
@@ -341,7 +348,8 @@ export function blockSessions(block: TrainingBlock, ctx: BlockContext): Arithmet
       weekIndex: i + 1,
       weeksInBlock: weeks.length,
       purpose,
-      daysToRace: daysBetween(weekStart, ctx.raceDate),
+      // No race is never near: an Open Horizon has no taper to count down to.
+      daysToRace: raceDate ? daysBetween(weekStart, raceDate) : Number.POSITIVE_INFINITY,
     });
     return weekSessions({
       window: wholeWeekWindow(weekStart, ctx.fixedConstraints, ctx.unavailableDates),
@@ -355,7 +363,7 @@ export function blockSessions(block: TrainingBlock, ctx: BlockContext): Arithmet
       // weeks — reading "less than full" as "deload" turned their easy days
       // into Recovery (Standards review, 2026-09-23).
       deload: factor <= DELOAD,
-    }).filter((row) => row.date >= from && row.date < ctx.raceDate);
+    }).filter((row) => row.date >= from && (raceDate === null || row.date < raceDate));
   });
 }
 

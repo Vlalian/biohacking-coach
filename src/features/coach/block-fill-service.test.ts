@@ -113,6 +113,68 @@ describe('ensureBlockFilled', () => {
     expect(rows.some((r) => weekStartOf(r.date) === '2026-10-12')).toBe(true);
   });
 
+  it('fills an Open Horizon with no race: the arc\'s weeks, no taper, no race-day cut-off (training-architecture/13)', async () => {
+    const { openHorizonBlocks } = await import('./open-horizon');
+    // The last block of an arc, today inside it: the week the race ladder
+    // would taper is an ordinary consolidation week here.
+    const blocks = openHorizonBlocks('2026-06-02', TODAY);
+    getAthleteById.mockResolvedValue(athlete({ raceDistance: 'Half' }));
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks, horizon: 'open', raceTooClose: false });
+
+    expect(await ensureBlockFilled('athlete_1', TODAY)).toBe('filled');
+    const rows = insertArithmeticSessions.mock.calls[0][1];
+    // Sessions run to the block's last day — there is no race day to stop at.
+    const last = blocks.find((b) => TODAY >= b.startDate && TODAY <= b.endDate)!;
+    expect(rows.some((r) => weekStartOf(r.date) === weekStartOf(last.endDate))).toBe(true);
+    expect(rows.every((r) => (r as { sport?: string }).sport !== 'brick')).toBe(true);
+  });
+
+  it('a race too close for blocks keeps its race day: nothing is drawn on or after it', async () => {
+    const { openHorizonBlocks } = await import('./open-horizon');
+    const close = '2026-10-25';
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'race_1', date: close, distance: 'Olympic' },
+      set: null,
+      blocks: openHorizonBlocks('2026-09-01', TODAY),
+      horizon: 'open',
+      raceTooClose: true,
+    });
+
+    expect(await ensureBlockFilled('athlete_1', TODAY)).toBe('filled');
+    const rows = insertArithmeticSessions.mock.calls[0][1];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.date < close)).toBe(true);
+  });
+
+  it('a Target Race already run cuts nothing off: the open arc is drawn from today', async () => {
+    const { openHorizonBlocks } = await import('./open-horizon');
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'race_1', date: '2026-10-04', distance: 'Full' },
+      set: null,
+      blocks: openHorizonBlocks('2026-10-05', TODAY),
+      horizon: 'open',
+      raceTooClose: false,
+    });
+
+    expect(await ensureBlockFilled('athlete_1', TODAY)).toBe('filled');
+    expect(insertArithmeticSessions.mock.calls[0][1].some((r) => r.date >= '2026-11-01')).toBe(true);
+  });
+
+  it('a race on today itself is still ahead: nothing is drawn on race day', async () => {
+    const { openHorizonBlocks } = await import('./open-horizon');
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'race_1', date: TODAY, distance: 'Sprint' },
+      set: null,
+      blocks: openHorizonBlocks('2026-09-01', TODAY),
+      horizon: 'open',
+      raceTooClose: true,
+    });
+
+    const outcome = await ensureBlockFilled('athlete_1', TODAY);
+    expect(outcome).toBe('no-plannable-day');
+    expect(insertArithmeticSessions).not.toHaveBeenCalled();
+  });
+
   it('a race with no blocks drawn yet is no-race too — there is no structure to fill', async () => {
     getResolvedBlocks.mockResolvedValue({ race: { id: 'race_1', date: RACE }, set: null, blocks: [] });
     expect(await ensureBlockFilled('athlete_1', TODAY)).toBe('no-race');

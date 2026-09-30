@@ -69,8 +69,10 @@ const COACH_NARRATABLE_TYPES = ['blocks_drafted', 'race_flagged_unrealistic', 'w
  * The athlete's un-narrated plan changes by another hand, oldest first.
  *
  * Two hands: the Head Coach's session actions, and — since
- * `training-architecture/07` — the Coach's own block shaping. An athlete's own
- * Session Moves are silent by design (CONTEXT.md), and `system` events are
+ * `training-architecture/07` — the Coach's own block shaping. Plus one act of
+ * the athlete's own, a race they added (`/37`), which the Coach asks about
+ * rather than announces. Every other athlete event — their Session Moves
+ * above all — is silent by design (CONTEXT.md), and `system` events are
  * nobody's hand on the plan. Ordered oldest-first so a batch of pending events
  * narrates in the order they happened.
  */
@@ -99,6 +101,10 @@ export async function getPendingNarrationEvents(
             sql`(${events.type} <> 'week_draft_approved' OR ${events.payload} ->> 'changed' = 'true')`,
           ),
           and(eq(events.actorType, 'coach_ai'), inArray(events.type, [...COACH_NARRATABLE_TYPES])),
+          // The one athlete act the Coach raises (`training-architecture/37`):
+          // a race they added. Paired with its type, so every other athlete
+          // event — their own moves and sessions — stays silent.
+          and(eq(events.actorType, 'athlete'), eq(events.type, 'race_added')),
         ),
       ),
     )

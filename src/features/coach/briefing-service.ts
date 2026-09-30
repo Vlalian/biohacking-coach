@@ -23,6 +23,7 @@ import {
   renderBriefingPrompt,
   toBriefingApiMessages,
   type BriefingContext,
+  briefingHorizonNote,
 } from './briefing';
 
 /**
@@ -120,6 +121,8 @@ export async function buildBriefingContextFor(
     phase,
     raceUnrealistic,
     staleSet,
+    // An Open Horizon is said to be one, never listed as the build to a race.
+    horizonNote: briefingHorizonNote(resolved),
   };
 
   const { reports, transcripts } = briefingContextOf(context, { today, phase });

@@ -19,6 +19,7 @@ import {
   type SkippedSession,
   type WeekFeedbackEntry,
 } from './check-in';
+import { isRaceTooClose } from './open-horizon';
 import { blockPosition, currentBlock, type TrainingBlock } from './training-blocks';
 import type { PresenceStage } from './presence';
 
@@ -164,19 +165,31 @@ function horizonFactsFrom(
   targetRace: { name: string; date: string } | null,
   blocks: TrainingBlock[],
 ) {
-  if (!targetRace) return {};
-  const race = { raceTarget: targetRace.name, raceDate: targetRace.date };
+  const race = targetRace ? { raceTarget: targetRace.name, raceDate: targetRace.date } : {};
 
-  // A race in the past leaves the athlete with a race but no blocks — nothing
-  // left to divide. They keep the race and lose the phase, which is the honest
-  // rendering of that state.
+  // A caller that could not resolve blocks leaves the athlete with the race
+  // alone and no phase, which is the honest rendering of that state.
   const block = currentBlock(today, blocks);
   if (!block) return race;
 
   // Position is never checked separately: it is derived from the block, so a
   // block without one cannot exist, and asking twice would suggest it could.
   const { week, weeks } = blockPosition(today, block);
-  return { ...race, phase: block.name, blockWeek: `week ${week} of ${weeks}` };
+  return { ...race, phase: block.name, blockWeek: `week ${week} of ${weeks}`, ...horizonNoteOf(today, targetRace) };
+}
+
+/**
+ * Whether the blocks are the Open Horizon's rather than a build to a race
+ * (`training-architecture/13`), from the same facts `getResolvedBlocks`
+ * decided it on: no race still ahead is the default arc, a race under eight
+ * weeks away keeps the athlete on it. Race day itself is ahead, not run.
+ */
+function horizonNoteOf(
+  today: string,
+  targetRace: { date: string } | null,
+): Pick<CheckIn, 'horizonNote'> {
+  if (!targetRace || targetRace.date < today) return { horizonNote: 'open' };
+  return isRaceTooClose(today, targetRace.date) ? { horizonNote: 'race-too-close' } : {};
 }
 
 /**

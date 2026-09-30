@@ -78,7 +78,8 @@ async function readyToFill(athleteId: string, today: string): Promise<FillOutcom
 
 /** What the structure draws from: the race, the hours and the blocks. */
 type DrawFacts = {
-  raceDate: string;
+  /** Race day while it is ahead; null on an Open Horizon with no race still to run (`training-architecture/13`). */
+  raceDate: string | null;
   distance: RaceDistance | null;
   hours: number;
   fixedConstraints: string[] | undefined;
@@ -93,22 +94,40 @@ function drawFacts(
   resolved: Awaited<ReturnType<typeof getResolvedBlocks>>,
   today: string,
 ): 'no-race' | 'no-hours' | DrawFacts {
-  // No race is an ordinary state, not a failure: the Coach still plans the
-  // week, there is simply no horizon to hang a block structure off.
-  if (!resolved.race || resolved.blocks.length === 0) return 'no-race';
+  // No blocks is an ordinary state, not a failure: the Coach still plans the
+  // week, there is simply no structure to fill. Since training-architecture/13
+  // an athlete with no race has the Open Horizon's blocks, so the outcome's
+  // name is older than its meaning.
+  if (resolved.blocks.length === 0) return 'no-race';
   // Hours are asked in onboarding (`training-architecture/35`) and null for
   // anyone who onboarded before the question existed. Nothing is invented from
   // an absent answer — the structure waits until the athlete says.
   if (!athlete || athlete.hoursPerWeek === null) return 'no-hours';
 
   return {
-    raceDate: resolved.race.date,
-    distance: toRaceDistance(resolved.race.distance),
+    ...raceFactsOf(resolved.race, athlete.raceDistance, today),
     hours: athlete.hoursPerWeek,
     fixedConstraints: athlete.profile?.fixedConstraints,
     firstDay: chosenFirstDay(athlete.profile, today),
     blocks: resolved.blocks,
   };
+}
+
+/**
+ * Race day while it is still ahead, and the distance to draw for.
+ *
+ * A Target Race already run is no cut-off — every day from today is after it —
+ * so the athlete is drawn on their Open Horizon without one. With no race the
+ * distance is the one the athlete trains for, asked in onboarding and stated
+ * even when nothing is booked (`prompts.ts`, horizonBlock).
+ */
+function raceFactsOf(
+  race: { date: string; distance: string } | null,
+  trainsFor: string | null,
+  today: string,
+): Pick<DrawFacts, 'raceDate' | 'distance'> {
+  if (!race) return { raceDate: null, distance: toRaceDistance(trainsFor) };
+  return { raceDate: race.date >= today ? race.date : null, distance: toRaceDistance(race.distance) };
 }
 
 /** The weeks owed and the context to draw them with, or why there is nothing owed. */
