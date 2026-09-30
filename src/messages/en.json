@@ -836,7 +836,6 @@
   "Feedback": {
     "title": "Give feedback",
     "intro": "Something broke, annoyed you or worked well? Tell us here. Someone on the team reads every note, and Momentum never sees it.",
-    "guidanceTitle": "What helps us most",
     "guidanceWhat": "What happened.",
     "guidanceWhere": "Where in the app: which screen, session or message.",
     "guidanceExpected": "What you expected instead.",

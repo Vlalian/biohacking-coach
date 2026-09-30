@@ -50,9 +50,6 @@ export function FeedbackForm({
       </header>
 
       <section className="flex flex-col gap-3 border border-border bg-panel p-5">
-        <h2 className="font-display text-2xl font-bold uppercase italic tracking-[0.03em] text-foreground">
-          {t('guidanceTitle')}
-        </h2>
         <ul className="flex list-disc flex-col gap-1 pl-5 font-body text-base leading-relaxed text-foreground">
           <li>{t('guidanceWhat')}</li>
           <li>{t('guidanceWhere')}</li>

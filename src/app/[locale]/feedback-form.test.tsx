@@ -45,6 +45,8 @@ describe('FeedbackForm', () => {
     expect(guidance).toContain('Where in the app: which screen, session or message');
     expect(guidance).toContain('What you expected instead');
     expect(guidance).toContain('A couple of sentences is plenty');
+    // No heading over the list (Mads, 2026-09-30): the intro leads straight into it.
+    expect(guidance).not.toContain('What helps us most');
   });
 
   it('gives the same guidance in Danish', () => {
