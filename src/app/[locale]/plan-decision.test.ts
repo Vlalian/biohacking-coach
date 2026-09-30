@@ -11,6 +11,12 @@ const PLAN = { sessions: [{ date: '2026-09-18', type: 'Endurance', durationMinut
 const OTHER = { sessions: [{ date: '2026-09-19', type: 'Intensity', durationMinutes: 30, zone: 'Z4', note: null }] };
 const PENDING = { proposal: PLAN, popupOpen: true, notice: { kind: 'none' as const } };
 
+describe('IDLE_DECISION — nothing on the table', () => {
+  it('shows no card, no popup and no notice', () => {
+    expect(IDLE_DECISION).toEqual({ proposal: null, popupOpen: false, notice: { kind: 'none' } });
+  });
+});
+
 describe('restoredDecision — what a conversation restores into', () => {
   it('a pending proposal comes back with the popup up, and no notice', () => {
     expect(restoredDecision(PLAN)).toEqual(PENDING);
