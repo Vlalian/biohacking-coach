@@ -14,6 +14,19 @@ describe('isSeqConflict', () => {
     ).toBe(true);
   });
 
+  it('recognises the conflict inside the error drizzle wraps it in', async () => {
+    // drizzle >= 0.44 throws a DrizzleQueryError for every failed query, on
+    // neon-http as on every driver: the message becomes "Failed query: ..."
+    // and the driver's own error, with its code, moves to `cause`. Read only
+    // at the top, the retry never fired against a real database.
+    const { DrizzleQueryError } = await import('drizzle-orm/errors');
+    const driverError = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    expect(isSeqConflict(new DrizzleQueryError('insert into "messages" ...', [], driverError))).toBe(true);
+    expect(
+      isSeqConflict(new DrizzleQueryError('insert ...', [], Object.assign(new Error('fk'), { code: '23503' }))),
+    ).toBe(false);
+  });
+
   it('does not swallow an unrelated failure', () => {
     // The point of a narrow predicate: a dead connection or a constraint this
     // code got wrong must surface, not be retried three times and hidden.

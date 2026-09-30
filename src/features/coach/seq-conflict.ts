@@ -20,8 +20,22 @@
 /** How many times a writer re-reads and retries before the error surfaces. */
 export const SEQ_RETRIES = 3;
 
-/** True for a unique violation on the (conversation_id, seq) index. */
+/**
+ * True for a unique violation on the (conversation_id, seq) index.
+ *
+ * Looks through `cause`: drizzle wraps every failed query in a
+ * `DrizzleQueryError` whose message is the SQL and whose `cause` is the
+ * driver's error, code and all. Reading only the outer error, this answered
+ * false to every real conflict and the retry above never ran (found
+ * 2026-09-30, `code-health/30`, the first time the append met a real index).
+ */
 export function isSeqConflict(error: unknown): boolean {
+  if (isUniqueViolation(error)) return true;
+  const cause = (error as { cause?: unknown } | null | undefined)?.cause;
+  return cause !== undefined && isUniqueViolation(cause);
+}
+
+function isUniqueViolation(error: unknown): boolean {
   const code = (error as { code?: string })?.code;
   if (code === '23505') return true;
   const message = error instanceof Error ? error.message : String(error);
