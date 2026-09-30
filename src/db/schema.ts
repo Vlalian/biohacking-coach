@@ -620,22 +620,21 @@ export type NewMessageRow = typeof messages.$inferInsert;
 export const ATHLETE_FEEDBACK_KINDS = ['fallback', 'trust_signal'] as const;
 
 /**
- * The two things a Feedback Interview produces that are **not** conversation
- * turns (`showable-version/07`).
+ * What testers write through the escape hatch (`showable-version/07`, `58`).
  *
- * The interview transcript itself lives in `conversations`/`messages` like every
- * other conversation — this table is deliberately not a second transcript store.
- * It holds:
+ * Interview transcripts, while there were any, live in `conversations`/`messages`
+ * like every other conversation — this table is deliberately not a second
+ * transcript store. It holds:
  *
- * - `fallback` — text submitted through the plain textarea that sits beside the
- *   interview. The escape hatch can never hard-depend on a model call, because a
- *   tester whose Coach is broken is the tester with the most to say. A row of
- *   this kind therefore *is* the signal that the model could not answer someone,
- *   which is why `coachFailureReason` hangs off it rather than being logged and
- *   forgotten.
+ * - `fallback` — text submitted through the feedback page's comment field. The
+ *   name is from when the box sat beside the Feedback Interview; since
+ *   2026-09-30 it is the only way to give feedback (ADR 0009, amended), and the
+ *   kind was kept so old and new rows read alike with no migration. Rows from
+ *   the interview era may carry a `coachFailureReason`, the signal that the model
+ *   could not answer that tester; new rows never do.
  * - `trust_signal` — the answer to "would you have done something different if
- *   you'd decided alone?", which `CONTEXT.md` calls the single most valuable
- *   qualitative data point. Asked once, near the end, inside the interview.
+ *   you'd decided alone?", asked once inside the interview. Nothing asks it since
+ *   2026-09-30; the rows already stored stay readable.
  *
  * Keyed to the opaque athlete id and nothing else: no name, no email, no user
  * id. The cascade is load-bearing rather than tidy — it is what puts this table
@@ -653,13 +652,13 @@ export const athleteFeedback = pgTable(
       .references(() => athlete.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
     body: text('body').notNull(),
-    /** The View the tester was on when they reached the escape hatch; null from the interview. */
+    /** The View the tester was on when they reached the escape hatch; null on a Trust Signal row. */
     view: text('view'),
     /** The interview this answer came from; null for a fallback submission, which has no conversation. */
     conversationId: uuid('conversation_id').references(() => conversations.id, {
       onDelete: 'cascade',
     }),
-    /** Why the Coach could not answer, for a `fallback` row. Null when the tester simply chose the box. */
+    /** Why the interviewer could not answer, on an interview-era `fallback` row. Null on every row since 2026-09-30. */
     coachFailureReason: text('coach_failure_reason'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
@@ -669,9 +668,9 @@ export const athleteFeedback = pgTable(
       'athlete_feedback_kind_valid',
       sql`${table.kind} IN (${sql.raw(quotedList(ATHLETE_FEEDBACK_KINDS))})`,
     ),
-    // One Trust Signal answer per athlete. The question is asked once by
-    // construction (`trustSignalState`); this is the database refusing to
-    // let a second answer overwrite the first if it ever is asked twice.
+    // One Trust Signal answer per athlete. The interview asked it once; this
+    // was the database refusing a second answer. Nothing asks it since
+    // 2026-09-30, and the index stays because dropping it is a migration.
     uniqueIndex('athlete_feedback_trust_signal_once')
       .on(table.athleteId)
       .where(sql`${table.kind} = 'trust_signal'`),
@@ -1316,7 +1315,7 @@ export type MessageRating = (typeof MESSAGE_RATINGS)[number];
  * unattended, which means nobody can ask "what just happened?" - so a flag has
  * to pin itself to something readable afterwards. "The Coach felt off sometimes"
  * is unactionable; this message, thumbs down, opens the transcript at the exact
- * text. The thumbs say *where*; the Feedback Interview says *why*.
+ * text. The thumbs say *where*; the feedback page's comment field says *why*.
  *
  * A table of its own rather than a kind on `athlete_feedback`: that one is keyed
  * by athlete with a partial unique index for the Trust Signal, and this is keyed

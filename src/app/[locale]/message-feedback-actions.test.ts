@@ -92,7 +92,7 @@ describe('rateMessageAction', () => {
   });
 
   it('caps a very long comment rather than refusing it', async () => {
-    // The one line is in-the-moment; anything longer is the Feedback Interview's
+    // The one line is in-the-moment; anything longer is the feedback page's
     // job. Truncating keeps what they typed first rather than losing the lot.
     await rateMessageAction({ messageId: 'm1', rating: 'down', comment: 'x'.repeat(400) });
 

@@ -1,84 +1,45 @@
-import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { athleteFeedback } from '@/db/schema';
 
 /**
- * The only place the app reads and writes `athlete_feedback`.
+ * The only place the app writes `athlete_feedback`.
  *
- * Two kinds of row, and neither is a conversation turn — the interview
- * transcript lives in `conversations`/`messages` like every other conversation
- * (`showable-version/07`). Every function takes the owning `athleteId` resolved
- * from the authenticated server session, never a client-supplied value, and
- * scopes its query to it (ADR 0006).
+ * Every function takes the owning `athleteId` resolved from the authenticated
+ * server session, never a client-supplied value (ADR 0006).
  *
- * Nothing here reads across athletes, and nothing here is exposed to a Head
- * Coach: there is deliberately no by-coach query to call. The builders' readout
- * of what testers said is `feedback-report-repository.ts`, run from a terminal
- * (`npm run feedback`) and called by nothing in the app.
+ * Nothing here reads, across athletes or at all, and nothing here is exposed to
+ * a Head Coach: there is deliberately no by-coach query to call. The builders'
+ * readout of what testers said is `feedback-report-repository.ts`, run from a
+ * terminal (`npm run feedback`) and called by nothing in the app.
  */
 
-export interface FallbackSubmission {
+export interface FeedbackSubmission {
   athleteId: string;
   body: string;
   /** The View the tester was on when they reached the escape hatch. */
   view: string | null;
-  /**
-   * Why the Coach could not answer, when that is what sent them to the box.
-   * Null when they simply chose to type instead of talk.
-   */
-  coachFailureReason: string | null;
 }
 
 /**
- * Stores one submission from the plain textarea beside the interview.
+ * Stores one submission from the feedback page's comment field.
  *
- * No model call, no consent gate, no conversation — by design. The escape hatch
- * can never hard-depend on the API, because a tester whose Coach is broken is
- * the tester with the most to say.
+ * No model call, no consent gate, no conversation, by design: the escape hatch
+ * never depends on the API, because a tester whose Coach is broken is the tester
+ * with the most to say.
+ *
+ * The row kind is `fallback`, the name from when this box sat beside the
+ * Feedback Interview. It is now the only way to give feedback (ADR 0009, amended
+ * 2026-09-30), and the kind is kept so the readout and the feedback-review
+ * ledger read old and new rows alike, with no migration. There is no interview
+ * to fail, so `coachFailureReason` is always null on a new row.
  */
-export async function recordFallback(submission: FallbackSubmission): Promise<void> {
+export async function recordFeedback(submission: FeedbackSubmission): Promise<void> {
   await getDb().insert(athleteFeedback).values({
     athleteId: submission.athleteId,
     kind: 'fallback',
     body: submission.body,
     view: submission.view,
     conversationId: null,
-    coachFailureReason: submission.coachFailureReason,
-  });
-}
-
-/**
- * Stores the Trust Signal answer against the interview it was asked in.
- *
- * The conversation id is what makes the answer readable afterwards: the reason
- * is the valuable half, and the reason is in the turns around it.
- */
-export async function recordTrustSignal(answer: {
-  athleteId: string;
-  conversationId: string;
-  body: string;
-}): Promise<void> {
-  await getDb().insert(athleteFeedback).values({
-    athleteId: answer.athleteId,
-    kind: 'trust_signal',
-    body: answer.body,
-    view: null,
-    conversationId: answer.conversationId,
     coachFailureReason: null,
   });
-}
-
-/** Whether this athlete has already answered the Trust Signal. Asked once. */
-export async function hasTrustSignal(athleteId: string): Promise<boolean> {
-  const rows = await getDb()
-    .select({ id: athleteFeedback.id })
-    .from(athleteFeedback)
-    .where(
-      and(
-        eq(athleteFeedback.athleteId, athleteId),
-        eq(athleteFeedback.kind, 'trust_signal'),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
 }

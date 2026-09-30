@@ -6,7 +6,7 @@ import type { Citation } from '@/lib/citation';
  *
  * Lived in `weekly-session.tsx` while that screen existed; the Weekly Session
  * is retired (`training-architecture/21`) and every remaining transcript —
- * Coach Chat, the Feedback Interview — imports the shape from here.
+ * Coach Chat — imports the shape from here.
  */
 export interface UiMessage {
   id: string;

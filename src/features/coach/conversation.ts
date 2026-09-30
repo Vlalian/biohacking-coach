@@ -22,11 +22,12 @@ import type { ConversationKind } from '@/lib/conversation-kinds';
  * `onboarding` stays: it is live, written by `onboarding-service`.
  *
  * `feedback` joined 2026-09-01 (`showable-version/07`) and is the one kind that
- * is **not** a Coach conversation at all: the Feedback Interview is conducted by
- * an interviewer that is explicitly not the Coach, and its transcript must never
- * reach a Coach prompt. That is exactly why it has its own kind rather than
+ * is **not** a Coach conversation at all: the Feedback Interview was conducted
+ * by an interviewer that is explicitly not the Coach, and its transcript must
+ * never reach a Coach prompt. That is exactly why it has its own kind rather than
  * living inside `coach_chat`, whose whole transcript is resent to the Coach on
- * every later turn.
+ * every later turn. Nothing writes it since 2026-09-30 (`showable-version/58`);
+ * the stored interviews keep the kind and the guarantee.
  */
 export type { ConversationKind };
 
