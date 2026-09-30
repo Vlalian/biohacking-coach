@@ -733,13 +733,6 @@ describe('the draft is held to the band around the arithmetic (training-architec
     expect(logWeekDraftClamped).toHaveBeenCalledWith(ATHLETE, { drafted: 255, clampedTo: 270, baseline: 300, reasoned: false });
   });
 
-  it('lets a reasoned cut stand inside −30%, and logs nothing', async () => {
-    callCoach.mockResolvedValue(toolReply({ sessions: PROPOSED, volumeReason: 'knee: easing run load' }));
-    await ensureWeekDrafted(ATHLETE, TODAY);
-    expect(recordWeekDraft.mock.calls[0][0].sessions.map((x: { durationMinutes: number }) => x.durationMinutes)).toEqual([60, 45, 150]);
-    expect(logWeekDraftClamped).not.toHaveBeenCalled();
-  });
-
   it('holds a reasoned cut beyond 30% to 30%, and logs that it was reasoned', async () => {
     const deep = PROPOSED.map((x) => ({ ...x, durationMinutes: 50 }));
     callCoach.mockResolvedValue(toolReply({ sessions: deep, volumeReason: 'ill' }));

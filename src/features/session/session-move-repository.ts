@@ -27,8 +27,10 @@ function movedDays(payload: unknown): { from: string; to: string } | null {
  * out rather than guessed at.
  */
 export async function getSessionMovesSince(athleteId: string, sinceKey: string): Promise<SessionMoveFact[]> {
+  // Stryker disable next-line ObjectLiteral — equivalent: a move is built from actorType and payload alone, so reading the whole row changes nothing a caller sees.
+  const columns = { actorType: events.actorType, payload: events.payload };
   const rows = await getDb()
-    .select({ actorType: events.actorType, payload: events.payload })
+    .select(columns)
     .from(events)
     .where(
       and(

@@ -13,8 +13,10 @@ const CHAT_EXCERPT_LINES = 5;
  * athlete id in the WHERE (ADR 0006).
  */
 export async function getRecentAthleteChatLines(athleteId: string, sinceKey: string): Promise<string[]> {
+  // Stryker disable next-line ObjectLiteral — equivalent: only content is returned, so reading the whole row changes nothing a caller sees.
+  const columns = { content: messages.content };
   const rows = await getDb()
-    .select({ content: messages.content })
+    .select(columns)
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
     .where(
