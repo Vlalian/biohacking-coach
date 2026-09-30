@@ -164,7 +164,6 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
       // (testing.md rule 1) counts `scripts/` as its one legitimate caller.
       'features/feedback/feedback-report-repository.ts',
       'features/feedback/feedback-repository.ts',
-      'features/feedback/feedback-service.ts',
     ]);
   });
 

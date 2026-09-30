@@ -115,3 +115,40 @@ has a live plan that predates this decision and commits item 4 to a form. Its `a
 its `shell-chrome.tsx` placement and its opaque-id storage all survive; what changes is what the link
 opens. Whoever builds either should reconcile the two tickets first rather than building both halves of
 the same escape hatch.
+
+## Amendment 2026-09-30 — The conversational interview is reversed; a plain comment field replaces it
+
+Mads, on the PR #114 preview ([showable-version/58](../../.scratch/showable-version/issues/58-one-way-to-give-feedback-grounded-in-the-app.md)):
+*"using the coach as an interviewer is too big a cost for this, because we are not using AI to its
+potential in this aspect. Therefore I think we should go with the comment field instead, which is
+simple and easy to understand. We will add a good description of how much to include as well."* The
+preview run that settled it (S117): asked for a progress line, the interviewer neither said a similar
+feature was planned nor asked what it should include, which was the one job the product brief had
+been added to do.
+
+**What is reversed.** The escape hatch no longer opens an AI conversation. The feedback page is one
+plain comment field, with guidance above it on what to write: what happened, where in the app (which
+screen, session or message), what you expected instead, and that a couple of sentences is plenty.
+This is the "short free-text form" this ADR superseded, with the guidance as the answer to the
+Context's complaint that a box returns *"the Coach felt off sometimes."* The interview's prompt, its
+service and its model call are deleted, not left dormant, and so is Plan H's product brief, whose only
+reader was the interviewer.
+
+**The Trust Signal is not asked anywhere** (Mads, 2026-09-30). It stays uncollected until it gets a
+surface of its own.
+
+**What survives.**
+- The escape-hatch link, its place in the drawer footer and the `from` View it carries.
+- No model call and no consent gate on the path, for the reason this ADR gave the textarea: a tester
+  whose Coach is broken is the tester with the most to say.
+- The storage, unchanged, with no migration. A submission is an `athlete_feedback` row of kind
+  `fallback`, the name from when the box sat beside the interview; `coachFailureReason` is null on
+  every new row because there is no interviewer to fail. The `feedback` conversation kind and the
+  `trust_signal` row kind stay in their CHECK constraints so the interviews and answers already stored
+  stay readable by `npm run feedback`.
+- Reason 3 still holds for those stored transcripts: `feedback-isolation.test.ts` still proves a
+  `feedback` conversation cannot be resumed into Coach Chat.
+- The thumbs, unchanged. They still say *where*; the comment field now says *why*.
+
+The reasoning above — that the Coach must not collect the verdict on itself — is not what changed. No
+AI collects it now.

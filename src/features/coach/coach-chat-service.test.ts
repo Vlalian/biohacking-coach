@@ -236,9 +236,8 @@ describe('sendCoachChatMessage', () => {
   it('names Coach Chat as the surface in the failure log', async () => {
     // The log exists so a churned tester can be told apart from one who simply
     // stopped caring (`showable-version/05`, item 2), and that only works if the
-    // surfaces are distinguishable. The turn machinery is shared with the
-    // Feedback Interview now, so which surface is reported is this caller's to
-    // get right.
+    // surfaces are distinguishable. The turn machinery is shared, so which
+    // surface is reported is this caller's to get right.
     getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
     callCoach.mockRejectedValue(new Error('upstream 529'));
 

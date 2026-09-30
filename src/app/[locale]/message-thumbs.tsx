@@ -11,7 +11,7 @@ import { clearMessageRatingAction, rateMessageAction } from './message-feedback-
  * The artifact-pinning half of the feedback instrumentation: testers try the app
  * unattended, so nobody can ask "what just happened?" — and a flag pinned to a
  * message id opens the transcript at the exact text afterwards. The thumbs say
- * *where*; the Feedback Interview says *why*.
+ * *where*; the feedback page's comment field says *why*.
  *
  * **Never a score.** No count, no average, nothing aggregated is shown back, and
  * nothing here is visible to a Head Coach. What the tester sees is only their own

@@ -73,7 +73,7 @@ describe('message catalogues', () => {
     // — are exempt only inside the Information View's catalogue, so the guard
     // keeps its full strength everywhere else.
     const cognates =
-      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing|Interviewer|Sprint|Half|Full)\b/g;
+      /\b(Information|Session|Sport|Type|Distance|Motivation|System|min|Plan|Data|Briefing|Sprint|Half|Full)\b/g;
     const cognateScope = (path: string) =>
       path.startsWith('Information.') ||
       path.startsWith('SessionDrawer.') ||
@@ -95,13 +95,6 @@ describe('message catalogues', () => {
       // lowercase ("Åbn briefing", "Coach-briefing"). A one-word tab label has
       // nowhere to hide a forgotten translation, which is what the guard is for.
       path.startsWith('Roster.tab') ||
-      // The Feedback Interview's speaker label. "Interviewer" is the Danish word
-      // as well as the English one, and it is the one label on that surface that
-      // has to be read as a role rather than a name — the interviewer is
-      // deliberately not a character (`showable-version/07`). A one-word speaker
-      // label has nowhere to hide a forgotten translation, which is what the
-      // guard is for.
-      path === 'FeedbackInterview.interviewerLabel' ||
       // The Race Distances and their step label (`training-architecture/02`).
       // "Distance" is an ordinary Danish noun, and Danish triathletes name the
       // distances in English — a Half is a Half and a Full is a Full, the same

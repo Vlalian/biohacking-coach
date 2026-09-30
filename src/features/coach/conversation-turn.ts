@@ -21,7 +21,8 @@ import { toApiMessages, type Message } from './conversation';
  * not empty, refuse a conversation that is not this athlete's, render the system
  * prompt, call the model, and write the turn and the reply together afterwards.
  * That sequence was written twice, and the second copy came with the first
- * ticket that needed a second surface.
+ * ticket that needed a second surface. The Feedback Interview was removed on
+ * 2026-09-30 (`showable-version/58`), so Coach Chat is its one caller today.
  *
  * What is shared here is the sequence and its ordering guarantees. What each
  * surface still owns is {@link ConversationTurn.prepare} — the prompt, and

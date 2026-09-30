@@ -63,22 +63,11 @@ function errorType(error: unknown): string {
   return error === null ? 'null' : typeof error;
 }
 
-/**
- * Which surface the failed model call came from.
- *
- * Named for the model call rather than for the Coach, because one of these is
- * not a Coach surface: `feedback` is the Feedback Interview, conducted by an
- * interviewer that is explicitly not the Coach (ADR 0009). It is listed here
- * because a failed interview turn is the one failure a tester is most likely to
- * be silent about afterwards — they reached the escape hatch to complain and the
- * escape hatch is what broke — and it shares this log rather than having its own
- * so the surfaces can be compared in one query.
- */
+/** Which surface the failed model call came from. */
 export type ModelSurface =
   | 'coach_chat'
   | 'weekly_session'
   | 'coach_briefing'
-  | 'feedback'
   /** The background Training Block adjustment (`training-architecture/07`); no conversation. */
   | 'block_adjustment'
   /** The silent week draft (`training-architecture/16`); no conversation. */

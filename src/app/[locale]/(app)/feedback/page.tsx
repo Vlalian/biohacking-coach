@@ -3,26 +3,21 @@ import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
-import { getCurrentAthlete, getCurrentSession } from '../current-user';
+import { getCurrentSession } from '../current-user';
 import { submittedFromView } from '@/features/feedback/feedback';
-import { getOpenInterview } from '@/features/feedback/feedback-service';
-import { FeedbackInterview } from '../../feedback-interview';
+import { FeedbackForm } from '../../feedback-form';
 
-// Read per-request: the page shows this tester's own interview, so it can never
-// be prerendered. Signed out, it is not a page at all — it redirects to sign-in.
+// Signed out, it is not a page at all — it redirects to sign-in, so it is read
+// per request.
 export const dynamic = 'force-dynamic';
 
 /**
- * The Feedback Interview (`showable-version/07`) — what the escape hatch opens.
+ * The feedback page — what the escape hatch opens (`showable-version/58`).
  *
- * A real page rather than an overlay, deliberately: it survives a refresh on a
- * plain URL, it needs no new overlay state machine, and its fallback textarea
- * can be a plain form with no model call anywhere in its path. That last one is
- * the load-bearing reason — a tester whose Coach is broken is the tester with
- * the most to say, so the box has to work when the conversation does not.
+ * A real page rather than an overlay: it survives a refresh on a plain URL, and
+ * its form is a plain post with no model call anywhere in its path.
  *
- * Opening it reads; it never writes and never calls the model. A tester who
- * looks and leaves has not started an interview.
+ * Opening it reads nothing and writes nothing.
  */
 export default async function FeedbackPage({
   params,
@@ -33,8 +28,7 @@ export default async function FeedbackPage({
 }) {
   const { locale } = await params;
   // The View the escape hatch was opened from, which this page cannot observe
-  // for itself. Read here rather than in the client component so the page keeps
-  // its single Suspense-free render; narrowed again server-side before storage.
+  // for itself. Narrowed here, and again server-side before storage.
   const { from } = await searchParams;
   if (!hasLocale(routing.locales, locale)) {
     notFound();
@@ -46,29 +40,5 @@ export default async function FeedbackPage({
     redirect({ href: '/sign-in', locale });
   }
 
-  // Scoped to the signed-in account's own athlete row, so no shape of this page
-  // reads another tester's interview (ADR 0006).
-  const athlete = await getCurrentAthlete();
-  const initial = athlete ? await getOpenInterview(athlete.id) : null;
-
-  return (
-    <FeedbackInterview
-      openedFrom={submittedFromView(from)}
-      initial={
-        initial
-          ? {
-              conversationId: initial.conversationId,
-              messages: initial.messages.map((m) => ({
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                seq: m.seq,
-                citations: [], // not a grounded conversation - nothing retrieves here
-                rating: null, // the thumbs are for the Coach's own turns only
-              })),
-            }
-          : null
-      }
-    />
-  );
+  return <FeedbackForm openedFrom={submittedFromView(from)} />;
 }
