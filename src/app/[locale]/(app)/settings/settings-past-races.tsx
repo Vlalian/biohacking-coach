@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { RACE_DISTANCES } from '@/lib/race-distances';
 import { formatFinish, parseFinishInput } from '@/features/onboarding/past-races';
 import type { AddPastRaceResult, SettingsActionResult } from './settings-actions';
-import { ActionButton } from './settings-races';
+import { ActionButton } from '../../action-button';
 import { useSave } from './use-save';
 
 /**

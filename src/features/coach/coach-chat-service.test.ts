@@ -93,7 +93,14 @@ const { getTargetRace, getRaces, getLatestPlanWrittenAt, getLatestOpenConversati
   getLatestPlanWrittenAt: vi.fn<() => Promise<Date | null>>(async () => null),
   getLatestOpenConversation: vi.fn(async (): Promise<unknown> => null),
 }));
-vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
+// The Open Horizon's reads (training-architecture/13), reached through the
+// real `getResolvedBlocks` when there is no race: no past races, and no
+// athlete row to count an arc from, so the prompt carries no block.
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces, getPastRaces: vi.fn(async () => []) }));
+vi.mock('@/features/athlete/athlete-repository', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/athlete/athlete-repository')>()),
+  getAthleteSince: vi.fn(async () => null),
+}));
 const { recordProposal, getPendingProposal, getDiscussedWeek, getUnavailableDates } = vi.hoisted(() => ({
   recordProposal: vi.fn(async () => undefined),
   getPendingProposal: vi.fn(async (): Promise<unknown> => null),

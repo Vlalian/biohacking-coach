@@ -247,6 +247,13 @@ export interface CheckIn {
    */
   blockWeek?: string | null;
   /**
+   * What the blocks hang off, when it is not a race to build toward
+   * (`training-architecture/13`): `open` is the default arc of an athlete
+   * with no race still ahead; `race-too-close` is a Target Race under eight
+   * weeks away, which keeps the athlete on that arc. Absent on a race horizon.
+   */
+  horizonNote?: 'open' | 'race-too-close';
+  /**
    * What an open Injury or Illness prevents, already rendered as a sentence by
    * `features/health/capacity.ts`. Absent when nothing is restricted.
    *

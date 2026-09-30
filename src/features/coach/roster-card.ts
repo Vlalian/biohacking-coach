@@ -18,10 +18,12 @@ export function rosterCardOf(
   horizon: { race: { name: string; date: string } | null; blocks: TrainingBlock[] },
   todayKey: string,
 ): RosterCard {
-  if (!horizon.race) return { race: null, block: null };
+  // The race while it is ahead, and the block whichever horizon it hangs off:
+  // an athlete with no race has the Open Horizon's (`training-architecture/13`).
+  const { race } = horizon;
   const block = currentBlock(todayKey, horizon.blocks);
   return {
-    race: { name: horizon.race.name, days: Math.max(0, daysBetween(todayKey, horizon.race.date)) },
+    race: race && race.date >= todayKey ? { name: race.name, days: daysBetween(todayKey, race.date) } : null,
     block: block ? { name: block.name, ...blockPosition(todayKey, block) } : null,
   };
 }

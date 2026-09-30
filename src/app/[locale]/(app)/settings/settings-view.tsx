@@ -71,7 +71,7 @@ export interface SettingsViewProps {
   preferredName: string;
   coachingLink: SettingsCoachingLink | null;
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
+  onAddRace: (name: string, date: string, distance: string, asTarget: boolean) => Promise<AddRaceResult>;
   onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
   onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
   onAddPastRace: (entry: PastRaceInput) => Promise<AddPastRaceResult>;
@@ -483,7 +483,7 @@ function TrainingSection({
   weeklySessionDayLinked: boolean;
   fixedConstraints: string[];
   onUpdateCommunicationStyle: (value: string) => Promise<SettingsActionResult>;
-  onAddRace: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
+  onAddRace: (name: string, date: string, distance: string, asTarget: boolean) => Promise<AddRaceResult>;
   onSetTargetRace: (raceId: string) => Promise<SettingsActionResult>;
   onRemoveRace: (raceId: string) => Promise<SettingsActionResult>;
   onAddPastRace: (entry: PastRaceInput) => Promise<AddPastRaceResult>;

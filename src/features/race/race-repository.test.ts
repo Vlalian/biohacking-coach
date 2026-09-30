@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import { pastRace as pastRaceTable, race as raceTable, type RaceRow } from '@/db/schema';
+import {
+  athlete as athleteTable,
+  events as eventsTable,
+  pastRace as pastRaceTable,
+  race as raceTable,
+  type RaceRow,
+} from '@/db/schema';
 
 const rows: RaceRow[] = [];
 
@@ -8,6 +14,7 @@ const orderBy = vi.fn(() => Promise.resolve(rows));
 const selectWhere = vi.fn(() => ({ orderBy }));
 
 const inserted: unknown[] = [];
+const insertTables: unknown[] = [];
 const returning = vi.fn(() => Promise.resolve([{ id: 'race_new' }]));
 const insertValues = vi.fn((v: unknown) => {
   inserted.push(v);
@@ -15,6 +22,7 @@ const insertValues = vi.fn((v: unknown) => {
 });
 
 const updates: { set: unknown; where: unknown }[] = [];
+const updateTables: unknown[] = [];
 const updateWhere = vi.fn((w: unknown) => {
   updates[updates.length - 1].where = w;
   return Promise.resolve();
@@ -24,7 +32,10 @@ const set = vi.fn((v: unknown) => {
   return { where: updateWhere };
 });
 
-const batch = vi.fn((statements: unknown[]) => Promise.all(statements));
+// Like the driver, a batch refuses anything that is not a statement.
+const batch = vi.fn((statements: unknown[]) =>
+  statements.every((s) => s != null) ? Promise.all(statements) : Promise.reject(new TypeError('not a statement')),
+);
 
 const deletes: unknown[] = [];
 const deleteWhere = vi.fn((w: unknown) => {
@@ -35,8 +46,14 @@ const deleteWhere = vi.fn((w: unknown) => {
 vi.mock('@/db', () => ({
   getDb: () => ({
     select: () => ({ from: () => ({ where: selectWhere }) }),
-    insert: () => ({ values: insertValues }),
-    update: () => ({ set }),
+    insert: (table: unknown) => {
+      insertTables.push(table);
+      return { values: insertValues };
+    },
+    update: (table: unknown) => {
+      updateTables.push(table);
+      return { set };
+    },
     delete: () => ({ where: deleteWhere }),
     batch,
   }),
@@ -54,6 +71,7 @@ const {
   getPastRaces,
   addPastRace,
   deletePastRace,
+  addRace,
 } = await import('./race-repository');
 
 function race(overrides: Partial<RaceRow> = {}): RaceRow {
@@ -73,6 +91,7 @@ beforeEach(() => {
   rows.length = 0;
   inserted.length = 0;
   updates.length = 0;
+  updateTables.length = 0;
   deletes.length = 0;
   batch.mockClear();
 });
@@ -251,5 +270,61 @@ describe('past races — the races the athlete has finished (training-architectu
     expect(returning).toHaveBeenCalledWith({ id: pastRaceTable.id });
     await deletePastRace('athlete_1', 'pr_2');
     expect(deletes).toEqual([and(eq(pastRaceTable.athleteId, 'athlete_1'), eq(pastRaceTable.id, 'pr_2'))]);
+  });
+});
+
+describe('addRace: the race, its target flag, the mirror and the event in one batch (CodeRabbit, PR #115)', () => {
+  const kbh = { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' as const };
+
+  beforeEach(() => {
+    inserted.length = 0;
+    insertTables.length = 0;
+  });
+
+  it('writes a tune-up and its race_added event together, and touches no target', async () => {
+    const id = await addRace('athlete_1', kbh, 'none');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(insertTables).toEqual([raceTable, eventsTable]);
+    expect(inserted[0]).toEqual({ id, athleteId: 'athlete_1', ...kbh, isTarget: false });
+    expect(inserted[1]).toEqual({
+      athleteId: 'athlete_1',
+      actorType: 'athlete',
+      actorId: 'athlete_1',
+      type: 'race_added',
+      payload: { raceId: id, ...kbh, isTarget: false },
+    });
+    expect(updates).toEqual([]);
+  });
+
+  it('writes a first race as the target, with the mirror, in the same batch', async () => {
+    const id = await addRace('athlete_1', kbh, 'first');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(inserted[0]).toMatchObject({ id, isTarget: true });
+    expect(updateTables).toEqual([athleteTable]);
+    expect(updates[0].set).toMatchObject({ raceTarget: 'IM Kbh' });
+    expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
+  });
+
+  it('replaces a target by clearing the old flag before the new race is inserted flagged', async () => {
+    const id = await addRace('athlete_1', kbh, 'replace');
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(updateTables).toEqual([raceTable, athleteTable]);
+    expect(updates[0]).toEqual({ set: { isTarget: false }, where: eq(raceTable.athleteId, 'athlete_1') });
+    expect(inserted[0]).toMatchObject({ id, isTarget: true });
+    expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
+    // The partial unique index allows one target, so the batch must run the
+    // clear before the flagged insert, or the database rejects the write.
+    const [clear] = updateWhere.mock.results.slice(-2).map((r) => r.value);
+    const [insert] = insertValues.mock.results.slice(-2).map((r) => r.value);
+    const statements = batch.mock.calls[0][0];
+    expect(statements[0]).toBe(clear);
+    expect(statements[1]).toBe(insert);
+  });
+
+  it('gives the race a fresh id each time, the same one the event carries', async () => {
+    const a = await addRace('athlete_1', kbh, 'none');
+    const b = await addRace('athlete_1', kbh, 'none');
+    expect(a).not.toBe(b);
+    expect(a).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { Session } from '@/features/session/session';
 
 // The drawer is a client component: importing it pulls next-intl's client
@@ -26,7 +27,17 @@ vi.mock('./session-actions', () => ({
   deleteAthleteSessionAction: vi.fn(),
 }));
 
-const { ViewBody, REFUSAL_KEY } = await import('./session-drawer');
+// The day's "+" can add a race (training-architecture/37); its action reaches
+// the database the same way, and no first render calls it.
+vi.mock('./(app)/settings/settings-actions', () => ({ addRaceAction: vi.fn() }));
+// Only the whole-drawer renders below read the catalogue through the hook;
+// `ViewBody` is handed its `t`. Keys come back as themselves.
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string, values?: Record<string, string>) =>
+    values ? `${key}(${Object.values(values).join(',')})` : key,
+}));
+
+const { ViewBody, REFUSAL_KEY, SessionDrawer } = await import('./session-drawer');
 const { athleteDrawerPolicy, headCoachDrawerPolicy } = await import(
   '@/features/session/drawer-policy',
 );
@@ -454,5 +465,40 @@ describe('ViewBody how-to', () => {
       expect(labels(body(s))).not.toContain('howTo');
       expect(howToIn(body(s))).toBeNull();
     }
+  });
+});
+
+describe('SessionDrawer — the day\'s "+" offers Session or Race (training-architecture/37)', () => {
+  const drawer = (state: Parameters<typeof SessionDrawer>[0]['state']) =>
+    renderToStaticMarkup(
+      <SessionDrawer
+        state={state}
+        sessions={[]}
+        importedSessionIds={[]}
+        locale="en"
+        todayKey={TODAY}
+        onClose={() => {}}
+        onRate={() => {}}
+        onEditRequest={() => {}}
+        onChoose={() => {}}
+        currentTargetRace={{ name: 'IM Kbh' }}
+        onBeginWrite={() => {}}
+        onSettleWrite={() => {}}
+        inFlightIds={[]}
+      />,
+    );
+
+  it('asks Session or Race first, and adds nothing yet', () => {
+    const html = drawer({ open: true, mode: 'choose', date: '2027-08-16' });
+    expect(html).toContain('data-action="choose-session"');
+    expect(html).toContain('data-action="choose-race"');
+    expect(html).not.toContain('type="date"');
+  });
+
+  it('the race form opened from a day carries that date, and knows the target it would replace', () => {
+    const html = drawer({ open: true, mode: 'create-race', date: '2027-08-16' });
+    expect(html).toMatch(/type="date"[^>]*value="2027-08-16"/);
+    expect(html).toContain('data-race-kind-choice="tune-up"');
+    expect(html).toContain('raceTitle');
   });
 });

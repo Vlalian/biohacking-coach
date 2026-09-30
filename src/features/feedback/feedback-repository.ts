@@ -12,7 +12,9 @@ import { athleteFeedback } from '@/db/schema';
  * scopes its query to it (ADR 0006).
  *
  * Nothing here reads across athletes, and nothing here is exposed to a Head
- * Coach: there is deliberately no by-coach query to call.
+ * Coach: there is deliberately no by-coach query to call. The builders' readout
+ * of what testers said is `feedback-report-repository.ts`, run from a terminal
+ * (`npm run feedback`) and called by nothing in the app.
  */
 
 export interface FallbackSubmission {
