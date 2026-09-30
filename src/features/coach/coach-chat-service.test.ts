@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
@@ -31,7 +31,14 @@ const {
 vi.mock('./coach-client', () => ({ callCoach }));
 const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
 const { logWeekDraftClamped } = vi.hoisted(() => ({ logWeekDraftClamped: vi.fn() }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift, logWeekDraftClamped }));
+// The real `chat_max_tokens` line, so its test reads what reaches the log
+// (console is the boundary); the rest are faked as before.
+vi.mock('@/lib/coach-log', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/coach-log')>()),
+  logCoachFailure,
+  logCoachDrift,
+  logWeekDraftClamped,
+}));
 const { capacityFor } = vi.hoisted(() => ({ capacityFor: vi.fn<() => Promise<string | null>>(async () => null) }));
 // The structured injury read and the week's moves (`training-architecture/52`):
 // boundaries, none open and none moved by default.
@@ -228,8 +235,8 @@ describe('sendCoachChatMessage', () => {
   });
 
   it('reports ran-out-of-room when the reply was cut off at the token limit, and logs it as such', async () => {
-    // Mads's smoke run of PR #71: four "not sent" errors were this. The athlete
-    // is told to ask for less, not to send the same long turn again.
+    // Mads's smoke run of PR #71: four "not sent" errors were this. The notice
+    // says the answer was cut off (`showable-version/60`).
     callCoach.mockRejectedValue(
       Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
     );
@@ -241,9 +248,48 @@ describe('sendCoachChatMessage', () => {
     expect(appendMessages).not.toHaveBeenCalled();
   });
 
+  describe('the chat_max_tokens line (showable-version/60)', () => {
+    const lines: unknown[] = [];
+    beforeEach(() => {
+      lines.length = 0;
+      vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+        lines.push(JSON.parse(String(line)));
+      });
+    });
+    afterEach(() => vi.mocked(console.error).mockRestore());
+
+    it('logs a cut-off chat reply with its stop reason and the cap it hit', async () => {
+      // So a cut-off is seen in the logs before a tester reports it.
+      getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+      callCoach.mockRejectedValue(
+        Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
+      );
+
+      await sendCoachChatMessage(ATHLETE, 'conv_1', 'I am away three days, change my week', '2026-08-12');
+
+      expect(lines).toEqual([
+        {
+          event: 'chat_max_tokens',
+          athleteId: ATHLETE.id,
+          conversationId: 'conv_1',
+          stopReason: 'max_tokens',
+          maxTokens: 4096,
+        },
+      ]);
+    });
+
+    it('writes no such line when the Coach simply could not be reached', async () => {
+      callCoach.mockRejectedValue(new Error('upstream 529'));
+
+      await sendCoachChatMessage(ATHLETE, null, 'should I ride?', '2026-08-12');
+
+      expect(lines).toEqual([]);
+    });
+  });
+
   it('gives the Coach room for a whole-week proposal and a paragraph', async () => {
     await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12');
-    expect(callCoach.mock.calls[0][0].maxTokens).toBe(2500);
+    expect(callCoach.mock.calls[0][0].maxTokens).toBe(4096);
   });
 
   it('names Coach Chat as the surface in the failure log', async () => {
