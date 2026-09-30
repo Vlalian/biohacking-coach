@@ -113,13 +113,49 @@ describe('howToFor — the main set (§08)', () => {
     );
   });
 
-  it('makes a main part too short for the fewest reps one block at the zone', () => {
-    // 20 min bike: 12 min main, and four 3-minute reps with 3 min rest need 21.
-    const h = howToFor({ type: 'Intensity', sport: 'bike', durationMinutes: 20, zone: 'Z4' }, 'en')!;
+  it('shortens a short bike Intensity session’s reps inside §08’s range, keeping the rep count and the rest rule', () => {
+    // 25 min bike: 17 min main. Four 3-minute reps with 3 min rest need 21, so
+    // the rep drops to 2 min (§08: 30 s – 5 min), resting as long as it worked:
+    // 4 × 2 + 3 × 2 = 14 min, 3 steady before it.
+    const h = howToFor({ type: 'Intensity', sport: 'bike', durationMinutes: 25, zone: 'Z4' }, 'en')!;
     expect(h.segments).toEqual([
       { name: 'warmUp', minutes: 5, zone: 'Z2', detail: null },
-      { name: 'main', minutes: 12, zone: 'Z4', detail: null },
+      { name: 'steady', minutes: 3, zone: 'Z2', detail: null },
+      { name: 'main', minutes: 14, zone: 'Z4', detail: '4 × 2 min, 2 min Z1 between' },
       { name: 'coolDown', minutes: 3, zone: 'Z2', detail: null },
+    ]);
+    // 20 min: 12 main. A 2-minute rep needs 14; a 1-minute rep rests the full two minutes (Hvem gør hvad): 4 + 6 = 10.
+    const shorter = howToFor({ type: 'Intensity', sport: 'bike', durationMinutes: 20, zone: 'Z4' }, 'da')!;
+    expect(shorter.segments.find((x) => x.name === 'main')).toEqual({
+      name: 'main',
+      minutes: 10,
+      zone: 'Z4',
+      detail: '4 × 1 min, 2 min Z1 imellem (fuld restitution)',
+    });
+    expect(sum(shorter.segments)).toBe(20);
+  });
+
+  it('shortens a Tempo rep a minute at a time down to 5 min on the bike, the floor of §08’s 5–30 min', () => {
+    const main = (d: number) => howToFor({ type: 'Tempo', sport: 'bike', durationMinutes: d, zone: null }, 'en')!.segments.find((x) => x.name === 'main')!;
+    // Tempo, 22 min: 14 main. Two 10-minute reps need 22.5; 7 min reps with 105 s rest take 15.75 → too long;
+    // 6 min with 90 s take 13.5 → 14.
+    expect(main(22)).toEqual({ name: 'main', minutes: 14, zone: 'Z3', detail: '2 × 6 min, 90 s Z1 between' });
+    // Tempo, 20 min: 12 main. Two 5-minute reps with 75 s rest take 11.25 → 12, the floor of §08's 5–30 min.
+    expect(main(20)).toEqual({ name: 'main', minutes: 12, zone: 'Z3', detail: '2 × 5 min, 75 s Z1 between' });
+  });
+
+  it('shows no main-set detail when even the shortest rep at the fewest reps does not fit, only its zone in words', () => {
+    // An Intensity brick at 60 min: 45 main, and two bike-then-run reps need 50.5.
+    const brick = howToFor({ type: 'Intensity', sport: 'brick', durationMinutes: 60, zone: 'Z4' }, 'en')!;
+    expect(brick.segments).toEqual([
+      { name: 'warmUp', minutes: 10, zone: 'Z2', detail: null },
+      { name: 'main', minutes: 45, zone: 'Z4', detail: 'The main part at Z4. No set of repeats is given for this session.' },
+      { name: 'coolDown', minutes: 5, zone: 'Z2', detail: null },
+    ]);
+    // Under 20 minutes there is no warm-up to hold a set after, so the same line stands alone.
+    const short = howToFor({ type: 'Tempo', sport: 'run', durationMinutes: 15, zone: 'Z3' }, 'da')!;
+    expect(short.segments).toEqual([
+      { name: 'main', minutes: 15, zone: 'Z3', detail: 'Hoveddelen i Z3. Der er ikke angivet et sæt gentagelser for denne session.' },
     ]);
   });
 
@@ -183,9 +219,38 @@ describe('howToFor — the main set (§08)', () => {
   });
 
   it('falls back to the type’s sport-neutral entry for an unknown or missing sport', () => {
-    const h = howToFor({ type: 'Intensity', sport: 'cycling', durationMinutes: 60, zone: 'Z4' }, 'en')!;
-    expect(names(h)).toEqual(['warmUp', 'main', 'coolDown']);
-    expect(h.segments[1]).toEqual({ name: 'main', minutes: 45, zone: 'Z4', detail: null });
+    const h = howToFor({ type: 'Endurance', sport: 'cycling', durationMinutes: 60, zone: 'Z2' }, 'en')!;
+    expect(h.segments[1]).toEqual({ name: 'main', minutes: 45, zone: 'Z2', detail: null });
+  });
+
+  it('gives the sport-neutral Intensity and Tempo sessions no set, since §08 has no row without a sport', () => {
+    const intensity = howToFor({ type: 'Intensity', sport: null, durationMinutes: 60, zone: 'Z4' }, 'en')!;
+    expect(names(intensity)).toEqual(['warmUp', 'main', 'coolDown']);
+    expect(intensity.segments[1]).toEqual({
+      name: 'main',
+      minutes: 45,
+      zone: 'Z4',
+      detail: 'The main part at Z4. No set of repeats is given for this session.',
+    });
+    const tempo = howToFor({ type: 'Tempo', sport: 'cycling', durationMinutes: 90, zone: 'Z3' }, 'da')!;
+    expect(tempo.segments.map((x) => [x.name, x.minutes])).toEqual([
+      ['warmUp', 15],
+      ['main', 70],
+      ['coolDown', 5],
+    ]);
+    expect(tempo.segments[1].detail).toBe('Hoveddelen i Z3. Der er ikke angivet et sæt gentagelser for denne session.');
+  });
+
+  it('never shows an Intensity or Tempo main part as a bare block at its zone, at any length or sport', () => {
+    for (const type of ['Intensity', 'Tempo']) {
+      for (const sport of [...HOW_TO_SPORTS, null]) {
+        for (const d of [15, 20, 25, 30, 45, 60, 90, 180]) {
+          const h = howToFor({ type, sport, durationMinutes: d, zone: null }, 'en')!;
+          expect(h.segments.find((x) => x.name === 'main')!.detail).toBeTruthy();
+          expect(sum(h.segments)).toBe(d);
+        }
+      }
+    }
   });
 });
 

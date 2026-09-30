@@ -77,10 +77,16 @@ export const INTENSITY_REST: RestRule = (workSeconds) =>
 const TEMPO_REST_SHARE = 0.25;
 const TEMPO_REST: RestRule = (workSeconds) => ({ seconds: Math.round(workSeconds * TEMPO_REST_SHARE), fullRecovery: false });
 
-/** Timed reps with rest, on the bike and the run. */
+/**
+ * Timed reps with rest, on the bike and the run. When the fewest reps at
+ * `workMinutes` do not fit, the rep is shortened a minute at a time down to
+ * `shortestWorkMinutes`, keeping the rep count and the rest rule (Mads,
+ * 2026-09-30); both sit inside §08's per-rep range.
+ */
 export interface IntervalsForm {
   reps: { min: number; max: number };
   workMinutes: number;
+  shortestWorkMinutes: number;
   rest: RestRule;
 }
 
@@ -107,8 +113,9 @@ export interface BrickForm {
 
 /**
  * The main set's form (§08), told apart by its fields. A template with no form
- * (`main: null`) runs its main part as one steady block at the session's zone:
- * Endurance and Recovery, and the fallback when no sport is known.
+ * (`main: null`) runs its main part as one steady block at the session's zone
+ * for Endurance and Recovery. Intensity and Tempo with no form (no sport known,
+ * so §08 has no row) show the main part's zone in words and no set.
  */
 export type MainSetForm = IntervalsForm | SwimRepeatsForm | BrickForm;
 
@@ -197,16 +204,21 @@ export const FUELLING_CUE: Cue = {
 
 // ── The main-set forms, each value inside §08's range ─────────────────────────
 
-/** §08 speed/VO2max · bike: 4–12 reps of 30 s – 5 min; a 3-minute rep is a long one. */
-const INTENSITY_BIKE: MainSetForm = { reps: { min: 4, max: 12 }, workMinutes: 3, rest: INTENSITY_REST };
-/** §08 speed/VO2max · run: 4–10 reps of 60 s – 3 min; a 1-minute rep is a short one, fully recovered. */
-const INTENSITY_RUN: MainSetForm = { reps: { min: 4, max: 10 }, workMinutes: 1, rest: INTENSITY_REST };
+/**
+ * §08 speed/VO2max · bike: 4–12 reps of 30 s – 5 min; a 3-minute rep is a long
+ * one. Shortened to 1 min at the least: four 1-minute reps with their 2 min
+ * rest take 10 min, and the shortest split session leaves 12, so a rep under a
+ * minute is never needed.
+ */
+const INTENSITY_BIKE: MainSetForm = { reps: { min: 4, max: 12 }, workMinutes: 3, shortestWorkMinutes: 1, rest: INTENSITY_REST };
+/** §08 speed/VO2max · run: 4–10 reps of 60 s – 3 min; a 1-minute rep is a short one, fully recovered, and already §08's shortest. */
+const INTENSITY_RUN: MainSetForm = { reps: { min: 4, max: 10 }, workMinutes: 1, shortestWorkMinutes: 1, rest: INTENSITY_REST };
 /** §08 speed/VO2max · swim: 4–20 × 25–300 m (mostly 50–150 m), rest short and fixed, 10–45 s. */
 const INTENSITY_SWIM: MainSetForm = { reps: { min: 4, max: 20 }, metres: 100, restSeconds: 20 };
-/** §08 threshold/tempo · bike: 2–8 reps of 5–30 min, rest ≈ 15–30 % of the work. */
-const TEMPO_BIKE: MainSetForm = { reps: { min: 2, max: 8 }, workMinutes: 10, rest: TEMPO_REST };
-/** §08 threshold/tempo · run: 2–6 reps of 3–15 min, rest ≈ 15–50 % of the work. */
-const TEMPO_RUN: MainSetForm = { reps: { min: 2, max: 6 }, workMinutes: 8, rest: TEMPO_REST };
+/** §08 threshold/tempo · bike: 2–8 reps of 5–30 min, rest ≈ 15–30 % of the work; shortened to 5 min at the least. */
+const TEMPO_BIKE: MainSetForm = { reps: { min: 2, max: 8 }, workMinutes: 10, shortestWorkMinutes: 5, rest: TEMPO_REST };
+/** §08 threshold/tempo · run: 2–6 reps of 3–15 min, rest ≈ 15–50 % of the work; shortened to 3 min at the least. */
+const TEMPO_RUN: MainSetForm = { reps: { min: 2, max: 6 }, workMinutes: 8, shortestWorkMinutes: 3, rest: TEMPO_REST };
 /** §08 threshold/tempo · swim: 2–8 × 100–600 m, rest very short and fixed, 5–30 s. */
 const TEMPO_SWIM: MainSetForm = { reps: { min: 2, max: 8 }, metres: 300, restSeconds: 15 };
 /** §08 brick: 2–4 × bike 6–20 min then run 5–10 min, a fixed transition of 60–120 s. */

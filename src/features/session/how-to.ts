@@ -86,6 +86,13 @@ export interface PlannedForHowTo {
   howTo: { cue?: string | null; coach?: HowTo | null } | null;
 }
 
+/**
+ * The types §08 gives only as repeats. When no set fits (or no sport is known),
+ * their main part is never shown as a continuous block at the zone, which no
+ * source gives (Mads, 2026-09-30).
+ */
+const REPEATS_ONLY: readonly string[] = ['Intensity', 'Tempo'];
+
 /** Each type's zone when the session names none this can use (`block-sessions.ts`, plan 34 D9). */
 const TYPE_ZONE: Record<string, Zone> = { Endurance: 'Z2', Tempo: 'Z3', Intensity: 'Z4', Recovery: 'Z1' };
 
@@ -135,7 +142,7 @@ export function howToFor(session: HowToInput, locale: Locale): HowTo | null {
   const minutes = session.durationMinutes;
   const zone = mainZone(session.type, session.zone);
   return {
-    segments: segmentsOf(template.main, minutes, zone, session.sport === 'swim', locale),
+    segments: segmentsOf(template, minutes, zone, session.sport === 'swim', locale),
     focus: focusOf(template, minutes, locale),
   };
 }
@@ -158,15 +165,16 @@ function easier(a: Zone, b: Zone): Zone {
   return ZONES[Math.min(ZONES.indexOf(a), ZONES.indexOf(b))];
 }
 
-function segmentsOf(form: MainSetForm | null, minutes: number, zone: Zone, swim: boolean, locale: Locale): HowToSegment[] {
-  if (minutes < SHORTEST_SPLIT) return [segment('main', minutes, zone, null)];
+function segmentsOf(template: HowToTemplate, minutes: number, zone: Zone, swim: boolean, locale: Locale): HowToSegment[] {
+  const unset = REPEATS_ONLY.includes(template.type) ? noSetLine(zone, locale) : null;
+  if (minutes < SHORTEST_SPLIT) return [segment('main', minutes, zone, unset)];
   const warm = warmUpMinutes(minutes);
   // §07: the cool-down is always shorter than the warm-up.
   const cool = warm === 5 ? 3 : 5;
   const easy = easier(EASY_ZONE, zone);
   return [
     segment('warmUp', warm, easy, swim ? SWIM_WARM_UP : null),
-    ...mainSegments(form, minutes - warm - cool, zone, easy, locale),
+    ...mainSegments(template.main, minutes - warm - cool, zone, easy, unset, locale),
     segment('coolDown', cool, easy, swim ? SWIM_COOL_DOWN : null),
   ];
 }
@@ -191,13 +199,30 @@ interface FittedSet {
 }
 
 /**
+ * What an Intensity or Tempo main part says when no set fits: its zone, and
+ * that no structure is given, rather than an invented one.
+ */
+function noSetLine(zone: Zone, locale: Locale): string {
+  return locale === 'da'
+    ? `Hoveddelen i ${zone}. Der er ikke angivet et sæt gentagelser for denne session.`
+    : `The main part at ${zone}. No set of repeats is given for this session.`;
+}
+
+/**
  * The main part: the set, with whatever time the set does not fill spent
  * steady at the easy zone before it. A set whose fewest reps do not fit is
- * one block at the zone instead.
+ * one block at the zone instead, carrying `unset` as its detail.
  */
-function mainSegments(form: MainSetForm | null, minutes: number, zone: Zone, easy: Zone, locale: Locale): HowToSegment[] {
+function mainSegments(
+  form: MainSetForm | null,
+  minutes: number,
+  zone: Zone,
+  easy: Zone,
+  unset: string | null,
+  locale: Locale,
+): HowToSegment[] {
   const set = fittedSet(form, minutes, locale);
-  if (!set) return [segment('main', minutes, zone, null)];
+  if (!set) return [segment('main', minutes, zone, unset)];
   const setMinutes = Math.ceil(set.seconds / 60);
   const steady = minutes - setMinutes;
   const main = segment('main', setMinutes, zone, set.detail);
@@ -221,15 +246,27 @@ function repsFitting(seconds: number, unit: number, gap: number, range: { min: n
   return reps < range.min ? null : reps;
 }
 
+/**
+ * The template's reps, or, when the fewest of them do not fit, the same count
+ * of shorter reps: a minute shorter at a time, down to the form's shortest.
+ */
 function intervals(form: IntervalsForm, minutes: number, locale: Locale): FittedSet | null {
-  const work = form.workMinutes * 60;
+  for (let workMinutes = form.workMinutes; workMinutes >= form.shortestWorkMinutes; workMinutes--) {
+    const set = intervalsOf(form, workMinutes, minutes, locale);
+    if (set) return set;
+  }
+  return null;
+}
+
+function intervalsOf(form: IntervalsForm, workMinutes: number, minutes: number, locale: Locale): FittedSet | null {
+  const work = workMinutes * 60;
   const rest = form.rest(work);
   const reps = repsFitting(minutes * 60, work, rest.seconds, form.reps);
   if (reps === null) return null;
   const [between, full] = locale === 'da' ? ['imellem', ' (fuld restitution)'] : ['between', ' (full recovery)'];
   return {
     seconds: reps * work + (reps - 1) * rest.seconds,
-    detail: `${reps} × ${form.workMinutes} min, ${duration(rest.seconds)} ${REST_ZONE} ${between}${rest.fullRecovery ? full : ''}`,
+    detail: `${reps} × ${workMinutes} min, ${duration(rest.seconds)} ${REST_ZONE} ${between}${rest.fullRecovery ? full : ''}`,
   };
 }
 
