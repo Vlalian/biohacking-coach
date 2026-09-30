@@ -2,3 +2,8 @@
 # checkout (core.autocrlf on Windows) breaks `scripts/context-brief.mjs` with
 # "Invalid or unexpected token". Found on 2026-09-15 in a fresh worktree.
 *.mjs text eol=lf
+
+# Bash stops at the first CRLF line ("$'\r': command not found"), and the bc-docs
+# Stop hook runs `scripts/sync-product-brief.sh` from the main checkout, which
+# is a CRLF checkout. Found on 2026-09-30, before it bit.
+*.sh text eol=lf
