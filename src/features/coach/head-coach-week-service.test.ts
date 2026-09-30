@@ -299,6 +299,11 @@ describe('approveWeekDraft', () => {
       const { cue: _cue, ...noCue } = FIRST;
       expect(await approve({ sessions: [noCue, DRAFTED[1]] })).toEqual({ ok: true, changed: true });
     });
+
+    it('counts a removed swap reason as changed, since the stored week loses it (CodeRabbit, PR #122)', async () => {
+      const { sportReason: _reason, ...noReason } = FIRST;
+      expect(await approve({ sessions: [noReason, DRAFTED[1]] })).toEqual({ ok: true, changed: true });
+    });
   });
 });
 describe('approval never reaches the calendar', () => {

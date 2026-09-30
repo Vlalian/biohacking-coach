@@ -192,7 +192,13 @@ function sameSession(x: ProposedSession, y: ProposedSession): boolean {
 }
 
 function sameHowTo(x: ProposedSession, y: ProposedSession): boolean {
-  return x.sport === y.sport && x.cue === y.cue && JSON.stringify(x.coachHowTo) === JSON.stringify(y.coachHowTo);
+  // The reason counts too: dropping it changes what is stored (CodeRabbit, PR #122).
+  return (
+    x.sport === y.sport &&
+    x.sportReason === y.sportReason &&
+    x.cue === y.cue &&
+    JSON.stringify(x.coachHowTo) === JSON.stringify(y.coachHowTo)
+  );
 }
 
 /**
