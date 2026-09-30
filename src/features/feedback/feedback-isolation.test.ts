@@ -157,9 +157,25 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
     expect(interviewReaders).toEqual([
       'app/[locale]/feedback-actions.ts',
       'db/schema.ts',
+      // The builders' terminal readout (`npm run feedback`). It reads across
+      // athletes by design and is called by `scripts/feedback.ts` and nothing
+      // under src/ — a page or action importing it would be a Head Coach
+      // surface in the making, and the export-with-no-caller measurement
+      // (testing.md rule 1) counts `scripts/` as its one legitimate caller.
+      'features/feedback/feedback-report-repository.ts',
       'features/feedback/feedback-repository.ts',
       'features/feedback/feedback-service.ts',
     ]);
+  });
+
+  it('keeps the cross-athlete readout out of every page and action', () => {
+    // The list above names `feedback-report-repository.ts` as a reader, but it
+    // cannot catch a page that imports *it*: that path does not contain
+    // `/feedback-repository`. This is the guard on its callers. The readout
+    // reads every athlete's interview at once, and its one caller is
+    // `scripts/feedback.ts`, which is outside src/ — so nothing in src/ may
+    // import it.
+    expect(readersOf(/from ['"][^'"]*feedback-report-repository['"]/)).toEqual([]);
   });
 
   it('keeps the thumbs equally out of every Head Coach surface', () => {
