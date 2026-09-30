@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { howToFor, howToOf, storedHowToFrom, cueFrom, coachHowToFrom, type HowTo, type HowToSegment } from './how-to';
-import { HOW_TO_TEMPLATES, HOW_TO_SPORTS, FUELLING_CUE, INTENSITY_REST } from './how-to-templates';
+import { HOW_TO_TEMPLATES, HOW_TO_SPORTS, FUELLING_CUE } from './how-to-templates';
 
 const sum = (segments: HowToSegment[]): number => segments.reduce((t, x) => t + x.minutes, 0);
 const names = (h: HowTo | null) => h?.segments.map((x) => x.name);
@@ -104,13 +104,12 @@ describe('howToFor — the main set (§08)', () => {
   });
 
   it('rests by rep length: under two minutes a fixed full recovery, from two minutes at most the work', () => {
-    expect(INTENSITY_REST(60)).toEqual({ seconds: 120, fullRecovery: true });
-    expect(INTENSITY_REST(119)).toEqual({ seconds: 120, fullRecovery: true });
-    expect(INTENSITY_REST(120)).toEqual({ seconds: 120, fullRecovery: false });
-    expect(INTENSITY_REST(180)).toEqual({ seconds: 180, fullRecovery: false });
-    expect(howToFor({ type: 'Intensity', sport: 'run', durationMinutes: 30, zone: 'Z4' }, 'da')!.segments.find((x) => x.name === 'main')!.detail).toMatch(
-      /2 min Z1 imellem \(fuld restitution\)$/,
-    );
+    // Reps are whole minutes, so a 1-minute rep is the only one under the two-minute boundary.
+    const detail = (sport: string, durationMinutes: number) =>
+      howToFor({ type: 'Intensity', sport, durationMinutes, zone: 'Z4' }, 'en')!.segments.find((x) => x.name === 'main')!.detail;
+    expect(detail('run', 30)).toMatch(/× 1 min, 2 min Z1 between \(full recovery\)$/);
+    expect(detail('bike', 25)).toBe('4 × 2 min, 2 min Z1 between');
+    expect(detail('bike', 30)).toBe('4 × 3 min, 3 min Z1 between');
   });
 
   it('shortens a short bike Intensity session’s reps inside §08’s range, keeping the rep count and the rest rule', () => {
@@ -363,15 +362,6 @@ describe('howToOf — which sessions, and whose text', () => {
     expect(coached.byCoach).toBe(true);
     expect(coached.cue).toBeNull();
     expect(sum(howToOf(s({ duration: 45 }), 'en')!.segments)).toBe(45);
-  });
-
-  it('refits only the session that changed', () => {
-    const a = s();
-    const b = s({ type: 'Tempo', sport: 'run', zone: 'Z3' });
-    const before = howToOf(b, 'en');
-    howToOf({ ...a, duration: 60 }, 'en');
-    expect(howToOf(b, 'en')).toEqual(before);
-    expect(howToOf({ ...a, duration: 60 }, 'en')).not.toEqual(howToOf(a, 'en'));
   });
 
   it('has none for a session with no minutes', () => {

@@ -64,12 +64,8 @@ const FULL_RECOVERY_SECONDS = 120;
  * how-to sees only the session's own fields, so that refinement is not here:
  * Mads ruled it out of 26 on 2026-09-30, and it is filed as
  * `training-architecture/55`.
- *
- * Export-for-test: the two-minute boundary sits between the two rep lengths
- * the templates ship (1 min on the run, 3 min on the bike), so no template
- * reaches it. Delete the export freely if a template ever does.
  */
-export const INTENSITY_REST: RestRule = (workSeconds) =>
+const INTENSITY_REST: RestRule = (workSeconds) =>
   workSeconds < LONG_REP_SECONDS
     ? { seconds: FULL_RECOVERY_SECONDS, fullRecovery: true }
     : { seconds: workSeconds, fullRecovery: false };
