@@ -65,7 +65,7 @@ export function hasRaceHorizon(today: string, raceDate: string): boolean {
  * a finished arc cycles or extends is the Head Coach's question (§12b). This is
  * the one function to replace if the answer is "extend".
  */
-export function nextArcStart(start: string, today: string): string {
+function nextArcStart(start: string, today: string): string {
   const completedArcs = Math.max(0, Math.floor(daysBetween(start, today) / ARC_DAYS));
   return addDays(start, completedArcs * ARC_DAYS);
 }

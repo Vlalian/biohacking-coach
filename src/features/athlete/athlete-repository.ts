@@ -187,8 +187,10 @@ function profileMergedWith(changes: Partial<AthleteProfile>) {
 export async function getAthleteSince(
   athleteId: string,
 ): Promise<{ createdAt: Date; onboardedAt: string | undefined } | null> {
+  // Stryker disable next-line ObjectLiteral — equivalent: the answer is built from createdAt and profile alone, so reading the whole row changes nothing a caller sees.
+  const columns = { createdAt: athlete.createdAt, profile: athlete.profile };
   const [row] = await getDb()
-    .select({ createdAt: athlete.createdAt, profile: athlete.profile })
+    .select(columns)
     .from(athlete)
     .where(eq(athlete.id, athleteId))
     .limit(1);

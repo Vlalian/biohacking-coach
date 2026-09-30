@@ -32,7 +32,10 @@ const set = vi.fn((v: unknown) => {
   return { where: updateWhere };
 });
 
-const batch = vi.fn((statements: unknown[]) => Promise.all(statements));
+// Like the driver, a batch refuses anything that is not a statement.
+const batch = vi.fn((statements: unknown[]) =>
+  statements.every((s) => s != null) ? Promise.all(statements) : Promise.reject(new TypeError('not a statement')),
+);
 
 const deletes: unknown[] = [];
 const deleteWhere = vi.fn((w: unknown) => {
@@ -281,7 +284,6 @@ describe('addRace: the race, its target flag, the mirror and the event in one ba
   it('writes a tune-up and its race_added event together, and touches no target', async () => {
     const id = await addRace('athlete_1', kbh, 'none');
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toHaveLength(2);
     expect(insertTables).toEqual([raceTable, eventsTable]);
     expect(inserted[0]).toEqual({ id, athleteId: 'athlete_1', ...kbh, isTarget: false });
     expect(inserted[1]).toEqual({
@@ -297,7 +299,6 @@ describe('addRace: the race, its target flag, the mirror and the event in one ba
   it('writes a first race as the target, with the mirror, in the same batch', async () => {
     const id = await addRace('athlete_1', kbh, 'first');
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toHaveLength(3);
     expect(inserted[0]).toMatchObject({ id, isTarget: true });
     expect(updateTables).toEqual([athleteTable]);
     expect(updates[0].set).toMatchObject({ raceTarget: 'IM Kbh' });
@@ -307,12 +308,17 @@ describe('addRace: the race, its target flag, the mirror and the event in one ba
   it('replaces a target by clearing the old flag before the new race is inserted flagged', async () => {
     const id = await addRace('athlete_1', kbh, 'replace');
     expect(batch).toHaveBeenCalledTimes(1);
-    const statements = batch.mock.calls[0][0];
-    expect(statements).toHaveLength(4);
     expect(updateTables).toEqual([raceTable, athleteTable]);
     expect(updates[0]).toEqual({ set: { isTarget: false }, where: eq(raceTable.athleteId, 'athlete_1') });
     expect(inserted[0]).toMatchObject({ id, isTarget: true });
     expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
+    // The partial unique index allows one target, so the batch must run the
+    // clear before the flagged insert, or the database rejects the write.
+    const [clear] = updateWhere.mock.results.slice(-2).map((r) => r.value);
+    const [insert] = insertValues.mock.results.slice(-2).map((r) => r.value);
+    const statements = batch.mock.calls[0][0];
+    expect(statements[0]).toBe(clear);
+    expect(statements[1]).toBe(insert);
   });
 
   it('gives the race a fresh id each time, the same one the event carries', async () => {

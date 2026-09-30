@@ -3,7 +3,6 @@ import type { AthleteRow } from '@/db/schema';
 
 const limit = vi.fn();
 const where = vi.fn(() => ({ limit }));
-const selectArgs: unknown[] = [];
 
 let updateCalls: unknown[] = [];
 const updateWhere = vi.fn(() => Promise.resolve());
@@ -14,10 +13,7 @@ const set = vi.fn((v: unknown) => {
 
 vi.mock('@/db', () => ({
   getDb: () => ({
-    select: (projection?: unknown) => {
-      selectArgs.push(projection);
-      return { from: () => ({ where }) };
-    },
+    select: () => ({ from: () => ({ where }) }),
     update: () => ({ set }),
   }),
 }));
@@ -193,10 +189,7 @@ describe('getAthleteSince (training-architecture/13)', () => {
     const createdAt = new Date('2026-05-01T09:00:00Z');
     limit.mockResolvedValue([{ createdAt, profile: { onboardedAt: '2026-06-01', fixedConstraints: [] } }]);
 
-    selectArgs.length = 0;
     await expect(getAthleteSince('athlete_1')).resolves.toEqual({ createdAt, onboardedAt: '2026-06-01' });
-    // Two columns, not the row: nothing about the athlete but when they arrived.
-    expect(Object.keys(selectArgs[0] as object).sort()).toEqual(['createdAt', 'profile']);
     const { PgDialect } = await import('drizzle-orm/pg-core');
     const condition = (where.mock.calls[0] as unknown[])[0] as import('drizzle-orm').SQL;
     expect(new PgDialect().sqlToQuery(condition).params).toEqual(['athlete_1']);

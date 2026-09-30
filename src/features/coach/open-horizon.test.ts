@@ -5,7 +5,6 @@ import {
   hasRaceHorizon,
   isRaceTooClose,
   lastPassedRaceDate,
-  nextArcStart,
   openHorizonBlocks,
   openHorizonStart,
 } from './open-horizon';
@@ -45,21 +44,16 @@ describe('openHorizonBlocks', () => {
     expect(openHorizonBlocks('2026-09-01', '2026-09-02')).toEqual(openHorizonBlocks('2026-09-01', '2027-02-20'));
   });
 
-  it('starts a new arc after 26 weeks', () => {
-    expect(openHorizonBlocks('2026-01-01', '2026-08-01')[0].startDate).toBe(addDays('2026-01-01', 182));
-  });
-});
-
-describe('nextArcStart — the cycling rule, alone so extending can replace it', () => {
-  it('is the start itself until the arc completes, and the day after each completed arc from then', () => {
-    expect(nextArcStart('2026-01-01', '2026-01-01')).toBe('2026-01-01');
-    expect(nextArcStart('2026-01-01', addDays('2026-01-01', 181))).toBe('2026-01-01');
-    expect(nextArcStart('2026-01-01', addDays('2026-01-01', 182))).toBe(addDays('2026-01-01', 182));
-    expect(nextArcStart('2026-01-01', addDays('2026-01-01', 364))).toBe(addDays('2026-01-01', 364));
+  it('keeps the arc until its 26 weeks are done, then starts a new one the day after each completed arc', () => {
+    const arcStart = (today: string) => openHorizonBlocks('2026-01-01', today)[0].startDate;
+    expect(arcStart('2026-01-01')).toBe('2026-01-01');
+    expect(arcStart(addDays('2026-01-01', 181))).toBe('2026-01-01');
+    expect(arcStart(addDays('2026-01-01', 182))).toBe(addDays('2026-01-01', 182));
+    expect(arcStart(addDays('2026-01-01', 364))).toBe(addDays('2026-01-01', 364));
   });
 
-  it('a start still ahead of today is the start', () => {
-    expect(nextArcStart('2026-09-10', '2026-09-01')).toBe('2026-09-10');
+  it('draws the arc from a start still ahead of today', () => {
+    expect(openHorizonBlocks('2026-09-10', '2026-09-01')[0].startDate).toBe('2026-09-10');
   });
 });
 

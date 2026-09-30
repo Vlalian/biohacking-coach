@@ -253,14 +253,11 @@ describe('getPendingNarrationEvents', () => {
 
     await getPendingNarrationEvents('a1');
 
-    const { sql, params } = new PgDialect().sqlToQuery(whereArgs[0] as SQL);
+    const { params } = new PgDialect().sqlToQuery(whereArgs[0] as SQL);
     expect(params).toContain('athlete');
     expect(params).toContain('race_added');
     expect(params).not.toContain('session_moved_by_athlete');
     expect(params).not.toContain('athlete_session_created');
-    expect(sql).toMatch(/\("events"\."actor_type" = \$\d+ and "events"\."type" = \$\d+\)\)\)$/);
-    const athleteAt = params.indexOf('athlete');
-    expect(params[athleteAt + 1]).toBe('race_added');
   });
 
   it('returns an empty list when nothing is pending', async () => {

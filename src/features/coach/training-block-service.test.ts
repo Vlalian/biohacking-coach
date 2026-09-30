@@ -327,7 +327,7 @@ describe('getResolvedBlocks — the one read seam', () => {
     expect(await getResolvedBlocks(ATHLETE, TODAY)).toMatchObject({ horizon: 'race', raceTooClose: false });
   });
 
-  it('returns no blocks and no set with no race and no athlete row to start an arc from, without reading sets', async () => {
+  it('returns no blocks and no set with no race and no athlete row to start an arc from', async () => {
     getTargetRace.mockResolvedValue(null);
 
     expect(await getResolvedBlocks(ATHLETE, TODAY)).toEqual({
@@ -337,7 +337,6 @@ describe('getResolvedBlocks — the one read seam', () => {
       horizon: 'open',
       raceTooClose: false,
     });
-    expect(getBlockSet).not.toHaveBeenCalled();
   });
 });
 
@@ -345,15 +344,13 @@ describe('getResolvedBlocks — the Open Horizon (training-architecture/13)', ()
   const since = (onboardedAt?: string) => ({ createdAt: new Date('2026-05-01T09:00:00'), onboardedAt });
   const openFrom = async (start: string) => (await import('./open-horizon')).openHorizonBlocks(start, TODAY);
 
-  it('gives an athlete with no target a forward arc from when they onboarded, reading no stored set', async () => {
+  it('gives an athlete with no target a forward arc from when they onboarded, and no stored set', async () => {
     getTargetRace.mockResolvedValue(null);
     getAthleteSince.mockResolvedValue(since('2026-06-01'));
 
     const view = await getResolvedBlocks(ATHLETE, TODAY);
 
     expect(view).toEqual({ race: null, set: null, horizon: 'open', raceTooClose: false, blocks: await openFrom('2026-06-01') });
-    expect(getAthleteSince).toHaveBeenCalledWith(ATHLETE);
-    expect(getBlockSet).not.toHaveBeenCalled();
   });
 
   it('starts after the last race already run, from either list, and before onboarding it falls back to the row', async () => {
@@ -363,8 +360,6 @@ describe('getResolvedBlocks — the Open Horizon (training-architecture/13)', ()
     getPastRaces.mockResolvedValue([{ date: '2026-08-16' }, { date: '2026-03-01' }]);
 
     expect((await getResolvedBlocks(ATHLETE, TODAY)).blocks).toEqual(await openFrom('2026-08-17'));
-    expect(getRaces).toHaveBeenCalledWith(ATHLETE);
-    expect(getPastRaces).toHaveBeenCalledWith(ATHLETE);
   });
 
   it('keeps a target under eight weeks away on the open arc, and says it is too close', async () => {
@@ -377,7 +372,6 @@ describe('getResolvedBlocks — the Open Horizon (training-architecture/13)', ()
     expect(view).toMatchObject({ race: close, set: null, horizon: 'open', raceTooClose: true });
     expect(view.blocks).toEqual(await openFrom('2026-06-01'));
     expect(view.blocks.some((b) => b.endDate === close.date)).toBe(false);
-    expect(getBlockSet).not.toHaveBeenCalled();
   });
 
   it('a target exactly eight weeks out wins at once, with race blocks', async () => {

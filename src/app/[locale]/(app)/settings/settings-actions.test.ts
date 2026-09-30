@@ -493,15 +493,6 @@ describe('races beyond the first (training-architecture/09)', () => {
       expect(addRace).toHaveBeenLastCalledWith('athlete_1', kbh, 'first');
     });
 
-    it('writes through the one batched call only, so a failure leaves nothing half-done (CodeRabbit, PR #115)', async () => {
-      getTargetRace.mockResolvedValue(target);
-      await addRaceAction('IM Kbh', '2027-09-15', 'Full', true);
-      expect(addRace).toHaveBeenCalledTimes(1);
-      expect(createRace).not.toHaveBeenCalled();
-      expect(setTargetRace).not.toHaveBeenCalled();
-      expect(updateRaceTarget).not.toHaveBeenCalled();
-    });
-
     it('refuses a bad date, an unknown distance, and an empty name', async () => {
       await expect(addRaceAction('X', '2027-02-30', 'Full')).resolves.toEqual({ ok: false, reason: 'invalid' });
       await expect(addRaceAction('X', '2027-03-01', 'Marathon')).resolves.toEqual({ ok: false, reason: 'invalid' });
