@@ -61,8 +61,9 @@ const FULL_RECOVERY_SECONDS = 120;
  *
  * The same section finds the Training Phase a fourth driver: full recovery
  * belongs early and in base, the tighter rest near the target race. The
- * how-to sees only the session's own fields, so that refinement is not here;
- * it is a follow-up on `training-architecture/26`.
+ * how-to sees only the session's own fields, so that refinement is not here:
+ * Mads ruled it out of 26 on 2026-09-30, and it is filed as
+ * `training-architecture/55`.
  *
  * Export-for-test: the two-minute boundary sits between the two rep lengths
  * the templates ship (1 min on the run, 3 min on the bike), so no template
