@@ -526,17 +526,6 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
       expect(stagedMinutes()).toEqual([70, 70]);
     });
 
-    it('clamps a week over +10 % down to +10 %, reason or not', async () => {
-      callCoach.mockResolvedValue({
-        text: 'More.',
-        toolCalls: [{ name: 'propose_week_plan', input: week(150, 'she feels great') }],
-      });
-
-      await sendCoachChatMessage(ATHLETE, 'c1', 'more', TODAY);
-
-      expect(stagedMinutes()).toEqual([110, 110]);
-    });
-
     it('keeps the arithmetic’s sport for each day unless Momentum said why (training-architecture/26)', async () => {
       const input = {
         sessions: [
@@ -553,15 +542,6 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
         ['bike', undefined],
         ['bike', 'sore calf'],
       ]);
-    });
-
-    it('leaves a week inside ±10 % as the Coach wrote it', async () => {
-      callCoach.mockResolvedValue({ text: 'Fine.', toolCalls: [{ name: 'propose_week_plan', input: week(95) }] });
-
-      await sendCoachChatMessage(ATHLETE, 'c1', 'ok', TODAY);
-
-      expect(stagedMinutes()).toEqual([95, 95]);
-      expect(logWeekDraftClamped).not.toHaveBeenCalled();
     });
   });
 

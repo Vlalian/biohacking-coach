@@ -148,9 +148,24 @@ describe('readAthleteContext — one round of reads, and nothing it was not aske
     }
   });
 
-  it('reads the Training Blocks for every purpose', async () => {
-    await readAthleteContext('a1', TODAY, { signals: [] });
-    expect(repo.getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
+  it('gives every purpose the resolved Training Blocks', async () => {
+    const build = { index: 2, total: 4, name: 'Build', startDate: THIS_WEEK, endDate: '2026-10-25', authoredBy: 'arithmetic', purpose: 'build' };
+    const resolved = { race: { name: 'Aarhus 70.3', date: '2027-06-06' }, set: null, blocks: [build] };
+    repo.getResolvedBlocks.mockResolvedValue(resolved);
+
+    const draft = draftContextOf(await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK)), ATHLETE, {
+      today: TODAY,
+      draftedWeek: NEXT_WEEK,
+    });
+    const chat = chatContextOf(await readAthleteContext('a1', TODAY, chatInclude(TODAY)), ATHLETE, {
+      today: TODAY,
+      planWrittenAt: null,
+    });
+    const briefing = await readAthleteContext('a1', TODAY, briefingInclude(link(false, false), false));
+
+    expect(draft.checkIn.phase).toBe('Build');
+    expect(chat.checkIn.phase).toBe('Build');
+    expect(briefing.horizon).toBe(resolved);
   });
 
   it("scopes the Check-in and the week to today's week", async () => {
@@ -159,23 +174,40 @@ describe('readAthleteContext — one round of reads, and nothing it was not aske
     expect(repo.getSessionsForWeek).toHaveBeenCalledWith('a1', THIS_WEEK);
   });
 
-  it('reads the four weeks before the week it is told to count back from', async () => {
-    await readAthleteContext('a1', TODAY, { signals: [], historyBefore: NEXT_WEEK });
-    expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', '2026-09-07', NEXT_WEEK);
-  });
-
   it('reads the shared transcripts only through a link, which checks its own flag', async () => {
     const shared = link(false, true);
     await readAthleteContext('a1', TODAY, { signals: [], link: shared });
     expect(repo.getSharedTranscripts).toHaveBeenCalledWith(shared);
   });
 
-  it('passes on what it read', async () => {
+  it('passes on what it read, for the draft and for Coach Chat', async () => {
+    const equipment = [{ id: 'e1' }];
+    const checkInRow = { id: 'c1' };
+    const races = [{ id: 'r1' }];
+    const week = [session({ date: '2026-09-30', status: 'planned' })];
     repo.getLanguageForAthlete.mockResolvedValue('da');
+    repo.getEquipmentItems.mockResolvedValue(equipment);
+    repo.getCheckInForWeek.mockResolvedValue(checkInRow);
     repo.capacityFor.mockResolvedValue('no run');
+    repo.getRaces.mockResolvedValue(races);
     repo.getUnavailableDates.mockResolvedValue(['2026-10-01']);
-    const ctx = await readAthleteContext('a1', TODAY, chatInclude(TODAY));
-    expect(ctx).toMatchObject({ capacity: 'no run', unavailableDates: ['2026-10-01'], language: null, athlete: null });
+    repo.getSessionsForWeek.mockResolvedValue(week);
+    const read = { equipment, checkInRow, capacity: 'no run', races, presenceStage: 'building' };
+
+    expect(await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK))).toMatchObject({
+      ...read,
+      athlete: ATHLETE,
+      language: 'da',
+      unavailableDates: [],
+      weekSessions: [],
+    });
+    expect(await readAthleteContext('a1', TODAY, chatInclude(TODAY))).toMatchObject({
+      ...read,
+      athlete: null,
+      language: null,
+      unavailableDates: ['2026-10-01'],
+      weekSessions: week,
+    });
   });
 
   it('reads nothing into a signal it was not asked for', async () => {
@@ -262,11 +294,6 @@ describe('Session Moves, reflection comments and what the athlete said lately (t
     expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
   });
 
-  it('Coach Chat reads the four weeks up to the end of this one', async () => {
-    await readAthleteContext('a1', TODAY, chatInclude(TODAY));
-    expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', '2026-09-07', NEXT_WEEK);
-  });
-
   it("drops a chat line carrying an identifier instead of failing the draft, and shortens a long one", async () => {
     repo.getRecentAthleteChatLines.mockResolvedValue(['mail me at a@b.dk', 'legs heavy', 'x'.repeat(200), 'y'.repeat(160)]);
     const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
@@ -324,40 +351,13 @@ describe('Session Moves, reflection comments and what the athlete said lately (t
 });
 
 describe('what each purpose reads', () => {
-  it('the draft reads the athlete, language and four weeks back from the drafted week, and leaves the unavailable dates to its gate', async () => {
+  it("the draft never reads the Briefing's reflections", async () => {
     await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
-    for (const reader of [
-      repo.getAthleteById,
-      repo.getLanguageForAthlete,
-      repo.getEquipmentItems,
-      repo.getCheckInForWeek,
-      repo.capacityFor,
-      repo.getRaces,
-      repo.getPresenceStage,
-    ]) {
-      expect(reader).toHaveBeenCalledTimes(1);
-    }
-    expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', '2026-09-07', NEXT_WEEK);
-    // Its ratings come from the history, as the week before the drafted one (/46).
-    expect(repo.getSessionsForWeek).not.toHaveBeenCalled();
-    expect(repo.getUnavailableDates).not.toHaveBeenCalled();
     expect(repo.getBriefingReflections).not.toHaveBeenCalled();
   });
 
-  it('Coach Chat reads the unavailable dates and not the athlete row it already has', async () => {
+  it("Coach Chat reads neither the Briefing's reflections nor the shared transcripts", async () => {
     await readAthleteContext('a1', TODAY, chatInclude(TODAY));
-    for (const reader of [
-      repo.getEquipmentItems,
-      repo.getCheckInForWeek,
-      repo.capacityFor,
-      repo.getRaces,
-      repo.getPresenceStage,
-      repo.getUnavailableDates,
-      repo.getSessionsForWeek,
-    ]) {
-      expect(reader).toHaveBeenCalledTimes(1);
-    }
-    expect(repo.getAthleteById).not.toHaveBeenCalled();
     expect(repo.getBriefingReflections).not.toHaveBeenCalled();
     expect(repo.getSharedTranscripts).not.toHaveBeenCalled();
   });

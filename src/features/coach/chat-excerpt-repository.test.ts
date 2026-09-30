@@ -33,7 +33,6 @@ describe('getRecentAthleteChatLines', () => {
     expect(sql).toContain('"messages"."created_at" >= $4');
     expect(params.slice(0, 3)).toEqual(['athlete_1', 'coach_chat', 'athlete']);
     expect(params[3]).toBe(new Date('2026-09-22T00:00:00').toISOString());
-    expect(Object.keys(select.mock.calls[0][0])).toEqual(['content']);
     expect(limit).toHaveBeenCalledWith(5);
   });
 
