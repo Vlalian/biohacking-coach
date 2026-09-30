@@ -1,7 +1,16 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { rawOf, relativeToSrc, sourceFiles, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
+
+/**
+ * This guard walks every component under `src/`. On an ordinary run that takes
+ * well under a second; under the v8 coverage instrumentation the hardening gate
+ * runs first, it goes past vitest's 5 s default and takes the whole gate down
+ * with it - `npm test` green, `npm run quality` dead (`code-health/11`, and
+ * again here on 2026-09-29). It uses the one cached walk in `source-sweep.ts`
+ * and that file's timeout, like every other sweep.
+ */
+vi.setConfig({ testTimeout: SWEEP_TIMEOUT_MS });
 
 /**
  * showable-version/57: a focusable `sr-only` element is `position: absolute`,
@@ -16,16 +25,6 @@ import { describe, expect, it } from 'vitest';
  * (`relative`) inside the scroller. This walks every component, so a new
  * hidden input cannot bring it back.
  */
-const ROOT = join(__dirname, '..', '..', '..');
-
-function tsxFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const path = join(dir, e.name);
-    if (e.isDirectory()) return tsxFiles(path);
-    return e.name.endsWith('.tsx') && !e.name.includes('.test.') ? [path] : [];
-  });
-}
-
 function className(el: ts.JsxOpeningLikeElement): string {
   for (const attr of el.attributes.properties) {
     if (ts.isJsxAttribute(attr) && attr.name.getText() === 'className' && attr.initializer) {
@@ -62,10 +61,14 @@ describe('hidden inputs stay inside the scroller (showable-version/57)', () => {
     expect(unanchoredHiddenInputs('const a = <label className="sr-only">Name</label>;')).toEqual([]);
   });
 
-  it('has none anywhere in the app', () => {
-    const offenders = tsxFiles(join(ROOT, 'src')).flatMap((f) =>
-      unanchoredHiddenInputs(readFileSync(f, 'utf8'), relative(ROOT, f)),
-    );
-    expect(offenders).toEqual([]);
-  });
+  it(
+    'has none anywhere in the app',
+    () => {
+      const offenders = sourceFiles(false)
+        .filter((f) => f.endsWith('.tsx'))
+        .flatMap((f) => unanchoredHiddenInputs(rawOf(f), relativeToSrc(f)));
+      expect(offenders).toEqual([]);
+    },
+    SWEEP_TIMEOUT_MS,
+  );
 });
