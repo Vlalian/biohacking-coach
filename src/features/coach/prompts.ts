@@ -280,21 +280,41 @@ function horizonBlock(
   phase: string | null | undefined,
   blockWeek: string | null | undefined,
   races: RaceLinesInput,
+  note?: CheckIn['horizonNote'],
 ): string {
   const distance = raceDistance ? `distance=${raceDistance}` : 'distance unknown — ask';
-  const race =
-    raceTarget && raceDate
-      ? `race=${raceTarget} on ${raceDate}`
-      // Not "the athlete said so": no race can mean they declared they have
-      // none *or* that every race they had has passed, and the prompt cannot
-      // tell which. Asserting the decision would be a claim about the athlete
-      // that nobody made — the fabrication `NO_CHECK_IN` exists to prevent, one
-      // block down.
-      : 'no race booked — do not assume one';
+  const race = note === 'open' ? OPEN_HORIZON : raceTextOf(raceTarget, raceDate, note);
   // The block and the position inside it, when there is a horizon to be inside.
   // Omitted together, because half of it says less than nothing.
   const block = phase && blockWeek ? ` · ${phase}, ${blockWeek}` : '';
   return [`HORIZON: ${distance} · ${race}${block}`, ...raceLines(races)].join('\n');
+}
+
+/**
+ * The Open Horizon (`training-architecture/13`), said loudly: a default, not a
+ * race. The whole reason a raceless arc is safe is that the Coach never
+ * mistakes its end for a start line — so no date, and no taper.
+ */
+const OPEN_HORIZON =
+  'no race booked — the blocks are a six-month default arc until the athlete picks one, not a build to any start line: never taper, and never speak of its end as if anything happens there';
+
+/** The race half of HORIZON, when the note is not the open arc. */
+function raceTextOf(
+  raceTarget: string | null | undefined,
+  raceDate: string | null | undefined,
+  note: CheckIn['horizonNote'],
+): string {
+  // Not "the athlete said so": no race can mean they declared they have
+  // none *or* that every race they had has passed, and the prompt cannot
+  // tell which. Asserting the decision would be a claim about the athlete
+  // that nobody made — the fabrication `NO_CHECK_IN` exists to prevent, one
+  // block down.
+  if (!raceTarget || !raceDate) return 'no race booked — do not assume one';
+  const race = `race=${raceTarget} on ${raceDate}`;
+  // CONTEXT.md: too late for the Training Blocks, early enough for the week.
+  return note === 'race-too-close'
+    ? `${race} — under eight weeks away, too close to build Training Blocks toward: the blocks are the default arc, not a build to it. Adjust the week for it, and say plainly you have not built toward it`
+    : race;
 }
 
 /** The slice-09 half of the horizon, as the Check-in carries it. */
@@ -540,6 +560,7 @@ export function buildChatPrompt(
     raceDistance,
     raceDate,
     blockWeek,
+    horizonNote,
     tuneUps,
     lateRaces,
     tuneUpWindow,
@@ -582,7 +603,7 @@ ${[
     // The same horizon the week draft plans against. Chat used to carry
     // `race=name` and nothing else of it, so "should I do tomorrow's intervals?"
     // was answered by a Coach that did not know when the race was.
-    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races, horizonNote),
 
     // What the athlete's body currently allows, or nothing at all when nothing
     // is restricted (ADR 0011) — the same sentence the week draft carries.
@@ -1036,6 +1057,7 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
     raceDistance,
     raceDate,
     blockWeek,
+    horizonNote,
     capacity,
     notableSignal,
     tuneUps,
@@ -1050,7 +1072,7 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
 
     'POSTURE: Confident, evidence-led, direct. You are drafting a proposal the athlete will accept, discuss or decline later; nothing you propose is saved.',
 
-    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races),
+    horizonBlock(raceDistance, raceTarget, raceDate, phase, blockWeek, races, horizonNote),
 
     capacity ?? null,
 

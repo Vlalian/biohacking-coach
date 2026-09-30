@@ -549,3 +549,44 @@ describe('the weekday header (showable-version/25)', () => {
     for (const [, opts] of headerCalls) expect(opts).toMatchObject({ weekday: 'short', timeZone: 'UTC' });
   });
 });
+
+describe('Calendar — race days (training-architecture/37)', () => {
+  // Both inside the month the calendar opens on (TODAY is 2026-08-19).
+  const TUNE = '2026-08-09';
+  const RACE = '2026-08-16';
+  const races = [
+    { date: TUNE, name: 'Aarhus 70.3', distance: 'Half', isTarget: false },
+    { date: RACE, name: 'IM Kbh', distance: 'Full', isTarget: true },
+  ];
+
+  it('marks race days, target and tune-up differently, and nothing on other days', () => {
+    const html = render({ races });
+    expect(html).toMatch(/data-day="2026-08-16"[\s\S]*?data-race-day="2026-08-16"[^>]*data-race-kind="target"/);
+    expect(html).toMatch(/data-race-day="2026-08-09"[^>]*data-race-kind="tune-up"/);
+    expect(html.match(/data-race-day=/g)).toHaveLength(2);
+    expect(html).toContain('IM Kbh');
+    expect(html).toContain('Aarhus 70.3');
+    // The kind is said in words too, not left to colour alone.
+    expect(html).toContain('raceDayTarget');
+    expect(html).toContain('raceDayTuneUp');
+  });
+
+  it('draws no race block without races — the Head Coach\'s calendar passes none', () => {
+    expect(render()).not.toContain('data-race-day');
+  });
+});
+
+describe('Calendar — the phase line on an Open Horizon (training-architecture/13)', () => {
+  it('names the block with no race line when there is no race', () => {
+    const html = render({ phase: { blockName: 'Base', week: 2, weeks: 6 } });
+    expect(html).toContain('data-phase-line');
+    expect(html).toContain('phaseLine');
+    expect(html).not.toContain('raceLine');
+  });
+
+  it('names the race and its days when there is one', () => {
+    const html = render({ phase: { blockName: 'Base', week: 2, weeks: 6, raceName: 'Aarhus 70.3', daysToRace: 20 } });
+    expect(html).toContain('Aarhus 70.3');
+    expect(html).toContain('raceLine');
+  });
+});

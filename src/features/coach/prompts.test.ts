@@ -993,6 +993,45 @@ describe('the current Training Block and the week within it reach the Coach', ()
 });
 
 
+describe('the Open Horizon reaches the Coach as a default, never a race (training-architecture/13)', () => {
+  it('names the open horizon a default arc, never a race', () => {
+    const p = buildChatPrompt(
+      { ...BASE, raceDistance: 'Half', phase: 'Build', blockWeek: 'week 2 of 6', horizonNote: 'open' },
+      TUESDAY,
+    );
+    expect(p).toMatch(/default arc/);
+    expect(p).toContain('Build, week 2 of 6');
+    expect(p).not.toMatch(/race day|your race|race=/i);
+  });
+
+  it('keeps a past target out of it: the open arc is what the athlete is on now', () => {
+    const p = buildChatPrompt(
+      { ...BASE, raceTarget: 'Aarhus 70.3', raceDate: '2026-08-16', phase: 'Base', blockWeek: 'week 1 of 6', horizonNote: 'open' },
+      TUESDAY,
+    );
+    expect(p).toMatch(/default arc/);
+    expect(p).not.toContain('race=Aarhus 70.3');
+  });
+
+  it('says it has not built toward a race under eight weeks away, and still names it', () => {
+    const p = buildChatPrompt(
+      {
+        ...BASE,
+        raceTarget: 'Aarhus 70.3',
+        raceDate: '2026-10-19',
+        phase: 'Base',
+        blockWeek: 'week 3 of 6',
+        horizonNote: 'race-too-close',
+      },
+      TUESDAY,
+    );
+    expect(p).toContain('race=Aarhus 70.3 on 2026-10-19');
+    expect(p).toMatch(/not built toward it/);
+    expect(p).toMatch(/default arc/);
+  });
+
+});
+
 describe("the athlete's own words reach the Coach", () => {
   function weekly(overrides: Partial<CheckIn> = {}) {
     return buildChatPrompt({ ...BASE, ...overrides }, TUESDAY);

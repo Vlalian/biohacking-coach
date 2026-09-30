@@ -19,13 +19,18 @@ const getActiveLink = vi.fn();
 // Coached Mode, where the Head Coach's hold on the set stands.
 const getLinkForAthlete = vi.fn();
 
-vi.mock('@/features/race/race-repository', () => ({ getTargetRace }));
+// The Open Horizon's facts (training-architecture/13): every race the athlete
+// has told us of, and when they arrived. Empty and unknown by default.
+const getRaces = vi.fn(async (): Promise<unknown[]> => []);
+const getPastRaces = vi.fn(async (): Promise<unknown[]> => []);
+const getAthleteSince = vi.fn(async (): Promise<unknown> => null);
+vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces, getPastRaces }));
 vi.mock('./training-block-repository', () => ({
   getBlockSet,
   insertBlockSet,
   casUpdateBlockSet,
 }));
-vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
+vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById, getAthleteSince }));
 vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
 vi.mock('./check-in-repository', () => ({ getCheckInForWeek }));
 vi.mock('@/features/session/session-repository', () => ({ getSessionsForAthlete }));
@@ -80,6 +85,9 @@ function toolReply(input: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   getTargetRace.mockResolvedValue(RACE);
+  getRaces.mockResolvedValue([]);
+  getPastRaces.mockResolvedValue([]);
+  getAthleteSince.mockResolvedValue(null);
   getBlockSet.mockResolvedValue(null);
   insertBlockSet.mockResolvedValue('inserted');
   casUpdateBlockSet.mockResolvedValue({ ok: true, version: 2 });
@@ -315,11 +323,76 @@ describe('getResolvedBlocks — the one read seam', () => {
     expect(view.blocks[0].startDate).toBe('2026-09-01');
   });
 
-  it('returns no blocks and no set for an athlete with no race, without reading sets', async () => {
+  it('says a far target is a race horizon, and never too close', async () => {
+    expect(await getResolvedBlocks(ATHLETE, TODAY)).toMatchObject({ horizon: 'race', raceTooClose: false });
+  });
+
+  it('returns no blocks and no set with no race and no athlete row to start an arc from', async () => {
     getTargetRace.mockResolvedValue(null);
 
-    expect(await getResolvedBlocks(ATHLETE, TODAY)).toEqual({ race: null, set: null, blocks: [] });
-    expect(getBlockSet).not.toHaveBeenCalled();
+    expect(await getResolvedBlocks(ATHLETE, TODAY)).toEqual({
+      race: null,
+      set: null,
+      blocks: [],
+      horizon: 'open',
+      raceTooClose: false,
+    });
+  });
+});
+
+describe('getResolvedBlocks — the Open Horizon (training-architecture/13)', () => {
+  const since = (onboardedAt?: string) => ({ createdAt: new Date('2026-05-01T09:00:00'), onboardedAt });
+  const openFrom = async (start: string) => (await import('./open-horizon')).openHorizonBlocks(start, TODAY);
+
+  it('gives an athlete with no target a forward arc from when they onboarded, and no stored set', async () => {
+    getTargetRace.mockResolvedValue(null);
+    getAthleteSince.mockResolvedValue(since('2026-06-01'));
+
+    const view = await getResolvedBlocks(ATHLETE, TODAY);
+
+    expect(view).toEqual({ race: null, set: null, horizon: 'open', raceTooClose: false, blocks: await openFrom('2026-06-01') });
+  });
+
+  it('starts after the last race already run, from either list, and before onboarding it falls back to the row', async () => {
+    getTargetRace.mockResolvedValue(null);
+    getAthleteSince.mockResolvedValue(since());
+    getRaces.mockResolvedValue([{ date: '2026-07-05' }, { date: '2026-12-01' }]);
+    getPastRaces.mockResolvedValue([{ date: '2026-08-16' }, { date: '2026-03-01' }]);
+
+    expect((await getResolvedBlocks(ATHLETE, TODAY)).blocks).toEqual(await openFrom('2026-08-17'));
+  });
+
+  it('keeps a target under eight weeks away on the open arc, and says it is too close', async () => {
+    const close = { ...RACE, date: '2026-10-19' }; // five weeks from TODAY
+    getTargetRace.mockResolvedValue(close);
+    getAthleteSince.mockResolvedValue(since('2026-06-01'));
+
+    const view = await getResolvedBlocks(ATHLETE, TODAY);
+
+    expect(view).toMatchObject({ race: close, set: null, horizon: 'open', raceTooClose: true });
+    expect(view.blocks).toEqual(await openFrom('2026-06-01'));
+    expect(view.blocks.some((b) => b.endDate === close.date)).toBe(false);
+  });
+
+  it('a target exactly eight weeks out wins at once, with race blocks', async () => {
+    const eight = { ...RACE, date: '2026-11-09' };
+    getTargetRace.mockResolvedValue(eight);
+
+    const view = await getResolvedBlocks(ATHLETE, TODAY);
+
+    expect(view).toMatchObject({ horizon: 'race', raceTooClose: false });
+    expect(view.blocks.at(-1)?.endDate).toBe('2026-11-09');
+  });
+
+  it('a target already run is not too close — the athlete is back on the open arc', async () => {
+    getTargetRace.mockResolvedValue({ ...RACE, date: '2026-09-06' });
+    getAthleteSince.mockResolvedValue(since('2026-06-01'));
+    getRaces.mockResolvedValue([{ date: '2026-09-06' }]);
+
+    const view = await getResolvedBlocks(ATHLETE, TODAY);
+
+    expect(view).toMatchObject({ horizon: 'open', raceTooClose: false });
+    expect(view.blocks).toEqual(await openFrom('2026-09-07'));
   });
 });
 

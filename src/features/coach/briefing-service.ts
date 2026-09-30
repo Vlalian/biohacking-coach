@@ -32,6 +32,7 @@ import {
   type BriefingContext,
   type BriefingReports,
   type BriefingTranscript,
+  briefingHorizonNote,
   briefingRaces,
 } from './briefing';
 
@@ -124,6 +125,8 @@ export async function buildBriefingContextFor(
     phase,
     raceUnrealistic,
     staleSet,
+    // An Open Horizon is said to be one, never listed as the build to a race.
+    horizonNote: briefingHorizonNote(resolved),
   };
 
   // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.

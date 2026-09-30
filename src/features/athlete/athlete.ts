@@ -31,6 +31,12 @@ export interface AthleteProfile {
    * history clears it.
    */
   historyImportedAt?: string | null;
+  /**
+   * The day onboarding finished, `YYYY-MM-DD` (`training-architecture/13`):
+   * where an Open Horizon starts counting. Absent for anyone who onboarded
+   * before it was recorded — the row's creation stands in, never a guess.
+   */
+  onboardedAt?: string;
 }
 
 /**

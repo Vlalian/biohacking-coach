@@ -35,7 +35,15 @@ export type BlockNarratableType = 'block_edited' | 'blocks_repinned';
 /** A Head Coach's hand on the drafted week or its day (`training-architecture/17`). */
 export type WeekNarratableType = 'weekly_session_day_set' | 'week_draft_approved';
 
-/** A plan change by another hand worth telling the athlete about. */
+/**
+ * The athlete's own act the Coach raises rather than announces
+ * (`training-architecture/37`, ruling 3): a race they added. Told as a
+ * question — the Coach decides nothing on its own, so there is no change to
+ * report, only a topic to open.
+ */
+export type AthleteNarratableType = 'race_added';
+
+/** A plan change by another hand worth telling the athlete about — or, for a race, asking about. */
 export interface NarratableEvent {
   id: string;
   /**
@@ -43,7 +51,12 @@ export interface NarratableEvent {
    * which have no actor to name — and null for malformed Head Coach history.
    */
   actorId: string | null;
-  type: HeadCoachNarratableType | BlockNarratableType | WeekNarratableType | CoachNarratableType;
+  type:
+    | HeadCoachNarratableType
+    | BlockNarratableType
+    | WeekNarratableType
+    | CoachNarratableType
+    | AthleteNarratableType;
   /** `jsonb`, so genuinely unknown until narrowed. */
   payload: unknown;
   createdAt: Date;
@@ -356,6 +369,42 @@ function weekClause(event: NarratableEvent, coachFirstNames: Record<string, stri
 }
 
 /**
+ * A race the athlete added, as the Coach's question about it. The date is the
+ * key itself, as a block's end is: a race is months out and its weekday says
+ * nothing. Without both name and date it is the plainer question, never a
+ * guessed race. A race added as the Target Race is asked about as the target
+ * it was chosen as: asking whether it is a tune-up would re-ask what the
+ * athlete just answered in the form.
+ */
+function raceAddedClause(payload: unknown, t: Translate): string {
+  const name = field(payload, 'name');
+  const date = field(payload, 'date');
+  if (!name || !date) return t('raceAddedNoDetail');
+  return t(isTargetPayload(payload) ? 'raceAddedTarget' : 'raceAdded', { name, date });
+}
+
+/** Whether a `race_added` payload says the race became the Target Race; only a literal `true` does. */
+function isTargetPayload(payload: unknown): boolean {
+  return (payload as { isTarget?: unknown }).isTarget === true;
+}
+
+/** One plan change's unpunctuated clause, by whose hand it was. */
+function clauseFor(
+  e: NarratableEvent,
+  coachFirstNames: Record<string, string>,
+  t: Translate,
+  weekdayOf: WeekdayOf,
+): string {
+  if (isCoachEvent(e)) return coachClause(e, t, weekdayOf);
+  if (e.type === 'weekly_session_day_set' || e.type === 'week_draft_approved') {
+    return weekClause(e, coachFirstNames, t);
+  }
+  if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
+  if (e.type === 'blocks_repinned') return blocksRepinnedClause(e, coachFirstNames, t);
+  return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
+}
+
+/**
  * Everything the Head Coach has done since the athlete was last told, as **one**
  * message.
  *
@@ -375,20 +424,21 @@ export function composeNarration(
 
   // Clauses are composed unpunctuated so the catalogue decides how a sentence
   // and a list item are each finished — punctuation differs by language, and it
-  // is copy, not logic.
-  const clauses = events.map((e) => {
-    if (isCoachEvent(e)) return coachClause(e, t, weekdayOf);
-    if (e.type === 'weekly_session_day_set' || e.type === 'week_draft_approved') {
-      return weekClause(e, coachFirstNames, t);
-    }
-    if (e.type === 'block_edited') return blockClause(e, coachFirstNames, t);
-    if (e.type === 'blocks_repinned') return blocksRepinnedClause(e, coachFirstNames, t);
-    return clause(e as NarratableEvent & { type: HeadCoachNarratableType }, coachFirstNames, t, weekdayOf);
+  // is copy, not logic. A race the athlete added is the one question among
+  // them, so it is finished as one.
+  const finished = events.map((e) => {
+    const question = e.type === 'race_added';
+    return {
+      clause: question ? raceAddedClause(e.payload, t) : clauseFor(e, coachFirstNames, t, weekdayOf),
+      question,
+    };
   });
-  if (clauses.length === 1) return t('single', { clause: clauses[0] });
+  if (finished.length === 1) {
+    return t(finished[0].question ? 'singleQuestion' : 'single', { clause: finished[0].clause });
+  }
 
   return [
     t('multiLead'),
-    ...clauses.map((c) => t('item', { clause: c })),
+    ...finished.map((c) => t(c.question ? 'itemQuestion' : 'item', { clause: c.clause })),
   ].join('\n');
 }

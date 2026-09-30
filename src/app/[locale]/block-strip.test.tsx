@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { resolveBlocks, trainingBlocks } from '@/features/coach/training-blocks';
+import { openHorizonBlocks } from '@/features/coach/open-horizon';
 
 /**
  * `training-architecture/07` — the athlete's one-line read of their Training
@@ -58,5 +59,16 @@ describe('BlockStrip', () => {
     // cannot be added without this going red.
     const html = renderToStaticMarkup(<BlockStrip todayKey={TODAY} race={RACE} blocks={shaped} />);
     expect(html).not.toMatch(/<(button|input|select|textarea|form)\b/i);
+  });
+
+  it('shows an Open Horizon as a default arc: the block and the week, no race and no count to one (training-architecture/13)', () => {
+    const html = renderToStaticMarkup(
+      <BlockStrip todayKey={TODAY} race={null} blocks={openHorizonBlocks('2026-09-14', TODAY)} />,
+    );
+    expect(html).toContain('Base');
+    expect(html).toContain('weekOf(week=3,weeks=6)');
+    expect(html).toContain('openHorizon()');
+    expect(html).not.toContain('weeksToRace');
+    expect(html).toContain('data-horizon="open"');
   });
 });

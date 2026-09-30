@@ -20,8 +20,10 @@ import {
  * Chat conversation, and moving one is the Head Coach's (slice 08). The test
  * asserts the markup carries no button, input or form so that stays true.
  *
- * Renders nothing rather than a placeholder for an athlete with no race, no
- * blocks, or a day outside every block — an empty strip would be a claim.
+ * Renders nothing rather than a placeholder for an athlete with no blocks, or
+ * a day outside every block — an empty strip would be a claim. An athlete on
+ * the Open Horizon (`training-architecture/13`) has blocks and no race: the
+ * strip says the arc is a default, and counts to nothing.
  */
 export function BlockStrip({
   todayKey,
@@ -29,35 +31,29 @@ export function BlockStrip({
   blocks,
 }: {
   todayKey: string;
+  /** The race still ahead, or null — then the blocks are the Open Horizon's. */
   race: { name: string; date: string } | null;
   blocks: TrainingBlock[];
 }) {
   const t = useTranslations('BlockStrip');
-  const block = race ? currentBlock(todayKey, blocks) : null;
-  if (!race || !block) return null;
+  const block = currentBlock(todayKey, blocks);
+  if (!block) return null;
 
   const { week, weeks } = blockPosition(todayKey, block);
-  const weeksToRace = Math.max(
-    0,
-    Math.floor(
-      (new Date(`${race.date}T00:00:00Z`).getTime() - new Date(`${todayKey}T00:00:00Z`).getTime()) /
-        (7 * 24 * 60 * 60 * 1000),
-    ),
-  );
   // Arithmetic, not judgement: how far through the block the week stands.
   const progress = weeks > 0 ? Math.min(100, Math.round((week / weeks) * 100)) : 0;
 
   return (
-    <section className="w-full max-w-[1500px] overflow-hidden border-l-4 border-signal bg-sidebar px-6 py-5 text-sidebar-foreground">
+    <section
+      data-horizon={race ? 'race' : 'open'}
+      className="w-full max-w-[1500px] overflow-hidden border-l-4 border-signal bg-sidebar px-6 py-5 text-sidebar-foreground"
+    >
       <div className="flex flex-wrap items-end justify-between gap-5">
-        <p className="flex items-baseline gap-3">
-          <span className="font-display text-5xl font-bold italic leading-none text-sidebar-primary">
-            {weeksToRace}
-          </span>
-          <span className="font-body text-base uppercase tracking-[0.16em] text-sidebar-foreground">
-            {t('weeksToRace', { weeks: weeksToRace, race: race.name })}
-          </span>
-        </p>
+        {race ? (
+          <RaceCount race={race} todayKey={todayKey} t={t} />
+        ) : (
+          <p className="font-body text-base uppercase tracking-[0.16em] text-sidebar-foreground">{t('openHorizon')}</p>
+        )}
         <p className="flex items-baseline gap-3">
           <span className="font-display text-lg font-bold uppercase italic tracking-[0.04em]">
             {block.name}
@@ -71,5 +67,32 @@ export function BlockStrip({
         <div className="h-full bg-signal" style={{ width: `${progress}%` }} />
       </div>
     </section>
+  );
+}
+
+/** The headline number: whole weeks to the race, never below zero. */
+function RaceCount({
+  race,
+  todayKey,
+  t,
+}: {
+  race: { name: string; date: string };
+  todayKey: string;
+  t: ReturnType<typeof useTranslations<'BlockStrip'>>;
+}) {
+  const weeksToRace = Math.max(
+    0,
+    Math.floor(
+      (new Date(`${race.date}T00:00:00Z`).getTime() - new Date(`${todayKey}T00:00:00Z`).getTime()) /
+        (7 * 24 * 60 * 60 * 1000),
+    ),
+  );
+  return (
+    <p className="flex items-baseline gap-3">
+      <span className="font-display text-5xl font-bold italic leading-none text-sidebar-primary">{weeksToRace}</span>
+      <span className="font-body text-base uppercase tracking-[0.16em] text-sidebar-foreground">
+        {t('weeksToRace', { weeks: weeksToRace, race: race.name })}
+      </span>
+    </p>
   );
 }
