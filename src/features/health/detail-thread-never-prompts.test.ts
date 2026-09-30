@@ -83,12 +83,15 @@ describe('the detail thread does not reach the model', () => {
   }, SWEEP_TIMEOUT_MS);
 
   /**
-   * The Bother Rating (slice 06) lives on the same side of the split as the
-   * thread: human eyes only. There is no allowlist for it because the column is
-   * legitimately read by the calendar layer and the drawer — instead, every
-   * module that renders or assembles a prompt is asserted never to name it.
+   * The Bother Rating (slice 06) was human eyes only, like the thread, until
+   * Mads's ruling E1 (2026-09-29, `training-architecture/52`): injuries and
+   * illness reach the Coach as **structured facts** — what each prevents, since
+   * when, and the Bother Rating — and never as the thread. So the rating may now
+   * reach a prompt, but only one way: `athlete-context.ts` maps the column to a
+   * structured fact the moment it is read. No prompt builder and no other Coach
+   * module reads the column off a row, and this pins both halves.
    */
-  it('the Bother Rating is named by nothing on the prompt path', () => {
+  it('the Bother Rating reaches the prompt path only as a structured fact (E1)', () => {
     const promptPath = [
       'features/coach/prompts.ts',
       'features/coach/prompt-blocks.ts',
@@ -96,15 +99,18 @@ describe('the detail thread does not reach the model', () => {
       'features/coach/weekly-session.ts',
       'features/coach/weekly-session-service.ts',
       'features/coach/coach-chat-service.ts',
+      'features/coach/week-draft-service.ts',
       'features/coach/briefing.ts',
       'features/coach/briefing-service.ts',
       'features/health/capacity.ts',
     ];
     for (const rel of promptPath) {
       const src = codeOf(srcPath(rel));
-      expect(src, rel).not.toMatch(/\bbother\b/i);
+      expect(src, rel).not.toMatch(/\.bother\b/);
     }
-  });
+    const coachReaders = filesMatching(/\.bother\b/, { self: import.meta.url }).filter((f) => f.startsWith('features/coach/'));
+    expect(coachReaders).toEqual(['features/coach/athlete-context.ts']);
+  }, SWEEP_TIMEOUT_MS);
 
   it('has no field on the prompt-facing type that could carry it', () => {
     // `capacityStatement` takes injuries as `{ capacity }` and nothing else, so

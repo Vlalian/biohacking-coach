@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
+import { today } from '@/lib/date';
 import { athlete } from '@/db/schema';
 import type { CompletedProfile, ExperienceLevel } from '@/features/onboarding/onboarding-flow';
 import { toAthlete, type Athlete, type AthleteProfile } from './athlete';
@@ -179,6 +180,25 @@ function profileMergedWith(changes: Partial<AthleteProfile>) {
 }
 
 /**
+ * When the athlete arrived: the row's creation and, once recorded, when
+ * onboarding finished (`profile.onboardedAt`). What an Open Horizon counts
+ * forwards from (`training-architecture/13`); null for no such athlete.
+ */
+export async function getAthleteSince(
+  athleteId: string,
+): Promise<{ createdAt: Date; onboardedAt: string | undefined } | null> {
+  // Stryker disable next-line ObjectLiteral — equivalent: the answer is built from createdAt and profile alone, so reading the whole row changes nothing a caller sees.
+  const columns = { createdAt: athlete.createdAt, profile: athlete.profile };
+  const [row] = await getDb()
+    .select(columns)
+    .from(athlete)
+    .where(eq(athlete.id, athleteId))
+    .limit(1);
+  if (!row) return null;
+  return { createdAt: row.createdAt, onboardedAt: (row.profile as AthleteProfile | null)?.onboardedAt };
+}
+
+/**
  * Merges changes into the athlete's `profile` JSONB, atomically.
  *
  * Scoped to the athlete id resolved from the authenticated session upstream,
@@ -290,7 +310,9 @@ export async function completeAthleteOnboarding(
       raceTarget: completed.raceTarget,
       raceDistance: completed.raceDistance,
       hoursPerWeek: completed.hoursPerWeek,
-      profile: profileMergedWith(profileChanges),
+      // The day onboarding finished, in the same write that finishes it: where
+      // an Open Horizon starts counting (`training-architecture/13`).
+      profile: profileMergedWith({ ...profileChanges, onboardedAt: today() }),
       updatedAt: new Date(),
     })
     .where(eq(athlete.id, athleteId));

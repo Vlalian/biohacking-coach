@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
+import { isImportedHistory } from '@/features/session/session';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
 import {
@@ -39,6 +40,8 @@ import {
   TYPE_COLORS,
 } from '@/features/session/type-colors';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
+import { addRaceAction } from './(app)/settings/settings-actions';
+import { RaceForm } from './race-form';
 import { undoDetectedImportAction } from './garmin-actions';
 import {
   markCompleteAction,
@@ -130,6 +133,14 @@ export const CONTENT_REFUSAL_KEY: Record<NonNullable<DrawerPolicy['contentRefusa
   'authors-content': 'refusalAuthorsContent',
 };
 
+const TITLE_KEY: Record<Exclude<DrawerState, { open: false }>['mode'], string> = {
+  view: 'title',
+  create: 'createTitle',
+  edit: 'edit',
+  choose: 'chooseTitle',
+  'create-race': 'raceTitle',
+};
+
 const STATUS_KEY: Record<string, string> = {
   completed: 'statusCompleted',
   planned: 'statusPlanned',
@@ -147,7 +158,10 @@ type DrawerState =
   | { open: false }
   | { open: true; mode: 'view'; sessionId: string }
   | { open: true; mode: 'create'; date: string }
-  | { open: true; mode: 'edit'; sessionId: string };
+  | { open: true; mode: 'edit'; sessionId: string }
+  // A day's "+" asks first what is being added (training-architecture/37).
+  | { open: true; mode: 'choose'; date: string }
+  | { open: true; mode: 'create-race'; date: string };
 
 /**
  * The Session Drawer (CONTEXT.md): the one detail surface for a session, and
@@ -171,8 +185,17 @@ export function SessionDrawer({
   onBeginWrite,
   onSettleWrite,
   inFlightIds,
+  onChoose,
+  currentTargetRace = null,
 }: {
   state: DrawerState;
+  /**
+   * The answer to the "+"'s question (`training-architecture/37`): a session
+   * opens the create form, a race the shared race form, both on that day.
+   */
+  onChoose?: (kind: 'session' | 'race', date: string) => void;
+  /** The athlete's Target Race, so a new target says which one it replaces. */
+  currentTargetRace?: { name: string } | null;
   /** Resolved fresh every render, never snapshotted at open-time — after a
    *  status action + router.refresh(), the drawer must show the new status,
    *  not what it looked like when it was opened. */
@@ -214,6 +237,8 @@ export function SessionDrawer({
   const coachOverlay = useCoachOverlay();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<ActionRefusal | null>(null);
+  // A race add in flight: the form holds its button until the server answers.
+  const [addingRace, setAddingRace] = useState(false);
   // Bound only while open: this component stays mounted and renders null when
   // closed, so an unconditional binding would swallow Escape for the whole page.
   const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
@@ -279,7 +304,7 @@ export function SessionDrawer({
 
   const mode = state.mode;
   const session =
-    mode !== 'create' ? sessions.find((s) => s.id === state.sessionId) : undefined;
+    'sessionId' in state ? sessions.find((s) => s.id === state.sessionId) : undefined;
   // Busy while this drawer's own action runs, or while a write to this session
   // from anywhere (a drag) has not come back: every action waits for it.
   const busy = pending || (session !== undefined && inFlightIds.includes(session.id));
@@ -301,7 +326,7 @@ export function SessionDrawer({
       >
         <header className="flex items-center justify-between border-b border-border px-5 py-3">
           <span className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
-            {mode === 'create' ? t('createTitle') : mode === 'edit' ? t('edit') : t('title')}
+            {t(TITLE_KEY[mode])}
           </span>
           <button
             type="button"
@@ -320,7 +345,45 @@ export function SessionDrawer({
             </p>
           )}
 
-          {mode === 'create' ? (
+          {mode === 'choose' ? (
+            <div className="flex flex-col gap-3 px-5 py-5">
+              <p className="font-body text-sm text-muted-foreground">{formatFullDate(state.date, locale)}</p>
+              {(['session', 'race'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  data-action={`choose-${kind}`}
+                  onClick={() => onChoose?.(kind, state.date)}
+                  className="h-11 border border-signal px-4 text-left font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground"
+                >
+                  {t(kind === 'session' ? 'chooseSession' : 'chooseRace')}
+                </button>
+              ))}
+            </div>
+          ) : mode === 'create-race' ? (
+            <div className="px-5 pb-5">
+              <RaceForm
+                defaultDate={state.date}
+                currentTarget={currentTargetRace}
+                disabled={addingRace}
+                onAdd={async ({ name, date, distance, asTarget }) => {
+                  setError(null);
+                  setAddingRace(true);
+                  const result = await answerOf(() => addRaceAction(name, date, distance, asTarget));
+                  setAddingRace(false);
+                  if (!result.ok) {
+                    setError(result.reason);
+                    return false;
+                  }
+                  // The race day is drawn from the page's read, and the
+                  // narration fires from the shell on the next render.
+                  router.refresh();
+                  onClose();
+                  return true;
+                }}
+              />
+            </div>
+          ) : mode === 'create' ? (
             <AthleteSessionForm
               date={state.date}
               todayKey={todayKey}
@@ -501,6 +564,7 @@ export function ViewBody({
     skip: policy.ownReport && rules.skip,
     unavailable: policy.ownReport && rules.unavailable,
   };
+  const imported = isImportedHistory(session);
 
   return (
     <div className="space-y-6 px-5 py-5">
@@ -541,7 +605,7 @@ export function ViewBody({
           >
             {session.note}
           </p>
-          {!policy.content && (
+          {!policy.content && !imported && (
             <p className="mt-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('readOnlyNote')}
             </p>
@@ -572,6 +636,11 @@ export function ViewBody({
               </button>
             )}
           </div>
+        ) : imported ? (
+          // History Upload writes past training as completed with no feedback,
+          // by design. It needs no rating (garmin-integration/07): the record
+          // is what the device measured, so that is what is shown.
+          importedRecord(session.summary, t)
         ) : session.status === 'completed' ? (
           <div className="mt-2 flex items-center justify-between border border-dashed border-border p-3">
             <span className="font-body text-sm text-muted-foreground">{t('notRated')}</span>
@@ -895,6 +964,34 @@ function AthleteSessionForm({
         {initial ? t('saveChanges') : t('createSubmit')}
       </button>
     </form>
+  );
+}
+
+/**
+ * The Session Reflection section of an imported history session: a marker that
+ * it came from the device, and the facts the device recorded — only those it
+ * has. A plain function, not a component, so it renders inline.
+ */
+function importedRecord(
+  summary: Session['summary'],
+  t: ReturnType<typeof useTranslations<'SessionDrawer'>>,
+) {
+  return (
+    <div className="mt-2 space-y-1 border border-border p-3">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
+        {t('imported')}
+      </p>
+      {summary?.distanceM != null && (
+        <p className="font-body text-sm text-foreground">
+          {t('deviceFacts.distance', { km: (summary.distanceM / 1000).toFixed(1) })}
+        </p>
+      )}
+      {summary?.avgHr != null && (
+        <p className="font-body text-sm text-foreground">
+          {t('deviceFacts.avgHr', { bpm: Math.round(summary.avgHr) })}
+        </p>
+      )}
+    </div>
   );
 }
 

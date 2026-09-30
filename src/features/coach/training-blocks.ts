@@ -78,9 +78,16 @@ export interface TrainingBlock {
   name: string;
   /** Inclusive, `YYYY-MM-DD`. */
   startDate: string;
-  /** Inclusive, `YYYY-MM-DD`. The last block's end is race day. */
+  /** Inclusive, `YYYY-MM-DD`. The last block's end is race day — on a race horizon. */
   endDate: string;
   authoredBy: BlockAuthor;
+  /**
+   * What the block is for, when its position cannot say. Only an Open Horizon
+   * sets it (`training-architecture/13`): its last block is a consolidation,
+   * and read by position on the race ladder it would be a taper. Absent, the
+   * purpose is the race ladder's ({@link blockPurpose}).
+   */
+  purpose?: BlockPurpose;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -128,6 +128,30 @@ export function logCoachFailure(failure: CoachFailure): void {
 }
 
 /**
+ * One line when a Coach Chat reply hit its output cap (`showable-version/60`).
+ *
+ * `coach_call_failed` already carries the stop reason, but mixed in with every
+ * other failure on every surface. This is the line that answers "is the chat's
+ * cap too small?" on its own, with the cap it hit beside the stop reason, so a
+ * cut-off shows up in the logs before a tester reports it. Numbers and the
+ * opaque id only.
+ */
+export interface ChatMaxTokens {
+  athleteId: string;
+  conversationId: string | null;
+  stopReason: 'max_tokens';
+  maxTokens: number;
+}
+
+export function logChatMaxTokens(cutOff: ChatMaxTokens): void {
+  try {
+    console.error(JSON.stringify({ event: 'chat_max_tokens', ...cutOff }));
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}
+
+/**
  * Writes one structured line for narration that could not be delivered.
  *
  * Narration makes no Anthropic call, so it is not a {@link CoachFailure} and
@@ -282,6 +306,24 @@ export function logCoachDrift(drift: CoachDrift): void {
         patterns: drift.patterns,
       }),
     );
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}
+
+/**
+ * One line when the week draft's volume was clamped back into the band around
+ * the arithmetic (`training-architecture/48`, Mads's ruling R2): what the Coach
+ * drafted, what the clamp made it, the arithmetic's minutes and whether a
+ * reason was given. Numbers only — no athlete text. A warning, not an error:
+ * the draft still lands.
+ */
+export function logWeekDraftClamped(
+  athleteId: string,
+  clamp: { drafted: number; clampedTo: number; baseline: number; reasoned: boolean },
+): void {
+  try {
+    console.warn(JSON.stringify({ event: 'week_draft_clamped', athleteId, ...clamp }));
   } catch {
     // Deliberately silent: see logCoachFailure.
   }

@@ -675,8 +675,9 @@ describe('formatWeekSessions — authorship labels and the parameter tail', () =
     // The structure's own row (`training-architecture/34`): the Coach is
     // adjusting a default, not holding on someone else's prescription.
     expect(labelFor('arithmetic')).toContain('the plan structure put this here');
-    // A Detected Activity in CONTEXT.md's terms, said plainly to the model.
-    expect(labelFor('garmin')).toContain("logged from the athlete's watch");
+    // A History Upload in CONTEXT.md's terms, said plainly to the model: it is
+    // imported history and needs no rating (garmin-integration/07).
+    expect(labelFor('garmin')).toContain("imported from the athlete's watch, no rating expected");
   });
 
   it('renders duration and zone as a separated tail, and omits it entirely when there is neither', () => {
@@ -993,6 +994,45 @@ describe('the current Training Block and the week within it reach the Coach', ()
 });
 
 
+describe('the Open Horizon reaches the Coach as a default, never a race (training-architecture/13)', () => {
+  it('names the open horizon a default arc, never a race', () => {
+    const p = buildChatPrompt(
+      { ...BASE, raceDistance: 'Half', phase: 'Build', blockWeek: 'week 2 of 6', horizonNote: 'open' },
+      TUESDAY,
+    );
+    expect(p).toMatch(/default arc/);
+    expect(p).toContain('Build, week 2 of 6');
+    expect(p).not.toMatch(/race day|your race|race=/i);
+  });
+
+  it('keeps a past target out of it: the open arc is what the athlete is on now', () => {
+    const p = buildChatPrompt(
+      { ...BASE, raceTarget: 'Aarhus 70.3', raceDate: '2026-08-16', phase: 'Base', blockWeek: 'week 1 of 6', horizonNote: 'open' },
+      TUESDAY,
+    );
+    expect(p).toMatch(/default arc/);
+    expect(p).not.toContain('race=Aarhus 70.3');
+  });
+
+  it('says it has not built toward a race under eight weeks away, and still names it', () => {
+    const p = buildChatPrompt(
+      {
+        ...BASE,
+        raceTarget: 'Aarhus 70.3',
+        raceDate: '2026-10-19',
+        phase: 'Base',
+        blockWeek: 'week 3 of 6',
+        horizonNote: 'race-too-close',
+      },
+      TUESDAY,
+    );
+    expect(p).toContain('race=Aarhus 70.3 on 2026-10-19');
+    expect(p).toMatch(/not built toward it/);
+    expect(p).toMatch(/default arc/);
+  });
+
+});
+
 describe("the athlete's own words reach the Coach", () => {
   function weekly(overrides: Partial<CheckIn> = {}) {
     return buildChatPrompt({ ...BASE, ...overrides }, TUESDAY);
@@ -1058,5 +1098,39 @@ describe('which absence the Coach is told about', () => {
 
     expect(fed).toContain('pulse=50bpm');
     expect(fed).not.toContain('NO DEVICE DATA');
+  });
+});
+
+describe('Coach Chat reads the athlete signals the draft does (training-architecture/52)', () => {
+  const CHECK: CheckIn = {
+    phase: 'Base', commStyle: '', experienceLevel: 'intermediate', presenceStage: 'full', language: 'English',
+    weeklySessionDay: 'Monday', fixedConstraints: [], equipment: [],
+  };
+
+  it('renders the recent weeks, injuries, moves and comments when it is given them', () => {
+    const out = buildChatPrompt(CHECK, '2026-08-18', null, [], null, null, {
+      recentWeeks: [{ weekStart: '2026-08-10', plannedMinutes: 60, doneMinutes: 60, completed: 1, skipped: 0, byType: [], soFar: false, imported: 1, unrecorded: 0, device: null }],
+      health: { injuries: [{ prevents: { swim: 'full', bike: 'full', run: 'none' }, since: '2026-08-12', botherRating: 4 }], illnesses: [] },
+      moves: [{ from: '2026-08-17', to: '2026-08-19', by: 'athlete' }],
+      comments: [{ date: '2026-08-11', sessionType: 'Endurance', comment: 'felt flat' }],
+    });
+    expect(out).toContain('RECENT WEEKS:');
+    expect(out).toContain('1 imported from the athlete\'s device (no rating expected)');
+    expect(out).toContain('run none; bothering them 4/5');
+    expect(out).toContain('- Mon 2026-08-17 → Wed 2026-08-19 (moved by the athlete)');
+    expect(out).toContain('"felt flat"');
+  });
+
+  it('is unchanged when given no signals', () => {
+    expect(buildChatPrompt(CHECK, '2026-08-18', null, [], null, null, null)).toBe(buildChatPrompt(CHECK, '2026-08-18'));
+  });
+
+  it('refuses a reflection comment carrying a direct identifier', () => {
+    expect(() =>
+      buildChatPrompt(CHECK, '2026-08-18', null, [], null, null, {
+        recentWeeks: [], health: { injuries: [], illnesses: [] }, moves: [],
+        comments: [{ date: '2026-08-11', sessionType: 'Endurance', comment: 'ring 12345678' }],
+      }),
+    ).toThrow();
   });
 });

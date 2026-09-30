@@ -126,6 +126,7 @@ export function beginCreate(
     status: createdStatusFor(draft.date, today),
     parked: false,
     sport: null,
+    summary: null,
     dayOrder: Math.max(-1, ...sameDay) + 1,
     title: null,
     zone: null,

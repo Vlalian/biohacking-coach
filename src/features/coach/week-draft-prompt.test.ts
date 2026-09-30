@@ -40,6 +40,7 @@ function ctx(over: Partial<WeekDraftContext> = {}): WeekDraftContext {
       TODAY,
     ),
     window: { start: '2026-09-21', end: '2026-09-27', excludedDates: ['2026-09-24', '2026-09-26'], fellThrough: false },
+    feedbackWeek: '2026-09-14',
     skeleton: [
       { date: '2026-09-21', role: 'easy' },
       { date: '2026-09-22', role: 'easy' },
@@ -81,7 +82,7 @@ describe('renderWeekDraftPrompt', () => {
     expect(out).toContain('WEEK WINDOW: 2026-09-21 to 2026-09-27');
     expect(out).toContain('Build the Volume, week 3 of 8');
     expect(out).toContain('calf a bit tight after Sunday');
-    expect(out).toContain('LAST WEEK FEEDBACK');
+    expect(out).toContain('RATINGS FROM THE WEEK OF 2026-09-14');
   });
 
   it('numbers the retrieved passages and names their sources', () => {
@@ -144,11 +145,18 @@ describe('renderWeekDraftPrompt — the blocks it inherited, branch by branch', 
     expect(none).not.toContain('Low body/energy/mental');
   });
 
-  it('LAST WEEK FEEDBACK: the reflections when there are any, else one of two honest absences', () => {
-    expect(draft()).toContain('LAST WEEK FEEDBACK:\n- Sun 13 Sept · Endurance · Body 🙂 (7/10) · Mind 🙂 (8/10)');
+  // The heading names the week the ratings come from (training-architecture/46);
+  // it said LAST WEEK FEEDBACK over today's week, which was wrong on a Monday.
+  it('RATINGS: the reflections of the named week when there are any, else one of two honest absences', () => {
+    expect(draft()).toContain(
+      'RATINGS FROM THE WEEK OF 2026-09-14 (the week before the one you are drafting):\n- Sun 13 Sept · Endurance · Body 🙂 (7/10) · Mind 🙂 (8/10)',
+    );
+    expect(draft()).not.toContain('LAST WEEK FEEDBACK');
     const noFeedback = { feedbackSummary: null };
-    expect(draft({}, noFeedback)).toContain('No feedback this week — use check-in signals and self-assessment.');
-    expect(draft({ readiness: undefined }, noFeedback)).toContain('No feedback this week, and no check-in data — go on what the athlete tells you.');
+    expect(draft({}, noFeedback)).toContain('No ratings from the week of 2026-09-14 — use check-in signals and self-assessment.');
+    expect(draft({ readiness: undefined }, noFeedback)).toContain(
+      'No ratings from the week of 2026-09-14, and no check-in data — plan from the structure and the recent weeks.',
+    );
     expect(draft({ readiness: undefined }, noFeedback)).not.toContain('use check-in signals');
   });
 
@@ -280,10 +288,10 @@ describe('the baseline week — what the structure already wrote (training-archi
 
 describe('the four weeks before the drafted one (training-architecture/44)', () => {
   const SUMMARY = [
-    { weekStart: '2026-08-24', plannedMinutes: 0, doneMinutes: 0, completed: 0, skipped: 0, byType: [], soFar: false },
-    { weekStart: '2026-08-31', plannedMinutes: 300, doneMinutes: 240, completed: 4, skipped: 1, byType: [{ type: 'Endurance', completed: 3, doneMinutes: 180 }, { type: 'Intensity', completed: 1, doneMinutes: 60 }], soFar: false },
-    { weekStart: '2026-09-07', plannedMinutes: 280, doneMinutes: 0, completed: 0, skipped: 4, byType: [], soFar: false },
-    { weekStart: '2026-09-14', plannedMinutes: 90, doneMinutes: 90, completed: 1, skipped: 0, byType: [{ type: 'Endurance', completed: 1, doneMinutes: 90 }], soFar: true },
+    { weekStart: '2026-08-24', plannedMinutes: 0, doneMinutes: 0, completed: 0, skipped: 0, byType: [], soFar: false, imported: 0, unrecorded: 0, device: null },
+    { weekStart: '2026-08-31', plannedMinutes: 300, doneMinutes: 240, completed: 4, skipped: 1, byType: [{ type: 'Endurance', completed: 3, doneMinutes: 180 }, { type: 'Intensity', completed: 1, doneMinutes: 60 }], soFar: false, imported: 0, unrecorded: 0, device: null },
+    { weekStart: '2026-09-07', plannedMinutes: 280, doneMinutes: 0, completed: 0, skipped: 4, byType: [], soFar: false, imported: 0, unrecorded: 0, device: null },
+    { weekStart: '2026-09-14', plannedMinutes: 90, doneMinutes: 90, completed: 1, skipped: 0, byType: [{ type: 'Endurance', completed: 1, doneMinutes: 90 }], soFar: true, imported: 0, unrecorded: 0, device: null },
   ];
 
   it('carries the last four weeks', () => {
@@ -329,5 +337,141 @@ describe('a re-draft after a decline (training-architecture/30)', () => {
     for (const declined of [undefined, null]) {
       expect(renderWeekDraftPrompt(ctx({ declined }))).not.toContain('DECLINED');
     }
+  });
+});
+
+describe('what the athlete trains on and has time for (training-architecture/47)', () => {
+  const bike = { id: 'e1', category: 'bike', name: 'Canyon Speedmax', details: null, addedDate: '2026-09-01' } as const;
+
+  it('carries the equipment block when the athlete has equipment, and nothing when not', () => {
+    expect(renderWeekDraftPrompt(ctx({ checkIn: { ...CHECK_IN, equipment: [bike] } }))).toContain('EQUIPMENT:');
+    expect(renderWeekDraftPrompt(ctx())).not.toContain('EQUIPMENT:');
+  });
+
+  it('carries the hours the athlete has, from the same onboarding block Coach Chat reads', () => {
+    const out = renderWeekDraftPrompt(ctx({ checkIn: { ...CHECK_IN, onboarding: { hoursPerWeek: 10 } } }));
+    expect(out).toContain('hours/week=10');
+    expect(out).toContain('ONBOARDING PROFILE');
+  });
+
+  it('refuses equipment carrying a direct identifier, like every other input', () => {
+    const leaked = { ...bike, name: 'anna@example.com' };
+    expect(() => renderWeekDraftPrompt(ctx({ checkIn: { ...CHECK_IN, equipment: [leaked] } }))).toThrow();
+  });
+});
+
+describe('the athlete signals the draft now reads (training-architecture/52)', () => {
+  const KNEE = { prevents: { swim: 'full', bike: 'easy', run: 'none' }, since: '2026-09-20', botherRating: 3 } as const;
+
+  it('carries open injuries and illness as structure', () => {
+    const out = renderWeekDraftPrompt(ctx({ health: { injuries: [KNEE], illnesses: [] } }));
+    expect(out).toContain('- Injury since 2026-09-20: swim full, bike easy only, run none; bothering them 3/5');
+  });
+
+  it('puts equipment, hours, injuries, moves, reflection comments and the chat excerpt in the draft prompt', () => {
+    const out = renderWeekDraftPrompt(
+      ctx({
+        checkIn: {
+          ...CHECK_IN,
+          equipment: [{ id: 'e1', category: 'bike', name: 'Canyon Speedmax', details: null, addedDate: '2026-09-01' }],
+          onboarding: { hoursPerWeek: 10 },
+        },
+        health: { injuries: [KNEE], illnesses: [] },
+        moves: [{ from: '2026-09-15', to: '2026-09-17', by: 'athlete' }],
+        comments: [{ date: '2026-09-15', sessionType: 'Intensity', comment: 'hard but good' }],
+        chat: ['knee tight Tue'],
+      }),
+    );
+    for (const s of ['EQUIPMENT', 'hours/week=10', 'Injury since', 'moved', 'knee tight Tue', 'hard but good']) {
+      expect(out).toContain(s);
+    }
+    expect(out).toContain('SESSION MOVES THIS WEEK:\n- Tue 2026-09-15 → Thu 2026-09-17 (moved by the athlete)');
+    expect(out).toContain('REFLECTION COMMENTS (the athlete\'s own words, the two weeks before this one):\n- Tue 2026-09-15 Intensity: "hard but good"');
+    expect(out).toContain('ATHLETE IN COACH CHAT (their own words, last seven days — condensed, not the transcript):\n- "knee tight Tue"');
+  });
+
+  it('names who moved a session, one line per move', () => {
+    const out = renderWeekDraftPrompt(
+      ctx({
+        moves: [
+          { from: '2026-09-15', to: '2026-09-17', by: 'head_coach' },
+          { from: '2026-09-16', to: '2026-09-18', by: 'system' },
+        ],
+      }),
+    );
+    expect(out).toContain(
+      'SESSION MOVES THIS WEEK:\n- Tue 2026-09-15 → Thu 2026-09-17 (moved by their coach)\n- Wed 2026-09-16 → Fri 2026-09-18 (moved by the app)',
+    );
+  });
+
+  it('lists several comments and chat lines one per line', () => {
+    const out = renderWeekDraftPrompt(
+      ctx({
+        comments: [
+          { date: '2026-09-15', sessionType: 'Intensity', comment: 'hard' },
+          { date: '2026-09-16', sessionType: 'Endurance', comment: 'easy' },
+        ],
+        chat: ['one', 'two'],
+      }),
+    );
+    expect(out).toContain('- Tue 2026-09-15 Intensity: "hard"\n- Wed 2026-09-16 Endurance: "easy"');
+    expect(out).toContain('- "one"\n- "two"');
+  });
+
+  it('adds nothing when no signal is given', () => {
+    expect(
+      renderWeekDraftPrompt(ctx({ health: { injuries: [], illnesses: [] }, moves: [], comments: [], chat: [] })),
+    ).toBe(renderWeekDraftPrompt(ctx()));
+  });
+
+  it('refuses a comment or chat line carrying a direct identifier, like every other input', () => {
+    expect(() => renderWeekDraftPrompt(ctx({ chat: ['mail a@b.dk'] }))).toThrow();
+    expect(() =>
+      renderWeekDraftPrompt(ctx({ comments: [{ date: '2026-09-15', sessionType: 'Endurance', comment: 'a@b.dk' }] })),
+    ).toThrow();
+  });
+
+  it('asserts on the health facts and the moves as well, as Coach Chat does', () => {
+    expect(() =>
+      renderWeekDraftPrompt(ctx({ health: { injuries: [], illnesses: [{ since: 'a@b.dk', botherRating: null }] } })),
+    ).toThrow();
+    expect(() => renderWeekDraftPrompt(ctx({ moves: [{ from: '2026-09-15', to: 'a@b.dk', by: 'athlete' }] }))).toThrow();
+  });
+
+  it('renders identically with every signal (golden)', () => {
+    expect(
+      renderWeekDraftPrompt(
+        ctx({
+          checkIn: {
+            ...CHECK_IN,
+            equipment: [{ id: 'e1', category: 'bike', name: 'Canyon Speedmax', details: null, addedDate: '2026-09-01' }],
+            onboarding: { hoursPerWeek: 10 },
+          },
+          recentWeeks: [
+            { weekStart: '2026-09-07', plannedMinutes: 300, doneMinutes: 240, completed: 4, skipped: 0, byType: [{ type: 'Endurance', completed: 4, doneMinutes: 240 }], soFar: false, imported: 2, unrecorded: 1, device: { distanceKm: 61.5, avgHr: 138 } },
+          ],
+          health: { injuries: [KNEE], illnesses: [{ since: '2026-09-14', botherRating: null }] },
+          moves: [{ from: '2026-09-15', to: '2026-09-17', by: 'athlete' }],
+          comments: [{ date: '2026-09-15', sessionType: 'Intensity', comment: 'hard but good' }],
+          chat: ['knee tight Tue'],
+        }),
+      ),
+    ).toMatchSnapshot();
+  });
+});
+
+describe('the rules on how far the draft moves the baseline (training-architecture/48)', () => {
+  const BASELINE = [{ date: '2026-09-22', sport: 'bike', type: 'Endurance', durationMinutes: 90, zone: 'Z2', title: 'Easy ride' }];
+
+  it('tells the Coach to adjust the baseline rather than remove its sessions, and the volume band', () => {
+    const out = renderWeekDraftPrompt(ctx({ baseline: BASELINE }));
+    expect(out).toContain("Adjust and change the baseline's sessions rather than remove them");
+    expect(out).toContain('within 10% of the baseline week\'s total minutes');
+    expect(out).toContain('down to 30% below only with a reason in volumeReason');
+    expect(out).toContain('never more than 10% above');
+  });
+
+  it('says nothing of the band over a skeleton, where there is no baseline to hold to', () => {
+    expect(renderWeekDraftPrompt(ctx())).not.toContain('volumeReason');
   });
 });

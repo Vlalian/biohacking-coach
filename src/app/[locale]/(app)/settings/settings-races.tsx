@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Loader2 } from 'lucide-react';
-import { RACE_DISTANCES } from '@/lib/race-distances';
 import type { AddRaceResult, SettingsActionResult } from './settings-actions';
+import { ActionButton } from '../../action-button';
+import { RaceForm } from '../../race-form';
 import { useSave } from './use-save';
 
 /**
@@ -18,7 +18,9 @@ import { useSave } from './use-save';
  *
  * Each Race carries its own distance: a tune-up is usually a different distance
  * from the one being trained for, so the add form asks. Editing a race is
- * remove-and-add — the two operations that exist, rather than a third.
+ * remove-and-add — the two operations that exist, rather than a third. The add
+ * form is the shared {@link RaceForm}, the same one a calendar day opens
+ * (`training-architecture/37`).
  */
 export interface SettingsRace {
   id: string;
@@ -36,7 +38,7 @@ export function RacesSection({
   onRemove,
 }: {
   races: SettingsRace[];
-  onAdd: (name: string, date: string, distance: string) => Promise<AddRaceResult>;
+  onAdd: (name: string, date: string, distance: string, asTarget: boolean) => Promise<AddRaceResult>;
   onSetTarget: (raceId: string) => Promise<SettingsActionResult>;
   onRemove: (raceId: string) => Promise<SettingsActionResult>;
 }) {
@@ -104,24 +106,28 @@ export function RacesSection({
         </ul>
       )}
 
-      <AddRaceForm
-        onAdd={async (name, date, distance) => {
+      <RaceForm
+        currentTarget={current.find((r) => r.isTarget) ?? null}
+        onAdd={async ({ name, date, distance, asTarget }) => {
           // The persisted id, captured from the result the save hook only
           // reads `ok` from — so remove and make-target work on the new race
           // at once, with no reload (CodeRabbit, PR #67).
           const created = { id: null as string | null };
           const ok = await run(async () => {
-            const result = await onAdd(name, date, distance);
+            const result = await onAdd(name, date, distance, asTarget);
             if (result.ok) created.id = result.raceId;
             return result;
           });
           if (ok && created.id !== null) {
-            // The server decides whether this became the target (it does when
-            // there was none); mirror that rule so the badge is right without a
-            // reload.
-            const first = current.every((r) => !r.isTarget);
+            // The server's rule, mirrored so the badge is right without a
+            // reload: a first race is the target whatever was asked, and a
+            // race asked for as the target replaces the one there was.
+            const isTarget = asTarget || current.every((r) => !r.isTarget);
             const id = created.id;
-            setCurrent((prev) => [...prev, { id, name, date, distance, isTarget: first }]);
+            setCurrent((prev) => [
+              ...prev.map((r) => (isTarget ? { ...r, isTarget: false } : r)),
+              { id, name, date, distance, isTarget },
+            ]);
           }
           return ok;
         }}
@@ -133,101 +139,5 @@ export function RacesSection({
         </p>
       )}
     </div>
-  );
-}
-
-function AddRaceForm({
-  onAdd,
-  disabled,
-}: {
-  onAdd: (name: string, date: string, distance: string) => Promise<boolean>;
-  disabled: boolean;
-}) {
-  const t = useTranslations('Settings');
-  const [name, setName] = useState('');
-  const [date, setDate] = useState('');
-  const [distance, setDistance] = useState<string>(RACE_DISTANCES[3]);
-  const canAdd = name.trim() !== '' && date !== '' && !disabled;
-
-  async function add() {
-    if (await onAdd(name, date, distance)) {
-      setName('');
-      setDate('');
-    }
-  }
-
-  return (
-    <div className="mt-3">
-      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-        {t('racesAddLabel')}
-      </p>
-      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('raceTargetPlaceholder')}
-          maxLength={120}
-          aria-label={t('raceTargetLabel')}
-          className="w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
-        />
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          aria-label={t('raceDateLabel')}
-          className="border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
-        />
-        <select
-          value={distance}
-          onChange={(e) => setDistance(e.target.value)}
-          aria-label={t('raceDistanceLabel')}
-          className="border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
-        >
-          {RACE_DISTANCES.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="mt-2">
-        <ActionButton onClick={add} disabled={!canAdd} label={t('racesAdd')} pending={disabled} />
-      </div>
-    </div>
-  );
-}
-
-export function ActionButton({
-  onClick,
-  disabled,
-  label,
-  pending,
-  quiet,
-  'data-action': dataAction,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  label: string;
-  pending?: boolean;
-  quiet?: boolean;
-  'data-action'?: string;
-}) {
-  return (
-    <button
-      type="button"
-      data-action={dataAction}
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        'inline-flex items-center gap-2 border h-10 px-4 font-body text-[15px] font-medium transition-colors disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent',
-        quiet
-          ? 'border-border text-muted-foreground hover:text-foreground'
-          : 'border-signal text-signal hover:bg-signal hover:text-signal-foreground',
-      ].join(' ')}
-    >
-      {pending && <Loader2 className="h-3 w-3 animate-spin" />}
-      {label}
-    </button>
   );
 }

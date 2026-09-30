@@ -2,6 +2,7 @@ import { COACH_IDENTITY } from './prompt-blocks';
 import { describe, it, expect } from 'vitest';
 import {
   BRIEFING_OPENER,
+  briefingHorizonNote,
   briefingRaces,
   buildBriefingContext,
   renderBriefingPrompt,
@@ -230,11 +231,49 @@ describe('renderBriefingPrompt — the Training Blocks (training-architecture/07
     );
   });
 
+  it('names an Open Horizon a default arc, never the horizon toward a race (training-architecture/13)', () => {
+    const open = renderBriefingPrompt(ctx({ blocks: { ...coachOnly, horizonNote: 'open' } }));
+    expect(open).toContain(
+      'TRAINING BLOCKS (a six-month default arc, always visible — the athlete has no race to build toward: ' +
+        'these blocks are not a build to any start line, and nothing happens at their end):',
+    );
+    expect(open).not.toContain('the horizon toward the Target Race');
+    // The blocks themselves are still listed: it is the plan's structure.
+    expect(open).toContain('Build the Volume · to 2027-01-10 · Momentum');
+  });
+
+  it('says a Target Race under eight weeks away has not been built toward (training-architecture/13)', () => {
+    const close = renderBriefingPrompt(ctx({ blocks: { ...coachOnly, horizonNote: 'race-too-close' } }));
+    expect(close).toContain(
+      'TRAINING BLOCKS (a six-month default arc, always visible — the Target Race is under eight weeks away, ' +
+        'too close to build Training Blocks toward: these blocks are not a build to it, so say plainly it has not been built toward):',
+    );
+    expect(close).not.toContain('the horizon toward the Target Race');
+  });
+
+  it('keeps the race heading when the blocks hang off the race', () => {
+    expect(renderBriefingPrompt(ctx({ blocks: coachOnly }))).toContain(
+      'TRAINING BLOCKS (the horizon toward the Target Race, always visible):',
+    );
+  });
+
   it('says plainly there are none for an athlete with no Target Race', () => {
     expect(renderBriefingPrompt(ctx({ blocks: null }))).toContain('TRAINING BLOCKS: none');
     expect(renderBriefingPrompt(ctx({ blocks: { blocks: [], phase: null, raceUnrealistic: null } }))).toContain(
       'TRAINING BLOCKS: none',
     );
+  });
+});
+
+describe('briefingHorizonNote — what the blocks hang off (training-architecture/13)', () => {
+  it('is nothing on a race horizon, and for a resolution that does not say', () => {
+    expect(briefingHorizonNote({ horizon: 'race', raceTooClose: false })).toBeUndefined();
+    expect(briefingHorizonNote({})).toBeUndefined();
+  });
+
+  it('is the open arc with no race to build toward, and says a too-close race is one', () => {
+    expect(briefingHorizonNote({ horizon: 'open', raceTooClose: false })).toBe('open');
+    expect(briefingHorizonNote({ horizon: 'open', raceTooClose: true })).toBe('race-too-close');
   });
 });
 
