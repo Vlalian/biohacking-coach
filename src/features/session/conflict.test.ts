@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeConflict, isRedundant } from './conflict';
+import { attemptedDuration, describeConflict, isRedundant } from './conflict';
 import type { Session } from './session';
 
 const session = (over: Partial<Session> = {}): Session => ({
@@ -202,5 +202,44 @@ describe('isRedundant', () => {
     });
 
     expect(isRedundant(conflict)).toBe(false);
+  });
+});
+
+describe('attemptedDuration — what a conflict shows the writer tried', () => {
+  it('is the minutes as text, and null for a cleared duration', () => {
+    expect(attemptedDuration(45)).toBe('45');
+    expect(attemptedDuration(0)).toBe('0');
+    expect(attemptedDuration(null)).toBeNull();
+  });
+});
+
+describe('what a conflict reports, field by field', () => {
+  const edit = (current: Session | null, attempted: Record<string, string | null>) =>
+    describeConflict({ sessionId: 'sess_1', baseVersion: 1, current, attempted, intent: 'edit' });
+
+  it('reports a title the other writer changed', () => {
+    expect(edit(session({ title: 'Long ride' }), { title: 'Tempo' }).divergences).toEqual([
+      { field: 'title', current: 'Long ride', attempted: 'Tempo' },
+    ]);
+  });
+
+  it('reports a zone the other writer changed', () => {
+    expect(edit(session({ zone: 'Z2' }), { zone: 'Z4' }).divergences).toEqual([
+      { field: 'zone', current: 'Z2', attempted: 'Z4' },
+    ]);
+  });
+
+  it('shows an empty stored field as empty, not as the word null', () => {
+    expect(edit(session({ note: null }), { note: 'legs heavy' }).divergences).toEqual([
+      { field: 'note', current: null, attempted: 'legs heavy' },
+    ]);
+  });
+
+  it('treats a blank value as empty, so a blank edit against an empty field is no disagreement', () => {
+    expect(edit(session({ note: null }), { note: '   ' }).divergences).toEqual([]);
+  });
+
+  it('a lost edit to a row that was deleted is never "already done"', () => {
+    expect(isRedundant(edit(null, { note: 'x' }))).toBe(false);
   });
 });

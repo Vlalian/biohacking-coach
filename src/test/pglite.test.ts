@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { athlete, knowledgeChunks, race } from '@/db/schema';
 import { user } from '@/db/auth-schema';
-import { createTestDatabase, type TestDatabase } from './pglite';
+import { createTestDatabase, seedAthlete, type TestDatabase } from './pglite';
 
 /**
  * The in-process database repository tests stand on (`code-health/30`).
@@ -14,11 +14,7 @@ import { createTestDatabase, type TestDatabase } from './pglite';
 
 const BOOT_MS = 60_000;
 
-async function anAthlete(t: TestDatabase, tag: string): Promise<string> {
-  await t.db.insert(user).values({ id: `user_${tag}`, name: tag, email: `${tag}@test.invalid` });
-  const [row] = await t.db.insert(athlete).values({ userId: `user_${tag}` }).returning({ id: athlete.id });
-  return row.id;
-}
+const anAthlete = (t: TestDatabase, tag: string) => seedAthlete(t.db, tag);
 
 const RACE = { name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full' };
 
@@ -103,6 +99,27 @@ describe('createTestDatabase', () => {
       expect(await t.db.select().from(race)).toEqual([]);
       expect(await t.db.select().from(athlete)).toEqual([]);
       expect(await t.db.select().from(user)).toEqual([]);
+    },
+    BOOT_MS,
+  );
+});
+
+describe('seedAthlete', () => {
+  it(
+    'stores an athlete joined to its own user, and keeps two apart by tag',
+    async () => {
+      const t = await createTestDatabase();
+
+      const a = await seedAthlete(t.db, 'a');
+      const b = await seedAthlete(t.db, 'b');
+
+      expect(a).not.toBe(b);
+      const rows = await t.db.select({ id: athlete.id, userId: athlete.userId }).from(athlete);
+      expect(rows).toEqual(expect.arrayContaining([{ id: a, userId: 'user_a' }, { id: b, userId: 'user_b' }]));
+      expect((await t.db.select({ email: user.email }).from(user)).map((u) => u.email).sort()).toEqual([
+        'a@test.invalid',
+        'b@test.invalid',
+      ]);
     },
     BOOT_MS,
   );

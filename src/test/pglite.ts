@@ -6,6 +6,8 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import type { getDb } from '@/db';
 import * as appSchema from '@/db/schema';
 import * as authSchema from '@/db/auth-schema';
+import { athlete } from '@/db/schema';
+import { user } from '@/db/auth-schema';
 
 /**
  * A real Postgres for repository tests, running in the test process
@@ -80,4 +82,15 @@ export async function createTestDatabase(): Promise<TestDatabase> {
       await pg.exec(truncate);
     },
   };
+}
+
+/**
+ * An athlete to own rows: the `athlete` row and the `user` it hangs off. Most
+ * tables key on `athlete_id` with a foreign key, so almost every repository
+ * test starts here. `tag` keeps two athletes in one test apart.
+ */
+export async function seedAthlete(db: AppDb, tag: string): Promise<string> {
+  await db.insert(user).values({ id: `user_${tag}`, name: tag, email: `${tag}@test.invalid` });
+  const [row] = await db.insert(athlete).values({ userId: `user_${tag}` }).returning({ id: athlete.id });
+  return row.id;
 }

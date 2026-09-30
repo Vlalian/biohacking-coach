@@ -1,7 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { athlete as athleteTable, race as raceTable } from '@/db/schema';
-import { user as userTable } from '@/db/auth-schema';
-import { createTestDatabase, type TestDatabase } from '@/test/pglite';
+import { race as raceTable } from '@/db/schema';
+import { createTestDatabase, seedAthlete, type TestDatabase } from '@/test/pglite';
 
 /**
  * Races against a real Postgres (`src/test/pglite.ts`, `code-health/30`): each
@@ -37,15 +36,7 @@ afterEach(async () => {
   await testDb.reset();
 });
 
-/** An athlete to own races — a row in `athlete`, and the `user` row it hangs off. */
-async function anAthlete(tag: string): Promise<string> {
-  await testDb.db.insert(userTable).values({ id: `user_${tag}`, name: tag, email: `${tag}@test.invalid` });
-  const [row] = await testDb.db
-    .insert(athleteTable)
-    .values({ userId: `user_${tag}` })
-    .returning({ id: athleteTable.id });
-  return row.id;
-}
+const anAthlete = (tag: string) => seedAthlete(testDb.db, tag);
 
 const COPENHAGEN = { name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full' as const };
 const KALMAR = { name: 'Ironman Kalmar', date: '2028-08-19', distance: 'Full' as const };
