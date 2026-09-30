@@ -10,6 +10,14 @@
 const VIEW_PATH_SHAPED = /^\/[A-Za-z0-9/_-]{0,63}$/;
 
 /**
+ * The longest comment the feedback page stores, in characters (CodeRabbit, PR #120).
+ * About 800 words: far past "a couple of sentences", so no real note is cut, while
+ * a direct call to the server action cannot grow a row without bound. The
+ * textarea carries the same limit, so the page never offers more than is kept.
+ */
+export const FEEDBACK_MAX_LENGTH = 5000;
+
+/**
  * The View a feedback submission came from, or null.
  *
  * The feedback page is its own page, so the View the tester was *on* when they

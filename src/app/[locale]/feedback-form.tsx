@@ -3,6 +3,7 @@
 import { useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check } from 'lucide-react';
+import { FEEDBACK_MAX_LENGTH } from '@/features/feedback/feedback';
 import { submitFeedbackAction } from './feedback-actions';
 
 /**
@@ -31,6 +32,8 @@ export function FeedbackForm({
     e.preventDefault();
     if (!body.trim() || pending) return;
 
+    // A new send clears the last one's "Sent" or error (CodeRabbit, PR #120).
+    setState('idle');
     startTransition(async () => {
       // The action rethrows a database error, and a dropped connection rejects
       // too. Left uncaught, either reaches the locale error boundary, which
@@ -72,6 +75,7 @@ export function FeedbackForm({
           <textarea
             id="feedback-comment"
             rows={5}
+            maxLength={FEEDBACK_MAX_LENGTH}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={t('placeholder')}

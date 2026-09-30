@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { FEEDBACK_MAX_LENGTH } from '@/features/feedback/feedback';
 
 const { resolveAthleteId, recordFeedback } = vi.hoisted(() => ({
   resolveAthleteId: vi.fn(),
@@ -50,6 +51,17 @@ describe('submitFeedbackAction', () => {
       reason: 'empty',
     });
     expect(stored()).toEqual([]);
+  });
+
+  it('refuses a comment over the length cap and stores nothing, and takes one at the cap (CodeRabbit, PR #120)', async () => {
+    expect(await submitFeedbackAction({ body: 'x'.repeat(FEEDBACK_MAX_LENGTH + 1), view: null })).toEqual({
+      ok: false,
+      reason: 'too-long',
+    });
+    expect(stored()).toEqual([]);
+
+    expect(await submitFeedbackAction({ body: 'x'.repeat(FEEDBACK_MAX_LENGTH), view: null })).toEqual({ ok: true });
+    expect(stored()).toHaveLength(1);
   });
 
   it('refuses a signed-out caller and stores nothing', async () => {

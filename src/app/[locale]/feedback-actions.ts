@@ -1,6 +1,6 @@
 'use server';
 
-import { submittedFromView } from '@/features/feedback/feedback';
+import { FEEDBACK_MAX_LENGTH, submittedFromView } from '@/features/feedback/feedback';
 import { recordFeedback } from '@/features/feedback/feedback-repository';
 import { resolveAthleteId } from './current-actor';
 
@@ -21,7 +21,7 @@ import { resolveAthleteId } from './current-actor';
 
 export type FeedbackResult =
   | { ok: true }
-  | { ok: false; reason: 'empty' | 'not-authenticated' };
+  | { ok: false; reason: 'empty' | 'too-long' | 'not-authenticated' };
 
 export async function submitFeedbackAction(input: {
   body: string;
@@ -34,6 +34,7 @@ export async function submitFeedbackAction(input: {
 }): Promise<FeedbackResult> {
   const body = input.body.trim();
   if (!body) return { ok: false, reason: 'empty' };
+  if (body.length > FEEDBACK_MAX_LENGTH) return { ok: false, reason: 'too-long' };
 
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
