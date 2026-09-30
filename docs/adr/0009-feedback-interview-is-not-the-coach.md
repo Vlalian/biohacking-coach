@@ -131,8 +131,8 @@ plain comment field, with guidance above it on what to write: what happened, whe
 screen, session or message), what you expected instead, and that a couple of sentences is plenty.
 This is the "short free-text form" this ADR superseded, with the guidance as the answer to the
 Context's complaint that a box returns *"the Coach felt off sometimes."* The interview's prompt, its
-service and its model call are deleted, not left dormant, and so is Plan H's product brief, whose only
-reader was the interviewer.
+service and its model call are deleted, not left dormant. Plan H's product brief, whose only reader
+was the interviewer, never reached main: it went with PR #114, closed unmerged.
 
 **The Trust Signal is not asked anywhere** (Mads, 2026-09-30). It stays uncollected until it gets a
 surface of its own.

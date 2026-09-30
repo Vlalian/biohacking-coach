@@ -1309,7 +1309,7 @@ export type MessageRating = (typeof MESSAGE_RATINGS)[number];
  * unattended, which means nobody can ask "what just happened?" - so a flag has
  * to pin itself to something readable afterwards. "The Coach felt off sometimes"
  * is unactionable; this message, thumbs down, opens the transcript at the exact
- * text. The thumbs say *where*; the Feedback Interview says *why*.
+ * text. The thumbs say *where*; the feedback page's comment field says *why*.
  *
  * A table of its own rather than a kind on `athlete_feedback`: that one is keyed
  * by athlete with a partial unique index for the Trust Signal, and this is keyed

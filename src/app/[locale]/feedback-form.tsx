@@ -32,9 +32,17 @@ export function FeedbackForm({
     if (!body.trim() || pending) return;
 
     startTransition(async () => {
-      const result = await submitFeedbackAction({ body, view: openedFrom });
-      setState(result.ok ? 'sent' : 'error');
-      if (result.ok) setBody('');
+      // The action rethrows a database error, and a dropped connection rejects
+      // too. Left uncaught, either reaches the locale error boundary, which
+      // replaces this form and the text in it with a retry screen. The tester
+      // keeps their text and gets the notice instead, as `coach-thread.tsx` does.
+      try {
+        const result = await submitFeedbackAction({ body, view: openedFrom });
+        setState(result.ok ? 'sent' : 'error');
+        if (result.ok) setBody('');
+      } catch {
+        setState('error');
+      }
     });
   }
 
