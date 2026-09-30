@@ -52,8 +52,8 @@ describe('refusalReason', () => {
 
   // Mads's smoke run of PR #71, 2026-09-17: four "not sent" errors were the
   // Coach hitting the chat's token budget mid-proposal and coming back with
-  // nothing. "Could not be reached" invites a retry of the same long turn; the
-  // athlete needs to know it ran out of room, and to ask for less.
+  // nothing. It is told apart from "could not be reached" so the log and the
+  // notice can say the answer was cut off.
   it('calls a reply cut off at the token limit ran-out-of-room, by its shape, not its class', () => {
     const cutOff = Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' });
     expect(refusalReason(cutOff)).toBe('ran-out-of-room');

@@ -675,8 +675,9 @@ describe('formatWeekSessions — authorship labels and the parameter tail', () =
     // The structure's own row (`training-architecture/34`): the Coach is
     // adjusting a default, not holding on someone else's prescription.
     expect(labelFor('arithmetic')).toContain('the plan structure put this here');
-    // A Detected Activity in CONTEXT.md's terms, said plainly to the model.
-    expect(labelFor('garmin')).toContain("logged from the athlete's watch");
+    // A History Upload in CONTEXT.md's terms, said plainly to the model: it is
+    // imported history and needs no rating (garmin-integration/07).
+    expect(labelFor('garmin')).toContain("imported from the athlete's watch, no rating expected");
   });
 
   it('renders duration and zone as a separated tail, and omits it entirely when there is neither', () => {
@@ -1097,5 +1098,39 @@ describe('which absence the Coach is told about', () => {
 
     expect(fed).toContain('pulse=50bpm');
     expect(fed).not.toContain('NO DEVICE DATA');
+  });
+});
+
+describe('Coach Chat reads the athlete signals the draft does (training-architecture/52)', () => {
+  const CHECK: CheckIn = {
+    phase: 'Base', commStyle: '', experienceLevel: 'intermediate', presenceStage: 'full', language: 'English',
+    weeklySessionDay: 'Monday', fixedConstraints: [], equipment: [],
+  };
+
+  it('renders the recent weeks, injuries, moves and comments when it is given them', () => {
+    const out = buildChatPrompt(CHECK, '2026-08-18', null, [], null, null, {
+      recentWeeks: [{ weekStart: '2026-08-10', plannedMinutes: 60, doneMinutes: 60, completed: 1, skipped: 0, byType: [], soFar: false, imported: 1, unrecorded: 0, device: null }],
+      health: { injuries: [{ prevents: { swim: 'full', bike: 'full', run: 'none' }, since: '2026-08-12', botherRating: 4 }], illnesses: [] },
+      moves: [{ from: '2026-08-17', to: '2026-08-19', by: 'athlete' }],
+      comments: [{ date: '2026-08-11', sessionType: 'Endurance', comment: 'felt flat' }],
+    });
+    expect(out).toContain('RECENT WEEKS:');
+    expect(out).toContain('1 imported from the athlete\'s device (no rating expected)');
+    expect(out).toContain('run none; bothering them 4/5');
+    expect(out).toContain('- Mon 2026-08-17 → Wed 2026-08-19 (moved by the athlete)');
+    expect(out).toContain('"felt flat"');
+  });
+
+  it('is unchanged when given no signals', () => {
+    expect(buildChatPrompt(CHECK, '2026-08-18', null, [], null, null, null)).toBe(buildChatPrompt(CHECK, '2026-08-18'));
+  });
+
+  it('refuses a reflection comment carrying a direct identifier', () => {
+    expect(() =>
+      buildChatPrompt(CHECK, '2026-08-18', null, [], null, null, {
+        recentWeeks: [], health: { injuries: [], illnesses: [] }, moves: [],
+        comments: [{ date: '2026-08-11', sessionType: 'Endurance', comment: 'ring 12345678' }],
+      }),
+    ).toThrow();
   });
 });

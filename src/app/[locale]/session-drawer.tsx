@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
+import { isImportedHistory } from '@/features/session/session';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
 import {
@@ -563,6 +564,7 @@ export function ViewBody({
     skip: policy.ownReport && rules.skip,
     unavailable: policy.ownReport && rules.unavailable,
   };
+  const imported = isImportedHistory(session);
 
   return (
     <div className="space-y-6 px-5 py-5">
@@ -603,7 +605,7 @@ export function ViewBody({
           >
             {session.note}
           </p>
-          {!policy.content && (
+          {!policy.content && !imported && (
             <p className="mt-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('readOnlyNote')}
             </p>
@@ -634,6 +636,11 @@ export function ViewBody({
               </button>
             )}
           </div>
+        ) : imported ? (
+          // History Upload writes past training as completed with no feedback,
+          // by design. It needs no rating (garmin-integration/07): the record
+          // is what the device measured, so that is what is shown.
+          importedRecord(session.summary, t)
         ) : session.status === 'completed' ? (
           <div className="mt-2 flex items-center justify-between border border-dashed border-border p-3">
             <span className="font-body text-sm text-muted-foreground">{t('notRated')}</span>
@@ -957,6 +964,34 @@ function AthleteSessionForm({
         {initial ? t('saveChanges') : t('createSubmit')}
       </button>
     </form>
+  );
+}
+
+/**
+ * The Session Reflection section of an imported history session: a marker that
+ * it came from the device, and the facts the device recorded — only those it
+ * has. A plain function, not a component, so it renders inline.
+ */
+function importedRecord(
+  summary: Session['summary'],
+  t: ReturnType<typeof useTranslations<'SessionDrawer'>>,
+) {
+  return (
+    <div className="mt-2 space-y-1 border border-border p-3">
+      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
+        {t('imported')}
+      </p>
+      {summary?.distanceM != null && (
+        <p className="font-body text-sm text-foreground">
+          {t('deviceFacts.distance', { km: (summary.distanceM / 1000).toFixed(1) })}
+        </p>
+      )}
+      {summary?.avgHr != null && (
+        <p className="font-body text-sm text-foreground">
+          {t('deviceFacts.avgHr', { bpm: Math.round(summary.avgHr) })}
+        </p>
+      )}
+    </div>
   );
 }
 

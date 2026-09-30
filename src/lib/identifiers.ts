@@ -95,8 +95,10 @@ export function isFreeOfShapedIdentifiers(value: unknown): boolean {
  * `ran-out-of-room` (2026-09-17): the Coach hit the turn's token budget and
  * came back with nothing — mid-way through a whole-week proposal, on Mads's
  * smoke run of PR #71. Told apart from `coach-unavailable` because "could not
- * be reached, send it again" invites a retry of the same long turn; the
- * athlete needs to know the reply was cut off and to ask for less.
+ * be reached" and "the answer was cut off" are different faults in the log.
+ * Since 2026-09-30 (`showable-version/60`) the athlete is told only that the
+ * answer was cut off and to try again — never to ask for less, because a
+ * three-day change is a real request and the budget is the app's to size.
  */
 export type RefusalReason = 'unsafe-content' | 'coach-unavailable' | 'ran-out-of-room';
 

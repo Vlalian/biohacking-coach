@@ -81,7 +81,7 @@ describe('ProposalCard', () => {
   });
 });
 
-describe('ProposalCard — a week the structure had already filled (training-architecture/40)', () => {
+describe('ProposalCard — adjusted is internal only (training-architecture/48, R4)', () => {
   const render = (draft: typeof DRAFT & { adjusted?: boolean }) =>
     renderToStaticMarkup(
       <CoachOverlayContext.Provider value={overlay}>
@@ -89,15 +89,11 @@ describe('ProposalCard — a week the structure had already filled (training-arc
       </CoachOverlayContext.Provider>,
     );
 
-  it('says the week was adjusted, not drafted, when it already held sessions', () => {
-    const html = render({ ...DRAFT, adjusted: true });
-    expect(html).toContain('titleAdjusted(week=fmt:');
-    expect(html).toContain('leadAdjusted(count=2)');
-    expect(html).not.toContain('title(week=');
-  });
-
-  it('keeps the drafted wording for an empty week and for a draft that carries no flag', () => {
-    for (const draft of [{ ...DRAFT, adjusted: false }, DRAFT]) {
+  // The 2026-09-26 audit: the card said "adjusted" over a week copied to the
+  // minute. Whether a week was adjusted is now computed and stored for
+  // statistics, and the card says the same thing either way.
+  it('shows the same title and lead whether or not a stored draft says it was adjusted', () => {
+    for (const draft of [{ ...DRAFT, adjusted: true }, { ...DRAFT, adjusted: false }, DRAFT]) {
       const html = render(draft);
       expect(html).toContain('title(week=fmt:');
       expect(html).toContain('lead(count=2)');

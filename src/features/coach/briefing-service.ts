@@ -1,19 +1,13 @@
 import { refusalReason, type RefusalReason } from '@/lib/identifiers';
 import { logCoachFailure } from '@/lib/coach-log';
-import { getAthleteById } from '@/features/athlete/athlete-repository';
-import {
-  getBriefingPlan,
-  getBriefingReflections,
-} from '@/features/session/session-repository';
+import { getBriefingPlan } from '@/features/session/session-repository';
 import { callCoach, type CoachReply } from './coach-client';
-import { getActiveLink, getSharedTranscripts } from './coach-repository';
+import { getActiveLink } from './coach-repository';
 import type { CoachingLink } from './coach';
 import { canSeeAthleteReports } from './link-visibility';
-import { getRaces } from '@/features/race/race-repository';
-import { capacityFor } from '@/features/health/health-repository';
 import { currentPhase, staleLastBlockOf } from './training-blocks';
 import { getLatestUnrealisticFlag } from './training-block-repository';
-import { getResolvedBlocks } from './training-block-service';
+import { briefingContextOf, briefingInclude, readAthleteContext } from './athlete-context';
 import {
   appendBriefingMessages,
   createBriefing,
@@ -28,12 +22,8 @@ import {
   buildBriefingContext,
   renderBriefingPrompt,
   toBriefingApiMessages,
-  toBriefingReflection,
   type BriefingContext,
-  type BriefingReports,
-  type BriefingTranscript,
   briefingHorizonNote,
-  briefingRaces,
 } from './briefing';
 
 /**
@@ -103,9 +93,14 @@ export async function buildBriefingContextFor(
   // 0003; the Training Blocks are the horizon that calendar is built toward).
   // The Coach's own "unrealistic" verdict travels with the blocks for the same
   // reason: it is the Coach's judgement, not the athlete's report.
-  const [plan, resolved, preferredName] = await Promise.all([
+  //
+  // Link Visibility gates the rest, in the one athlete read shared with the
+  // draft and Coach Chat (`training-architecture/52`): with a flag off the
+  // signal is not in the include, so it is never fetched — not
+  // fetched-then-hidden. `getSharedTranscripts` checks its own flag.
+  const [plan, context, preferredName] = await Promise.all([
     getBriefingPlan(athleteId),
-    getResolvedBlocks(athleteId, today),
+    readAthleteContext(athleteId, today, briefingInclude(link, canSeeAthleteReports(link.visibility))),
     // What the athlete chose for the Coach to call them (`preferred-name/02`),
     // read through the user seam for the *linked* athlete — the action cannot
     // resolve it, since the signed-in user here is the Head Coach. Ungated by
@@ -113,6 +108,7 @@ export async function buildBriefingContextFor(
     // sees their real name on the Roster.
     getPreferredNameForAthlete(athleteId),
   ]);
+  const resolved = context.horizon;
   // Scoped to the current Target Race: a verdict on a race the athlete has since
   // replaced is not this race's.
   const raceUnrealistic = resolved.race ? await getLatestUnrealisticFlag(athleteId, resolved.race.id) : null;
@@ -129,73 +125,8 @@ export async function buildBriefingContextFor(
     horizonNote: briefingHorizonNote(resolved),
   };
 
-  // Gated here: with the flag off nothing is fetched, not fetched-then-hidden.
-  const reports = canSeeAthleteReports(link.visibility)
-    ? await readReports(athleteId, phase, today)
-    : null;
-
-  // Gated inside getSharedTranscripts: null (nothing fetched) when the flag is off.
-  const shared = await getSharedTranscripts(link);
-  const transcripts: BriefingTranscript[] | null = shared
-    ? shared.map((c) => ({
-        kind: c.kind,
-        lines: c.messages.map((m) => `${roleLabel(m.role)}: ${m.content}`),
-      }))
-    : null;
-
+  const { reports, transcripts } = briefingContextOf(context, { today, phase });
   return buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName });
-}
-
-/**
- * The athlete's self-reported material, read only once `shareAthleteReports`
- * has been checked by the caller.
- *
- * `phase` arrives resolved: the Training Phase is the name of the Training
- * Block today falls inside — the Coach-shaped one when a set exists
- * (`training-architecture/07`) — and null for an athlete with no race, which
- * the briefing renders as no phase.
- */
-async function readReports(athleteId: string, phase: string | null, today: string): Promise<BriefingReports> {
-  const [athlete, reflectionRows, capacity, races] = await Promise.all([
-    getAthleteById(athleteId),
-    getBriefingReflections(athleteId),
-    // An open Injury or Illness is data the athlete reported about their own
-    // body, so it belongs to `shareAthleteReports` alongside their Session
-    // Reflections and Check-ins — the same flag, not a third one. Read inside
-    // this branch, so when the flag is off it is never fetched at all rather
-    // than fetched and hidden (ticket 11).
-    capacityFor(athleteId),
-    // Every race the athlete has (slice 09). Read inside this branch like the
-    // rest of the profile: a race is something the athlete reported.
-    getRaces(athleteId),
-  ]);
-  // A missing athlete row reads as an athlete who has said nothing: every
-  // column is nullable already, so the empty row is the honest stand-in.
-  // Stryker disable next-line ObjectLiteral: equivalent. Every profile field is
-  // rendered by presence, so an empty stand-in and an all-null one produce the
-  // same briefing; the explicit nulls are for the type, not the behaviour.
-  const a = athlete ?? { experienceLevel: null, raceTarget: null, trainingSessionsPerWeek: null, profile: null };
-  return {
-    profile: {
-      phase,
-      experienceLevel: a.experienceLevel,
-      raceTarget: a.raceTarget,
-      sessionsPerWeek: a.trainingSessionsPerWeek,
-      onboarding: a.profile?.onboarding ?? null,
-      // The capacity half only. A Head Coach reads the detail thread on the
-      // athlete's own page, not through a briefing that is assembled into a
-      // model prompt (ADR 0011).
-      capacity,
-      ...briefingRaces(races, today),
-    },
-    reflections: reflectionRows.map(toBriefingReflection),
-  };
-}
-
-function roleLabel(role: 'athlete' | 'coach_ai' | 'head_coach'): string {
-  if (role === 'athlete') return 'Athlete';
-  if (role === 'head_coach') return 'Coach';
-  return 'Momentum';
 }
 
 export interface BriefingState {

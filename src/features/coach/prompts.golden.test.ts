@@ -291,3 +291,19 @@ describe('golden — no Check-in has ever been given', () => {
     expect(buildChatPrompt({ ...NO_READINESS, presenceStage: 'cold_start' }, TODAY)).toMatchSnapshot();
   });
 });
+
+describe('golden — Coach Chat with the athlete signals it now reads (training-architecture/52)', () => {
+  it('renders identically with recent weeks, injuries, moves and reflection comments', () => {
+    expect(
+      buildChatPrompt(BASE, TODAY, null, [], null, null, {
+        recentWeeks: [
+          { weekStart: '2026-08-10', plannedMinutes: 240, doneMinutes: 180, completed: 3, skipped: 1, byType: [{ type: 'Endurance', completed: 3, doneMinutes: 180 }], soFar: false, imported: 0, unrecorded: 0, device: { distanceKm: 40.2, avgHr: 141 } },
+          { weekStart: '2026-08-17', plannedMinutes: 120, doneMinutes: 60, completed: 1, skipped: 0, byType: [{ type: 'Endurance', completed: 1, doneMinutes: 60 }], soFar: true, imported: 0, unrecorded: 1, device: null },
+        ],
+        health: { injuries: [{ prevents: { swim: 'full', bike: 'full', run: 'easy' }, since: '2026-08-12', botherRating: 2 }], illnesses: [] },
+        moves: [{ from: '2026-08-17', to: '2026-08-19', by: 'head_coach' }],
+        comments: [{ date: '2026-08-11', sessionType: 'Endurance', comment: 'calf tight at the end' }],
+      }),
+    ).toMatchSnapshot();
+  });
+});

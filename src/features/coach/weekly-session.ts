@@ -1,6 +1,6 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
-import type { Session } from '@/features/session/session';
+import { isImportedHistory, isUnrecorded, type Session } from '@/features/session/session';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
@@ -329,6 +329,24 @@ export interface WeekSummary {
    * come is left out rather than read as not done.
    */
   soFar: boolean;
+  /**
+   * How many of the completed sessions are imported history — a History
+   * Upload's, which needs no rating (`garmin-integration/07`). Counted within
+   * `completed`, so the Coach reads them as done and never as unrated.
+   */
+  imported: number;
+  /**
+   * Past Planned Sessions nobody recorded (`training-architecture/45`) — in
+   * `plannedMinutes`, never in `completed` or `skipped`, and said as such so
+   * the Coach does not read them as done or as dropped.
+   */
+  unrecorded: number;
+  /**
+   * What a device recorded on the week's completed sessions
+   * (`training-architecture/52`): distance summed, average heart rate the mean
+   * of the sessions that had one. Null when none of them came with a summary.
+   */
+  device: { distanceKm: number; avgHr: number | null } | null;
 }
 
 /** How many weeks before the drafted one the draft reads. */
@@ -337,8 +355,10 @@ export const RECENT_WEEKS = 4;
 /**
  * The four weeks before `targetWeekStart`, oldest first — a week with nothing
  * in it is returned empty rather than dropped, so the Coach reads a gap as a
- * gap. Done means `status = 'completed'` whatever wrote the session: the
- * history importer writes `origin: 'athlete'`, and nothing writes `'garmin'`.
+ * gap. Done means `status = 'completed'` whatever wrote the session: a
+ * Detected Activity accept keeps `'athlete'` or the planned session's origin,
+ * and a History Upload writes `'garmin'` — counted as done and as
+ * {@link WeekSummary.imported}, never as a reflection missing.
  *
  * The draft is written days before its week starts, so the last of the four is
  * usually the current one. A session from today on that is neither completed
@@ -350,11 +370,11 @@ export function fourWeekSummary(sessions: Session[], targetWeekStart: string, to
   return Array.from({ length: RECENT_WEEKS }, (_, i) => {
     const weekStart = addDays(targetWeekStart, (i - RECENT_WEEKS) * 7);
     const week = decided.filter((s) => weekStartOf(s.date) === weekStart);
-    return summariseWeek(weekStart, week, weekStart === weekStartOf(today));
+    return summariseWeek(weekStart, week, weekStart === weekStartOf(today), today);
   });
 }
 
-function summariseWeek(weekStart: string, week: Session[], soFar: boolean): WeekSummary {
+function summariseWeek(weekStart: string, week: Session[], soFar: boolean, today: string): WeekSummary {
   const done = week.filter((s) => s.status === 'completed');
   return {
     weekStart,
@@ -364,6 +384,21 @@ function summariseWeek(weekStart: string, week: Session[], soFar: boolean): Week
     skipped: week.filter((s) => s.status === 'skipped').length,
     byType: typeSplit(done),
     soFar,
+    imported: done.filter(isImportedHistory).length,
+    unrecorded: week.filter((s) => isUnrecorded(s, today)).length,
+    device: deviceOf(done),
+  };
+}
+
+/** The device facts of a week's completed sessions, or null when none carried any. */
+function deviceOf(done: Session[]): WeekSummary['device'] {
+  const summaries = done.flatMap((s) => (s.summary ? [s.summary] : []));
+  if (summaries.length === 0) return null;
+  const metres = summaries.reduce((sum, x) => sum + (x.distanceM ?? 0), 0);
+  const rates = summaries.flatMap((x) => (x.avgHr === null ? [] : [x.avgHr]));
+  return {
+    distanceKm: Math.round(metres / 100) / 10,
+    avgHr: rates.length === 0 ? null : Math.round(rates.reduce((a, b) => a + b, 0) / rates.length),
   };
 }
 
@@ -468,6 +503,11 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
         description:
           "When you changed the week you were given, one sentence in the athlete's language on what you changed. Leave it out when you changed nothing.",
       },
+      volumeReason: {
+        type: 'string',
+        description:
+          "Only when the week's total minutes are more than 10% below the baseline week: the athlete's reason for the larger cut (injury, illness, fatigue they reported). The server allows at most 30% below with a reason, 10% without, and never more than 10% above.",
+      },
     },
     required: ['sessions'],
   },
@@ -498,6 +538,113 @@ function positiveMinutes(value: unknown): number | null {
  */
 export function whatChangedFrom(input: unknown): string | null {
   return optionalString((input as { whatChanged?: unknown } | null | undefined)?.whatChanged)?.trim() ?? null;
+}
+
+/**
+ * The stated reason for cutting the arithmetic's volume by more than 10 %
+ * (`training-architecture/48`, R1), or null when the Coach gave none.
+ */
+export function volumeReasonFrom(input: unknown): string | null {
+  return optionalString((input as { volumeReason?: unknown } | null | undefined)?.volumeReason)?.trim() ?? null;
+}
+
+/** The band around the arithmetic's minutes a draft may land in (R1). */
+const BAND = { below: 0.9, belowWithReason: 0.7, above: 1.1 } as const;
+
+/** How far a week may move before it counts as adjusted (R4). */
+const ADJUSTED_VOLUME = 0.05;
+
+function totalMinutes(sessions: readonly { durationMinutes: number | null }[]): number {
+  return sessions.reduce((sum, x) => sum + (x.durationMinutes ?? 0), 0);
+}
+
+/** A clamped session's minutes: rounded to five, never under fifteen (R2). */
+function fitMinutes(minutes: number): number {
+  return Math.max(15, Math.round(minutes / 5) * 5);
+}
+
+/**
+ * The draft held to the band around the arithmetic's volume
+ * (`training-architecture/48`, Mads's rulings R1 and R2, 2026-09-29).
+ *
+ * Within ±10 % the draft stands as it is. It may go down to −30 % only with a
+ * stated reason, and never above +10 %, reason or not. Outside the band every
+ * session's minutes are scaled by the same factor back to the nearest edge,
+ * rounded to five minutes and kept at fifteen or more — so the draft is never
+ * lost, only its volume is brought back. The edge is taken at the five-minute
+ * mark inside the band, and the longest session absorbs what the rounding and
+ * the fifteen-minute floor added or took, so the week lands on that mark
+ * rather than just outside it. A week the arithmetic wrote nothing for has no
+ * band, and a week with no minutes has nothing to scale.
+ */
+export function clampToBand(
+  sessions: ProposedSession[],
+  baselineMinutes: number,
+  reason: string | null,
+): { sessions: ProposedSession[]; total: number; clamped: boolean } {
+  const total = totalMinutes(sessions);
+  const floor = baselineMinutes * (reason ? BAND.belowWithReason : BAND.below);
+  const ceiling = baselineMinutes * BAND.above;
+  if (standsAsIs(total, baselineMinutes, floor, ceiling)) return { sessions, total, clamped: false };
+  const goal = Math.min(Math.max(total, Math.ceil(floor / 5) * 5), Math.floor(ceiling / 5) * 5);
+  const scaled = sessions.map((x) =>
+    x.durationMinutes === null ? x : { ...x, durationMinutes: fitMinutes(x.durationMinutes * (goal / total)) },
+  );
+  const held = settledOn(goal, scaled);
+  return { sessions: held, total: totalMinutes(held), clamped: true };
+}
+
+/** No arithmetic to hold it to, no minutes to scale, or already inside the band. */
+function standsAsIs(total: number, baselineMinutes: number, floor: number, ceiling: number): boolean {
+  return baselineMinutes === 0 || total === 0 || (total >= floor && total <= ceiling);
+}
+
+/**
+ * The scaled week brought to `goal`. Minutes the rounding took are given back to
+ * the longest session. Minutes it added are taken back five at a time, each from
+ * the longest session still over fifteen, so no single session is floored while
+ * others could give (CodeRabbit, PR #116). When every session is already at
+ * fifteen the floor (R2) wins and the week stays over: the draft is never lost.
+ */
+function settledOn(goal: number, sessions: ProposedSession[]): ProposedSession[] {
+  const minutes = sessions.map((x) => x.durationMinutes ?? 0);
+  const rest = goal - totalMinutes(sessions);
+  // Stryker disable next-line EqualityOperator — at rest 0 adding 0 and trimming 0 are the same.
+  if (rest > 0) minutes[minutes.indexOf(Math.max(...minutes))] += rest;
+  else trimFromLongest(minutes, -rest);
+  return sessions.map((x, i) => (x.durationMinutes === null ? x : { ...x, durationMinutes: minutes[i] }));
+}
+
+/** Takes `over` minutes off, five at a time from the longest session above fifteen. */
+function trimFromLongest(minutes: number[], over: number): void {
+  for (let left = over; left > 0; left -= 5) {
+    const longest = Math.max(...minutes);
+    if (longest <= 15) return;
+    minutes[minutes.indexOf(longest)] -= 5;
+  }
+}
+
+/** The (date, Session Type) pairs of a week, in date order, as one comparable key. */
+function shapeOf(sessions: readonly { date: string; type: string }[]): string {
+  return JSON.stringify(sessions.map((x) => [x.date, x.type]).sort());
+}
+
+/**
+ * Whether the draft really differs from the arithmetic's week (R4): a session
+ * added, removed, moved or retyped, or the volume moved by more than 5 %.
+ * Internal — stored for statistics, never shown to the athlete or the coach.
+ * The Coach's own flag said "adjusted" whenever a baseline existed, and a
+ * draft that copied the arithmetic to the minute claimed an adjustment (the
+ * 2026-09-26 audit). No arithmetic week is nothing to adjust.
+ */
+export function isAdjusted(
+  draft: readonly { date: string; type: string; durationMinutes: number | null }[],
+  baseline: readonly { date: string; type: string; durationMinutes: number | null }[],
+): boolean {
+  if (baseline.length === 0) return false;
+  if (shapeOf(draft) !== shapeOf(baseline)) return true;
+  const base = totalMinutes(baseline);
+  return Math.abs(totalMinutes(draft) - base) > base * ADJUSTED_VOLUME;
 }
 
 export type ValidatePlanResult =
@@ -585,7 +732,7 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow): ProposedSe
  * and narrows, so there is no sentinel empty string standing in for "not a
  * date": absence and invalidity are the same refusal and are written once.
  */
-function isPlannableDay(date: unknown, window: PlanningWindow): date is string {
+export function isPlannableDay(date: unknown, window: PlanningWindow): date is string {
   // Stryker disable next-line ConditionalExpression: equivalent. The typeof is
   // here to narrow for TypeScript; at runtime isValidDateKey already rejects a
   // non-string, so no behavioural test can tell the two apart.

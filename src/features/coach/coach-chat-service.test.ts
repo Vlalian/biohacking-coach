@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
@@ -14,7 +14,9 @@ const {
   getOwnedSession,
   getSessionsForWeek,
   logCoachFailure,
+  getArithmeticSessionsForWeek,
 } = vi.hoisted(() => ({
+  getArithmeticSessionsForWeek: vi.fn(async (): Promise<unknown[]> => []),
   callCoach: vi.fn(),
   createConversation: vi.fn(),
   getOwnedConversation: vi.fn(),
@@ -28,9 +30,24 @@ const {
 
 vi.mock('./coach-client', () => ({ callCoach }));
 const { logCoachDrift } = vi.hoisted(() => ({ logCoachDrift: vi.fn() }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logCoachDrift }));
+const { logWeekDraftClamped } = vi.hoisted(() => ({ logWeekDraftClamped: vi.fn() }));
+// The real `chat_max_tokens` line, so its test reads what reaches the log
+// (console is the boundary); the rest are faked as before.
+vi.mock('@/lib/coach-log', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/coach-log')>()),
+  logCoachFailure,
+  logCoachDrift,
+  logWeekDraftClamped,
+}));
 const { capacityFor } = vi.hoisted(() => ({ capacityFor: vi.fn<() => Promise<string | null>>(async () => null) }));
-vi.mock('@/features/health/health-repository', () => ({ capacityFor }));
+// The structured injury read and the week's moves (`training-architecture/52`):
+// boundaries, none open and none moved by default.
+vi.mock('@/features/health/health-repository', () => ({
+  capacityFor,
+  getOpenInjuries: vi.fn(async () => []),
+  getOpenIllnesses: vi.fn(async () => []),
+}));
+vi.mock('@/features/session/session-move-repository', () => ({ getSessionMovesSince: vi.fn(async () => []) }));
 
 // One grounding per turn (knowledge-oracle/05). Faked at the module seam so
 // these tests assert the wiring — which tools the Coach is offered, where the
@@ -98,6 +115,9 @@ vi.mock('@/features/equipment/equipment-repository', () => ({ getEquipmentItems 
 vi.mock('@/features/session/session-repository', () => ({
   getOwnedSession,
   getSessionsForWeek,
+  // The recent weeks Chat reads since `training-architecture/52`. None by default.
+  getSessionsInRange: vi.fn(async () => []),
+  getArithmeticSessionsForWeek,
 }));
 
 const { sendCoachChatMessage, getOpenCoachChat } = await import('./coach-chat-service');
@@ -222,8 +242,8 @@ describe('sendCoachChatMessage', () => {
   });
 
   it('reports ran-out-of-room when the reply was cut off at the token limit, and logs it as such', async () => {
-    // Mads's smoke run of PR #71: four "not sent" errors were this. The athlete
-    // is told to ask for less, not to send the same long turn again.
+    // Mads's smoke run of PR #71: four "not sent" errors were this. The notice
+    // says the answer was cut off (`showable-version/60`).
     callCoach.mockRejectedValue(
       Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
     );
@@ -235,9 +255,48 @@ describe('sendCoachChatMessage', () => {
     expect(appendMessages).not.toHaveBeenCalled();
   });
 
+  describe('the chat_max_tokens line (showable-version/60)', () => {
+    const lines: unknown[] = [];
+    beforeEach(() => {
+      lines.length = 0;
+      vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+        lines.push(JSON.parse(String(line)));
+      });
+    });
+    afterEach(() => vi.mocked(console.error).mockRestore());
+
+    it('logs a cut-off chat reply with its stop reason and the cap it hit', async () => {
+      // So a cut-off is seen in the logs before a tester reports it.
+      getOwnedConversation.mockResolvedValue({ id: 'conv_1', kind: 'coach_chat' });
+      callCoach.mockRejectedValue(
+        Object.assign(new Error('empty'), { name: 'EmptyCoachReplyError', stopReason: 'max_tokens' }),
+      );
+
+      await sendCoachChatMessage(ATHLETE, 'conv_1', 'I am away three days, change my week', '2026-08-12');
+
+      expect(lines).toEqual([
+        {
+          event: 'chat_max_tokens',
+          athleteId: ATHLETE.id,
+          conversationId: 'conv_1',
+          stopReason: 'max_tokens',
+          maxTokens: 4096,
+        },
+      ]);
+    });
+
+    it('writes no such line when the Coach simply could not be reached', async () => {
+      callCoach.mockRejectedValue(new Error('upstream 529'));
+
+      await sendCoachChatMessage(ATHLETE, null, 'should I ride?', '2026-08-12');
+
+      expect(lines).toEqual([]);
+    });
+  });
+
   it('gives the Coach room for a whole-week proposal and a paragraph', async () => {
     await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12');
-    expect(callCoach.mock.calls[0][0].maxTokens).toBe(2500);
+    expect(callCoach.mock.calls[0][0].maxTokens).toBe(4096);
   });
 
   it('names Coach Chat as the surface in the failure log', async () => {
@@ -475,6 +534,52 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(recordProposal).not.toHaveBeenCalled();
   });
 
+  describe('holds the week to the band around the arithmetic (training-architecture/48, ruling 2026-09-29)', () => {
+    // Two arithmetic sessions inside this week's remainder (200 min) and one
+    // on Monday, before the window, which the band must not count.
+    const ARITHMETIC = [
+      { date: '2026-09-15', sport: 'run', type: 'Endurance', durationMinutes: 1000, zone: 'Z2', title: 'Before' },
+      { date: '2026-09-17', sport: 'bike', type: 'Endurance', durationMinutes: 100, zone: 'Z2', title: 'Ride' },
+      { date: '2026-09-18', sport: 'run', type: 'Endurance', durationMinutes: 100, zone: 'Z2', title: 'Run' },
+    ];
+    const week = (minutes: number, volumeReason?: string) => ({
+      sessions: [
+        { date: '2026-09-17', type: 'Endurance', durationMinutes: minutes, zone: 'Z2', note: null },
+        { date: '2026-09-18', type: 'Endurance', durationMinutes: minutes, zone: 'Z2', note: null },
+      ],
+      ...(volumeReason ? { volumeReason } : {}),
+    });
+    const stagedMinutes = () =>
+      ((recordProposal.mock.calls[0] as unknown[])[2] as { durationMinutes: number }[]).map((x) => x.durationMinutes);
+
+    beforeEach(() => {
+      getArithmeticSessionsForWeek.mockReset().mockResolvedValue(ARITHMETIC);
+      logWeekDraftClamped.mockClear();
+    });
+
+    it('pulls a week 35 % under the arithmetic, with no reason, back to −10 %', async () => {
+      callCoach.mockResolvedValue({ text: 'Lighter.', toolCalls: [{ name: 'propose_week_plan', input: week(65) }] });
+
+      const result = await sendCoachChatMessage(ATHLETE, 'c1', 'lighter', TODAY);
+
+      expect(getArithmeticSessionsForWeek).toHaveBeenCalledWith('athlete_1', '2026-09-14');
+      expect(stagedMinutes()).toEqual([90, 90]);
+      expect(logWeekDraftClamped).toHaveBeenCalledWith('athlete_1', { drafted: 130, clampedTo: 180, baseline: 200, reasoned: false });
+      expect(result).toMatchObject({ ok: true, proposal: { sessions: [{ durationMinutes: 90 }, { durationMinutes: 90 }] } });
+    });
+
+    it('with a stated reason, pulls it only to −30 %', async () => {
+      callCoach.mockResolvedValue({
+        text: 'Lighter.',
+        toolCalls: [{ name: 'propose_week_plan', input: week(65, 'she is sick') }],
+      });
+
+      await sendCoachChatMessage(ATHLETE, 'c1', 'I am ill', TODAY);
+
+      expect(stagedMinutes()).toEqual([70, 70]);
+    });
+  });
+
   it('stages nothing, but still stores the turn, when the plan falls outside the window', async () => {
     // Next week, and no draft was brought in to discuss: not this chat's to write.
     const outside = { sessions: [{ ...PLAN.sessions[0], date: '2026-09-23' }] };
@@ -485,6 +590,8 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(result).toMatchObject({ ok: true, proposal: null });
     expect(recordProposal).not.toHaveBeenCalled();
     expect(appendMessages).toHaveBeenCalledTimes(1);
+    // Refused cleanly, not by a throw after the store.
+    expect(logCoachFailure).not.toHaveBeenCalled();
   });
 });
 
@@ -601,6 +708,7 @@ describe('Coach Chat sees the week', () => {
     feedbackComment: null,
     origin: 'coach',
     isTraining: true,
+    summary: null,
     ...over,
   });
 

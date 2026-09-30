@@ -120,9 +120,9 @@ export interface NewWeekDraft {
   citations: Citation[];
   skeleton: SkeletonDay[];
   /**
-   * The week already held the structure's sessions, so the draft adjusted it
-   * rather than filling an empty one (`training-architecture/40`). Narration
-   * reads it later, when that fact can no longer be recovered.
+   * Whether the draft really differs from the arithmetic's week — computed by
+   * `isAdjusted` (`training-architecture/48`, R4) and stored for statistics.
+   * Internal only: neither the card nor narration shows it.
    */
   adjusted?: boolean;
   /** The Coach's one sentence on what it changed, when it gave one. */

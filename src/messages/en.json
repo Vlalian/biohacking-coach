@@ -409,6 +409,11 @@
     "edit": "Edit session",
     "delete": "Delete session",
     "undoImport": "Undo this import",
+    "imported": "Imported from your device — no rating needed.",
+    "deviceFacts": {
+      "distance": "Distance {km} km",
+      "avgHr": "Average heart rate {bpm} bpm"
+    },
     "readOnlyNote": "This session's content comes from Momentum or your coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",
@@ -654,7 +659,7 @@
     "consentRequiredLink": "Open Privacy & consent",
     "error": "That didn't send. Try again.",
     "unsafeContent": "A note or a piece of gear you have saved contains what looks like an email address or phone number. Momentum cannot read that. Edit it out and try again.",
-    "ranOutOfRoom": "Momentum ran out of room for that answer. Ask for a smaller change, or one week at a time.",
+    "ranOutOfRoom": "Momentum's answer got cut off. Try again.",
     "drewOn": "What I drew on",
     "thumbUp": "This helped",
     "thumbDown": "This was off",
@@ -718,8 +723,6 @@
     "blocksDrafted": "I've shaped your training toward {race}: {blocks}",
     "weekDrafted": "I've drafted a training week for you — have a look at your plan when you're ready",
     "weekDraftedFrom": "I've drafted a training week for you, starting {day} — have a look at your plan when you're ready",
-    "weekAdjusted": "I've adjusted the week already in your plan — have a look when you're ready",
-    "weekAdjustedFrom": "I've adjusted the week already in your plan, from {day} — have a look when you're ready",
     "weekDraftChange": "{clause}. {change}",
     "weeklyDaySet": "{coach} moved your weekly planning day to {day}",
     "weeklyDaySetNoDetail": "{coach} changed your weekly planning day",
@@ -967,8 +970,6 @@
   "ProposalCard": {
     "title": "The week of {week} is drafted",
     "lead": "{count, plural, one {# session} other {# sessions}}. Accept it, talk it over with Momentum, or leave the week as it is.",
-    "titleAdjusted": "The week of {week}, adjusted",
-    "leadAdjusted": "{count, plural, one {# session} other {# sessions}}, adjusted from what your plan already held. Accept it, talk it over with Momentum, or leave the week as it is.",
     "accept": "Accept",
     "discuss": "Discuss with Momentum",
     "decline": "Not this week",

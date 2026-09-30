@@ -9,6 +9,9 @@ import {
   preferredNameBlock,
   buildEquipmentLines,
   recentWeeksBlock,
+  healthFactsBlock,
+  type HealthFacts,
+  type ReflectionComment,
   type PromptBlock,
 } from './prompt-blocks';
 import type { PlanningWindow } from './planning-window';
@@ -22,6 +25,7 @@ import type { PresenceStage } from './presence';
 import { assertNoDirectIdentifier } from './check-in';
 import type { SessionOrigin } from '@/features/session/session';
 import type { WeekSession } from './week';
+import type { SessionMoveFact } from '@/features/session/session-move-repository';
 import type {
   CheckIn,
   RaceMention,
@@ -391,20 +395,19 @@ Strong feedback → validate. Mixed → name inconsistency. What the athlete tel
 }
 
 /**
- * Last week's Session Reflections, or what to do without them.
- *
- * The no-feedback line used to send the Coach to "check-in signals", which was
- * written when a check-in was always sent — with none, it points the Coach at
- * data it does not have.
+ * The draft's ratings block: the week they come from, named
+ * (`training-architecture/46`). It said "LAST WEEK FEEDBACK" over whatever
+ * week the service passed, which was today's week — wrong on a Monday.
  */
-function lastWeekFeedbackBlock(
-  feedbackSummary: string | null,
-  readiness?: Readiness,
-): string {
-  if (feedbackSummary) return `LAST WEEK FEEDBACK:
+function draftFeedbackBlock(feedbackSummary: string | null, readiness: Readiness | undefined, feedbackWeek: string): string {
+  if (feedbackSummary) {
+    return `RATINGS FROM THE WEEK OF ${feedbackWeek} (the week before the one you are drafting):
 ${feedbackSummary}`;
-  if (readiness) return 'No feedback this week — use check-in signals and self-assessment.';
-  return 'No feedback this week, and no check-in data — go on what the athlete tells you.';
+  }
+  const fallback = readiness
+    ? ' — use check-in signals and self-assessment.'
+    : ', and no check-in data — plan from the structure and the recent weeks.';
+  return `No ratings from the week of ${feedbackWeek}${fallback}`;
 }
 
 // ── The Presence Arc ──────────────────────────────────────────────────────────
@@ -526,6 +529,14 @@ export interface ChatPlanning {
   stagedProposal: ProposedSession[] | null;
 }
 
+/** The athlete signals Coach Chat reads beside the week (`training-architecture/52`). */
+export interface ChatSignals {
+  recentWeeks: WeekSummary[];
+  health: HealthFacts;
+  moves: SessionMoveFact[];
+  comments: ReflectionComment[];
+}
+
 export function buildChatPrompt(
   checkIn: CheckIn,
   today: string = todayISO(),
@@ -538,7 +549,14 @@ export function buildChatPrompt(
    * not run over — see `preferredNameBlock`. Null when the athlete chose none.
    */
   preferredName: string | null = null,
+  /**
+   * What Chat now reads beside the week (`training-architecture/52`): the
+   * recent weeks, open injuries and illness as structure, this week's moves and
+   * the athlete's recent reflection comments. Null renders none of them.
+   */
+  signals: ChatSignals | null = null,
 ): string {
+  assertNoDirectIdentifier(signals);
   // Asserted here, at the prompt builder, because that is where AGENTS.md says
   // the assertion belongs — not only in `buildWeeklyCheckIn`. Both arguments are
   // covered: the check-in (whose equipment and onboarding answers are athlete
@@ -621,6 +639,8 @@ ${[
 
     weekBlock(week),
 
+    ...chatSignalBlocks(signals),
+
     equipmentBlock(equipmentLines),
 
     onboardingBlock(onboarding),
@@ -688,17 +708,19 @@ function chatPlanningBlocks(planning: ChatPlanning | null): PromptBlock[] {
  * set this" are the difference between a Coach that reshapes its own session and
  * one that explains and holds on someone else's (ADR 0003).
  *
- * The `garmin` origin is a **Detected Activity** in `CONTEXT.md`'s terms. The
- * label stays plain language for the same reason the others do — the model is
- * being told what happened, not taught the glossary — but the domain term is
- * named here so a reader of this code can find the entry that governs it.
+ * The `garmin` origin is a **History Upload** in `CONTEXT.md`'s terms — the
+ * only writer of it (`history-import-service.ts`); a Detected Activity accept
+ * keeps the session's own origin. The label stays plain language for the same
+ * reason the others do — the model is being told what happened, not taught the
+ * glossary — but the domain term is named here so a reader of this code can
+ * find the entry that governs it.
  */
 const ORIGIN_LABEL: Record<SessionOrigin, string> = {
   coach: 'you planned this',
   arithmetic: 'the plan structure put this here',
   head_coach: "the athlete's coach set this",
   athlete: 'the athlete added this themselves',
-  garmin: "logged from the athlete's watch",
+  garmin: "imported from the athlete's watch, no rating expected",
 };
 
 /**
@@ -885,6 +907,23 @@ export interface WeekDraftContext extends WeeklyContext {
    */
   recentWeeks?: WeekSummary[];
   /**
+   * The Monday of the week `feedbackSummary` comes from — the week before the
+   * drafted one (`training-architecture/46`). Named in the heading, because
+   * "last week" was wrong whenever the draft was for next week.
+   */
+  feedbackWeek: string;
+  /**
+   * Open Injuries and Illnesses as structure (`training-architecture/52`,
+   * E1): what each prevents, since when, the Bother Rating. Absent: no block.
+   */
+  health?: HealthFacts;
+  /** This week's Session Moves (`training-architecture/52`). */
+  moves?: SessionMoveFact[];
+  /** The athlete's reflection comments of the two weeks before the drafted one. */
+  comments?: ReflectionComment[];
+  /** What the athlete said in Coach Chat lately (E2): their own lines, condensed. */
+  chat?: string[];
+  /**
    * The draft the athlete declined for this week, and why — set only on a
    * re-draft (`training-architecture/30`), so the Coach proposes something
    * other than the week it was just told no to. Absent on a first draft.
@@ -952,6 +991,56 @@ function draftWindowBlock(today: string, window: PlanningWindow, fixedConstraint
   return lines.join('\n');
 }
 
+const NO_HEALTH: HealthFacts = { injuries: [], illnesses: [] };
+
+/** Who moved a session, as the Coach is told it. */
+const MOVED_BY: Record<string, string> = { athlete: 'the athlete', head_coach: 'their coach' };
+
+/** This week's Session Moves, one line each, or nothing (`training-architecture/52`). */
+function movesBlock(moves: SessionMoveFact[]): PromptBlock {
+  if (moves.length === 0) return null;
+  const lines = moves.map(
+    (m) => `- ${dayReference(m.from)} → ${dayReference(m.to)} (moved by ${MOVED_BY[m.by] ?? 'the app'})`,
+  );
+  return `SESSION MOVES THIS WEEK:\n${lines.join('\n')}`;
+}
+
+/** The athlete's own reflection comments, dated, or nothing. */
+function reflectionCommentsBlock(comments: ReflectionComment[]): PromptBlock {
+  if (comments.length === 0) return null;
+  const lines = comments.map((c) => `- ${dayReference(c.date)} ${c.sessionType}: "${c.comment}"`);
+  return `REFLECTION COMMENTS (the athlete's own words, the two weeks before this one):\n${lines.join('\n')}`;
+}
+
+/** What the athlete said in Coach Chat lately (E2), or nothing. */
+function chatExcerptBlock(lines: string[] | undefined): PromptBlock {
+  if (!lines || lines.length === 0) return null;
+  return `ATHLETE IN COACH CHAT (their own words, last seven days — condensed, not the transcript):\n${lines.map((l) => `- "${l}"`).join('\n')}`;
+}
+
+/** Coach Chat's athlete signals: the recent weeks, then the ones the draft reads too. */
+function chatSignalBlocks(signals: ChatSignals | null): PromptBlock[] {
+  if (!signals) return [];
+  return [recentWeeksBlock(signals.recentWeeks), ...athleteSignalBlocks(signals)];
+}
+
+/**
+ * The athlete signals the draft and Coach Chat both read
+ * (`training-architecture/52`): open injuries and illness as structure, this
+ * week's moves, and the athlete's recent reflection comments.
+ */
+function athleteSignalBlocks(signals: {
+  health?: HealthFacts;
+  moves?: SessionMoveFact[];
+  comments?: ReflectionComment[];
+}): PromptBlock[] {
+  return [
+    healthFactsBlock(signals.health ?? NO_HEALTH),
+    movesBlock(signals.moves ?? []),
+    reflectionCommentsBlock(signals.comments ?? []),
+  ];
+}
+
 /** A session the structure wrote, as this prompt needs it. */
 export interface BaselineSession {
   date: string;
@@ -966,6 +1055,11 @@ export interface BaselineSession {
  * The week as it stands — what the structure drew, one line per session. The
  * Coach is adjusting a plan, not inventing one, and saying so is the whole
  * point of `training-architecture/34`: the athlete has already seen these.
+ *
+ * The two rules on how far it may move them (`training-architecture/48`, Mads
+ * 2026-09-29): R3 — adjust rather than remove, a prompt principle with no code
+ * rule behind it; R1 — the volume band, which `clampToBand` enforces anyway,
+ * stated here so the model aims inside it rather than being cut back.
  */
 function baselineBlock(baseline: BaselineSession[]): string {
   const lines = baseline.map(
@@ -976,6 +1070,8 @@ function baselineBlock(baseline: BaselineSession[]): string {
   return `BASELINE WEEK (what the plan structure already put in the athlete's calendar):
 ${lines.join('\n')}
 Adjust it for this athlete and this week. Keep the rest day and the long/hard spacing unless you have a stated reason to move them.
+Adjust and change the baseline's sessions rather than remove them: shorten, ease or swap a session before you drop it.
+VOLUME: keep the week within 10% of the baseline week's total minutes; go down to 30% below only with a reason in volumeReason (an injury, illness or fatigue the athlete reported); never more than 10% above. The server scales a week outside that band back to its edge.
 The athlete can already see this week: say in one sentence, in whatChanged, what you changed.`;
 }
 
@@ -1043,8 +1139,15 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
   assertNoDirectIdentifier(ctx.checkIn);
   assertNoDirectIdentifier(ctx.recentWeeks);
   assertNoDirectIdentifier(ctx.declined);
+  // Every input `training-architecture/52` added, as Coach Chat asserts its
+  // own: the two in the athlete's words, and the health facts and moves, which
+  // carry dates read back from stored rows and event payloads.
+  assertNoDirectIdentifier(ctx.comments);
+  assertNoDirectIdentifier(ctx.chat);
+  assertNoDirectIdentifier(ctx.health);
+  assertNoDirectIdentifier(ctx.moves);
 
-  const { feedbackSummary, unavailableDates, today, window, skeleton, baseline, recentWeeks, declined, passages, citations } =
+  const { feedbackSummary, feedbackWeek, unavailableDates, today, window, skeleton, baseline, recentWeeks, declined, passages, citations } =
     ctx;
   const {
     readiness,
@@ -1064,6 +1167,8 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
     lateRaces,
     tuneUpWindow,
     tuneUpEveEasy,
+    equipment,
+    onboarding,
   } = ctx.checkIn;
   const races = { tuneUps, lateRaces, tuneUpWindow, tuneUpEveEasy };
 
@@ -1082,11 +1187,22 @@ export function renderWeekDraftPrompt(ctx: WeekDraftContext): string {
 
     stateBlock({ phase, presenceStage, experienceLevel, readiness }),
 
-    lastWeekFeedbackBlock(feedbackSummary, readiness),
+    draftFeedbackBlock(feedbackSummary, readiness, feedbackWeek),
 
     recentWeeksBlock(recentWeeks ?? []),
 
     unavailableBlock(unavailableDates),
+
+    // What the athlete trains on and the hours they have, from the same two
+    // blocks Coach Chat renders (`training-architecture/47`): the draft built
+    // the equipment into its Check-in and never rendered it.
+    equipmentBlock(buildEquipmentLines(equipment)),
+
+    onboardingBlock(onboarding),
+
+    ...athleteSignalBlocks(ctx),
+
+    chatExcerptBlock(ctx.chat),
 
     baseline && baseline.length > 0 ? baselineBlock(baseline) : skeletonBlock(skeleton),
 

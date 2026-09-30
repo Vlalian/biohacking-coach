@@ -35,6 +35,7 @@ const session = (over: Partial<Session> = {}): Session => ({
   feedbackComment: 'felt strong',
   origin: 'coach',
   isTraining: true,
+  summary: null,
   ...over,
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SESSION_ORIGINS, toSessionOrigin } from './session';
+import { SESSION_ORIGINS, isImportedHistory, isUnrecorded, toDeviceSummary, toSessionOrigin } from './session';
 
 /**
  * `training-architecture/34` — the structure writes sessions of its own, and
@@ -15,5 +15,54 @@ describe('session origins', () => {
     for (const origin of SESSION_ORIGINS) expect(toSessionOrigin(origin)).toBe(origin);
     expect(toSessionOrigin('nonsense')).toBe('coach');
     expect(toSessionOrigin('')).toBe('coach');
+  });
+});
+
+/** `garmin-integration/07` — the drawer shows what the device recorded. */
+describe('device summary', () => {
+  it('keeps the distance and heart rate a device recorded', () => {
+    expect(toDeviceSummary({ distanceM: 42000, avgHr: 138, maxHr: 170 })).toEqual({
+      distanceM: 42000,
+      avgHr: 138,
+    });
+  });
+
+  it('keeps one fact without the other', () => {
+    expect(toDeviceSummary({ distanceM: null, avgHr: 150 })).toEqual({ distanceM: null, avgHr: 150 });
+    expect(toDeviceSummary({ distanceM: 1500 })).toEqual({ distanceM: 1500, avgHr: null });
+  });
+
+  it('reads no summary from nothing, a non-object, or an object without either fact', () => {
+    expect(toDeviceSummary(null)).toBeNull();
+    expect(toDeviceSummary(undefined)).toBeNull();
+    expect(toDeviceSummary('42000')).toBeNull();
+    expect(toDeviceSummary({ distanceM: '42000', avgHr: Number.NaN })).toBeNull();
+    expect(toDeviceSummary({})).toBeNull();
+  });
+});
+
+describe('imported history', () => {
+  it('is a completed session a History Upload wrote', () => {
+    expect(isImportedHistory({ origin: 'garmin', status: 'completed' })).toBe(true);
+  });
+
+  it('is not an in-app session, nor a garmin row that is not completed', () => {
+    expect(isImportedHistory({ origin: 'coach', status: 'completed' })).toBe(false);
+    expect(isImportedHistory({ origin: 'athlete', status: 'completed' })).toBe(false);
+    expect(isImportedHistory({ origin: 'garmin', status: 'planned' })).toBe(false);
+  });
+});
+
+/** `training-architecture/45` — a past Planned Session nobody ticked. */
+describe('unrecorded', () => {
+  it("names a past planned session unrecorded, and today's not", () => {
+    expect(isUnrecorded({ status: 'planned', date: '2026-09-28' }, '2026-09-29')).toBe(true);
+    expect(isUnrecorded({ status: 'planned', date: '2026-09-29' }, '2026-09-29')).toBe(false);
+  });
+
+  it('is never a session that was completed, skipped or made unavailable', () => {
+    for (const status of ['completed', 'skipped', 'unavailable']) {
+      expect(isUnrecorded({ status, date: '2026-09-20' }, '2026-09-29')).toBe(false);
+    }
   });
 });

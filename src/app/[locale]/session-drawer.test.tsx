@@ -99,6 +99,7 @@ function session(overrides: Partial<Session> = {}): Session {
     feedbackComment: null,
     origin: 'coach',
     isTraining: true,
+    summary: null,
     ...overrides,
   };
 }
@@ -218,6 +219,53 @@ describe('ViewBody undo import', () => {
     expect(shown).not.toContain('markComplete');
     expect(shown).not.toContain('skip');
     expect(shown).toContain('undoImport');
+  });
+});
+
+describe('ViewBody imported history (garmin-integration/07)', () => {
+  // A History Upload writes past training as completed with empty feedback, by
+  // design. Asking for a rating on each of those read as weeks of undone work.
+  it('an imported history session asks for no rating and says it came from the device', () => {
+    const shown = render(
+      session({ origin: 'garmin', status: 'completed', feedbackBody: null, feedbackMind: null }),
+    );
+
+    expect(shown).not.toContain('notRated');
+    expect(shown).not.toContain('rate');
+    expect(shown).not.toContain('readOnlyNote');
+    expect(shown).toContain('imported');
+  });
+
+  it('an in-app completed session without feedback still asks for its rating', () => {
+    const shown = render(
+      session({ origin: 'coach', status: 'completed', feedbackBody: null, feedbackMind: null }),
+    );
+
+    expect(shown).toContain('notRated');
+    expect(shown).toContain('rate');
+    expect(shown).not.toContain('imported');
+  });
+
+  it('shows the device facts it has, and none it lacks', () => {
+    const shown = render(
+      session({
+        origin: 'garmin',
+        status: 'completed',
+        summary: { distanceM: 42000, avgHr: 138 },
+      }),
+    );
+    expect(shown).toContain('deviceFacts.distance');
+    expect(shown).toContain('deviceFacts.avgHr');
+
+    const bare = render(session({ origin: 'garmin', status: 'completed', summary: null }));
+    expect(bare).not.toContain('deviceFacts.distance');
+    expect(bare).not.toContain('deviceFacts.avgHr');
+
+    const hrOnly = render(
+      session({ origin: 'garmin', status: 'completed', summary: { distanceM: null, avgHr: 150 } }),
+    );
+    expect(hrOnly).not.toContain('deviceFacts.distance');
+    expect(hrOnly).toContain('deviceFacts.avgHr');
   });
 });
 

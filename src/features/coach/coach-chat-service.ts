@@ -1,37 +1,32 @@
 import type { Athlete } from '@/features/athlete/athlete';
-import { getEquipmentItems } from '@/features/equipment/equipment-repository';
-import { getOwnedSession, getSessionsForWeek } from '@/features/session/session-repository';
+import { getArithmeticSessionsForWeek, getOwnedSession } from '@/features/session/session-repository';
 import type { Session } from '@/features/session/session';
 import { weekStartOf } from '@/lib/date';
 import type { SessionContext } from './check-in';
 import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
+import { chatContextOf, chatInclude, readAthleteContext } from './athlete-context';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
-import { getRaces } from '@/features/race/race-repository';
 import { getLatestPlanWrittenAt } from './plan-proposal-repository';
 import { productionGrounding } from './grounding';
 import { proposalTurnTools } from './proposal-tools';
-import { capacityFor } from '@/features/health/health-repository';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
-import { getResolvedBlocks } from './training-block-service';
-import { getCheckInForWeek } from './check-in-repository';
-import { getPresenceStage } from './presence-repository';
-import { notableSignalFrom, readinessFrom } from './check-in';
 import {
-  buildWeeklyCheckIn,
   fixedConstraintsOf,
   validateProposedPlan,
+  volumeReasonFrom,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   type ProposedSession,
 } from './weekly-session';
-import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { getPendingProposal, recordProposal } from './plan-proposal-repository';
 import { getDiscussedWeek } from './week-draft-repository';
 import { conversationWindow } from './week-draft';
 import type { PlanningWindow } from './planning-window';
+import { arithmeticInWindow, heldToBand } from './volume-band';
 import type { CoachReply } from './coach-client';
+import { logChatMaxTokens } from '@/lib/coach-log';
 
 /**
  * Coach Chat — the Coach Overlay's one conversation (ADR 0007, amended
@@ -56,10 +51,24 @@ import type { CoachReply } from './coach-client';
  * Room for a whole-week proposal plus a paragraph. 1200 until 2026-09-17, when
  * Mads's smoke run of PR #71 hit it four times: a `propose_week_plan` call for
  * seven days is large, and a reply cut off mid-call comes back empty. Raised
- * rather than retried — a retry doubles a twenty-second wait — and a cut-off is
- * now its own refusal (`ran-out-of-room`) so the athlete is asked for less.
+ * rather than retried — a retry doubles a twenty-second wait.
+ *
+ * 2500 until 2026-09-30 (`showable-version/60`): a request to re-plan three
+ * days of the week hit it on PR #116's preview. The estimate, from the tool's
+ * shape: one session is about 30 tokens of JSON keys, date, type, minutes and
+ * zone, plus a one-line note of 20–30 (more in Danish), so ~60. A heavy week
+ * with doubles is ~12 sessions, ~720; `whatChanged` and `volumeReason` ~100; the
+ * reply around the call up to ~400; a lookup call ~50. About 1300 in all —
+ * which 2500 should have held, so the estimate misses something (longer replies
+ * since Plan E's context, longer notes) until a real one is measured.
+ *
+ * 4096 is ~3x that estimate. The ceiling above it is the adapter's fixed
+ * 60-second request timeout (`coach-client.ts`), which replaces the SDK's
+ * max_tokens-scaled one: at a typical 60–80 tokens a second a reply that fills
+ * 4096 already takes 50–70 seconds, so a higher cap would mostly turn a
+ * cut-off into a timeout. Only tokens used are billed; the cap is a ceiling.
  */
-const CHAT_MAX_TOKENS = 2500;
+const CHAT_MAX_TOKENS = 4096;
 
 /** The Reference the athlete brought into the thread, as the prompt sees it. */
 function toSessionContext(session: Session): SessionContext {
@@ -97,49 +106,18 @@ async function renderSystem(
   conversationId: string | null = null,
   preferredName: string | null = null,
 ): Promise<{ system: string; window: PlanningWindow }> {
-  const [
-    equipmentItems,
-    weekSessions,
-    reference,
-    horizon,
-    checkInRow,
-    races,
-    planWrittenAt,
-    capacity,
-    unavailableDates,
-    facts,
-    presenceStage,
-  ] = await Promise.all([
-    getEquipmentItems(athlete.id),
-    getSessionsForWeek(athlete.id, weekStartOf(today)),
+  // One round of reads, shared with the draft and the Briefing
+  // (`training-architecture/52`): the same horizon, Check-in, capacity, races,
+  // presence, equipment and unavailable days the draft plans with, so Chat
+  // never contradicts the week the athlete was just drafted. The Reference,
+  // when this plan was written and the conversation's own facts are Chat's.
+  const [context, reference, planWrittenAt, facts] = await Promise.all([
+    readAthleteContext(athlete.id, today, chatInclude(today)),
     referenceSessionId
       ? getOwnedSession(athlete.id, referenceSessionId)
       : Promise.resolve(undefined),
-    // The same horizon the Weekly Session reads. Chat is where "should I do
-    // tomorrow's intervals?" gets asked, and the answer depends on how far out
-    // the race is — a Coach with no horizon here would contradict the one the
-    // athlete just planned a week with.
-    getResolvedBlocks(athlete.id, today),
-    // The same Check-in the Weekly Session reads. Chat is where "should I do
-    // tomorrow's intervals?" gets asked, and an athlete who reported low energy
-    // on Monday should not have to say it again on Wednesday.
-    getCheckInForWeek(athlete.id, weekStartOf(today)),
-    // Slice 09: the same tune-up and late-race lines the Weekly Session renders.
-    getRaces(athlete.id),
     getLatestPlanWrittenAt(athlete.id, weekStartOf(today)),
-    // What the athlete's body currently allows — the capacity half only, as
-    // the Weekly Session reads it (training-architecture/06; CodeRabbit on PR
-    // #60 found Chat knew nothing of it). The detail thread has no reader here.
-    capacityFor(athlete.id),
-    // The window the chat may write into needs the athlete's days off, the same
-    // list the Weekly Session reads (`training-architecture/20`).
-    getUnavailableDates(athlete.id),
     conversationFacts(athlete.id, conversationId),
-    // How much the Coach may claim to know: the Presence Arc, read from weeks
-    // of Session Reflections and Check-ins filed (`training-architecture/21`).
-    // A Check-in filed at any time — after the week was drafted, say — is
-    // simply the freshest signal for this, the next prompt that reads it.
-    getPresenceStage(athlete.id),
   ]);
 
   // The week this conversation may propose: the whole of a week brought in to
@@ -150,29 +128,11 @@ async function renderSystem(
     today,
     facts.discussedWeek,
     fixedConstraintsOf(athlete),
-    unavailableDates,
+    context.unavailableDates,
     chosenFirstDay(athlete.profile, today),
   );
 
-  const checkIn = buildWeeklyCheckIn(
-    athlete,
-    today,
-    readinessFrom(checkInRow),
-    presenceStage,
-    language,
-    equipmentItems,
-    horizon.race ? { name: horizon.race.name, date: horizon.race.date } : null,
-    capacity,
-    // The athlete's own sentence, for the same reason Chat reads the Check-in at
-    // all: someone who wrote "calf tight since Tuesday" on Monday should not
-    // have to say it again on Wednesday.
-    notableSignalFrom(checkInRow),
-    races,
-    planWrittenAt,
-    // The same resolved blocks the Weekly Session plans inside, so Chat names
-    // the same phase the athlete just planned a week with.
-    horizon.blocks,
-  );
+  const { checkIn, weekSessions, signals } = chatContextOf(context, athlete, { today, language, planWrittenAt });
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.
@@ -187,6 +147,7 @@ async function renderSystem(
       // resolved at the user seam by the action and threaded here as plain
       // data, beside the language and for the same reason.
       preferredName,
+      signals,
     ),
     window,
   };
@@ -229,8 +190,13 @@ async function stageChatProposal(
   if (!call) return null;
   const validated = validateProposedPlan(call.input, window);
   if (!validated.ok) return null;
-  await recordProposal(athleteId, conversationId, validated.sessions);
-  return { sessions: validated.sessions };
+  // The same band as the week draft (`training-architecture/48`, extended to
+  // Chat by Mads's ruling of 2026-09-29): held against the arithmetic's
+  // sessions inside this window only.
+  const baseline = await getArithmeticSessionsForWeek(athleteId, weekStartOf(window.start));
+  const sessions = heldToBand(athleteId, validated.sessions, arithmeticInWindow(baseline, window), volumeReasonFrom(call.input));
+  await recordProposal(athleteId, conversationId, sessions);
+  return { sessions };
 }
 
 export interface CoachChatState {
@@ -338,5 +304,15 @@ export async function sendCoachChatMessage(
       };
     },
   });
+  if (!result.ok && result.reason === 'ran-out-of-room') {
+    // `ran-out-of-room` is only ever the `max_tokens` stop (`refusalReason`),
+    // so the stop reason is known here without the error.
+    logChatMaxTokens({
+      athleteId: athlete.id,
+      conversationId,
+      stopReason: 'max_tokens',
+      maxTokens: CHAT_MAX_TOKENS,
+    });
+  }
   return result.ok ? { ...result, proposal } : result;
 }
