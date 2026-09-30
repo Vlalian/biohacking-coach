@@ -27,6 +27,11 @@ describe('isSeqConflict', () => {
     ).toBe(false);
   });
 
+  it('recognises either marker on its own', () => {
+    expect(isSeqConflict(new Error('insert failed on "messages_conversation_seq_idx"'))).toBe(true);
+    expect(isSeqConflict(new Error('duplicate key value violates unique constraint'))).toBe(true);
+  });
+
   it('does not swallow an unrelated failure', () => {
     // The point of a narrow predicate: a dead connection or a constraint this
     // code got wrong must surface, not be retried three times and hidden.

@@ -31,8 +31,7 @@ export const SEQ_RETRIES = 3;
  */
 export function isSeqConflict(error: unknown): boolean {
   if (isUniqueViolation(error)) return true;
-  const cause = (error as { cause?: unknown } | null | undefined)?.cause;
-  return cause !== undefined && isUniqueViolation(cause);
+  return isUniqueViolation((error as { cause?: unknown } | null | undefined)?.cause);
 }
 
 function isUniqueViolation(error: unknown): boolean {
