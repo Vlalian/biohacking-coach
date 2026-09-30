@@ -1,16 +1,6 @@
 import ts from 'typescript';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { rawOf, relativeToSrc, sourceFiles, SWEEP_TIMEOUT_MS } from '@/test/source-sweep';
-
-/**
- * This guard walks every component under `src/`. On an ordinary run that takes
- * well under a second; under the v8 coverage instrumentation the hardening gate
- * runs first, it goes past vitest's 5 s default and takes the whole gate down
- * with it - `npm test` green, `npm run quality` dead (`code-health/11`, and
- * again here on 2026-09-29). It uses the one cached walk in `source-sweep.ts`
- * and that file's timeout, like every other sweep.
- */
-vi.setConfig({ testTimeout: SWEEP_TIMEOUT_MS });
 
 /**
  * showable-version/57: a focusable `sr-only` element is `position: absolute`,

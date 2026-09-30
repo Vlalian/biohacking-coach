@@ -188,10 +188,13 @@ export async function updateTargetRaceAction(
   name: string,
   date: string,
 ): Promise<SettingsActionResult> {
+  const edit = parseTargetRaceEdit(name, date);
+  if (edit === 'invalid') return { ok: false, reason: 'invalid' };
+
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  if (!name.trim() && !date.trim()) {
+  if (edit === 'clear') {
     await clearTargetRace(athlete.id);
     await updateRaceTarget(athlete.id, null);
     return { ok: true };
@@ -202,7 +205,7 @@ export async function updateTargetRaceAction(
   // is exactly the habit this slice removed — so an athlete with no Race
   // Distance fails the same closed-set check an unknown distance does.
   // Stryker disable next-line StringLiteral — equivalent: any fallback outside RACE_DISTANCES is refused identically
-  const race = parseNewRace(name, date, athlete.raceDistance ?? '');
+  const race = parseNewRace(edit.name, edit.date, athlete.raceDistance ?? '');
   if (!race) return { ok: false, reason: 'invalid' };
 
   await upsertTargetRace(athlete.id, race);
@@ -235,6 +238,20 @@ export async function addRaceAction(
   const raceId = await createRace(athlete.id, newRace, { asTarget });
   if (asTarget) await updateRaceTarget(athlete.id, newRace.name);
   return { ok: true, raceId };
+}
+
+/**
+ * What a Target Race edit asks for, judged before anyone is looked up: a name
+ * past the cap is refused as invalid whoever sends it, and two blank fields
+ * mean clear the target. Anything else goes on to {@link parseNewRace} once the
+ * athlete's distance is known.
+ */
+function parseTargetRaceEdit(name: string, date: string): 'invalid' | 'clear' | { name: string; date: string } {
+  const trimmedName = name.trim();
+  const trimmedDate = date.trim();
+  if (trimmedName.length > RACE_TARGET_MAX) return 'invalid';
+  if (!trimmedName && !trimmedDate) return 'clear';
+  return { name: trimmedName, date: trimmedDate };
 }
 
 /** A Race as the form typed it, or null when any part of it is not one. */

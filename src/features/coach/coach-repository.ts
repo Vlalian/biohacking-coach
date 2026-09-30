@@ -69,9 +69,9 @@ export async function getCoachByUserId(
  */
 export async function holdsActiveCoachingLinks(userId: string): Promise<boolean> {
   // Stryker disable next-line ObjectLiteral — equivalent: only whether a row came back is read, never its columns
-  const anyColumn = { id: coachingLink.id };
+  const existenceProbe = { id: coachingLink.id };
   const rows = await getDb()
-    .select(anyColumn)
+    .select(existenceProbe)
     .from(coachingLink)
     .innerJoin(coach, eq(coachingLink.coachId, coach.id))
     .where(and(eq(coach.userId, userId), eq(coachingLink.status, 'active')))

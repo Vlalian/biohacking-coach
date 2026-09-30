@@ -457,6 +457,17 @@ describe('the horizon actions refuse a caller they cannot identify', () => {
     expect(upsertTargetRace).not.toHaveBeenCalled();
   });
 
+  it('refuses a race name past the length cap before asking who is signed in', async () => {
+    // An input error is answered as one whoever sends it, as every other
+    // Settings action does: a signed-out request with a bad name is invalid.
+    getSession.mockResolvedValue(null);
+
+    await expect(updateTargetRaceAction('x'.repeat(121), '2027-08-15')).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+  });
+
   it('refuses a race name past the length cap, and takes one exactly at it', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_1' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
