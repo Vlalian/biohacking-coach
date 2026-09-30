@@ -1,6 +1,7 @@
 import type { EquipmentCategory, EquipmentItem } from '@/features/equipment/equipment';
 import type { Onboarding } from './check-in';
 import type { WeekSummary } from './weekly-session';
+import type { Capacity } from '@/features/health/capacity';
 
 /**
  * How a Coach system prompt is put together.
@@ -142,18 +143,85 @@ export function recentWeeksBlock(weeks: WeekSummary[]): PromptBlock {
   );
 }
 
-const isEmptyWeek = (w: WeekSummary): boolean => w.plannedMinutes === 0 && w.completed === 0 && w.skipped === 0;
+const isEmptyWeek = (w: WeekSummary): boolean =>
+  w.plannedMinutes === 0 && w.completed === 0 && w.skipped === 0 && w.unrecorded === 0;
 
 function recentWeekLine(week: WeekSummary): string {
   // The current week is only part-way through; say so, or its unfinished days read as a light week.
   const label = `- Week of ${week.weekStart}${week.soFar ? ' (this week, up to today)' : ''}`;
   if (isEmptyWeek(week)) return `${label}: empty — nothing planned, nothing done`;
-  const counts = `${week.completed} completed, ${week.skipped} skipped`;
+  // Imported history needs no rating (garmin-integration/07): say so, or weeks of unrated uploads read as an athlete who never reflects.
+  const imported = week.imported > 0 ? `, ${week.imported} imported from the athlete's device (no rating expected)` : '';
+  // A past planned session nobody ticked is neither done nor dropped (training-architecture/45).
+  const unrecorded = week.unrecorded > 0 ? `, ${week.unrecorded} not recorded` : '';
+  const counts = `${week.completed} completed, ${week.skipped} skipped${unrecorded}${imported}`;
   const types = week.byType.map((t) => `${t.type} ${t.completed} (${hours(t.doneMinutes)})`).join(', ');
-  return `${label}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}`;
+  return `${label}: ${hours(week.doneMinutes)} done of ${hours(week.plannedMinutes)} planned; ${counts}${types ? `; done by type: ${types}` : ''}${deviceFacts(week.device)}`;
+}
+
+/** What the device recorded that week, only the facts it has (training-architecture/52). */
+function deviceFacts(device: WeekSummary['device']): string {
+  if (!device) return '';
+  const facts = [
+    device.distanceKm > 0 ? `${device.distanceKm.toFixed(1)} km` : null,
+    device.avgHr === null ? null : `avg HR ${device.avgHr}`,
+  ].filter((f) => f !== null);
+  return facts.length > 0 ? `; device: ${facts.join(', ')}` : '';
 }
 
 const hours = (minutes: number): string => `${(minutes / 60).toFixed(1)}h`;
+
+/**
+ * An open Injury as the Coach reads it (`training-architecture/52`, Mads's
+ * ruling E1, 2026-09-29): what it prevents per discipline, since when, and the
+ * athlete's Bother Rating. Structure only — never the injury's name and never
+ * the detail thread (ADR 0011), both of which are free text for human eyes.
+ */
+export interface InjuryFact {
+  prevents: Capacity;
+  since: string;
+  botherRating: number | null;
+}
+
+/** An open Illness as the Coach reads it: since when, and the Bother Rating. */
+export interface IllnessFact {
+  since: string;
+  botherRating: number | null;
+}
+
+/** One reflection comment in the athlete's own words, dated and typed. */
+export interface ReflectionComment {
+  date: string;
+  sessionType: string;
+  comment: string;
+}
+
+export interface HealthFacts {
+  injuries: InjuryFact[];
+  illnesses: IllnessFact[];
+}
+
+const ALLOWANCE_WORDS: Record<Capacity[keyof Capacity], string> = { full: 'full', easy: 'easy only', none: 'none' };
+
+/** The Bother Rating as the athlete gave it, or nothing when they gave none. */
+const bothering = (rating: number | null): string => (rating === null ? '' : `; bothering them ${rating}/5`);
+
+/**
+ * The open Injuries and Illnesses, one line each (E1). What the athlete
+ * reported and nothing else: plan around what each prevents, never diagnose
+ * from it (ADR 0011's remit). Absent when nothing is open.
+ */
+export function healthFactsBlock(health: HealthFacts): PromptBlock {
+  const injuries = health.injuries.map(
+    (i) =>
+      `- Injury since ${i.since}: swim ${ALLOWANCE_WORDS[i.prevents.swim]}, bike ${ALLOWANCE_WORDS[i.prevents.bike]}, run ${ALLOWANCE_WORDS[i.prevents.run]}${bothering(i.botherRating)}`,
+  );
+  const illnesses = health.illnesses.map((i) => `- Illness since ${i.since}${bothering(i.botherRating)}`);
+  return block(
+    'OPEN INJURIES AND ILLNESS (what the athlete reported; the Bother Rating is theirs, 1 = barely, 5 = a lot — plan around what each prevents, never diagnose):',
+    [...injuries, ...illnesses],
+  );
+}
 
 export function equipmentBlock(equipmentLines: string[]): PromptBlock {
   return block('EQUIPMENT:', equipmentLines);

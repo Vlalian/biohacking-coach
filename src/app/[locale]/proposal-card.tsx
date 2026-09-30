@@ -95,9 +95,6 @@ export function ProposalCard({
   const [outcome, setOutcome] = useState<CardOutcome>(initialOutcome);
   const asking = outcome.kind === 'asking';
   const decided = isDecided(outcome);
-  // The structure had already filled this week and the Coach adjusted it
-  // (`training-architecture/40`): "drafted" would claim an empty week.
-  const adjusted = draft.adjusted === true;
 
   const settle = (result: { ok: true } | { ok: false; reason: string }, onOk: () => CardOutcome) => {
     if (result.ok) {
@@ -162,10 +159,10 @@ export function ProposalCard({
       aria-live="polite"
     >
       <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">
-        {t(adjusted ? 'titleAdjusted' : 'title', { week })}
+        {t('title', { week })}
       </h2>
       <p className="mt-1 font-body text-sm text-muted-foreground">
-        {t(adjusted ? 'leadAdjusted' : 'lead', { count: draft.sessions.length })}
+        {t('lead', { count: draft.sessions.length })}
       </p>
       <ul className="mt-3 divide-y divide-rule border-y border-rule">
         {draft.sessions.map((s, i) => (

@@ -5,7 +5,6 @@ import { RACE_DISTANCES, type RaceDistance } from '@/lib/race-distances';
 import { isCalendarDate } from '@/lib/calendar-date';
 import {
   clearTargetRace,
-  createRace,
   deleteRace,
   getRaces,
   getTargetRace,
@@ -14,6 +13,7 @@ import {
   addPastRace,
   deletePastRace,
   getPastRaces,
+  addRace,
   type NewRace,
 } from '@/features/race/race-repository';
 import { experienceFromCount, parsePastRace } from '@/features/onboarding/past-races';
@@ -214,19 +214,24 @@ export async function updateTargetRaceAction(
 }
 
 /**
- * Adds a Race (`training-architecture/09`).
+ * Adds a Race (`training-architecture/09`), as a Target Race or not (`/37`).
  *
- * The first race an athlete adds becomes the Target Race — there is nothing
- * else it could be — and its name goes to the mirror column for the same reason
- * `updateTargetRaceAction` writes it. A race added beside an existing target is
- * a non-target: a Tune-up Race if it falls before the target, or simply a later
- * race. Each Race carries its own distance, because a tune-up is usually a
- * different distance from the one being trained for.
+ * The first race an athlete adds becomes the Target Race whatever was asked —
+ * there is nothing else it could be — and its name goes to the mirror column
+ * for the same reason `updateTargetRaceAction` writes it. Asked for as the
+ * target beside an existing one, it **replaces** it: created as a non-target,
+ * the old flag cleared first in `addRace`'s one batch, because the partial
+ * unique index allows one target per athlete. The old target stays a race —
+ * a Tune-up Race if it falls before the new one (derived, `races.ts`), a later
+ * race otherwise. Asked for as a Tune-up, it is simply a non-target. Each Race
+ * carries its own distance, because a tune-up is usually a different distance
+ * from the one being trained for.
  */
 export async function addRaceAction(
   name: string,
   date: string,
   distance: string,
+  asTarget = false,
 ): Promise<AddRaceResult> {
   const newRace = parseNewRace(name, date, distance);
   if (!newRace) return { ok: false, reason: 'invalid' };
@@ -234,9 +239,10 @@ export async function addRaceAction(
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  const asTarget = (await getTargetRace(athlete.id)) === null;
-  const raceId = await createRace(athlete.id, newRace, { asTarget });
-  if (asTarget) await updateRaceTarget(athlete.id, newRace.name);
+  const first = (await getTargetRace(athlete.id)) === null;
+  // One batch: the race, the moved flag, the mirror and the race_added event the
+  // Coach raises once in chat (ruling 3) all land, or none do.
+  const raceId = await addRace(athlete.id, newRace, first ? 'first' : asTarget ? 'replace' : 'none');
   return { ok: true, raceId };
 }
 

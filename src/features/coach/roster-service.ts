@@ -333,18 +333,29 @@ function openHealthFromSpans(spans: HealthSpan[]): OpenHealth {
 }
 
 /**
+ * The race the blocks hang off, or null. An Open Horizon's hang off no race,
+ * and a stored set needs one (`training_block_set.race_id`), so there is
+ * nothing for the panel to edit (`training-architecture/13`) — even when a
+ * race too close for blocks exists.
+ */
+function raceBlocksHangOff(horizon: ResolvedBlocks): ResolvedBlocks['race'] {
+  return horizon.horizon === 'open' ? null : horizon.race;
+}
+
+/**
  * The resolved blocks as the panel's editing surface. With nothing stored the
  * version is 0 and the start is today: the edit will materialise the arithmetic
  * draft from today, so that is the set the panel is describing.
  */
 function blocksViewOf(horizon: ResolvedBlocks, todayKey: string): CoachBlocksView | null {
-  if (!horizon.race) return null;
+  const race = raceBlocksHangOff(horizon);
+  if (!race) return null;
   return {
-    raceId: horizon.race.id,
-    raceName: horizon.race.name,
-    raceDate: horizon.race.date,
+    raceId: race.id,
+    raceName: race.name,
+    raceDate: race.date,
     version: horizon.set?.version ?? 0,
-    stale: isStaleSet(horizon.set, horizon.race.date),
+    stale: isStaleSet(horizon.set, race.date),
     startDate: horizon.set?.startDate ?? todayKey,
     blocks: horizon.blocks,
   };

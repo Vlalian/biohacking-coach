@@ -28,3 +28,22 @@ Three existing decisions converge on this, and none of them survives the simpler
 **Mads ruled on 2026-09-10 that the field stays.** The hazard this ADR names is the *durable detail thread* and the *Head Coach's* clinical note. An athlete's own passing sentence about their week is a different thing, and they already type freely into Coach Chat, whose transcript is replayed to the model on every later turn — closing the Check-in's field while that stays open would buy nothing.
 
 The steering is done by the label instead: *"Your AI Coach reads this. Keep it to how training felt — not medical detail."* The detail thread's rule is unchanged, and remains enforced structurally rather than by convention.
+
+## Amendment, 2026-09-29 — the structured half grows by two fields
+
+`training-architecture/52` gave the draft and Coach Chat one shared athlete context, and with it the injury
+and illness records as **structure** (Mads, ruling E1, 2026-09-29). This widens "the only half a Coach
+prompt ever sees" from *what it prevents* to three structured facts:
+
+- **what it prevents**, per discipline, as before;
+- **since when**, the record's start date (and its end date for a closed illness);
+- **the Bother Rating**, the athlete's optional 1–5 answer.
+
+All three are athlete-authored and structured. They sit under the required `health_data` purpose, like the
+capacity sentence the calendar and the Coach already read.
+
+**Unchanged:** the free-text **detail thread** never enters a prompt, still enforced structurally
+(`detail-thread-never-prompts.test.ts` now names `athlete-context.ts` as the only reader of the record, and
+no prompt builder). **The injury's name** ("left knee") also stays out. Mads, 2026-09-29: it is
+human-eyes-only, and Momentum plans around capacity, not body location. That is the posture this ADR
+started from.

@@ -304,47 +304,41 @@ describe('composeNarration — the Coach announcing its own blocks (training-arc
     expect(mixed).toBe('single(clause=weekDraftedFrom(day=day:2026-09-24))');
   });
 
-  // training-architecture/40: the structure fills the week before the Coach
-  // drafts, so "drafted a week" reads wrong over a week the athlete could
-  // already see. The `adjusted` flag is recorded with the draft.
+  // training-architecture/40 said "adjusted" over a week the structure had
+  // filled; /48 (R4, 2026-09-29) made that internal only — a draft that copied
+  // the arithmetic still claimed an adjustment. Every draft is announced the
+  // same way now, whatever the stored flag says.
   const weekDrafted = (payload: unknown) =>
     composeNarration([{ id: 'ev_w', actorId: null, type: 'week_drafted', payload, createdAt: new Date() }], {}, t, weekday);
 
-  it('says the week was adjusted when the structure had already filled it', () => {
-    expect(weekDrafted({ sessions: [{ date: '2026-09-28' }], adjusted: true })).toBe(
-      'single(clause=weekAdjustedFrom(day=day:2026-09-28))',
-    );
-    expect(weekDrafted({ sessions: [], adjusted: true })).toBe('single(clause=weekAdjusted)');
-  });
-
-  it('keeps the planned wording where there was nothing to adjust, and for an event written before the flag', () => {
-    // Every `week_drafted` already in the events table predates `adjusted`.
+  it('announces a drafted week the same way whether or not it was adjusted', () => {
     for (const payload of [
+      { sessions: [{ date: '2026-09-28' }], adjusted: true },
       { sessions: [{ date: '2026-09-28' }], adjusted: false },
       { sessions: [{ date: '2026-09-28' }] },
-      { sessions: [{ date: '2026-09-28' }], adjusted: 'true' },
     ]) {
       expect(weekDrafted(payload)).toBe('single(clause=weekDraftedFrom(day=day:2026-09-28))');
     }
+    expect(weekDrafted({ sessions: [], adjusted: true })).toBe('single(clause=weekDrafted)');
   });
 
   it('carries the Coach’s one-line summary of what it changed as its own sentence', () => {
     expect(
       weekDrafted({ sessions: [{ date: '2026-09-28' }], adjusted: true, whatChanged: 'Moved the long ride to Saturday.' }),
-    ).toBe('single(clause=weekDraftChange(clause=weekAdjustedFrom(day=day:2026-09-28),change=Moved the long ride to Saturday))');
+    ).toBe('single(clause=weekDraftChange(clause=weekDraftedFrom(day=day:2026-09-28),change=Moved the long ride to Saturday))');
   });
 
   it('leaves the catalogue to finish the sentence, so the summary never ends in two stops', () => {
     // `single` adds the full stop and a list item adds none; a summary that
     // brought its own would read "Saturday.." in one and inconsistently in the other.
-    expect(weekDrafted({ sessions: [], adjusted: true, whatChanged: '  Cut Thursday short!  ' })).toBe(
-      'single(clause=weekDraftChange(clause=weekAdjusted,change=Cut Thursday short))',
+    expect(weekDrafted({ sessions: [], whatChanged: '  Cut Thursday short!  ' })).toBe(
+      'single(clause=weekDraftChange(clause=weekDrafted,change=Cut Thursday short))',
     );
   });
 
   it('adds nothing when the Coach said nothing, or said only blank space', () => {
     for (const whatChanged of [undefined, null, '', '   ', 42, '...']) {
-      expect(weekDrafted({ sessions: [], adjusted: true, whatChanged })).toBe('single(clause=weekAdjusted)');
+      expect(weekDrafted({ sessions: [], whatChanged })).toBe('single(clause=weekDrafted)');
     }
   });
 
@@ -620,5 +614,84 @@ describe('composeNarration — a moved race is re-pinned (training-architecture/
     expect(
       composeNarration([{ ...drafted, payload: { refittedHeadCoachBlocks: true } }], {}, t, weekday),
     ).toBe('single(clause=blocksRefittedNoDetail)');
+  });
+});
+
+describe('composeNarration — a race the athlete added (training-architecture/37)', () => {
+  const raceAdded = (payload: unknown, id = 'ev_r'): NarratableEvent => ({
+    id,
+    actorId: 'athlete_1',
+    type: 'race_added',
+    payload,
+    createdAt: new Date('2026-09-29T08:00:00Z'),
+  });
+  const AARHUS = { raceId: 'r1', name: 'Aarhus 70.3', date: '2027-02-27', distance: 'Half', isTarget: false };
+
+  it('asks about it, naming the race and its date — a question, never a plan change', () => {
+    expect(composeNarration([raceAdded(AARHUS)], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAdded(name=Aarhus 70.3,date=2027-02-27))',
+    );
+  });
+
+  it('stays a question inside a batch, and names no Head Coach — the athlete added it', () => {
+    const out = composeNarration([prescribed(), raceAdded(AARHUS)], NAMES, t, weekday) ?? '';
+    expect(out.split('\n')).toEqual([
+      'multiLead',
+      'item(clause=prescribed(coach=Lars,day=day:2026-08-20,type=Endurance))',
+      'itemQuestion(clause=raceAdded(name=Aarhus 70.3,date=2027-02-27))',
+    ]);
+  });
+
+  it('asks about a new Target Race as the target it was chosen as, never as a tune-up', () => {
+    // The athlete picked Target in the form: asking whether it is a tune-up
+    // would put back a question they already answered (Mads, 2026-09-29).
+    expect(composeNarration([raceAdded({ ...AARHUS, isTarget: true })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAddedTarget(name=Aarhus 70.3,date=2027-02-27))',
+    );
+    // Only a literal true: a payload that does not say is the tune-up question.
+    expect(composeNarration([raceAdded({ ...AARHUS, isTarget: 'yes' })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAdded(name=Aarhus 70.3,date=2027-02-27))',
+    );
+  });
+
+  it('degrades to a plainer question when the payload lacks the race', () => {
+    expect(composeNarration([raceAdded({ date: '2027-02-27' })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAddedNoDetail)',
+    );
+    expect(composeNarration([raceAdded({ name: 'Aarhus 70.3' })], NAMES, t, weekday)).toBe(
+      'singleQuestion(clause=raceAddedNoDetail)',
+    );
+  });
+
+  it('reads as the ruling wrote it, in English and in Danish', async () => {
+    const { createTranslator } = await import('next-intl');
+    const da = (await import('@/messages/da.json')).default;
+    const say = (locale: 'en' | 'da', messages: typeof en) =>
+      composeNarration(
+        [raceAdded(AARHUS)],
+        {},
+        createTranslator({ locale, messages, namespace: 'Narration' }) as unknown as Parameters<typeof composeNarration>[2],
+        weekday,
+      );
+    expect(say('en', en)).toMatch(/Aarhus 70\.3 on 2027-02-27.*a tune-up in the plan, or just so I know\?$/);
+    expect(say('da', da as unknown as typeof en)).toMatch(/Aarhus 70\.3.*2027-02-27.*\?$/);
+  });
+
+  it('asks about a new target in both languages, as a question', async () => {
+    const { createTranslator } = await import('next-intl');
+    const da = (await import('@/messages/da.json')).default;
+    const say = (locale: 'en' | 'da', messages: typeof en) =>
+      composeNarration(
+        [raceAdded({ ...AARHUS, isTarget: true })],
+        {},
+        createTranslator({ locale, messages, namespace: 'Narration' }) as unknown as Parameters<typeof composeNarration>[2],
+        weekday,
+      );
+    expect(say('en', en)).toBe(
+      'You’ve made Aarhus 70.3 on 2027-02-27 your target race: shall we go through what that changes in your plan?',
+    );
+    expect(say('da', da as unknown as typeof en)).toBe(
+      'Du har gjort Aarhus 70.3 den 2027-02-27 til dit mål-løb: skal vi gå igennem, hvad det ændrer i din plan?',
+    );
   });
 });

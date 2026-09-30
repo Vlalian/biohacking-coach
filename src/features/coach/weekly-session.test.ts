@@ -12,9 +12,14 @@ import {
   whatChangedFrom,
   PROPOSE_WEEK_PLAN_TOOL_NAME,
   PROPOSE_WEEK_PLAN_TOOL,
+  clampToBand,
+  isAdjusted,
+  volumeReasonFrom,
+  type ProposedSession,
   type Readiness,
 } from './weekly-session';
 import { resolveBlocks, trainingBlocks } from './training-blocks';
+import { openHorizonBlocks } from './open-horizon';
 import { planningWindow } from './planning-window';
 
 // The Training Phase is derived from the horizon now rather than stored on the
@@ -67,6 +72,7 @@ function session(overrides: Partial<Session> = {}): Session {
     feedbackComment: null,
     origin: 'coach',
     isTraining: true,
+    summary: null,
     ...overrides,
   };
 }
@@ -219,9 +225,9 @@ describe('fourWeekSummary', () => {
     expect(week).toMatchObject({ completed: 1, doneMinutes: 0, plannedMinutes: 0 });
   });
 
-  it('counts an imported session as done — the importer writes origin "athlete", not "garmin"', () => {
-    // `origin: 'garmin'` is legal in the schema and written nowhere in production
-    // (detected-activity.ts writes 'athlete'). Filtering on it would find nothing.
+  it('counts a session from a device as done, whichever origin wrote it', () => {
+    // A Detected Activity accept keeps 'athlete' (or the planned session's own
+    // origin); a History Upload writes 'garmin'. Both are done.
     const week = fourWeekSummary(
       [
         session({ date: '2026-09-21', status: 'completed', duration: 60, origin: 'athlete' }),
@@ -231,6 +237,63 @@ describe('fourWeekSummary', () => {
       DRAFTED_ON_THE_MONDAY,
     )[3];
     expect(week).toMatchObject({ completed: 2, doneMinutes: 90 });
+  });
+
+  it('counts imported sessions as done and imported, never as unrated (garmin-integration/07)', () => {
+    const week = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', origin: 'garmin', feedbackBody: null }),
+        session({ date: '2026-09-22', status: 'completed', origin: 'coach', feedbackBody: null }),
+      ],
+      '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
+    )[3];
+    expect(week.completed).toBe(2);
+    expect(week.imported).toBe(1);
+  });
+
+  it('counts a past planned session as not recorded, and one from today on as still to come (training-architecture/45)', () => {
+    const summary = fourWeekSummary(
+      [
+        session({ date: '2026-09-14', status: 'planned', duration: 60 }),
+        session({ date: '2026-09-22', status: 'planned', duration: 45 }),
+        session({ date: '2026-09-23', status: 'planned', duration: 30 }),
+      ],
+      '2026-09-28',
+      '2026-09-23',
+    );
+    expect(summary[2].unrecorded).toBe(1);
+    expect(summary[3].unrecorded).toBe(1);
+    expect(summary[1].unrecorded).toBe(0);
+  });
+
+  it("adds up what the device recorded on the week's completed sessions (training-architecture/52)", () => {
+    const [, , , week] = fourWeekSummary(
+      [
+        session({ date: '2026-09-21', status: 'completed', summary: { distanceM: 42000, avgHr: 130 } }),
+        session({ date: '2026-09-22', status: 'completed', summary: { distanceM: 1500, avgHr: null } }),
+        session({ date: '2026-09-23', status: 'completed', summary: { distanceM: null, avgHr: 150 } }),
+        session({ date: '2026-09-24', status: 'skipped', summary: { distanceM: 9000, avgHr: 170 } }),
+        session({ date: '2026-09-25', status: 'completed', summary: null }),
+      ],
+      '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
+    );
+    expect(week.device).toEqual({ distanceKm: 43.5, avgHr: 140 });
+  });
+
+  it('gives no average heart rate when no session recorded one', () => {
+    const [, , , week] = fourWeekSummary(
+      [session({ date: '2026-09-21', status: 'completed', summary: { distanceM: 1500, avgHr: null } })],
+      '2026-09-28',
+      DRAFTED_ON_THE_MONDAY,
+    );
+    expect(week.device).toEqual({ distanceKm: 1.5, avgHr: null });
+  });
+
+  it('says nothing about the device for a week with no device data', () => {
+    const [, , , week] = fourWeekSummary([session({ date: '2026-09-21', status: 'completed' })], '2026-09-28', DRAFTED_ON_THE_MONDAY);
+    expect(week.device).toBeNull();
   });
 
   it('splits the week by Session Type, listing only the types that happened', () => {
@@ -724,6 +787,43 @@ describe('buildWeeklyCheckIn — the resolved Training Blocks (training-architec
   });
 });
 
+describe('buildWeeklyCheckIn — the Open Horizon (training-architecture/13)', () => {
+  const open = openHorizonBlocks('2026-08-20', TODAY_KEY);
+  const build = (race: { name: string; date: string } | null, blocks = open) =>
+    buildWeeklyCheckIn(athlete(), TODAY_KEY, null, 'building', undefined, [], race, null, null, [], null, blocks);
+
+  it('carries the open arc\'s block and position for an athlete with no race, marked as the default arc', () => {
+    const checkIn = build(null);
+    expect(checkIn.phase).toBe('Base');
+    expect(checkIn.blockWeek).toBe('week 3 of 6');
+    expect(checkIn.horizonNote).toBe('open');
+    expect(checkIn).not.toHaveProperty('raceDate');
+  });
+
+  it('marks a target under eight weeks away as too close, keeping the race', () => {
+    const checkIn = build({ name: 'Aarhus 70.3', date: '2026-10-19' });
+    expect(checkIn).toMatchObject({ raceTarget: 'Aarhus 70.3', raceDate: '2026-10-19', horizonNote: 'race-too-close' });
+  });
+
+  it('a target already run leaves the athlete on the open arc', () => {
+    expect(build({ name: 'Aarhus 70.3', date: '2026-09-08' }).horizonNote).toBe('open');
+    // Race day itself is not run yet — it is too close, not over.
+    expect(build({ name: 'Aarhus 70.3', date: TODAY_KEY }).horizonNote).toBe('race-too-close');
+  });
+
+  it('a race horizon carries no note', () => {
+    const checkIn = build(TARGET_RACE, trainingBlocks(TODAY_KEY, TARGET_RACE.date));
+    expect(checkIn.phase).toBeDefined();
+    expect(checkIn).not.toHaveProperty('horizonNote');
+  });
+
+  it('with no race and no blocks there is nothing to be inside, and nothing is claimed', () => {
+    const checkIn = build(null, []);
+    expect(checkIn).not.toHaveProperty('phase');
+    expect(checkIn).not.toHaveProperty('horizonNote');
+  });
+});
+
 describe('buildWeeklyCheckIn — the other races (training-architecture/09)', () => {
   const target = {
     id: 't', athleteId: 'a', name: 'Ironman Copenhagen', date: '2027-06-01', distance: 'Full',
@@ -769,5 +869,153 @@ describe('buildWeeklyCheckIn — the other races (training-architecture/09)', ()
 
   it('carries nothing when the races list has no target — a lone non-target race is just a race', () => {
     expect(build([tuneUp], null)).not.toHaveProperty('tuneUps');
+  });
+});
+
+/**
+ * `training-architecture/48`, Mads's rulings R1 and R2 (2026-09-29): the draft
+ * may move the arithmetic's volume ±10 % freely, down to −30 % with a stated
+ * reason, and never above +10 %. Outside the band, code scales every session
+ * back to the nearest edge — the draft is never lost.
+ */
+describe('clampToBand', () => {
+  const s = (durationMinutes: number | null, date = '2026-09-22'): ProposedSession => ({
+    date,
+    type: 'Endurance',
+    durationMinutes,
+    zone: 'Z2',
+    note: null,
+  });
+  const week = (each: number, n = 6) => Array.from({ length: n }, (_, i) => s(each, `2026-09-2${i + 1}`));
+
+  it('leaves a draft within ±10% of the arithmetic untouched', () => {
+    const out = clampToBand(week(90), 600, null);
+    expect(out.total).toBe(540);
+    expect(out.clamped).toBe(false);
+    expect(clampToBand(week(110), 600, null)).toMatchObject({ total: 660, clamped: false });
+  });
+
+  it('pulls an unexplained −35% back to −10%, and a reasoned −35% to −30%', () => {
+    expect(clampToBand(week(65), 600, null)).toMatchObject({ total: 540, clamped: true });
+    expect(clampToBand(week(65), 600, 'knee: easing run load')).toMatchObject({ total: 420, clamped: true });
+  });
+
+  it('lets a reasoned cut inside −30% stand as it is', () => {
+    expect(clampToBand(week(75), 600, 'tired')).toMatchObject({ total: 450, clamped: false });
+  });
+
+  it('never lets a draft exceed +10%, reason or not', () => {
+    expect(clampToBand(week(120), 600, 'feeling great')).toMatchObject({ total: 660, clamped: true });
+  });
+
+  it('scales every session proportionally, rounded to 5 min, never below 15', () => {
+    const out = clampToBand([s(300), s(60), s(30)], 600, null);
+    expect(out.sessions.map((x) => x.durationMinutes)).toEqual([415, 85, 40]);
+    expect(out.total).toBe(540);
+    // The fifteen-minute floor lifts the short one; the long one gives the
+    // rounding back, so the week still lands on the band's edge.
+    expect(clampToBand([s(900), s(10)], 600, null)).toMatchObject({ total: 660 });
+    expect(clampToBand([s(900), s(10)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([645, 15]);
+    expect(clampToBand([s(10), s(null), s(900)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([15, null, 645]);
+  });
+
+  it('never lands outside the band because of the rounding', () => {
+    // Seven sessions of 103 min (721) against 600: each scales to 94.3 and
+    // rounds up to 95, which alone would make 665 — above the +10% edge.
+    const down = clampToBand(week(103, 7), 600, null);
+    expect(down.total).toBe(660);
+    expect(down.sessions.map((x) => x.durationMinutes)).toEqual([90, 95, 95, 95, 95, 95, 95]);
+    // Seven of 67 min (469) up to −10% of 600 (540): each scales to 77.1 and
+    // rounds down to 75, which alone would make 525 — below the edge.
+    const up = clampToBand(week(67, 7), 600, null);
+    expect(up.total).toBe(540);
+    expect(up.sessions.map((x) => x.durationMinutes)).toEqual([90, 75, 75, 75, 75, 75, 75]);
+  });
+
+  it('spreads the rounding over several sessions when one alone would hit the floor (CodeRabbit, PR #116)', () => {
+    // Seven of 40 (280) against 115: the goal is 125. Each scales to 17.9 and
+    // rounds to 20 (140); taking all 15 from one session would floor it at 15
+    // and land on 135, above the 126.5 edge.
+    const out = clampToBand(week(40, 7), 115, null);
+    expect(out.total).toBe(125);
+    expect(out.sessions.map((x) => x.durationMinutes)).toEqual([15, 15, 15, 20, 20, 20, 20]);
+  });
+
+  it('gives minutes the rounding took back to the longest session', () => {
+    // 20, 44 and 25 (89) up to 540 scale to 120, 265 and 150 (535): the 5 go on the 265.
+    expect(clampToBand([s(20), s(44), s(25)], 600, null).sessions.map((x) => x.durationMinutes)).toEqual([120, 270, 150]);
+  });
+
+  it('stops every session at fifteen when even that is more than the band allows (R2: the draft is never lost)', () => {
+    // Seven sessions can't go under 105 minutes; the edge is 55.
+    const out = clampToBand(week(40, 7), 50, null);
+    expect(out.sessions.every((x) => x.durationMinutes === 15)).toBe(true);
+    expect(out.total).toBe(105);
+  });
+
+  it('lands on the five-minute mark inside an edge that is not one', () => {
+    // 613 × 1.1 = 674.3: the week lands on 670, not 675.
+    expect(clampToBand(week(120), 613, null).total).toBe(670);
+    // 613 × 0.9 = 551.7: the week lands on 555, not 550.
+    expect(clampToBand(week(60), 613, null).total).toBe(555);
+  });
+
+  it('does not claim a clamp when no session carries minutes to scale', () => {
+    expect(clampToBand([s(null), s(null)], 600, null)).toMatchObject({ total: 0, clamped: false });
+  });
+
+  it('keeps a session with no duration as it is', () => {
+    const out = clampToBand([s(300), s(null)], 600, null);
+    expect(out.sessions[1].durationMinutes).toBeNull();
+    expect(out.total).toBe(540);
+  });
+
+  it('has no band when the arithmetic wrote nothing for the week', () => {
+    expect(clampToBand(week(200), 0, null)).toMatchObject({ total: 1200, clamped: false });
+  });
+});
+
+describe('isAdjusted (R4: internal, for statistics)', () => {
+  const ARITH = [
+    { date: '2026-09-22', type: 'Endurance', durationMinutes: 60 },
+    { date: '2026-09-24', type: 'Tempo', durationMinutes: 80 },
+  ];
+  const drafted = (rows: typeof ARITH) =>
+    rows.map((r) => ({ ...r, type: r.type as ProposedSession['type'], zone: null, note: null }));
+
+  it('marks a week adjusted only when it really differs from the arithmetic', () => {
+    expect(isAdjusted(drafted(ARITH), ARITH)).toBe(false);
+    // Order is not a change: the same sessions listed the other way round.
+    expect(isAdjusted(drafted([...ARITH].reverse()), ARITH)).toBe(false);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], type: 'Intensity' }]), ARITH)).toBe(true);
+  });
+
+  it('counts a session added or removed as a change', () => {
+    expect(isAdjusted(drafted([ARITH[0]]), ARITH)).toBe(true);
+    expect(isAdjusted(drafted([...ARITH, { date: '2026-09-26', type: 'Recovery', durationMinutes: 30 }]), ARITH)).toBe(true);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], date: '2026-09-25' }]), ARITH)).toBe(true);
+  });
+
+  it('counts volume moved by more than 5% as a change, and 5% or less as none', () => {
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], durationMinutes: 87 }]), ARITH)).toBe(false);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], durationMinutes: 88 }]), ARITH)).toBe(true);
+    expect(isAdjusted(drafted([ARITH[0], { ...ARITH[1], durationMinutes: 72 }]), ARITH)).toBe(true);
+  });
+
+  it('is never adjusted when there was no arithmetic week to adjust', () => {
+    expect(isAdjusted(drafted(ARITH), [])).toBe(false);
+  });
+});
+
+describe('volumeReasonFrom', () => {
+  it('reads the stated reason for a larger cut, or none', () => {
+    expect(volumeReasonFrom({ sessions: [], volumeReason: ' knee ' })).toBe('knee');
+    expect(volumeReasonFrom({ sessions: [], volumeReason: '  ' })).toBeNull();
+    expect(volumeReasonFrom({ sessions: [] })).toBeNull();
+    expect(volumeReasonFrom(null)).toBeNull();
+  });
+
+  it('is offered on the tool, beside whatChanged', () => {
+    expect(PROPOSE_WEEK_PLAN_TOOL.input_schema.properties).toHaveProperty('volumeReason');
   });
 });

@@ -8,6 +8,7 @@ import {
   logCoachChoresFailure,
   logLookupFailure,
   logCoachDrift,
+  logWeekDraftClamped,
 } from './coach-log';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
@@ -348,5 +349,27 @@ describe('logCoachDrift', () => {
     expect(() =>
       logCoachDrift({ surface: 'coach_chat', athleteId: 'a1', conversationId: null, patterns: ['bracket-marker'] }),
     ).not.toThrow();
+  });
+});
+
+describe('logWeekDraftClamped (training-architecture/48, R2)', () => {
+  it('records the minutes the Coach drafted, what the clamp made them, and the arithmetic they were held to', () => {
+    const s = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    logWeekDraftClamped('a1', { drafted: 390, clampedTo: 540, baseline: 600, reasoned: false });
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'week_draft_clamped',
+      athleteId: 'a1',
+      drafted: 390,
+      clampedTo: 540,
+      baseline: 600,
+      reasoned: false,
+    });
+  });
+
+  it('never throws, even when the console does', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {
+      throw new Error('console gone');
+    });
+    expect(() => logWeekDraftClamped('a1', { drafted: 1, clampedTo: 1, baseline: 1, reasoned: true })).not.toThrow();
   });
 });

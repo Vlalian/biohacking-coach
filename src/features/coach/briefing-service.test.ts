@@ -427,6 +427,28 @@ describe('startBriefing — the prompt material the rest of the suite does not r
     expect(lastSystem()).toContain('TRAINING BLOCKS: none');
   });
 
+  it('tells the Head Coach an Open Horizon is a default arc and a too-close race was not built toward (training-architecture/13)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    const arc = [
+      { index: 1, total: 4, name: 'Base', startDate: '2026-08-01', endDate: '2026-09-11', authoredBy: 'arithmetic' },
+    ];
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: arc, horizon: 'open', raceTooClose: false });
+    await startBriefing('coach_1', 'a1', TODAY);
+    expect(lastSystem()).toContain('TRAINING BLOCKS (a six-month default arc');
+    expect(lastSystem()).toContain('the athlete has no race to build toward');
+
+    getResolvedBlocks.mockResolvedValue({
+      race: { id: 'r1', name: 'IM', date: '2026-09-20' },
+      set: null,
+      blocks: arc,
+      horizon: 'open',
+      raceTooClose: true,
+    });
+    await startBriefing('coach_1', 'a1', TODAY);
+    expect(lastSystem()).toContain('too close to build Training Blocks toward');
+    expect(lastSystem()).not.toContain('the horizon toward the Target Race');
+  });
+
   it('names the phase from the resolved block today falls inside', async () => {
     getActiveLink.mockResolvedValue(activeLink(true, false));
     getAthleteById.mockResolvedValue({ experienceLevel: 'intermediate', raceTarget: null, trainingSessionsPerWeek: null, profile: null });

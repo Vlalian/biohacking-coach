@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { pastRace, race, type PastRaceRow, type RaceRow } from '@/db/schema';
+import { athlete, events, pastRace, race, type PastRaceRow, type RaceRow } from '@/db/schema';
 import type { RaceDistance } from '@/lib/race-distances';
 import type { PastRace } from '@/features/onboarding/past-races';
 
@@ -65,6 +65,50 @@ export async function getTargetRace(athleteId: string): Promise<RaceRow | null> 
     .where(and(eq(race.athleteId, athleteId), eq(race.isTarget, true)))
     .orderBy(asc(race.date));
   return rows[0] ?? null;
+}
+
+/**
+ * How a race added from Settings or a calendar day relates to the Target Race:
+ * `first` when the athlete has none (the new race becomes it), `replace` when it
+ * is asked for as the target beside an existing one, `none` for a tune-up.
+ */
+export type AddedAs = 'none' | 'first' | 'replace';
+
+/**
+ * Adds a race and everything that goes with it in **one `db.batch`**, which
+ * neon-http runs as a transaction: the old target cleared (on `replace`), the
+ * race inserted, the `raceTarget` mirror written (when it is the target), and
+ * the `race_added` event for narration (training-architecture/37). Separate
+ * round trips could leave a race without its event, or a moved flag with a stale
+ * mirror, and a retry from the preserved form would add the race twice
+ * (CodeRabbit, PR #115). The id is made here so the event can carry it.
+ */
+export async function addRace(athleteId: string, newRace: NewRace, addedAs: AddedAs): Promise<string> {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  const isTarget = addedAs !== 'none';
+  const insert = db.insert(race).values({ id, athleteId, ...newRace, isTarget });
+  const event = db.insert(events).values({
+    athleteId,
+    actorType: 'athlete',
+    actorId: athleteId,
+    type: 'race_added',
+    payload: { raceId: id, ...newRace, isTarget } satisfies RaceAdded,
+  });
+  if (!isTarget) {
+    await db.batch([insert, event]);
+    return id;
+  }
+  // Built in batch order: the partial unique index allows one target, so the
+  // clear must run before the flagged insert.
+  const clear =
+    addedAs === 'replace' ? db.update(race).set({ isTarget: false }).where(eq(race.athleteId, athleteId)) : null;
+  const mirror = db
+    .update(athlete)
+    .set({ raceTarget: newRace.name, updatedAt: new Date() })
+    .where(eq(athlete.id, athleteId));
+  await (clear ? db.batch([clear, insert, mirror, event]) : db.batch([insert, mirror, event]));
+  return id;
 }
 
 /**
@@ -141,6 +185,12 @@ export async function deleteRace(athleteId: string, raceId: string): Promise<voi
   await getDb()
     .delete(race)
     .where(and(eq(race.athleteId, athleteId), eq(race.id, raceId)));
+}
+
+/** What a `race_added` event carries: the race as the athlete entered it. */
+export interface RaceAdded extends NewRace {
+  raceId: string;
+  isTarget: boolean;
 }
 
 // ── Past races — what the athlete has finished (training-architecture/35) ────

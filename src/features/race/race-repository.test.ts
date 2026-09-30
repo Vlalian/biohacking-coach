@@ -1,5 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { race as raceTable } from '@/db/schema';
+import { athlete as athleteTable, events as eventsTable, race as raceTable } from '@/db/schema';
 import { createTestDatabase, seedAthlete, type TestDatabase } from '@/test/pglite';
 
 /**
@@ -25,6 +26,7 @@ const {
   getPastRaces,
   addPastRace,
   deletePastRace,
+  addRace,
 } = await import('./race-repository');
 
 // Booting and migrating is seconds; the default five would fail on a cold start.
@@ -363,5 +365,94 @@ describe('past races — the races the athlete has finished (training-architectu
     await addPastRace(theirs, HALF);
 
     expect(await getPastRaces(mine)).toEqual([]);
+  });
+});
+
+describe('addRace: the race, its target flag, the mirror and the event in one batch (CodeRabbit, PR #115)', () => {
+  const KBH = { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' as const };
+
+  const mirrorOf = async (athleteId: string) =>
+    (await testDb.db.select({ raceTarget: athleteTable.raceTarget }).from(athleteTable).where(eq(athleteTable.id, athleteId)))[0]
+      .raceTarget;
+  const raceAddedEvents = () => testDb.db.select().from(eventsTable).where(eq(eventsTable.type, 'race_added'));
+
+  it('stores a tune-up with its race_added event, and touches neither the target nor the mirror', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    const id = await addRace(athleteId, KBH, 'none');
+
+    expect(await stored(athleteId)).toEqual([
+      { ...COPENHAGEN, isTarget: true },
+      { ...KBH, isTarget: false },
+    ]);
+    expect(await mirrorOf(athleteId)).toBeNull();
+    expect(await raceAddedEvents()).toEqual([
+      expect.objectContaining({
+        athleteId,
+        actorType: 'athlete',
+        actorId: athleteId,
+        payload: { raceId: id, ...KBH, isTarget: false },
+      }),
+    ]);
+  });
+
+  it('stores a first race as the target, with the mirror and the event', async () => {
+    const athleteId = await anAthlete('a');
+
+    const id = await addRace(athleteId, KBH, 'first');
+
+    expect((await getTargetRace(athleteId))?.id).toBe(id);
+    expect(await mirrorOf(athleteId)).toBe('IM Kbh');
+    expect((await raceAddedEvents()).map((e) => e.payload)).toEqual([{ raceId: id, ...KBH, isTarget: true }]);
+  });
+
+  it('replaces a target: the old flag is cleared before the new race lands flagged', async () => {
+    // The partial unique index allows one target per athlete, so a batch that
+    // inserted the flagged race before clearing the old flag would be refused.
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    const id = await addRace(athleteId, KBH, 'replace');
+
+    expect(await stored(athleteId)).toEqual([
+      { ...COPENHAGEN, isTarget: false },
+      { ...KBH, isTarget: true },
+    ]);
+    expect((await getTargetRace(athleteId))?.id).toBe(id);
+    expect(await mirrorOf(athleteId)).toBe('IM Kbh');
+  });
+
+  it('replaces only the asking athlete’s target', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await createRace(theirs, COPENHAGEN);
+
+    await addRace(mine, KBH, 'replace');
+
+    expect((await getTargetRace(theirs))?.name).toBe('Ironman Copenhagen');
+    expect(await mirrorOf(theirs)).toBeNull();
+  });
+
+  it('writes nothing when a part of the batch fails — no race without its event', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    // 'first' beside an existing target: the flagged insert is refused by the
+    // index, and the event and mirror in the same batch must go with it.
+    await expect(addRace(athleteId, KBH, 'first')).rejects.toThrow();
+
+    expect(await stored(athleteId)).toEqual([{ ...COPENHAGEN, isTarget: true }]);
+    expect(await raceAddedEvents()).toEqual([]);
+    expect(await mirrorOf(athleteId)).toBeNull();
+  });
+
+  it('gives each race a fresh id, the one its event carries', async () => {
+    const athleteId = await anAthlete('a');
+    const a = await addRace(athleteId, KBH, 'none');
+    const b = await addRace(athleteId, KBH, 'none');
+
+    expect(a).not.toBe(b);
+    expect((await raceAddedEvents()).map((e) => (e.payload as { raceId: string }).raceId).sort()).toEqual([a, b].sort());
   });
 });

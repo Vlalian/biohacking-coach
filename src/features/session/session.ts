@@ -23,6 +23,30 @@ export function toSessionOrigin(value: string): SessionOrigin {
 }
 
 /**
+ * What a device recorded for a session, as far as anything renders it: the
+ * distance and average heart rate a Garmin file carried
+ * (`garmin-integration/07`). Either may be missing — a pool swim has no GPS,
+ * a watch without a strap no heart rate.
+ */
+export type DeviceSummary = { distanceM: number | null; avgHr: number | null };
+
+/** `Number.isFinite` never coerces, so a string or null is not finite. */
+function finiteOrNull(value: unknown): number | null {
+  return Number.isFinite(value) ? (value as number) : null;
+}
+
+/** Narrows the stored `summary` JSONB to the facts a session shows. A value
+ *  that is not an object, or an object holding neither fact, is no summary. */
+// Export-for-test: reaching each stored JSONB shape through `toSession` needs a
+// full SessionRow per case. Delete freely if this is inlined into `toSession`.
+export function toDeviceSummary(value: unknown): DeviceSummary | null {
+  if (value === null || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const summary = { distanceM: finiteOrNull(raw.distanceM), avgHr: finiteOrNull(raw.avgHr) };
+  return summary.distanceM === null && summary.avgHr === null ? null : summary;
+}
+
+/**
  * A session, as the calendar knows one.
  *
  * Narrower than the stored row: it carries what the calendar renders today — the
@@ -64,11 +88,35 @@ export type Session = {
   /** Whether it counts as training load (Athlete Session's Other-as-training
    *  toggle) — governs Double/Rest-day placement rules on the calendar. */
   isTraining: boolean;
+  /** What the device recorded, on a session that came from one; null on
+   *  everything the app itself wrote. */
+  summary: DeviceSummary | null;
   /** The row version this view was read at. A write sends it back so a change
    *  that landed in between is refused rather than overwritten
    *  (`versioned-write.ts`). Rendered by nothing; carried by every editor. */
   version: number;
 };
+
+/**
+ * Imported history (`garmin-integration/07`): a session a History Upload wrote
+ * as completed training. History Upload is the only writer of origin `garmin`,
+ * and it writes no feedback by design — so such a session needs no rating and
+ * is never an unrated reflection. A Detected Activity accepted onto a Planned
+ * Session keeps its own origin and still asks for one.
+ */
+export function isImportedHistory(session: Pick<Session, 'origin' | 'status'>): boolean {
+  return session.origin === 'garmin' && session.status === 'completed';
+}
+
+/**
+ * A past Planned Session nobody recorded (`training-architecture/45`): its day
+ * is behind today and it was never completed or skipped. The row is left as it
+ * is — nothing writes a status for it — and the Coach reads it as "not
+ * recorded" rather than as a plan still to come. Today's session is not past.
+ */
+export function isUnrecorded(session: Pick<Session, 'status' | 'date'>, today: string): boolean {
+  return session.status === 'planned' && session.date < today;
+}
 
 /** The one place a stored session row becomes a domain object. */
 export function toSession(row: SessionRow): Session {
@@ -91,6 +139,7 @@ export function toSession(row: SessionRow): Session {
     // hold a value outside SESSION_ORIGINS.
     origin: toSessionOrigin(row.origin),
     isTraining: row.isTraining,
+    summary: toDeviceSummary(row.summary),
     version: row.version,
   };
 }

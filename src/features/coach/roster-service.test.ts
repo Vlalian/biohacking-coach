@@ -450,6 +450,16 @@ describe('getCoachAthleteView — the Training Blocks are plan structure (traini
     expect(view!.blocks).toBeNull();
   });
 
+  it('is null on an Open Horizon, even with a race too close for blocks: there is no race set to edit (training-architecture/13)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(true, true));
+    getResolvedBlocks.mockResolvedValue({ race: RACE, set: null, blocks: BLOCKS, horizon: 'open', raceTooClose: true });
+
+    expect((await getCoachAthleteView('coach_1', 'a1', TODAY))!.blocks).toBeNull();
+
+    getResolvedBlocks.mockResolvedValue({ race: RACE, set: null, blocks: BLOCKS, horizon: 'race', raceTooClose: false });
+    expect((await getCoachAthleteView('coach_1', 'a1', TODAY))!.blocks).not.toBeNull();
+  });
+
   it('reads nothing when there is no link', async () => {
     getActiveLink.mockResolvedValue(undefined);
     getResolvedBlocks.mockClear();
