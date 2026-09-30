@@ -647,7 +647,7 @@
     "consentRequiredLink": "Åbn Privatliv & samtykke",
     "error": "Beskeden blev ikke sendt. Prøv igen.",
     "unsafeContent": "En note eller et stykke udstyr, du har gemt, indeholder noget, der ligner en e-mailadresse eller et telefonnummer. Momentum kan ikke læse det. Fjern det, og prøv igen.",
-    "ranOutOfRoom": "Momentum løb tør for plads til det svar. Bed om en mindre ændring, eller én uge ad gangen.",
+    "ranOutOfRoom": "Momentums svar blev afbrudt. Prøv igen.",
     "drewOn": "Det jeg trak på",
     "thumbUp": "Det her hjalp",
     "thumbDown": "Det her ramte forkert",

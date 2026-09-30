@@ -26,6 +26,7 @@ import { conversationWindow } from './week-draft';
 import type { PlanningWindow } from './planning-window';
 import { arithmeticInWindow, heldToBand } from './volume-band';
 import type { CoachReply } from './coach-client';
+import { logChatMaxTokens } from '@/lib/coach-log';
 
 /**
  * Coach Chat — the Coach Overlay's one conversation (ADR 0007, amended
@@ -50,10 +51,24 @@ import type { CoachReply } from './coach-client';
  * Room for a whole-week proposal plus a paragraph. 1200 until 2026-09-17, when
  * Mads's smoke run of PR #71 hit it four times: a `propose_week_plan` call for
  * seven days is large, and a reply cut off mid-call comes back empty. Raised
- * rather than retried — a retry doubles a twenty-second wait — and a cut-off is
- * now its own refusal (`ran-out-of-room`) so the athlete is asked for less.
+ * rather than retried — a retry doubles a twenty-second wait.
+ *
+ * 2500 until 2026-09-30 (`showable-version/60`): a request to re-plan three
+ * days of the week hit it on PR #116's preview. The estimate, from the tool's
+ * shape: one session is about 30 tokens of JSON keys, date, type, minutes and
+ * zone, plus a one-line note of 20–30 (more in Danish), so ~60. A heavy week
+ * with doubles is ~12 sessions, ~720; `whatChanged` and `volumeReason` ~100; the
+ * reply around the call up to ~400; a lookup call ~50. About 1300 in all —
+ * which 2500 should have held, so the estimate misses something (longer replies
+ * since Plan E's context, longer notes) until a real one is measured.
+ *
+ * 4096 is ~3x that estimate. The ceiling above it is the adapter's fixed
+ * 60-second request timeout (`coach-client.ts`), which replaces the SDK's
+ * max_tokens-scaled one: at a typical 60–80 tokens a second a reply that fills
+ * 4096 already takes 50–70 seconds, so a higher cap would mostly turn a
+ * cut-off into a timeout. Only tokens used are billed; the cap is a ceiling.
  */
-const CHAT_MAX_TOKENS = 2500;
+const CHAT_MAX_TOKENS = 4096;
 
 /** The Reference the athlete brought into the thread, as the prompt sees it. */
 function toSessionContext(session: Session): SessionContext {
@@ -289,5 +304,15 @@ export async function sendCoachChatMessage(
       };
     },
   });
+  if (!result.ok && result.reason === 'ran-out-of-room') {
+    // `ran-out-of-room` is only ever the `max_tokens` stop (`refusalReason`),
+    // so the stop reason is known here without the error.
+    logChatMaxTokens({
+      athleteId: athlete.id,
+      conversationId,
+      stopReason: 'max_tokens',
+      maxTokens: CHAT_MAX_TOKENS,
+    });
+  }
   return result.ok ? { ...result, proposal } : result;
 }

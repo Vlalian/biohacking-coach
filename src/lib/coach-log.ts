@@ -139,6 +139,30 @@ export function logCoachFailure(failure: CoachFailure): void {
 }
 
 /**
+ * One line when a Coach Chat reply hit its output cap (`showable-version/60`).
+ *
+ * `coach_call_failed` already carries the stop reason, but mixed in with every
+ * other failure on every surface. This is the line that answers "is the chat's
+ * cap too small?" on its own, with the cap it hit beside the stop reason, so a
+ * cut-off shows up in the logs before a tester reports it. Numbers and the
+ * opaque id only.
+ */
+export interface ChatMaxTokens {
+  athleteId: string;
+  conversationId: string | null;
+  stopReason: 'max_tokens';
+  maxTokens: number;
+}
+
+export function logChatMaxTokens(cutOff: ChatMaxTokens): void {
+  try {
+    console.error(JSON.stringify({ event: 'chat_max_tokens', ...cutOff }));
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}
+
+/**
  * Writes one structured line for narration that could not be delivered.
  *
  * Narration makes no Anthropic call, so it is not a {@link CoachFailure} and

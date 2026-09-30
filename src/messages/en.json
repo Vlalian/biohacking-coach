@@ -647,7 +647,7 @@
     "consentRequiredLink": "Open Privacy & consent",
     "error": "That didn't send. Try again.",
     "unsafeContent": "A note or a piece of gear you have saved contains what looks like an email address or phone number. Momentum cannot read that. Edit it out and try again.",
-    "ranOutOfRoom": "Momentum ran out of room for that answer. Ask for a smaller change, or one week at a time.",
+    "ranOutOfRoom": "Momentum's answer got cut off. Try again.",
     "drewOn": "What I drew on",
     "thumbUp": "This helped",
     "thumbDown": "This was off",
