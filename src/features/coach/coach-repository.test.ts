@@ -1,46 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { athlete, coach, coachingLink, conversations, messages } from '@/db/schema';
+import { user } from '@/db/auth-schema';
+import { createTestDatabase, seedAthlete, type TestDatabase } from '@/test/pglite';
 
-// Each repository function issues exactly one query, so one queued result set
-// per call suffices. The chain object is thenable: every builder method returns
-// it, and awaiting it resolves the queued rows — enough to exercise the JS the
-// repository actually owns (name resolution, undefined-on-empty), without
-// re-asserting drizzle's own SQL generation.
-let nextRows: unknown[] = [];
-/** Every `.set(...)` payload passed to an update chain, in call order. */
-let updateCalls: unknown[] = [];
-/** Every `.select(...)` projection, so a read can be held to the columns it names. */
-let selectCalls: unknown[] = [];
-const CHAIN_METHODS = [
-  'select',
-  'from',
-  'where',
-  'innerJoin',
-  'leftJoin',
-  'orderBy',
-  'limit',
-  'update',
-] as const;
+/**
+ * The coach roster and the Coaching Link, against a real Postgres
+ * (`src/test/pglite.ts`, `code-health/30`). A severed link revokes access by
+ * construction — no query returns its row (ADR 0006, ADR 0003) — so most tests
+ * here store a severed link beside an active one and check it stays invisible.
+ */
 
-function chain() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c: any = {};
-  for (const m of CHAIN_METHODS) c[m] = () => c;
-  c.select = (projection?: unknown) => {
-    selectCalls.push(projection);
-    return c;
-  };
-  // Not an identity method like the rest: `.set()` is where an update chain's
-  // payload actually is, so it is captured rather than discarded.
-  c.set = (v: unknown) => {
-    updateCalls.push(v);
-    return c;
-  };
-  c.then = (resolve: (rows: unknown[]) => unknown) =>
-    Promise.resolve(nextRows).then(resolve);
-  return c;
-}
-
-vi.mock('@/db', () => ({ getDb: () => chain() }));
+let testDb: TestDatabase;
+vi.mock('@/db', () => ({ getDb: () => testDb.db }));
 
 const {
   getCoachByUserId,
@@ -51,264 +23,375 @@ const {
   updateLinkVisibility,
   severLinkForAthlete,
   holdsActiveCoachingLinks,
+  updateCoachInformationViewLayout,
+  getSharedTranscripts,
+  resolveAthleteName,
 } = await import('./coach-repository');
 
-/** A stored coaching_link row, as the repository selects it. */
-const linkRow = (over: Record<string, unknown> = {}) => ({
-  id: 'link_1',
-  coachId: 'coach_1',
-  athleteId: 'a1',
-  status: 'active',
-  shareAthleteReports: true,
-  shareAiTranscripts: false,
-  createdAt: new Date('2026-07-01'),
-  severedAt: null,
-  ...over,
+beforeAll(async () => {
+  testDb = await createTestDatabase();
+}, 60_000);
+
+afterEach(async () => {
+  await testDb.reset();
 });
 
-beforeEach(() => {
-  nextRows = [];
-  updateCalls = [];
-  selectCalls = [];
-});
+/** A Head Coach: a user holding a coach row. Returns the coach id. */
+async function aCoach(tag: string, uiPrefs: Record<string, unknown> | null = null): Promise<string> {
+  await testDb.db.insert(user).values({ id: `user_${tag}`, name: `Coach ${tag}`, email: `${tag}@test.invalid`, uiPrefs });
+  const [row] = await testDb.db.insert(coach).values({ userId: `user_${tag}` }).returning({ id: coach.id });
+  return row.id;
+}
+
+/** An athlete with no user row — the synthetic kind, named by its label. */
+async function aSyntheticAthlete(label: string): Promise<string> {
+  const [row] = await testDb.db.insert(athlete).values({ syntheticLabel: label }).returning({ id: athlete.id });
+  return row.id;
+}
+
+async function aLink(
+  coachId: string,
+  athleteId: string,
+  over: Partial<typeof coachingLink.$inferInsert> = {},
+): Promise<string> {
+  const [row] = await testDb.db
+    .insert(coachingLink)
+    .values({ coachId, athleteId, ...over })
+    .returning({ id: coachingLink.id });
+  return row.id;
+}
+
+async function linkRow(id: string) {
+  const [row] = await testDb.db.select().from(coachingLink).where(eq(coachingLink.id, id));
+  return row;
+}
 
 describe('getCoachByUserId', () => {
-  it('maps a row to the domain coach, dropping storage columns', async () => {
-    nextRows = [{ id: 'coach_1', informationViewLayout: { favorites: [] } }];
-    const coach = await getCoachByUserId('user_1');
-    expect(coach).toEqual({ id: 'coach_1', informationViewLayout: { favorites: [] } });
-  });
+  it('resolves the coach a user owns, with its layout', async () => {
+    const coachId = await aCoach('lars');
+    await testDb.db.update(coach).set({ informationViewLayout: { favorites: ['hrv'], range: '4w' } });
 
-  it('returns undefined when the user holds no coach row', async () => {
-    nextRows = [];
-    expect(await getCoachByUserId('user_x')).toBeUndefined();
-  });
-
-  it('resolves a coach for a user who also holds an athlete row — the dual-role person', async () => {
-    // Dual-role is structural: the coach lookup keys off the `coach` table
-    // alone and never consults `athlete`, so the same user id resolves to a
-    // coach here while `getAthleteByUserId` resolves the same user to an
-    // athlete elsewhere. Both capacities work because the tables are
-    // independent (route ticket 05, ballot 1). This is the query that proves
-    // the coach half does not require — or exclude — an athlete row.
-    nextRows = [{ id: 'coach_of_mads', informationViewLayout: null }];
-    expect(await getCoachByUserId('mads_user_id')).toEqual({
-      id: 'coach_of_mads',
-      informationViewLayout: null,
+    expect(await getCoachByUserId('user_lars')).toEqual({
+      id: coachId,
+      informationViewLayout: { favorites: ['hrv'], range: '4w' },
     });
+  });
+
+  it('is undefined for a user who holds no coach row', async () => {
+    await seedAthlete(testDb.db, 'solo');
+    expect(await getCoachByUserId('user_solo')).toBeUndefined();
+  });
+
+  it('resolves a coach for a user who is also an athlete — the dual-role person', async () => {
+    // The coach lookup keys off `coach` alone, so an athlete row on the same
+    // user neither requires nor excludes it (route ticket 05, ballot 1).
+    await seedAthlete(testDb.db, 'mads');
+    const [row] = await testDb.db.insert(coach).values({ userId: 'user_mads' }).returning({ id: coach.id });
+
+    expect((await getCoachByUserId('user_mads'))?.id).toBe(row.id);
+  });
+});
+
+describe('holdsActiveCoachingLinks — whether the drawer shows a Roster', () => {
+  it('is true for a coach with an active link', async () => {
+    await aLink(await aCoach('lars'), await seedAthlete(testDb.db, 'a'));
+    expect(await holdsActiveCoachingLinks('user_lars')).toBe(true);
+  });
+
+  it('is false for a coach whose only link is severed', async () => {
+    await aLink(await aCoach('lars'), await seedAthlete(testDb.db, 'a'), { status: 'severed' });
+    expect(await holdsActiveCoachingLinks('user_lars')).toBe(false);
+  });
+
+  it('is false for a coach with no links, and for a user who is no coach', async () => {
+    await aCoach('lars');
+    await seedAthlete(testDb.db, 'solo');
+    expect(await holdsActiveCoachingLinks('user_lars')).toBe(false);
+    expect(await holdsActiveCoachingLinks('user_solo')).toBe(false);
+  });
+
+  it('does not count another coach’s links', async () => {
+    await aCoach('lars');
+    await aLink(await aCoach('sarah'), await seedAthlete(testDb.db, 'a'));
+    expect(await holdsActiveCoachingLinks('user_lars')).toBe(false);
   });
 });
 
 describe('getRoster — names resolved through the user seam', () => {
-  it('uses user.name for a real athlete, synthetic_label for a synthetic one, sorted', async () => {
-    nextRows = [
-      { link: linkRow({ id: 'l2', athleteId: 'a2', shareAthleteReports: true }), userName: null, syntheticLabel: 'Zed' },
-      { link: linkRow({ id: 'l1', athleteId: 'a1', shareAthleteReports: false }), userName: 'Mads', syntheticLabel: null },
-    ];
-    const roster = await getRoster('coach_1');
-    expect(roster.map((r) => r.name)).toEqual(['Mads', 'Zed']); // localeCompare sort
+  it('lists every active athlete, named by user.name or synthetic_label, sorted by name', async () => {
+    const coachId = await aCoach('lars');
+    const zed = await aSyntheticAthlete('Zed');
+    const mads = await seedAthlete(testDb.db, 'Mads');
+    // Linked Zed first, so the order read back is the sort's, not the insert's.
+    await aLink(coachId, zed);
+    const madsLink = await aLink(coachId, mads, { shareAthleteReports: false, shareAiTranscripts: true });
+
+    const roster = await getRoster(coachId);
+
+    expect(roster.map((r) => r.name)).toEqual(['Mads', 'Zed']);
     expect(roster[0]).toEqual({
-      athleteId: 'a1',
+      athleteId: mads,
       name: 'Mads',
       link: {
-        id: 'l1',
-        coachId: 'coach_1',
-        athleteId: 'a1',
+        id: madsLink,
+        coachId,
+        athleteId: mads,
         status: 'active',
-        visibility: { shareAthleteReports: false, shareAiTranscripts: false },
+        visibility: { shareAthleteReports: false, shareAiTranscripts: true },
       },
     });
   });
 
-  it('falls back to a placeholder when neither name source is present', async () => {
-    nextRows = [{ link: linkRow(), userName: null, syntheticLabel: null }];
-    expect((await getRoster('coach_1'))[0].name).toBe('Unknown athlete');
+  it('orders by name whatever order the athletes were stored or linked in', async () => {
+    const coachId = await aCoach('lars');
+    const cecilie = await aSyntheticAthlete('Cecilie');
+    const aske = await aSyntheticAthlete('Aske');
+    const birk = await aSyntheticAthlete('Birk');
+    for (const id of [birk, cecilie, aske]) await aLink(coachId, id);
+
+    expect((await getRoster(coachId)).map((r) => r.name)).toEqual(['Aske', 'Birk', 'Cecilie']);
+  });
+
+  it('leaves out severed links and other coaches’ athletes', async () => {
+    const lars = await aCoach('lars');
+    const sarah = await aCoach('sarah');
+    await aLink(lars, await aSyntheticAthlete('Gone'), { status: 'severed' });
+    await aLink(sarah, await aSyntheticAthlete('Theirs'));
+    await aLink(lars, await aSyntheticAthlete('Mine'));
+
+    expect((await getRoster(lars)).map((r) => r.name)).toEqual(['Mine']);
+  });
+
+  it('falls back to a placeholder when neither name source is present', () => {
+    // The `athlete_identity_source` check makes such a row unstorable, so the
+    // rule every read shares is asked directly: the belt behind that check.
+    expect(resolveAthleteName(null, null)).toBe('Unknown athlete');
+    expect(resolveAthleteName('Mads', 'Zed')).toBe('Mads');
   });
 
   it('an empty roster is an empty list, not an error', async () => {
-    nextRows = [];
-    expect(await getRoster('coach_1')).toEqual([]);
+    expect(await getRoster(await aCoach('lars'))).toEqual([]);
   });
 });
 
 describe('getActiveLink — the authorization gate', () => {
-  it('returns the full Coaching Link when an active one exists', async () => {
-    nextRows = [linkRow({ id: 'l1', shareAthleteReports: true, shareAiTranscripts: true })];
-    expect(await getActiveLink('coach_1', 'a1')).toEqual({
-      id: 'l1',
-      coachId: 'coach_1',
-      athleteId: 'a1',
+  it('returns the full Coaching Link when an active one joins the pair', async () => {
+    const coachId = await aCoach('lars');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aLink(coachId, athleteId, { shareAiTranscripts: true });
+
+    expect(await getActiveLink(coachId, athleteId)).toEqual({
+      id,
+      coachId,
+      athleteId,
       status: 'active',
       visibility: { shareAthleteReports: true, shareAiTranscripts: true },
     });
   });
 
-  it('returns undefined when no active link joins the pair (no link or severed)', async () => {
-    // The query filters status = active, so a severed link is simply not
-    // returned — severing revokes by producing this same empty result.
-    nextRows = [];
-    expect(await getActiveLink('coach_1', 'a_stranger')).toBeUndefined();
-  });
-});
+  it('is undefined for a severed link — severing revokes by producing no row', async () => {
+    const coachId = await aCoach('lars');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    await aLink(coachId, athleteId, { status: 'severed' });
 
-describe('getActiveLink / getRoster — status is fail-closed', () => {
-  it('toCoachingLink treats any non-active stored status as severed', async () => {
-    // A defensive belt: even if a row with an unexpected status reached this
-    // path, it resolves to severed rather than leaking access.
-    nextRows = [linkRow({ status: 'weird_value' })];
-    expect((await getActiveLink('coach_1', 'a1'))!.status).toBe('severed');
+    expect(await getActiveLink(coachId, athleteId)).toBeUndefined();
+  });
+
+  it('is undefined for an athlete linked to someone else, and for a coach linked to someone else', async () => {
+    const lars = await aCoach('lars');
+    const sarah = await aCoach('sarah');
+    const mine = await seedAthlete(testDb.db, 'mine');
+    const theirs = await seedAthlete(testDb.db, 'theirs');
+    await aLink(lars, mine);
+    await aLink(sarah, theirs);
+
+    expect(await getActiveLink(lars, theirs)).toBeUndefined();
+    expect(await getActiveLink(sarah, mine)).toBeUndefined();
   });
 });
 
 describe('getLinkForAthlete — the athlete reading their own link', () => {
-  it('returns the head coach name alongside the link when active', async () => {
-    nextRows = [
-      {
-        link: linkRow({ shareAthleteReports: true, shareAiTranscripts: true }),
-        coachUserName: 'Lars Nielsen',
-      },
-    ];
-    expect(await getLinkForAthlete('a1')).toEqual({
-      headCoachName: 'Lars Nielsen',
-      headCoachPreferredName: null,
+  it('returns the link with the Head Coach’s account name and preferred name (training-architecture/42)', async () => {
+    const coachId = await aCoach('sarah', { preferredName: 'Coach B', language: 'da' });
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aLink(coachId, athleteId, { shareAiTranscripts: true });
+
+    expect(await getLinkForAthlete(athleteId)).toEqual({
+      headCoachName: 'Coach sarah',
+      headCoachPreferredName: 'Coach B',
       link: {
-        id: 'link_1',
-        coachId: 'coach_1',
-        athleteId: 'a1',
+        id,
+        coachId,
+        athleteId,
         status: 'active',
         visibility: { shareAthleteReports: true, shareAiTranscripts: true },
       },
     });
   });
 
-  it('is undefined when solo — no link, or a severed one', async () => {
-    nextRows = [];
-    expect(await getLinkForAthlete('a1')).toBeUndefined();
-  });
-
-  it('returns the Head Coach’s preferred name beside their account name (training-architecture/42)', async () => {
-    nextRows = [{ link: linkRow(), coachUserName: 'Sarah Berg', coachUiPrefs: { preferredName: 'Coach B', language: 'da' } }];
-    expect(await getLinkForAthlete('a1')).toMatchObject({ headCoachName: 'Sarah Berg', headCoachPreferredName: 'Coach B' });
-  });
-
-  it('reads the preferred name off the coach’s own user row, the one it already joins', async () => {
-    const { user } = await import('@/db/auth-schema');
-    nextRows = [];
-    await getLinkForAthlete('a1');
-    expect(selectCalls.at(-1)).toMatchObject({ coachUserName: user.name, coachUiPrefs: user.uiPrefs });
-  });
-
-  it('is null when the coach never set a preferred name — not an empty string, and no throw on null prefs', async () => {
-    for (const coachUiPrefs of [null, {}, { language: 'en' }]) {
-      nextRows = [{ link: linkRow(), coachUserName: 'Sarah Berg', coachUiPrefs }];
-      expect((await getLinkForAthlete('a1'))?.headCoachPreferredName).toBeNull();
+  it('the preferred name is null when the coach never set one, whatever their prefs hold', async () => {
+    for (const [tag, prefs] of [['n', null], ['e', {}], ['l', { language: 'en' }]] as const) {
+      const athleteId = await seedAthlete(testDb.db, `athlete_${tag}`);
+      await aLink(await aCoach(tag, prefs), athleteId);
+      expect((await getLinkForAthlete(athleteId))?.headCoachPreferredName).toBeNull();
     }
+  });
+
+  it('is undefined when solo — no link, or a severed one', async () => {
+    const solo = await seedAthlete(testDb.db, 'solo');
+    const severed = await seedAthlete(testDb.db, 'severed');
+    await aLink(await aCoach('lars'), severed, { status: 'severed' });
+
+    expect(await getLinkForAthlete(solo)).toBeUndefined();
+    expect(await getLinkForAthlete(severed)).toBeUndefined();
+  });
+
+  it('shows the newest link if the athlete somehow holds two', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    await aLink(await aCoach('old'), athleteId, { createdAt: new Date('2026-01-01') });
+    await aLink(await aCoach('new'), athleteId, { createdAt: new Date('2026-06-01') });
+
+    expect((await getLinkForAthlete(athleteId))?.headCoachName).toBe('Coach new');
   });
 });
 
-describe('updateLinkVisibility', () => {
-  it('writes exactly the changes given', async () => {
-    await updateLinkVisibility('a1', { shareAiTranscripts: true });
-    expect(updateCalls).toContainEqual({ shareAiTranscripts: true });
+describe('updateLinkVisibility — scoped to the athlete’s own active link', () => {
+  it('writes exactly the flag given and leaves the other', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aLink(await aCoach('lars'), athleteId);
+
+    await updateLinkVisibility(athleteId, { shareAiTranscripts: true });
+
+    expect(await linkRow(id)).toMatchObject({ shareAiTranscripts: true, shareAthleteReports: true });
   });
 
-  it('can set either flag independently', async () => {
-    await updateLinkVisibility('a1', { shareAthleteReports: false });
-    expect(updateCalls).toContainEqual({ shareAthleteReports: false });
+  it('touches neither another athlete’s link nor the athlete’s own severed one', async () => {
+    const coachId = await aCoach('lars');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const other = await seedAthlete(testDb.db, 'b');
+    const severed = await aLink(coachId, athleteId, { status: 'severed' });
+    const theirs = await aLink(coachId, other);
+
+    await updateLinkVisibility(athleteId, { shareAthleteReports: false });
+
+    expect((await linkRow(severed)).shareAthleteReports).toBe(true);
+    expect((await linkRow(theirs)).shareAthleteReports).toBe(true);
   });
 });
 
 describe('severLinkForAthlete', () => {
-  it('marks the link severed and stamps when', async () => {
-    await severLinkForAthlete('a1');
-    expect(updateCalls).toHaveLength(1);
-    const written = updateCalls[0] as { status: string; severedAt: Date };
-    expect(written.status).toBe('severed');
-    expect(written.severedAt).toBeInstanceOf(Date);
+  it('marks the athlete’s active link severed, stamps when, and keeps the row', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    const id = await aLink(coachId, athleteId);
+
+    await severLinkForAthlete(athleteId);
+
+    const row = await linkRow(id);
+    expect(row.status).toBe('severed');
+    expect(row.severedAt).toBeInstanceOf(Date);
+    expect(await getActiveLink(coachId, athleteId)).toBeUndefined();
+  });
+
+  it('leaves other athletes’ links active', async () => {
+    const coachId = await aCoach('lars');
+    const mine = await seedAthlete(testDb.db, 'a');
+    const theirs = await seedAthlete(testDb.db, 'b');
+    await aLink(coachId, mine);
+    const id = await aLink(coachId, theirs);
+
+    await severLinkForAthlete(mine);
+
+    expect((await linkRow(id)).status).toBe('active');
   });
 });
 
 describe('getAthleteName', () => {
-  it('resolves a name, or undefined when the athlete does not exist', async () => {
-    nextRows = [{ userName: 'Mads', syntheticLabel: null }];
-    expect(await getAthleteName('a1')).toBe('Mads');
-    nextRows = [];
-    expect(await getAthleteName('ghost')).toBeUndefined();
+  it('resolves a real athlete’s user name, a synthetic one’s label, and undefined for no athlete', async () => {
+    const real = await seedAthlete(testDb.db, 'Mads');
+    const synthetic = await aSyntheticAthlete('Zed');
+
+    expect(await getAthleteName(real)).toBe('Mads');
+    expect(await getAthleteName(synthetic)).toBe('Zed');
+    expect(await getAthleteName('00000000-0000-4000-8000-000000000000')).toBeUndefined();
+  });
+});
+
+describe('updateCoachInformationViewLayout', () => {
+  it('stores the one roster-wide layout on that coach only', async () => {
+    const lars = await aCoach('lars');
+    await aCoach('sarah');
+
+    await updateCoachInformationViewLayout(lars, { favorites: ['sleep'], range: '8w' });
+
+    expect((await getCoachByUserId('user_lars'))?.informationViewLayout).toEqual({ favorites: ['sleep'], range: '8w' });
+    expect((await getCoachByUserId('user_sarah'))?.informationViewLayout).toBeNull();
   });
 });
 
 describe('getSharedTranscripts — gated on the link', () => {
-  it('returns null without an active link — nothing is read', async () => {
-    const { getSharedTranscripts } = await import('./coach-repository');
+  const link = (athleteId: string, over: { status?: 'active' | 'severed'; shareAiTranscripts?: boolean } = {}) => ({
+    id: 'l1',
+    coachId: 'c1',
+    athleteId,
+    status: over.status ?? ('active' as const),
+    visibility: { shareAthleteReports: true, shareAiTranscripts: over.shareAiTranscripts ?? true },
+  });
+
+  async function aConversation(athleteId: string, kind: string, createdAt: string, lines: [string, string][]) {
+    const [row] = await testDb.db
+      .insert(conversations)
+      .values({ athleteId, kind, createdAt: new Date(createdAt) })
+      .returning({ id: conversations.id });
+    // Stored out of order on purpose: the read orders by seq, not by insert.
+    for (const [seq, [role, content]] of [...lines.entries()].reverse()) {
+      await testDb.db.insert(messages).values({ conversationId: row.id, role, content, seq });
+    }
+    return row.id;
+  }
+
+  it('with the flag on, returns Coach Chat and Weekly Session transcripts, oldest first, messages in seq order', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const later = await aConversation(athleteId, 'weekly_session', '2026-07-02', [['athlete', 'plan?']]);
+    const earlier = await aConversation(athleteId, 'coach_chat', '2026-07-01', [
+      ['athlete', 'hi'],
+      ['coach_ai', 'hello'],
+    ]);
+
+    expect(await getSharedTranscripts(link(athleteId))).toEqual([
+      {
+        conversationId: earlier,
+        kind: 'coach_chat',
+        createdAt: new Date('2026-07-01'),
+        messages: [
+          { role: 'athlete', content: 'hi', seq: 0 },
+          { role: 'coach_ai', content: 'hello', seq: 1 },
+        ],
+      },
+      {
+        conversationId: later,
+        kind: 'weekly_session',
+        createdAt: new Date('2026-07-02'),
+        messages: [{ role: 'athlete', content: 'plan?', seq: 0 }],
+      },
+    ]);
+  });
+
+  it('never serves a kind outside the Link Visibility contract, nor another athlete’s', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const other = await seedAthlete(testDb.db, 'b');
+    await aConversation(athleteId, 'onboarding', '2026-07-01', [['athlete', 'private']]);
+    await aConversation(other, 'coach_chat', '2026-07-01', [['athlete', 'theirs']]);
+
+    expect(await getSharedTranscripts(link(athleteId))).toEqual([]);
+  });
+
+  it('is null — nothing read — without a link, with the flag off, or with a severed link', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    await aConversation(athleteId, 'coach_chat', '2026-07-01', [['athlete', 'hi']]);
+
     expect(await getSharedTranscripts(undefined)).toBeNull();
-  });
-
-  it('returns null when share_ai_transcripts is off — withheld, not fetched', async () => {
-    const { getSharedTranscripts } = await import('./coach-repository');
-    const link = {
-      id: 'l1',
-      coachId: 'coach_1',
-      athleteId: 'a1',
-      status: 'active' as const,
-      visibility: { shareAthleteReports: true, shareAiTranscripts: false },
-    };
-    expect(await getSharedTranscripts(link)).toBeNull();
-  });
-
-  it('with the flag on, groups messages by conversation in seq order', async () => {
-    const { getSharedTranscripts } = await import('./coach-repository');
-    // The kind filter is in the SQL WHERE now, so only shared kinds arrive
-    // here; this proves the grouping/ordering the repository owns in JS.
-    nextRows = [
-      { conversationId: 'c1', kind: 'coach_chat', createdAt: new Date('2026-07-01'), role: 'athlete', content: 'hi', seq: 0 },
-      { conversationId: 'c1', kind: 'coach_chat', createdAt: new Date('2026-07-01'), role: 'coach_ai', content: 'hello', seq: 1 },
-      { conversationId: 'c2', kind: 'weekly_session', createdAt: new Date('2026-07-02'), role: 'athlete', content: 'plan?', seq: 0 },
-    ];
-    const link = {
-      id: 'l1',
-      coachId: 'coach_1',
-      athleteId: 'a1',
-      status: 'active' as const,
-      visibility: { shareAthleteReports: true, shareAiTranscripts: true },
-    };
-    const result = await getSharedTranscripts(link);
-    expect(result?.map((c) => c.conversationId)).toEqual(['c1', 'c2']);
-    expect(result?.[0].messages).toHaveLength(2);
-    expect(result?.[0].messages.map((m) => m.content)).toEqual(['hi', 'hello']);
-  });
-
-  it('a severed link (should it ever reach here) is refused before any read', async () => {
-    const { getSharedTranscripts } = await import('./coach-repository');
-    const severed = {
-      id: 'l1',
-      coachId: 'coach_1',
-      athleteId: 'a1',
-      status: 'severed' as const,
-      visibility: { shareAthleteReports: true, shareAiTranscripts: true },
-    };
-    expect(await getSharedTranscripts(severed)).toBeNull();
-  });
-});
-
-describe('holdsActiveCoachingLinks', () => {
-  // The Navigation Drawer's Roster entry hangs off this boolean. It shipped
-  // missing entirely (2026-08-21): the coach's pages existed and worked, and no
-  // link to them was ever rendered, so a Head Coach could not reach their own
-  // Roster.
-  beforeEach(() => {
-    nextRows = [];
-  });
-
-  it('is true when the user holds at least one active link', async () => {
-    nextRows = [{ id: 'link_1' }];
-    expect(await holdsActiveCoachingLinks('user_1')).toBe(true);
-  });
-
-  it('is false when the query finds nothing', async () => {
-    // Covers all three ways of holding no roster — no coach row, a coach row
-    // with no links, and a coach row whose links are all severed. The status
-    // filter is in the query, so each one comes back as zero rows.
-    nextRows = [];
-    expect(await holdsActiveCoachingLinks('user_1')).toBe(false);
+    expect(await getSharedTranscripts(link(athleteId, { shareAiTranscripts: false }))).toBeNull();
+    expect(await getSharedTranscripts(link(athleteId, { status: 'severed' }))).toBeNull();
   });
 });
