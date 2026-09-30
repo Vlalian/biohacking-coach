@@ -791,7 +791,15 @@ describe('the draft keeps the arithmetic’s sport unless Momentum says why (tra
     const recorded = recordWeekDraft.mock.calls[0][0];
     expect(recorded.sessions.map((x: { sport: string }) => x.sport)).toEqual(['bike', 'bike', 'bike']);
     expect(recorded.sessions[1]).toMatchObject({ sportReason: 'knee: run → bike', cue: 'Seated efforts, spare the knee.' });
-    expect(recorded.whatChanged).toBe('Eased the run load. 2026-09-23: run → bike (knee: run → bike)');
+    expect(recorded.whatChanged).toBe('Eased the run load. Wednesday: run → bike (knee: run → bike)');
+  });
+
+  it('writes the swap line in the Athlete Language: the weekday and the sports in Danish, the reason as written', async () => {
+    getLanguageForAthlete.mockResolvedValue('da');
+    const sessions = [PROPOSED[0], { ...PROPOSED[1], sport: 'bike', sportReason: 'knæ' }, PROPOSED[2]];
+    callCoach.mockResolvedValue(toolReply({ sessions, whatChanged: null }));
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0].whatChanged).toBe('Onsdag: løb → cykel (knæ)');
   });
 });
 

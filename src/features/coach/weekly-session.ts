@@ -814,37 +814,40 @@ function knownSports(day: readonly { sport: string }[]): HowToSport[] {
   return day.map((x) => howToSportOf(x.sport)).filter((x): x is HowToSport => x !== null);
 }
 
+/** A sport Momentum swapped on a day, and the reason it gave. */
+export interface SportSwap {
+  date: string;
+  from: HowToSport;
+  to: HowToSport;
+  reason: string;
+}
+
 /**
- * A proposed week held to the arithmetic's sports day by day, and one line per
- * swap Momentum explained, for `whatChanged` (E4: the reason shows in the draft
- * and in the coach's review). A reason on a session whose sport did not change
- * explains nothing and is dropped.
+ * A proposed week held to the arithmetic's sports day by day, and each swap
+ * Momentum explained, for `whatChanged` (E4: the reason shows in the draft and
+ * in the coach's review; `sport-swap.ts` words it in the Athlete Language). A
+ * reason on a session whose sport did not change explains nothing and is
+ * dropped.
  */
 export function withArithmeticSports(
   sessions: ProposedSession[],
   baseline: readonly { date: string; sport: string }[],
-): { sessions: ProposedSession[]; swaps: string[] } {
-  const swaps: string[] = [];
+): { sessions: ProposedSession[]; swaps: SportSwap[] } {
+  const swaps: SportSwap[] = [];
   const held = sessions.map((session) => {
     const day = baseline.filter((x) => x.date === session.date);
     const sport = sportOf(session, day);
     const planned = knownSports(day);
     // sportOf keeps a sport the arithmetic did not have only with a reason.
     const swapped = planned.length > 0 && !planned.includes(sport as HowToSport);
-    if (swapped) swaps.push(`${session.date}: ${planned[0]} → ${sport} (${session.sportReason})`);
+    // A swap is kept only with a reason (sportOf), so both are there when it is one.
+    if (swapped) swaps.push({ date: session.date, from: planned[0], to: sport as HowToSport, reason: session.sportReason as string });
     const rest = { ...session };
     delete rest.sport;
     delete rest.sportReason;
     return { ...rest, ...presentOnly({ sport, sportReason: swapped ? session.sportReason : undefined }) };
   });
   return { sessions: held, swaps };
-}
-
-/** Momentum's sentence on what changed, with the explained sport swaps after it. */
-export function withSwaps(whatChanged: string | null, swaps: string[]): string | null {
-  if (swaps.length === 0) return whatChanged;
-  const lines = swaps.join('; ');
-  return whatChanged ? `${whatChanged} ${lines}` : lines;
 }
 
 /**

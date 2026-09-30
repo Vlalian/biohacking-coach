@@ -9,6 +9,7 @@ import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repositor
 import { retrievePassages, type RetrievalResult } from '@/features/knowledge-oracle/retrieval';
 import type { PlanningWindow } from './planning-window';
 import { arithmeticInWindow, heldToBand } from './volume-band';
+import { withSwaps } from './sport-swap';
 import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
 import { buildWeeklyContext, renderWeekDraftPrompt, type BaselineSession } from './prompts';
 import { draftContextOf, draftInclude, readAthleteContext } from './athlete-context';
@@ -23,7 +24,6 @@ import {
   volumeReasonFrom,
   isAdjusted,
   withArithmeticSports,
-  withSwaps,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -421,7 +421,8 @@ async function askCoach(
   const sessions = heldToBand(athleteId, sports.sessions, gathered.baseline, proposal.volumeReason);
   return {
     sessions,
-    whatChanged: withSwaps(proposal.whatChanged, sports.swaps),
+    // Worded in the Athlete Language: the athlete reads it in the narration (Mads, 2026-09-30).
+    whatChanged: withSwaps(proposal.whatChanged, sports.swaps, gathered.language),
     citations: gathered.grounding.citations,
     skeleton: gathered.skeleton,
     // Computed, never the Coach's word for it (R4): internal, for statistics.
@@ -478,7 +479,13 @@ async function gatherContext(
   window: PlanningWindow,
   unavailableDates: string[],
   declined: DeclinedDraft | null,
-): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; baseline: BaselineSession[] }> {
+): Promise<{
+  system: string;
+  skeleton: SkeletonDay[];
+  grounding: RetrievalResult;
+  baseline: BaselineSession[];
+  language: string | null;
+}> {
   // The drafted week, not this one: the history the draft reads counts back
   // from the week it is writing (`training-architecture/44`).
   const draftedWeek = weekStartOf(window.start);
@@ -512,7 +519,13 @@ async function gatherContext(
   };
   // The band and the adjusted flag (`training-architecture/48`) compare the
   // draft with the arithmetic's sessions it could have kept: the window's days.
-  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, baseline: arithmeticInWindow(baseline, window) };
+  return {
+    system: renderWeekDraftPrompt(ctx),
+    skeleton,
+    grounding,
+    baseline: arithmeticInWindow(baseline, window),
+    language: context.language,
+  };
 }
 
 const NO_GROUNDING: RetrievalResult = { passages: [], citations: [] };

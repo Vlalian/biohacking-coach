@@ -16,7 +16,6 @@ import {
   isAdjusted,
   volumeReasonFrom,
   withArithmeticSports,
-  withSwaps,
   type ProposedSession,
   type Readiness,
 } from './weekly-session';
@@ -1092,17 +1091,10 @@ describe('sport, sportReason and cue (training-architecture/26)', () => {
     expect(held.sessions.map((x) => x.sport)).toEqual(['bike', 'bike', 'bike']);
     expect(held.sessions[0].sportReason).toBe('knee: no running');
     expect(held.sessions[2]).not.toHaveProperty('sportReason');
-    expect(held.swaps).toEqual(['2026-07-30: run → bike (knee: no running)']);
+    expect(held.swaps).toEqual([{ date: '2026-07-30', from: 'run', to: 'bike', reason: 'knee: no running' }]);
     // A day the arithmetic wrote no known sport for is no swap, whatever Momentum chose.
     const unknown = withArithmeticSports([{ ...ROW, sport: 'swim' } as ProposedSession], [{ date: ROW.date, sport: '' }]);
     expect(unknown).toEqual({ sessions: [{ ...ROW, sport: 'swim' }], swaps: [] });
-  });
-
-  it('adds the swaps to what changed, and leaves it alone when there are none', () => {
-    expect(withSwaps('Eased the long ride.', ['2026-07-30: run → bike (knee)'])).toBe('Eased the long ride. 2026-07-30: run → bike (knee)');
-    expect(withSwaps(null, ['a', 'b'])).toBe('a; b');
-    expect(withSwaps('Same week.', [])).toBe('Same week.');
-    expect(withSwaps(null, [])).toBeNull();
   });
 
   it('offers the three fields on the tool, none of them required', () => {
