@@ -59,8 +59,23 @@ function stamp(date: Date): string {
   return date.toISOString().slice(0, 16).replace('T', ' ');
 }
 
+/**
+ * What a tester typed, made safe to print. The report is read in a terminal,
+ * and an escape sequence in a body would be obeyed there — clearing the screen
+ * or hiding the lines around it. Every control character but the line break
+ * and the tab is shown as `\xNN` instead.
+ */
+function printable(text: string): string {
+  return (
+    text
+      .replace(/\r\n/g, '\n')
+      // oxlint-disable-next-line no-control-regex -- matching control characters is the point
+      .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`)
+  );
+}
+
 function indent(text: string): string {
-  return text
+  return printable(text)
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
@@ -87,8 +102,8 @@ function renderInterview(interview: ReportInterview, trustSignal: ReportFeedback
 function renderFallback(row: ReportFeedbackRow): string[] {
   // The tag is the point: a fallback with a reason on it is a tester the model
   // failed, which is a signal in itself and not just a degraded path (ADR 0009).
-  const reason = row.coachFailureReason ? `, Coach failed: ${row.coachFailureReason}` : '';
-  const from = row.view ? `from ${row.view}` : 'from an unknown View';
+  const reason = row.coachFailureReason ? `, Coach failed: ${printable(row.coachFailureReason)}` : '';
+  const from = row.view ? `from ${printable(row.view)}` : 'from an unknown View';
   return [`  Fallback (${stamp(row.createdAt)}, ${from}${reason}):`, indent(row.body)];
 }
 

@@ -121,6 +121,27 @@ describe('renderFeedbackReport', () => {
     expect(out.indexOf('Tester:')).toBeGreaterThan(b);
   });
 
+  it('prints what a tester typed as text, never as terminal control', () => {
+    // A tester writes the body; a builder reads it in a terminal. An escape
+    // sequence in it must show up as visible characters, not clear the screen
+    // or recolour the lines around it. Line breaks and tabs stay what they are.
+    const out = renderFeedbackReport({
+      interviews: [
+        {
+          ...interview,
+          turns: [{ role: 'athlete', content: 'Hidden\u001b[2Jbelow\r\nnext\tline', createdAt: at('2026-09-20T09:00:00Z') }],
+        },
+      ],
+      feedback: [row({ kind: 'fallback', body: 'bell\u0007here', coachFailureReason: 'x\u001b]0;t\u0007' })],
+    });
+
+    // oxlint-disable-next-line no-control-regex -- asserting their absence is the point
+    expect(out).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
+    expect(out).toContain('Hidden\\x1b[2Jbelow');
+    expect(out).toContain('    next\tline');
+    expect(out).toContain('bell\\x07here');
+  });
+
   it('closes with the counts', () => {
     const out = renderFeedbackReport({
       interviews: [interview],
