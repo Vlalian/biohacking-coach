@@ -22,7 +22,7 @@
     "viewSettings": "Settings",
     "viewPrivacy": "Privacy & Terms",
     "viewRoster": "Roster",
-    "viewFeedback": "Feedback Interview",
+    "viewFeedback": "Give feedback",
     "feedbackHatch": "Feedback"
   },
   "AthletePage": {
@@ -853,27 +853,18 @@
       }
     }
   },
-  "FeedbackInterview": {
-    "title": "Feedback Interview",
-    "intro": "This is not Momentum. It is an interviewer, asking the questions the people building this app want answered — so it can follow up on what you say instead of leaving it at one line. Nothing you say here reaches Momentum.",
-    "emptyTitle": "Tell it what happened",
-    "emptyBody": "Anything: something that broke, something that annoyed you, something that worked. It will ask you to be specific.",
-    "inputLabel": "Your answer",
-    "placeholder": "What happened?",
+  "Feedback": {
+    "title": "Give feedback",
+    "intro": "Something broke, annoyed you or worked well? Tell us here. Someone on the team reads every note, and Momentum never sees it.",
+    "guidanceWhat": "What happened.",
+    "guidanceWhere": "Where in the app: which screen, session or message.",
+    "guidanceExpected": "What you expected instead.",
+    "guidanceLength": "A couple of sentences is plenty.",
+    "label": "Your feedback",
+    "placeholder": "E.g. On the Training Plan I moved Tuesday's run to Thursday and it jumped back. I expected it to stay.",
     "send": "Send",
-    "thinking": "Thinking",
-    "youLabel": "You",
-    "interviewerLabel": "Interviewer",
-    "error": "That did not go through. Your text is still here — try again, or use the box below.",
-    "consentRequired": "The interview needs AI consent, which you have not given. The box below works either way.",
-    "consentRequiredLink": "Privacy & Terms",
-    "fallbackTitle": "Or just write it down",
-    "fallbackBody": "No conversation, no AI. This box works even when everything else does not.",
-    "fallbackLabel": "Your feedback",
-    "fallbackPlaceholder": "What went wrong?",
-    "fallbackSend": "Submit",
-    "fallbackSent": "Sent. Thank you — someone will read it.",
-    "fallbackError": "That did not save. Try again."
+    "sent": "Sent. Thank you, someone will read it.",
+    "error": "That did not save. Your text is still here, so try again."
   },
   "BlockStrip": {
     "openHorizon": "Default six-month arc · no race picked yet",

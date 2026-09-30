@@ -22,7 +22,7 @@
     "viewSettings": "Indstillinger",
     "viewPrivacy": "Privatliv & vilkår",
     "viewRoster": "Atleter",
-    "viewFeedback": "Feedback-interview",
+    "viewFeedback": "Giv feedback",
     "feedbackHatch": "Giv feedback"
   },
   "AthletePage": {
@@ -853,27 +853,18 @@
       }
     }
   },
-  "FeedbackInterview": {
-    "title": "Feedback-interview",
-    "intro": "Dette er ikke Momentum. Det er en interviewer, der stiller de spørgsmål, holdet bag appen gerne vil have svar på — så den kan spørge videre i stedet for at nøjes med én linje. Intet af det, du siger her, når Momentum.",
-    "emptyTitle": "Fortæl hvad der skete",
-    "emptyBody": "Hvad som helst: noget der gik i stykker, noget der irriterede dig, noget der virkede. Den vil bede dig være konkret.",
-    "inputLabel": "Dit svar",
-    "placeholder": "Hvad skete der?",
-    "send": "Send svar",
-    "thinking": "Tænker",
-    "youLabel": "Dig",
-    "interviewerLabel": "Interviewer",
-    "error": "Det gik ikke igennem. Din tekst står der stadig — prøv igen, eller brug boksen nedenfor.",
-    "consentRequired": "Interviewet kræver AI-samtykke, som du ikke har givet. Boksen nedenfor virker uanset hvad.",
-    "consentRequiredLink": "Privatliv & vilkår",
-    "fallbackTitle": "Eller skriv det bare ned",
-    "fallbackBody": "Ingen samtale, ingen AI. Denne boks virker, også når alt andet ikke gør.",
-    "fallbackLabel": "Din feedback",
-    "fallbackPlaceholder": "Hvad gik galt?",
-    "fallbackSend": "Send feedback",
-    "fallbackSent": "Sendt. Tak — der er nogen, der læser det.",
-    "fallbackError": "Det blev ikke gemt. Prøv igen."
+  "Feedback": {
+    "title": "Giv feedback",
+    "intro": "Gik noget i stykker, irriterede det dig, eller virkede det godt? Skriv det her. En fra holdet læser hver besked, og Momentum ser den aldrig.",
+    "guidanceWhat": "Hvad der skete.",
+    "guidanceWhere": "Hvor i appen: hvilken skærm, hvilket træningspas eller hvilken besked.",
+    "guidanceExpected": "Hvad du havde forventet i stedet.",
+    "guidanceLength": "Et par sætninger er rigeligt.",
+    "label": "Din feedback",
+    "placeholder": "Fx: På Træningsplanen flyttede jeg tirsdagens løbetur til torsdag, og den hoppede tilbage. Jeg havde forventet, at den blev liggende.",
+    "send": "Send feedback",
+    "sent": "Sendt. Tak, der er nogen, der læser det.",
+    "error": "Det blev ikke gemt. Din tekst står der stadig, så prøv igen."
   },
   "BlockStrip": {
     "openHorizon": "Standard-forløb på seks måneder · intet løb valgt endnu",

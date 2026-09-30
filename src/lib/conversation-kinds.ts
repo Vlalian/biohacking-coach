@@ -7,7 +7,11 @@
  * the Feedback Interview (`showable-version/07`): an interview is deliberately
  * *not* a coaching behaviour, which is the argument for its own kind rather than
  * hiding it inside `coach_chat`, where it would be resent to the Coach as
- * training talk on every later turn.
+ * training talk on every later turn. Since 2026-09-30 nothing writes it: the
+ * interview was replaced by a plain comment field (`showable-version/58`, ADR
+ * 0009 amended). It stays in the set so the interviews already stored stay
+ * readable (`npm run feedback`) and stay out of every Coach prompt, and because
+ * dropping it would change the CHECK constraint, which is a migration.
  *
  * It lives in `lib/` rather than in either of its two consumers, and that is the
  * whole point of the module. It was first written into `db/schema.ts`, which

@@ -122,16 +122,16 @@ export function ShellChrome({
         coachOverlay={{ open: coachOpen }}
         coachContent={coachContent}
         navFooter={
-          // The escape hatch (`showable-version/05` item 4, opening the
-          // Feedback Interview per `07`). It sits in the drawer footer because
+          // The escape hatch (`showable-version/05` item 4), opening the
+          // feedback page's comment field (`58`). It sits in the drawer footer because
           // that footer is part of the shared shell, so this one placement makes
           // it reachable from *every* View — the athlete's five and the Head
           // Coach's Roster, which the same shell has wrapped since PR #41.
           <div className="flex flex-col gap-1">
             <Link
-              // Carries the View being left. The interview is its own page, so
-              // `/feedback` is the only path it can see for itself — every
-              // fallback row recorded that and nothing else until this was
+              // Carries the View being left. The feedback page is its own page,
+              // so `/feedback` is the only path it can see for itself — every
+              // stored row recorded that and nothing else until this was
               // passed. `from` is client-supplied by construction and narrowed
               // server-side (`submittedFromView`).
               href={{

@@ -29,7 +29,7 @@ import {
 /**
  * Note: there is no 'coach' View — the Coach is the always-available Overlay.
  *
- * `feedback` is a View id without being a navigable View: the Feedback Interview
+ * `feedback` is a View id without being a navigable View: the feedback page
  * is a real page, so it needs a path and a label, but it is reached from the
  * escape hatch in the drawer footer rather than from the View list. It is
  * therefore never in `availableViews`.
