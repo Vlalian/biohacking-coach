@@ -152,4 +152,14 @@ describe('message catalogues', () => {
       );
     }
   });
+
+  it('gives the onboarding buttons no arrow of their own, since the button draws one', () => {
+    // PrimaryButton renders an ArrowRight icon; "Continue →" showed two arrows (preview, 2026-09-30).
+    const onboarding = (catalogue: unknown) => (catalogue as { Onboarding: Record<string, string> }).Onboarding;
+    for (const catalogue of [en, da]) {
+      for (const key of ['continue', 'finish', 'startTraining']) {
+        expect(onboarding(catalogue)[key]).not.toMatch(/→\s*$/);
+      }
+    }
+  });
 });
