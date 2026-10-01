@@ -7,7 +7,7 @@ import { canHeadCoachEditContent, canHeadCoachMove } from './head-coach-authorit
 import { applyMove, type MoveResult } from '@/features/session/session-move';
 import { isFrozen } from '@/features/session/move-rules';
 import { casDeleteSession, casUpdateSession } from '@/features/session/versioned-write';
-import type { SessionConflict } from '@/features/session/conflict';
+import { attemptedDuration, type SessionConflict } from '@/features/session/conflict';
 import { prescribedSessionOf, prescriptionColumns, type PrescriptionInput } from './prescription';
 import type { Session } from '@/features/session/session';
 
@@ -249,7 +249,7 @@ export async function editPrescribedSession(params: {
     attempted: {
       date: columns.date,
       type: columns.type,
-      duration: columns.duration === null ? null : String(columns.duration),
+      duration: attemptedDuration(columns.duration),
       zone: columns.zone,
       title: columns.title,
       note: columns.note,

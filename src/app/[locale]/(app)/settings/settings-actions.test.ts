@@ -148,6 +148,11 @@ describe('updateCommunicationStyleAction', () => {
     expect(updateCommunicationStyle).not.toHaveBeenCalled();
   });
 
+  it('takes a value exactly at the length cap', async () => {
+    expect(await updateCommunicationStyleAction('x'.repeat(300))).toEqual({ ok: true });
+    expect(updateCommunicationStyle).toHaveBeenCalledWith('athlete_1', 'x'.repeat(300));
+  });
+
   it('refuses a signed-out request without touching storage', async () => {
     getSession.mockResolvedValue(null);
     const result = await updateCommunicationStyleAction('Anything');
@@ -187,6 +192,12 @@ describe('updateWeeklySessionDayAction', () => {
   it('refuses a value outside the closed set', async () => {
     const result = await updateWeeklySessionDayAction('Someday');
     expect(result).toEqual({ ok: false, reason: 'invalid' });
+    expect(mergeAthleteProfile).not.toHaveBeenCalled();
+  });
+
+  it('refuses a signed-out request without touching storage', async () => {
+    getSession.mockResolvedValue(null);
+    expect(await updateWeeklySessionDayAction('Tuesday')).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(mergeAthleteProfile).not.toHaveBeenCalled();
   });
 });
@@ -231,6 +242,12 @@ describe('addFixedConstraintAction', () => {
     expect(result).toEqual({ ok: false, reason: 'invalid' });
     expect(addFixedConstraint).not.toHaveBeenCalled();
   });
+
+  it('refuses when nobody is signed in', async () => {
+    getSession.mockResolvedValue(null);
+    expect(await addFixedConstraintAction('Monday')).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(addFixedConstraint).not.toHaveBeenCalled();
+  });
 });
 
 describe('removeFixedConstraintAction', () => {
@@ -265,6 +282,12 @@ describe('updateLanguageAction', () => {
   it('refuses a locale the app does not support', async () => {
     const result = await updateLanguageAction('fr');
     expect(result).toEqual({ ok: false, reason: 'invalid' });
+    expect(setUiLanguage).not.toHaveBeenCalled();
+  });
+
+  it('refuses when nobody is signed in', async () => {
+    getSession.mockResolvedValue(null);
+    expect(await updateLanguageAction('da')).toEqual({ ok: false, reason: 'not-authenticated' });
     expect(setUiLanguage).not.toHaveBeenCalled();
   });
 });
@@ -303,6 +326,20 @@ describe('updateLinkVisibilityAction', () => {
     expect(updateLinkVisibility).toHaveBeenCalledWith('athlete_1', {
       shareAiTranscripts: true,
     });
+  });
+
+  it('toggles the athlete-reports section too — both sections are in the set', async () => {
+    expect(await updateLinkVisibilityAction('shareAthleteReports', false)).toEqual({ ok: true });
+    expect(updateLinkVisibility).toHaveBeenCalledWith('athlete_1', { shareAthleteReports: false });
+  });
+
+  it('refuses when nobody is signed in', async () => {
+    getSession.mockResolvedValue(null);
+    expect(await updateLinkVisibilityAction('shareAiTranscripts', true)).toEqual({
+      ok: false,
+      reason: 'not-authenticated',
+    });
+    expect(updateLinkVisibility).not.toHaveBeenCalled();
   });
 
   it('refuses a section outside the closed set', async () => {
@@ -423,13 +460,59 @@ describe('the horizon actions refuse a caller they cannot identify', () => {
     expect(upsertTargetRace).not.toHaveBeenCalled();
   });
 
-  it('refuses a race name past the length cap before reading the athlete', async () => {
+  it('refuses a race name past the length cap before asking who is signed in', async () => {
+    // An input error is answered as one whoever sends it, as every other
+    // Settings action does: a signed-out request with a bad name is invalid.
+    getSession.mockResolvedValue(null);
+
+    await expect(updateTargetRaceAction('x'.repeat(121), '2027-08-15')).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
+  });
+
+  it('refuses a race name past the length cap, and takes one exactly at it', async () => {
     getSession.mockResolvedValue({ user: { id: 'user_1' } });
     getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
 
     await expect(
       updateTargetRaceAction('x'.repeat(121), '2027-08-15'),
     ).resolves.toEqual({ ok: false, reason: 'invalid' });
+    expect(upsertTargetRace).not.toHaveBeenCalled();
+
+    await expect(updateTargetRaceAction('x'.repeat(120), '2027-08-15')).resolves.toEqual({ ok: true });
+  });
+
+  it('stores the name and date the athlete typed without the padding', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
+
+    await expect(updateTargetRaceAction('  Ironman Copenhagen ', ' 2027-08-15 ')).resolves.toEqual({ ok: true });
+    expect(upsertTargetRace).toHaveBeenCalledWith('athlete_1', {
+      name: 'Ironman Copenhagen',
+      date: '2027-08-15',
+      distance: 'Full',
+    });
+    expect(updateRaceTarget).toHaveBeenCalledWith('athlete_1', 'Ironman Copenhagen');
+  });
+
+  it('treats two blank fields as a clear, not a bad edit', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Full' });
+
+    await expect(updateTargetRaceAction('  ', ' ')).resolves.toEqual({ ok: true });
+    expect(clearTargetRace).toHaveBeenCalledWith('athlete_1');
+    expect(upsertTargetRace).not.toHaveBeenCalled();
+  });
+
+  it('refuses a stored Race Distance outside the closed set rather than writing it onto a race', async () => {
+    getSession.mockResolvedValue({ user: { id: 'user_1' } });
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', raceDistance: 'Ironman' });
+
+    await expect(updateTargetRaceAction('Ironman Copenhagen', '2027-08-15')).resolves.toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
     expect(upsertTargetRace).not.toHaveBeenCalled();
   });
 });
@@ -491,6 +574,31 @@ describe('races beyond the first (training-architecture/09)', () => {
       expect(addRace).toHaveBeenLastCalledWith('athlete_1', kbh, 'first');
       await addRaceAction('IM Kbh', '2027-09-15', 'Full', true);
       expect(addRace).toHaveBeenLastCalledWith('athlete_1', kbh, 'first');
+    });
+
+    it('stores the date without the padding the form left on it', async () => {
+      getTargetRace.mockResolvedValue(target);
+      await expect(addRaceAction('Olympic Odense', ' 2027-03-01 ', 'Olympic')).resolves.toEqual({
+        ok: true,
+        raceId: 'race_new',
+      });
+      expect(addRace).toHaveBeenCalledWith(
+        'athlete_1',
+        { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' },
+        'none',
+      );
+    });
+
+    it('takes a name exactly at the length cap and refuses one past it', async () => {
+      getTargetRace.mockResolvedValue(target);
+      await expect(addRaceAction('x'.repeat(120), '2027-03-01', 'Full')).resolves.toEqual({
+        ok: true,
+        raceId: 'race_new',
+      });
+      await expect(addRaceAction('x'.repeat(121), '2027-03-01', 'Full')).resolves.toEqual({
+        ok: false,
+        reason: 'invalid',
+      });
     });
 
     it('refuses a bad date, an unknown distance, and an empty name', async () => {
@@ -579,7 +687,8 @@ describe('past races in Settings (training-architecture/35)', () => {
     expect(deletePastRace).not.toHaveBeenCalled();
     expect(updateExperienceLevel).not.toHaveBeenCalled();
 
-    getPastRaces.mockResolvedValueOnce([HALF]).mockResolvedValueOnce([]);
+    // Two races on file: owning one of them is enough.
+    getPastRaces.mockResolvedValueOnce([HALF, { ...HALF, id: 'pr_2' }]).mockResolvedValueOnce([]);
     await expect(removePastRaceAction('pr_1')).resolves.toEqual({ ok: true });
     expect(deletePastRace).toHaveBeenCalledWith('athlete_1', 'pr_1');
     expect(updateExperienceLevel).toHaveBeenCalledWith('athlete_1', 'beginner');

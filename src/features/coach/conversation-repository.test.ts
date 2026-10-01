@@ -1,161 +1,210 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { conversations } from '@/db/schema';
-import type { ConversationRow, MessageRow } from '@/db/schema';
+import { coach, conversations, messages } from '@/db/schema';
+import { user } from '@/db/auth-schema';
+import { createTestDatabase, seedAthlete, type TestDatabase } from '@/test/pglite';
 
-// Spy the query builders so the ownership-scoping rule can be asserted directly:
-// a conversation read must key on BOTH the id and the owning athlete_id.
-vi.mock('drizzle-orm', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('drizzle-orm')>();
-  return {
-    ...actual,
-    eq: vi.fn(actual.eq),
-    and: vi.fn(actual.and),
-    asc: vi.fn(actual.asc),
-    desc: vi.fn(actual.desc),
-  };
-});
+/**
+ * Coach conversations and their transcripts, against a real Postgres
+ * (`src/test/pglite.ts`, `code-health/30`). What is asserted is what the
+ * athlete or coach would read back: which conversations resolve for whom, and
+ * the transcript in `seq` order. The unique (conversation_id, seq) index the
+ * append leans on is the migrated one.
+ */
 
-// A tiny fake of the drizzle builder chain. Each select resolves to `selectRows`,
-// each insert returns `insertRows`; the last insert's `.values(...)` argument is
-// captured so seq assignment can be asserted.
-let selectRows: unknown[] = [];
-let insertRows: unknown[] = [];
-let insertedValues: unknown = null;
-
-const limit = vi.fn(() => Promise.resolve(selectRows));
-const orderBy = vi.fn(() => ({ limit }));
-const where = vi.fn(() => ({ orderBy, limit }));
-const from = vi.fn(() => ({ where }));
-const select = vi.fn(() => ({ from }));
-
-const returning = vi.fn(() => Promise.resolve(insertRows));
-const values = vi.fn((v: unknown) => {
-  insertedValues = v;
-  return { returning };
-});
-const insert = vi.fn(() => ({ values }));
-
-vi.mock('@/db', () => ({ getDb: () => ({ select, insert }) }));
+let testDb: TestDatabase;
+vi.mock('@/db', () => ({ getDb: () => testDb.db }));
 
 const {
-  getOwnedConversation,
-  appendMessages,
   createConversation,
+  getOpenConversations,
+  getLatestOpenConversation,
+  endConversation,
+  getOwnedConversation,
+  getOwnedConversationWithMessages,
+  appendMessages,
   createBriefing,
   getOwnedBriefing,
   appendBriefingMessages,
   getLatestBriefingWithMessages,
 } = await import('./conversation-repository');
 
-function cRow(overrides: Partial<ConversationRow> = {}): ConversationRow {
-  return {
-    id: 'c1',
-    athleteId: 'athlete_1',
-    kind: 'weekly_session',
-    coachId: null,
-    weeklySessionNumber: 1,
-    createdAt: new Date(),
-    endedAt: null,
-    ...overrides,
-  };
-}
+beforeAll(async () => {
+  testDb = await createTestDatabase();
+}, 60_000);
 
-function mRow(overrides: Partial<MessageRow> = {}): MessageRow {
-  return {
-    id: 'm1',
-    conversationId: 'c1',
-    role: 'athlete',
-    content: 'hi',
-    seq: 0,
-    citations: null,
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-beforeEach(() => {
-  selectRows = [];
-  insertRows = [];
-  insertedValues = null;
-  vi.clearAllMocks();
-  // clearAllMocks wipes recorded calls but keeps implementations, so a test that
-  // makes a mock reject would leak into the next one. Re-seat the whole chain.
-  limit.mockImplementation(() => Promise.resolve(selectRows));
-  orderBy.mockImplementation(() => ({ limit }));
-  where.mockImplementation(() => ({ orderBy, limit }));
-  from.mockImplementation(() => ({ where }));
-  select.mockImplementation(() => ({ from }));
-  returning.mockImplementation(() => Promise.resolve(insertRows));
-  values.mockImplementation((v: unknown) => {
-    insertedValues = v;
-    return { returning };
-  });
-  insert.mockImplementation(() => ({ values }));
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await testDb.reset();
 });
+
+const MISSING = '00000000-0000-4000-8000-000000000000';
+
+async function aCoach(tag: string): Promise<string> {
+  await testDb.db.insert(user).values({ id: `user_${tag}`, name: tag, email: `${tag}@test.invalid` });
+  const [row] = await testDb.db.insert(coach).values({ userId: `user_${tag}` }).returning({ id: coach.id });
+  return row.id;
+}
+
+/** A conversation stored at a known time, so "newest" is not left to the clock. */
+async function aConversation(athleteId: string, kind: string, createdAt: string, endedAt: Date | null = null) {
+  const [row] = await testDb.db
+    .insert(conversations)
+    .values({ athleteId, kind, createdAt: new Date(createdAt), endedAt })
+    .returning({ id: conversations.id });
+  return row.id;
+}
+
+const transcriptOf = async (conversationId: string) =>
+  (await testDb.db.select().from(messages).where(eq(messages.conversationId, conversationId)))
+    .sort((a, b) => a.seq - b.seq)
+    .map((m) => ({ role: m.role, content: m.content, seq: m.seq }));
 
 describe('createConversation', () => {
-  it('inserts with the given athlete and kind, and never writes a Weekly Session number', async () => {
+  it('stores an open conversation of the kind asked for, and never a Weekly Session number', async () => {
     // The column stays for the rows already written; the behavior that
     // numbered them is retired (`training-architecture/21`).
-    insertRows = [cRow({ kind: 'coach_chat', weeklySessionNumber: null })];
-    const conv = await createConversation({ athleteId: 'athlete_1', kind: 'coach_chat' });
-    expect(insert).toHaveBeenCalledWith(conversations);
-    expect(insertedValues).toEqual({ athleteId: 'athlete_1', kind: 'coach_chat' });
-    expect(conv.weeklySessionNumber).toBeNull();
+    const athleteId = await seedAthlete(testDb.db, 'a');
+
+    const conv = await createConversation({ athleteId, kind: 'coach_chat' });
+
+    expect(conv).toMatchObject({ athleteId, kind: 'coach_chat', weeklySessionNumber: null, endedAt: null });
+    expect(await getOwnedConversation(athleteId, conv.id)).toEqual(conv);
   });
 });
 
-describe('getOwnedConversation', () => {
-  it('scopes the read to both the id and the owning athlete', async () => {
-    selectRows = [cRow()];
-    await getOwnedConversation('athlete_1', 'c1');
-    expect(eq).toHaveBeenCalledWith(conversations.id, 'c1');
-    expect(eq).toHaveBeenCalledWith(conversations.athleteId, 'athlete_1');
+describe('open conversations — what the shell can restore', () => {
+  it('lists every open conversation of the athlete, newest first, and none that ended', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const older = await aConversation(athleteId, 'coach_chat', '2026-07-01');
+    const newer = await aConversation(athleteId, 'weekly_session', '2026-07-02');
+    await aConversation(athleteId, 'coach_chat', '2026-07-03', new Date('2026-07-03'));
+
+    expect((await getOpenConversations(athleteId)).map((c) => c.id)).toEqual([newer, older]);
   });
 
-  it('returns null when no row matches (another athlete asks)', async () => {
-    selectRows = [];
-    expect(await getOwnedConversation('athlete_2', 'c1')).toBeNull();
+  it('does not list another athlete’s', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    await aConversation(await seedAthlete(testDb.db, 'b'), 'coach_chat', '2026-07-01');
+
+    expect(await getOpenConversations(athleteId)).toEqual([]);
+  });
+
+  it('the latest open one of a kind is the newest still open, of that kind, of that athlete', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const other = await seedAthlete(testDb.db, 'b');
+    await aConversation(athleteId, 'coach_chat', '2026-07-01');
+    const latest = await aConversation(athleteId, 'coach_chat', '2026-07-02');
+    await aConversation(athleteId, 'coach_chat', '2026-07-03', new Date('2026-07-03'));
+    await aConversation(athleteId, 'onboarding', '2026-07-04');
+    await aConversation(other, 'coach_chat', '2026-07-05');
+
+    expect((await getLatestOpenConversation(athleteId, 'coach_chat'))?.id).toBe(latest);
+  });
+
+  it('the latest open one is null when there is none', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    expect(await getLatestOpenConversation(athleteId, 'coach_chat')).toBeNull();
+  });
+});
+
+describe('endConversation', () => {
+  it('ends the athlete’s own conversation', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
+    const endedAt = new Date('2026-07-02T10:00:00Z');
+
+    expect(await endConversation(athleteId, id, endedAt)).toBe(true);
+    expect((await getOwnedConversation(athleteId, id))?.endedAt).toEqual(endedAt);
+  });
+
+  it('refuses another athlete’s conversation and leaves it open', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const theirs = await aConversation(await seedAthlete(testDb.db, 'b'), 'coach_chat', '2026-07-01');
+
+    expect(await endConversation(athleteId, theirs, new Date())).toBe(false);
+    const [row] = await testDb.db.select().from(conversations).where(eq(conversations.id, theirs));
+    expect(row.endedAt).toBeNull();
+  });
+});
+
+describe('getOwnedConversation — ownership is part of the read', () => {
+  it('resolves only for the athlete who owns it', async () => {
+    const owner = await seedAthlete(testDb.db, 'a');
+    const stranger = await seedAthlete(testDb.db, 'b');
+    const id = await aConversation(owner, 'coach_chat', '2026-07-01');
+
+    expect((await getOwnedConversation(owner, id))?.id).toBe(id);
+    expect(await getOwnedConversation(stranger, id)).toBeNull();
+    expect(await getOwnedConversation(owner, MISSING)).toBeNull();
+  });
+
+  it('with messages: the transcript in seq order for the owner, nothing for anyone else', async () => {
+    const owner = await seedAthlete(testDb.db, 'a');
+    const stranger = await seedAthlete(testDb.db, 'b');
+    const id = await aConversation(owner, 'coach_chat', '2026-07-01');
+    await testDb.db.insert(messages).values([
+      { conversationId: id, role: 'coach_ai', content: 'hello', seq: 1 },
+      { conversationId: id, role: 'athlete', content: 'hi', seq: 0 },
+    ]);
+
+    const read = await getOwnedConversationWithMessages(owner, id);
+    expect(read?.conversation.id).toBe(id);
+    expect(read?.messages.map((m) => m.content)).toEqual(['hi', 'hello']);
+    expect(await getOwnedConversationWithMessages(stranger, id)).toBeNull();
   });
 });
 
 describe('appendMessages — ownership and seq', () => {
-  it('refuses and writes nothing when the conversation is not owned', async () => {
-    selectRows = []; // ownership lookup finds nothing
-    const result = await appendMessages('athlete_2', 'c1', [
-      { role: 'athlete', content: 'let me in' },
-    ]);
-    expect(result).toBeNull();
-    expect(insert).not.toHaveBeenCalled();
-  });
+  it('starts a transcript at seq 0 and continues past the highest stored', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
 
-  it('assigns consecutive seq numbers continuing past the highest existing', async () => {
-    // First select = ownership row; second select = highest existing seq.
-    const owner = cRow();
-    let call = 0;
-    limit.mockImplementation(() => {
-      call += 1;
-      return Promise.resolve(call === 1 ? [owner] : [mRow({ seq: 4 })]);
-    });
-    insertRows = [mRow({ seq: 5 }), mRow({ id: 'm2', role: 'coach_ai', seq: 6 })];
-
-    const result = await appendMessages('athlete_1', 'c1', [
-      { role: 'athlete', content: 'ping' },
+    const first = await appendMessages(athleteId, id, [{ role: 'athlete', content: 'ping' }]);
+    const next = await appendMessages(athleteId, id, [
       { role: 'coach_ai', content: 'pong' },
+      { role: 'athlete', content: 'again' },
     ]);
 
-    expect(result).toHaveLength(2);
-    expect(insertedValues).toEqual([
-      { conversationId: 'c1', role: 'athlete', content: 'ping', citations: null, seq: 5 },
-      { conversationId: 'c1', role: 'coach_ai', content: 'pong', citations: null, seq: 6 },
+    expect(first?.map((m) => m.seq)).toEqual([0]);
+    expect(next?.map((m) => m.seq)).toEqual([1, 2]);
+    expect(await transcriptOf(id)).toEqual([
+      { role: 'athlete', content: 'ping', seq: 0 },
+      { role: 'coach_ai', content: 'pong', seq: 1 },
+      { role: 'athlete', content: 'again', seq: 2 },
     ]);
   });
 
-  it('writes the sources the Coach drew on with the turn that used them', async () => {
-    // code-health/06. The reference list is stored with the message so it
-    // re-renders identically a week later; a reference that vanishes on reload
-    // is not evidence of anything.
+  it('counts only this conversation’s messages when numbering', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const busy = await aConversation(athleteId, 'onboarding', '2026-07-01');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-02');
+    await appendMessages(athleteId, busy, [
+      { role: 'athlete', content: 'a' },
+      { role: 'athlete', content: 'b' },
+    ]);
+
+    expect((await appendMessages(athleteId, id, [{ role: 'athlete', content: 'c' }]))?.[0].seq).toBe(0);
+  });
+
+  it('appending nothing writes nothing and answers with nothing', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
+
+    expect(await appendMessages(athleteId, id, [])).toEqual([]);
+    expect(await transcriptOf(id)).toEqual([]);
+  });
+
+  it('refuses and writes nothing when the conversation is not the athlete’s', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const theirs = await aConversation(await seedAthlete(testDb.db, 'b'), 'coach_chat', '2026-07-01');
+
+    expect(await appendMessages(athleteId, theirs, [{ role: 'athlete', content: 'let me in' }])).toBeNull();
+    expect(await transcriptOf(theirs)).toEqual([]);
+  });
+
+  it('stores the sources the Coach drew on with the turn that used them, and none on other turns', async () => {
+    // code-health/06: the references re-render identically a week later.
     const citation = {
       sourceId: 'src_1',
       slug: 'polarized-training',
@@ -168,163 +217,144 @@ describe('appendMessages — ownership and seq', () => {
       attribution: 'Seiler S (2019), CC BY 4.0',
       ordinals: [3],
     };
-    const owner = cRow();
-    let call = 0;
-    limit.mockImplementation(() => {
-      call += 1;
-      return Promise.resolve(call === 1 ? [owner] : []);
-    });
-    insertRows = [mRow({ role: 'coach_ai', citations: [citation] })];
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
 
-    const written = await appendMessages('athlete_1', 'c1', [
+    const written = await appendMessages(athleteId, id, [
+      { role: 'athlete', content: 'Why easy?' },
       { role: 'coach_ai', content: 'Thursday is easy on purpose.', citations: [citation] },
     ]);
 
-    expect(insertedValues).toEqual([
-      expect.objectContaining({ role: 'coach_ai', citations: [citation] }),
-    ]);
-    expect(written?.[0].citations).toEqual([citation]);
+    expect(written?.map((m) => m.citations)).toEqual([[], [citation]]);
+    const read = await getOwnedConversationWithMessages(athleteId, id);
+    expect(read?.messages.map((m) => m.citations)).toEqual([[], [citation]]);
   });
 
-  it('re-reads and retries when a concurrent append takes the same seq', async () => {
-    // Reads in order: [1] ownership, [2] highest seq = 4 → tries 5 and loses the
-    // race, [3] highest seq is now 5 → lands at 6. The unique index turns the
-    // collision into a retry, not a corrupted transcript.
-    let read = 0;
-    limit.mockImplementation(() => {
-      read += 1;
-      if (read === 1) return Promise.resolve([cRow()]);
-      return Promise.resolve([mRow({ seq: read === 2 ? 4 : 5 })]);
-    });
+  it('two appends racing for the same seq both land, one after the other', async () => {
+    // Read-max-then-insert is not atomic: both read "no messages yet" and both
+    // try seq 0. The unique index refuses the second, which re-reads and lands
+    // at seq 1 — a retry, not a corrupted transcript or a lost turn.
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
 
-    let attempted = 0;
-    returning.mockImplementation(() => {
-      attempted += 1;
-      if (attempted === 1) {
-        return Promise.reject(
-          Object.assign(new Error('duplicate key value violates unique constraint'), {
-            code: '23505',
-          }),
-        );
-      }
-      return Promise.resolve([mRow({ seq: 6 })]);
-    });
-
-    const result = await appendMessages('athlete_1', 'c1', [
-      { role: 'athlete', content: 'ping' },
+    await Promise.all([
+      appendMessages(athleteId, id, [{ role: 'athlete', content: 'one' }]),
+      appendMessages(athleteId, id, [{ role: 'athlete', content: 'two' }]),
     ]);
 
-    expect(result).toEqual([expect.objectContaining({ seq: 6 })]);
-    expect(insertedValues).toEqual([
-      { conversationId: 'c1', role: 'athlete', content: 'ping', citations: null, seq: 6 },
-    ]);
+    const transcript = await transcriptOf(id);
+    expect(transcript.map((m) => m.seq)).toEqual([0, 1]);
+    expect(transcript.map((m) => m.content).sort()).toEqual(['one', 'two']);
   });
 
-  it('rethrows an error that is not a seq conflict', async () => {
-    let read = 0;
-    limit.mockImplementation(() => {
-      read += 1;
-      return Promise.resolve(read === 1 ? [cRow()] : []);
-    });
-    returning.mockImplementation(() => Promise.reject(new Error('connection reset')));
+  it('a seq conflict that never clears surfaces as an error rather than retrying forever', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
+    // Every insert into the transcript collides, as if other writers kept
+    // winning the race.
+    const conflict = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    const realInsert = testDb.db.insert.bind(testDb.db);
+    vi.spyOn(testDb.db, 'insert').mockImplementation(((table: unknown) =>
+      table === messages
+        ? { values: () => ({ returning: () => Promise.reject(conflict) }) }
+        : realInsert(table as typeof messages)) as typeof testDb.db.insert);
+
+    await expect(appendMessages(athleteId, id, [{ role: 'athlete', content: 'x' }])).rejects.toBe(conflict);
+  });
+
+  it('an error that is not a seq conflict is thrown at once, with nothing written', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const id = await aConversation(athleteId, 'coach_chat', '2026-07-01');
 
     await expect(
-      appendMessages('athlete_1', 'c1', [{ role: 'athlete', content: 'x' }]),
-    ).rejects.toThrow('connection reset');
-    // One attempt only — a connection error is not a race to retry.
-    expect(insert).toHaveBeenCalledTimes(1);
-  });
-
-  it('starts at seq 0 for the first message in a conversation', async () => {
-    const owner = cRow();
-    let call = 0;
-    limit.mockImplementation(() => {
-      call += 1;
-      return Promise.resolve(call === 1 ? [owner] : []);
-    });
-    insertRows = [mRow({ seq: 0 })];
-
-    await appendMessages('athlete_1', 'c1', [{ role: 'athlete', content: 'first' }]);
-
-    expect(insertedValues).toEqual([
-      { conversationId: 'c1', role: 'athlete', content: 'first', citations: null, seq: 0 },
-    ]);
+      appendMessages(athleteId, id, [{ role: 'robot' as 'athlete', content: 'x' }]),
+    ).rejects.toThrow();
+    expect(await transcriptOf(id)).toEqual([]);
   });
 });
 
 // ── Coach Briefing persistence (slice 13) ─────────────────────────────────────
 
-const bRow = (overrides: Partial<ConversationRow> = {}): ConversationRow =>
-  cRow({ id: 'b1', kind: 'coach_briefing', coachId: 'coach_1', weeklySessionNumber: null, ...overrides });
+describe('briefings — owned by a coach, about an athlete', () => {
+  it('createBriefing stores a coach_briefing the coach owns, about the athlete', async () => {
+    const coachId = await aCoach('lars');
+    const athleteId = await seedAthlete(testDb.db, 'a');
 
-describe('createBriefing', () => {
-  it('inserts a coach_briefing owned by the coach and about the athlete', async () => {
-    insertRows = [bRow()];
-    const conv = await createBriefing({ coachId: 'coach_1', athleteId: 'athlete_1' });
-    expect(insert).toHaveBeenCalledWith(conversations);
-    expect(insertedValues).toMatchObject({
-      athleteId: 'athlete_1',
-      coachId: 'coach_1',
-      kind: 'coach_briefing',
-    });
-    expect(conv.coachId).toBe('coach_1');
-    expect(conv.kind).toBe('coach_briefing');
-  });
-});
+    const conv = await createBriefing({ coachId, athleteId });
 
-describe('getOwnedBriefing', () => {
-  it('scopes the read to the id, the owning coach, and the coach_briefing kind', async () => {
-    selectRows = [bRow()];
-    await getOwnedBriefing('coach_1', 'b1');
-    expect(eq).toHaveBeenCalledWith(conversations.id, 'b1');
-    expect(eq).toHaveBeenCalledWith(conversations.coachId, 'coach_1');
-    expect(eq).toHaveBeenCalledWith(conversations.kind, 'coach_briefing');
+    expect(conv).toMatchObject({ coachId, athleteId, kind: 'coach_briefing' });
+    expect((await getOwnedBriefing(coachId, conv.id))?.id).toBe(conv.id);
   });
 
-  it('returns null when no row matches (another coach asks)', async () => {
-    selectRows = [];
-    expect(await getOwnedBriefing('coach_2', 'b1')).toBeNull();
+  it('getOwnedBriefing resolves only for its coach, and never an athlete’s own conversation', async () => {
+    const lars = await aCoach('lars');
+    const sarah = await aCoach('sarah');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const briefing = await createBriefing({ coachId: lars, athleteId });
+    const chat = await aConversation(athleteId, 'coach_chat', '2026-07-01');
+
+    expect(await getOwnedBriefing(sarah, briefing.id)).toBeNull();
+    expect(await getOwnedBriefing(lars, chat)).toBeNull();
+    expect(await getOwnedBriefing(lars, MISSING)).toBeNull();
   });
 
-  it('refuses a non-briefing conversation even if the query somehow returned one', async () => {
-    // Belt-and-suspenders: coachOwnedOrNull rejects a wrong-kind row.
-    selectRows = [cRow({ id: 'b1', kind: 'weekly_session', coachId: 'coach_1' })];
-    expect(await getOwnedBriefing('coach_1', 'b1')).toBeNull();
-  });
-});
+  it('a conversation of another kind is not a briefing even when it carries the coach', async () => {
+    // Belt-and-suspenders: the kind is in the query and in coachOwnedOrNull.
+    const lars = await aCoach('lars');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const [row] = await testDb.db
+      .insert(conversations)
+      .values({ athleteId, coachId: lars, kind: 'coach_chat' })
+      .returning({ id: conversations.id });
 
-describe('appendBriefingMessages — coach ownership', () => {
-  it('refuses and writes nothing when the briefing is not the coach\'s', async () => {
-    selectRows = []; // ownership lookup finds nothing
-    const result = await appendBriefingMessages('coach_2', 'b1', [
-      { role: 'head_coach', content: 'brief me' },
-    ]);
-    expect(result).toBeNull();
-    expect(insert).not.toHaveBeenCalled();
+    expect(await getOwnedBriefing(lars, row.id)).toBeNull();
   });
 
-  it('appends when the coach owns the briefing', async () => {
-    let call = 0;
-    limit.mockImplementation(() => {
-      call += 1;
-      return Promise.resolve(call === 1 ? [bRow()] : []); // owner, then no prior seq
-    });
-    insertRows = [mRow({ id: 'bm1', role: 'head_coach', seq: 0 })];
+  it('appendBriefingMessages writes for the owning coach and refuses anyone else', async () => {
+    const lars = await aCoach('lars');
+    const sarah = await aCoach('sarah');
+    const briefing = await createBriefing({ coachId: lars, athleteId: await seedAthlete(testDb.db, 'a') });
 
-    const result = await appendBriefingMessages('coach_1', 'b1', [
+    expect(await appendBriefingMessages(sarah, briefing.id, [{ role: 'head_coach', content: 'brief me' }])).toBeNull();
+    const written = await appendBriefingMessages(lars, briefing.id, [
       { role: 'head_coach', content: 'how has her sleep trended?' },
     ]);
 
-    expect(result).toHaveLength(1);
-    expect(insertedValues).toEqual([
-      { conversationId: 'b1', role: 'head_coach', content: 'how has her sleep trended?', citations: null, seq: 0 },
+    expect(written?.map((m) => ({ role: m.role, seq: m.seq }))).toEqual([{ role: 'head_coach', seq: 0 }]);
+    expect(await transcriptOf(briefing.id)).toEqual([
+      { role: 'head_coach', content: 'how has her sleep trended?', seq: 0 },
     ]);
   });
-});
 
-describe('getLatestBriefingWithMessages', () => {
-  it('returns null when the coach has no briefing about this athlete', async () => {
-    selectRows = [];
-    expect(await getLatestBriefingWithMessages('coach_1', 'athlete_1')).toBeNull();
+  it('the latest briefing is the coach’s newest about that athlete, with its transcript', async () => {
+    const lars = await aCoach('lars');
+    const sarah = await aCoach('sarah');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const otherAthlete = await seedAthlete(testDb.db, 'b');
+    const insertBriefing = async (coachId: string, about: string, createdAt: string) => {
+      const [row] = await testDb.db
+        .insert(conversations)
+        .values({ athleteId: about, coachId, kind: 'coach_briefing', createdAt: new Date(createdAt) })
+        .returning({ id: conversations.id });
+      return row.id;
+    };
+    await insertBriefing(lars, athleteId, '2026-07-01');
+    const latest = await insertBriefing(lars, athleteId, '2026-07-02');
+    await insertBriefing(lars, otherAthlete, '2026-07-03');
+    await insertBriefing(sarah, athleteId, '2026-07-04');
+    await appendBriefingMessages(lars, latest, [{ role: 'head_coach', content: 'and now?' }]);
+
+    const read = await getLatestBriefingWithMessages(lars, athleteId);
+
+    expect(read?.conversation.id).toBe(latest);
+    expect(read?.messages.map((m) => m.content)).toEqual(['and now?']);
+  });
+
+  it('there is no latest briefing when the coach has none about that athlete', async () => {
+    const lars = await aCoach('lars');
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    await aConversation(athleteId, 'coach_chat', '2026-07-01');
+
+    expect(await getLatestBriefingWithMessages(lars, athleteId)).toBeNull();
   });
 });

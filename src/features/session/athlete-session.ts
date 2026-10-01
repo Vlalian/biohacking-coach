@@ -4,7 +4,7 @@ import { sessions, events } from '@/db/schema';
 import { getSessionAuthority } from './session-repository';
 import { createdStatusFor, validateAthleteSessionDraft } from './athlete-session-rules';
 import { casDeleteSession, casUpdateSession } from './versioned-write';
-import type { SessionConflict } from './conflict';
+import { attemptedDuration, type SessionConflict } from './conflict';
 import { toSession, type Session } from './session';
 
 /**
@@ -137,7 +137,7 @@ export async function updateAthleteSession(params: {
     },
     attempted: {
       type: draft.type,
-      duration: draft.durationMin === null ? null : String(draft.durationMin),
+      duration: attemptedDuration(draft.durationMin),
       note: draft.note,
       // Set above, so it has to be comparable here too: an edit that toggles
       // only this reported no divergence, which reads as "already done".

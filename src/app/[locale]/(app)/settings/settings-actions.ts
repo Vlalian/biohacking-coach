@@ -188,34 +188,28 @@ export async function updateTargetRaceAction(
   name: string,
   date: string,
 ): Promise<SettingsActionResult> {
-  const trimmedName = name.trim();
-  const trimmedDate = date.trim();
-  if (trimmedName.length > RACE_TARGET_MAX) return { ok: false, reason: 'invalid' };
+  const edit = parseTargetRaceEdit(name, date);
+  if (edit === 'invalid') return { ok: false, reason: 'invalid' };
 
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  if (!trimmedName && !trimmedDate) {
+  if (edit === 'clear') {
     await clearTargetRace(athlete.id);
     await updateRaceTarget(athlete.id, null);
     return { ok: true };
   }
 
-  if (!trimmedName || !isCalendarDate(trimmedDate)) return { ok: false, reason: 'invalid' };
   // A Race carries a distance and there is nowhere honest to get one from when
   // the athlete has never answered the question. Deriving it from the race name
-  // is exactly the habit this slice removed.
-  const distance = athlete.raceDistance;
-  if (!distance || !(RACE_DISTANCES as readonly string[]).includes(distance)) {
-    return { ok: false, reason: 'invalid' };
-  }
+  // is exactly the habit this slice removed — so an athlete with no Race
+  // Distance fails the same closed-set check an unknown distance does.
+  // Stryker disable next-line StringLiteral — equivalent: any fallback outside RACE_DISTANCES is refused identically
+  const race = parseNewRace(edit.name, edit.date, athlete.raceDistance ?? '');
+  if (!race) return { ok: false, reason: 'invalid' };
 
-  await upsertTargetRace(athlete.id, {
-    name: trimmedName,
-    date: trimmedDate,
-    distance: distance as RaceDistance,
-  });
-  await updateRaceTarget(athlete.id, trimmedName);
+  await upsertTargetRace(athlete.id, race);
+  await updateRaceTarget(athlete.id, race.name);
   return { ok: true };
 }
 
@@ -250,6 +244,20 @@ export async function addRaceAction(
   // Coach raises once in chat (ruling 3) all land, or none do.
   const raceId = await addRace(athlete.id, newRace, first ? 'first' : asTarget ? 'replace' : 'none');
   return { ok: true, raceId };
+}
+
+/**
+ * What a Target Race edit asks for, judged before anyone is looked up: a name
+ * past the cap is refused as invalid whoever sends it, and two blank fields
+ * mean clear the target. Anything else goes on to {@link parseNewRace} once the
+ * athlete's distance is known.
+ */
+function parseTargetRaceEdit(name: string, date: string): 'invalid' | 'clear' | { name: string; date: string } {
+  const trimmedName = name.trim();
+  const trimmedDate = date.trim();
+  if (trimmedName.length > RACE_TARGET_MAX) return 'invalid';
+  if (!trimmedName && !trimmedDate) return 'clear';
+  return { name: trimmedName, date: trimmedDate };
 }
 
 /** A Race as the form typed it, or null when any part of it is not one. */
