@@ -7,8 +7,11 @@ import {
   buildOnboardingLines,
   COACH_IDENTITY,
   languageDirective,
+  patternLines,
+  PATTERNS_HEADING,
   type PromptBlock,
 } from './prompt-blocks';
+import type { Pattern } from './pattern-insight';
 import { reflectionScoreToTen } from './weekly-session';
 import type { CoachMessage } from './coach-client';
 import { toApiMessages, type Message } from './conversation';
@@ -199,6 +202,12 @@ export interface BriefingContext {
    * are from the Roster.
    */
   preferredName?: string | null;
+  /**
+   * The strongest code-found patterns (`training-architecture/50`), already
+   * filtered by Link Visibility: one built from reports the athlete does not
+   * share never arrives here.
+   */
+  patterns?: Pattern[];
 }
 
 /**
@@ -220,6 +229,7 @@ export function buildBriefingContext(input: {
   transcripts: BriefingTranscript[] | null;
   language?: string;
   preferredName?: string | null;
+  patterns?: Pattern[];
 }): BriefingContext {
   const ctx: BriefingContext = {
     today: input.today,
@@ -229,6 +239,7 @@ export function buildBriefingContext(input: {
     reports: input.reports,
     transcripts: input.transcripts,
     preferredName: input.preferredName ?? null,
+    patterns: input.patterns ?? [],
   };
   // Guard the material the app assembled from the athlete's opaque record. The
   // transcripts are deliberately excluded — see the doc comment.
@@ -477,8 +488,24 @@ export function renderBriefingPrompt(ctx: BriefingContext): string {
     planBlock(plan),
     blocksBlock(blocks),
     ...reportsBlocks(reports),
+    briefingPatternsBlock(ctx.patterns ?? []),
     transcriptsBlock(transcripts),
   ]);
+}
+
+/**
+ * The patterns, reported to the coach (ruling 2: said in the Briefing). A
+ * briefing is a report, so they are given rather than held for a conversation,
+ * but worded the same way: observations, never verdicts, each with how sure it
+ * is (ruling 11). None found renders nothing.
+ */
+function briefingPatternsBlock(patterns: readonly Pattern[]): PromptBlock {
+  if (patterns.length === 0) return null;
+  return [
+    PATTERNS_HEADING,
+    ...patternLines(patterns),
+    'Report these as observations, never verdicts, and say how sure each one is. They are the only patterns you may name.',
+  ].join('\n');
 }
 
 /**

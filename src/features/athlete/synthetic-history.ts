@@ -1,7 +1,7 @@
 import type { NewInjuryRow } from '@/db/schema';
 import type { RaceDistance } from '@/lib/race-distances';
 import { addDays, dateKey } from '@/lib/date';
-import type { SessionHistoryItem } from '@/features/coach/check-in';
+import type { PatternSession } from '@/features/coach/pattern-insight';
 import type { PlanType } from '@/features/coach/weekly-session';
 import type { Capacity } from '@/features/health/capacity';
 import { uuidV5 } from './uuid-v5';
@@ -532,21 +532,26 @@ export function toSessionRows(
 }
 
 /**
- * The generated sessions in the shape Pattern Insight consumes.
+ * The generated sessions in the shape Pattern Insight consumes
+ * (`training-architecture/50`): every session, skipped ones as skips, because
+ * a skip clustering on one weekday is a schedule pattern and a skip after a
+ * low rating is body push-back.
  *
- * `sleep`, `pulse` and `pushedBack` are left undefined because a session row
- * carries none of them — mapping a plausible number in here would be inventing
- * data the app does not have, which is the failure `NO_CHECK_IN` exists to stop.
- * Ordered by date, because the post-intensity rule reads consecutive entries.
+ * Sleep, resting pulse and push-back are left out because a session row
+ * carries none of them; mapping a plausible number in would be inventing data
+ * the app does not have, which is the failure `NO_CHECK_IN` exists to stop. No
+ * device summary either: the generator writes none.
  */
-export function toSessionHistory(
-  sessions: readonly SyntheticSession[],
-): SessionHistoryItem[] {
-  return sessions
-    .filter((s) => s.status === 'completed')
-    .map((s) => ({
-      sessionType: s.type.toLowerCase(),
-      ...(s.feedbackBody !== null ? { bodyFeedback: s.feedbackBody } : {}),
-      ...(s.feedbackMind !== null ? { mindFeedback: s.feedbackMind } : {}),
-    }));
+export function toPatternHistory(sessions: readonly SyntheticSession[]): PatternSession[] {
+  return sessions.map((s) => ({
+    date: s.date,
+    type: s.type,
+    sport: null,
+    status: s.status,
+    duration: s.duration,
+    body: s.feedbackBody,
+    mind: s.feedbackMind,
+    avgHr: null,
+    distanceM: null,
+  }));
 }

@@ -1,6 +1,7 @@
+import type { Pattern } from './pattern-insight';
 import { describe, expect, it } from 'vitest';
 
-import { COACH_IDENTITY, groundingBlock, healthFactsBlock, onboardingBlock, openingBlock, recentWeeksBlock } from './prompt-blocks';
+import { COACH_IDENTITY, groundingBlock, healthFactsBlock, onboardingBlock, openingBlock, recentWeeksBlock, patternsBlock } from './prompt-blocks';
 
 describe('groundingBlock', () => {
   it('GROUNDING: asked what it knows, the Coach looks up before answering and never describes the tool as its scope (knowledge-oracle/07)', () => {
@@ -158,5 +159,83 @@ describe('healthFactsBlock (E1, training-architecture/52)', () => {
 
   it('is absent when nothing is open', () => {
     expect(healthFactsBlock({ injuries: [], illnesses: [] })).toBeNull();
+  });
+});
+
+describe('patternsBlock — what Momentum is handed (training-architecture/50)', () => {
+  const tuesdays: Pattern = {
+    family: 'schedule',
+    subject: 'Tuesday',
+    direction: null,
+    numbers: { skipped: 3, of: 4 },
+    sample: 4,
+    strength: 3,
+    section: 'always',
+  };
+  const bodyShift: Pattern = {
+    family: 'shift',
+    subject: 'body',
+    metric: 'body',
+    direction: 'down',
+    numbers: { baseline: 4, recent: 1.5 },
+    sample: 18,
+    strength: 4,
+    section: 'reports',
+  };
+
+  it('with none, says so and forbids naming one of its own', () => {
+    expect(patternsBlock([])).toBe('PATTERNS: none found. Do not name a pattern of your own.');
+  });
+
+  it('lists each pattern with the numbers behind it, and marks one resting on few sessions', () => {
+    const text = patternsBlock([bodyShift, tuesdays]) as string;
+    expect(text.startsWith("PATTERNS (found by code in this athlete's own history, strongest first):")).toBe(true);
+    expect(text).toContain('- Body ratings have gone down: usually 4, lately 1.5 (18 sessions).');
+    expect(text).toContain('- Tuesday sessions are often skipped: 3 of 4 (rests on few sessions).');
+  });
+
+  it('says a kind rated higher, as well as lower', () => {
+    const up: Pattern = { ...bodyShift, family: 'kind', subject: 'swimming', metric: 'mind', direction: 'up', numbers: { median: 5, others: 2, sessions: 4 } };
+    expect(patternsBlock([up])).toContain('- Mind ratings for swimming sessions run higher: 5 against 2 for the rest (18 sessions).');
+  });
+
+  it('ten sessions is enough to stop calling it a hunch', () => {
+    expect(patternsBlock([{ ...tuesdays, sample: 10 }])).toContain('3 of 4 (10 sessions).');
+    expect(patternsBlock([{ ...tuesdays, sample: 9 }])).toContain('3 of 4 (rests on few sessions).');
+  });
+
+  it('frames them as the ruling says: only when relevant, an observation, how sure, never push-back for a schedule', () => {
+    const text = patternsBlock([tuesdays]) as string;
+    expect(text).toMatch(/only when the conversation touches it/i);
+    expect(text).toMatch(/observation, never a verdict/i);
+    expect(text).toMatch(/how sure you are/i);
+    expect(text).toMatch(/the day may be wrong, not the body/i);
+    expect(text).toMatch(/only patterns you may name/i);
+  });
+
+  it('has a line for every family, none of them blank', () => {
+    const families: Pattern[] = [
+      { ...bodyShift, family: 'kind', subject: 'Intensity', numbers: { median: 1, others: 4, sessions: 4 } },
+      { ...tuesdays, numbers: { moved: 3 } },
+      { ...tuesdays, family: 'body-push-back', subject: 'body', numbers: { pairs: 3 }, section: 'reports' },
+      { ...bodyShift, family: 'effort-drift', subject: 'running', metric: 'heart rate', direction: 'up', numbers: { baseline: 140, recent: 156 } },
+      { ...bodyShift, family: 'effort-drift', subject: 'running', metric: 'pace', numbers: { baseline: 200, recent: 160 } },
+      { ...tuesdays, family: 'low-body-after-intensity', subject: 'Intensity', numbers: { times: 4 }, section: 'reports' },
+      { ...tuesdays, family: 'sleep-intensity', subject: 'sleep', numbers: { times: 3 }, section: 'reports' },
+      { ...tuesdays, family: 'pulse-push-back', subject: 'resting pulse', numbers: { times: 3 }, section: 'reports' },
+      { ...tuesdays, family: 'sleep-mind', subject: 'sleep', numbers: { times: 3 }, section: 'reports' },
+    ];
+    const lines = (patternsBlock(families) as string).split('\n').filter((l) => l.startsWith('- '));
+    expect(lines).toEqual([
+      '- Body ratings for Intensity sessions run lower: 1 against 4 for the rest (18 sessions).',
+      '- Sessions are often moved away from Tuesday: 3 times (rests on few sessions).',
+      '- A skip has followed a low Body rating 3 times (rests on few sessions).',
+      '- Average heart rate on similar running sessions has gone up: 140 to 156 (18 sessions).',
+      '- Pace on similar running sessions has gone down: 200 to 160 metres a minute (18 sessions).',
+      '- Body has been low the session after an Intensity session 4 times (rests on few sessions).',
+      '- An Intensity session was pushed back after a short night 3 times (rests on few sessions).',
+      '- Sessions were pushed back with a raised resting pulse 3 times (rests on few sessions).',
+      '- Mind was low after a short night 3 times (rests on few sessions).',
+    ]);
   });
 });

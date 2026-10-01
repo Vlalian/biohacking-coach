@@ -9,7 +9,9 @@ import {
   logLookupFailure,
   logCoachDrift,
   logWeekDraftClamped,
+  logPatternsDetected,
 } from './coach-log';
+import type { Pattern } from '@/features/coach/pattern-insight';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
 let written: string[] = [];
@@ -373,3 +375,39 @@ describe('logWeekDraftClamped (training-architecture/48, R2)', () => {
     expect(() => logWeekDraftClamped('a1', { drafted: 1, clampedTo: 1, baseline: 1, reasoned: true })).not.toThrow();
   });
 });
+
+describe('logPatternsDetected (training-architecture/50, ruling 7)', () => {
+  const pattern = (over: Partial<Pattern>): Pattern => ({
+    family: 'shift',
+    subject: 'body',
+    metric: 'body',
+    direction: 'down',
+    numbers: { baseline: 4, recent: 1 },
+    sample: 18,
+    strength: 4.05,
+    section: 'reports',
+    ...over,
+  });
+
+  it('writes one line per detected pattern, with its strength and whether it was said', () => {
+    const s = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const shift = pattern({});
+    const tuesdays = pattern({ family: 'schedule', subject: 'Tuesday', metric: undefined, direction: null, strength: 4, sample: 4 });
+    logPatternsDetected('a1', 'briefing', [shift, tuesdays], [tuesdays]);
+    expect(s.mock.calls.map(([line]) => JSON.parse(line as string))).toEqual([
+      { event: 'pattern_detected', athleteId: 'a1', surface: 'briefing', family: 'shift', subject: 'body', strength: 4.05, sample: 18, said: false },
+      { event: 'pattern_detected', athleteId: 'a1', surface: 'briefing', family: 'schedule', subject: 'Tuesday', strength: 4, sample: 4, said: true },
+    ]);
+  });
+
+  it('writes nothing when nothing was found, and never throws', () => {
+    const s = vi.spyOn(console, 'warn').mockImplementation(() => {
+      throw new Error('stdout closed');
+    });
+    expect(() => logPatternsDetected('a1', 'coach_chat', [pattern({})], [])).not.toThrow();
+    s.mockClear();
+    logPatternsDetected('a1', 'coach_chat', [], []);
+    expect(s).not.toHaveBeenCalled();
+  });
+});
+

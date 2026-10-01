@@ -307,3 +307,20 @@ describe('golden — Coach Chat with the athlete signals it now reads (training-
     ).toMatchSnapshot();
   });
 });
+
+describe('golden — Coach Chat with code-found patterns (training-architecture/50)', () => {
+  it('renders identically with a schedule pattern and a Body shift', () => {
+    expect(
+      buildChatPrompt({ ...BASE, presenceStage: 'full' }, TODAY, null, [], null, null, {
+        recentWeeks: [],
+        health: { injuries: [], illnesses: [] },
+        moves: [],
+        comments: [],
+        patterns: [
+          { family: 'shift', subject: 'body', metric: 'body', direction: 'down', numbers: { baseline: 4, recent: 1.5 }, sample: 18, strength: 4.05, section: 'reports' },
+          { family: 'schedule', subject: 'Tuesday', direction: null, numbers: { skipped: 3, of: 4 }, sample: 4, strength: 3, section: 'always' },
+        ],
+      }),
+    ).toMatchSnapshot();
+  });
+});
