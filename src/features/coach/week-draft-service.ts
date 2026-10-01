@@ -64,7 +64,15 @@ import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
  * write, and this module does not import the means to make one.
  */
 
-const DRAFT_MAX_TOKENS = 1400;
+/**
+ * Raised from 1400 for testing (Mads, 2026-10-01: "remove the cap for now, and let
+ * testers run without it"). The API always needs a cap, so this is the practical
+ * ceiling instead: past about 4,000 tokens a reply runs into the 60 s request
+ * timeout in `coach-client.ts` before it reaches the cap. Coach Chat uses the same
+ * value. `week_draft_usage` logs what each draft really spends; set the cap from
+ * those numbers once testing has produced some.
+ */
+const DRAFT_MAX_TOKENS = 4096;
 const DRAFT_ACK = 'Staged as a proposal for the athlete. Reply with one word.';
 
 /** Why a run ended where it did. Returned for the log and the tests; the trigger ignores it. */

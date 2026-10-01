@@ -230,7 +230,7 @@ describe('ensureWeekDrafted — a valid reply is staged once, as the Coach', () 
   it('logs how much of DRAFT_MAX_TOKENS the draft used, so a live draft shows whether the cap holds (training-architecture/26)', async () => {
     callCoach.mockResolvedValue({ ...toolReply({ sessions: PROPOSED }), usage: { outputTokens: 1234, stopReason: 'tool_use' } });
     await ensureWeekDrafted(ATHLETE, TODAY);
-    expect(logWeekDraftUsage).toHaveBeenCalledWith(ATHLETE, { outputTokens: 1234, maxTokens: 1400, stopReason: 'tool_use' });
+    expect(logWeekDraftUsage).toHaveBeenCalledWith(ATHLETE, { outputTokens: 1234, maxTokens: 4096, stopReason: 'tool_use' });
   });
 
   it('logs no usage line for a reply that carries none, rather than one with no numbers', async () => {
