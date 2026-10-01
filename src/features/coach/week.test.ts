@@ -22,6 +22,7 @@ function session(over: Partial<Session> = {}): Session {
     origin: 'coach',
     isTraining: true,
     summary: null,
+    howTo: null,
     ...over,
   };
 }

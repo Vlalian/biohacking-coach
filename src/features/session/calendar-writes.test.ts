@@ -39,6 +39,7 @@ function s(id: string, date: string, over: Partial<Session> = {}): Session {
     origin: 'athlete',
     isTraining: true,
     summary: null,
+    howTo: null,
     version: 1,
     ...over,
   };

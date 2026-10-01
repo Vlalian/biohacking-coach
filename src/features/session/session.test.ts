@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { SESSION_ORIGINS, isImportedHistory, isUnrecorded, toDeviceSummary, toSessionOrigin } from './session';
+import type { SessionRow } from '@/db/schema';
+import { SESSION_ORIGINS, isImportedHistory, isUnrecorded, toDeviceSummary, toSession, toSessionOrigin } from './session';
 
 /**
  * `training-architecture/34` — the structure writes sessions of its own, and
@@ -64,5 +65,47 @@ describe('unrecorded', () => {
     for (const status of ['completed', 'skipped', 'unavailable']) {
       expect(isUnrecorded({ status, date: '2026-09-20' }, '2026-09-29')).toBe(false);
     }
+  });
+});
+
+/** `training-architecture/26` — what was written about how to do a session reaches the read model, parsed. */
+describe('toSession — the how-to column', () => {
+  const row = (howTo: unknown): SessionRow =>
+    ({
+      id: 's1',
+      athleteId: 'a1',
+      date: '2026-10-05',
+      type: 'Endurance',
+      origin: 'coach',
+      status: 'planned',
+      parked: false,
+      parkedByDate: null,
+      isTraining: true,
+      duration: 60,
+      zone: 'Z2',
+      note: null,
+      title: null,
+      dayOrder: 0,
+      startTime: null,
+      sport: 'bike',
+      summary: null,
+      externalId: null,
+      howTo,
+      feedbackBody: null,
+      feedbackMind: null,
+      feedbackComment: null,
+      ratedAt: null,
+      version: 1,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    }) as SessionRow;
+
+  it('carries Momentum’s cue from the stored column', () => {
+    expect(toSession(row({ cue: 'Spin light, spare the knee.' })).howTo).toEqual({ cue: 'Spin light, spare the knee.' });
+  });
+
+  it('reads an empty or malformed column as nothing written', () => {
+    expect(toSession(row(null)).howTo).toBeNull();
+    expect(toSession(row({ cue: 42 })).howTo).toBeNull();
   });
 });

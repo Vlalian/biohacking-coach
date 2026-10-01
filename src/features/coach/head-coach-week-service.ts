@@ -103,7 +103,7 @@ export async function approveWeekDraft(params: {
     draftId,
     weekStart,
     visibleFrom: pending.visibleFrom,
-    sessions: withoutCoachNotes(pending.sessions, accepted),
+    sessions: withoutCoachProse(pending.sessions, accepted),
     citations: pending.citations,
     changed,
   });
@@ -118,7 +118,8 @@ export async function approveWeekDraft(params: {
 function acceptedSessions(weekStart: string, today: string, sessions: unknown): ProposedSession[] | null {
   const window = weekWindow(weekStart, today);
   if (!window) return null;
-  const validated = validateProposedPlan({ sessions }, window);
+  // The one place a coach's own how-to is taken in (`training-architecture/26`, E6).
+  const validated = validateProposedPlan({ sessions }, window, { coachHowTo: true });
   return validated.ok ? validated.sessions : null;
 }
 
@@ -128,7 +129,11 @@ function sessionsArrayLength(input: unknown): number {
 }
 
 /**
- * The approved sessions with every note the coach wrote removed.
+ * The approved sessions with every note the coach wrote removed — and every
+ * cue and sport reason, which are Momentum's words by the same rule and are
+ * shown as Momentum's (`training-architecture/26`). The coach's own words
+ * about how to do a session go in their how-to, which is shown as theirs.
+ *
  *
  * **A Head Coach's note is never sent** (`prompts.ts:sessionNote`, Mads
  * 2026-08-21): it is a third party's prose about the athlete, and a name in it
@@ -148,26 +153,52 @@ function sessionsArrayLength(input: unknown): number {
  * never wrote them for (CodeRabbit, PR #69). A moved session keeps its
  * position, so its note survives.
  */
-function withoutCoachNotes(drafted: ProposedSession[], accepted: ProposedSession[]): ProposedSession[] {
-  // One comparison: a null note either matches a null draft note or is
-  // rebuilt to the same null, so a separate null guard would be a branch no
-  // test can tell apart.
-  return accepted.map((s, i) => (s.note === drafted[i]?.note ? s : { ...s, note: null }));
+function withoutCoachProse(drafted: ProposedSession[], accepted: ProposedSession[]): ProposedSession[] {
+  return accepted.map((s, i) => momentumWordsOnly(s, drafted[i] ?? NOT_DRAFTED));
 }
 
-/** Field-by-field, in order — a reordered week is a changed week. */
+/** A session the coach added has no drafted counterpart, so none of its words are Momentum's. */
+const NOT_DRAFTED: Partial<ProposedSession> = {};
+
+function momentumWordsOnly(s: ProposedSession, drafted: Partial<ProposedSession>): ProposedSession {
+  // One comparison each: a null note either matches a null draft note or is
+  // rebuilt to the same null, so a separate null guard would be a branch no
+  // test can tell apart.
+  const kept = { ...s, note: s.note === drafted.note ? s.note : null };
+  if (s.cue !== drafted.cue) delete kept.cue;
+  if (s.sportReason !== drafted.sportReason) delete kept.sportReason;
+  return kept;
+}
+
+/**
+ * Field-by-field, in order — a reordered week is a changed week. The sport,
+ * the cue and the coach's own how-to count too (`training-architecture/26`):
+ * a coach who rewrote how a session is done shaped the week.
+ */
 function sameSessions(a: ProposedSession[], b: ProposedSession[]): boolean {
   if (a.length !== b.length) return false;
-  return a.every((x, i) => {
-    const y = b[i];
-    return (
-      x.date === y.date &&
-      x.type === y.type &&
-      x.durationMinutes === y.durationMinutes &&
-      x.zone === y.zone &&
-      x.note === y.note
-    );
-  });
+  return a.every((x, i) => sameSession(x, b[i]));
+}
+
+function sameSession(x: ProposedSession, y: ProposedSession): boolean {
+  return (
+    x.date === y.date &&
+    x.type === y.type &&
+    x.durationMinutes === y.durationMinutes &&
+    x.zone === y.zone &&
+    x.note === y.note &&
+    sameHowTo(x, y)
+  );
+}
+
+function sameHowTo(x: ProposedSession, y: ProposedSession): boolean {
+  // The reason counts too: dropping it changes what is stored (CodeRabbit, PR #122).
+  return (
+    x.sport === y.sport &&
+    x.sportReason === y.sportReason &&
+    x.cue === y.cue &&
+    JSON.stringify(x.coachHowTo) === JSON.stringify(y.coachHowTo)
+  );
 }
 
 /**

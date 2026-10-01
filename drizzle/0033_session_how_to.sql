@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "how_to" jsonb;

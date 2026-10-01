@@ -445,7 +445,8 @@
     "formZone": "Zone",
     "formTitle": "Titel",
     "formNote": "Bemærkning",
-    "save": "Gem"
+    "save": "Gem",
+    "howTo": "Sådan gør du"
   },
   "History": {
     "title": "Træningshistorik",
@@ -940,7 +941,17 @@
     "approved": "Godkendt. Det når atleten på deres planlægningsdag.",
     "approvedChanged": "Godkendt med dine ændringer. Atleten får at vide, at du har justeret den.",
     "stale": "Udkastet er erstattet. Genindlæs for at se det gældende.",
-    "error": "Det virkede ikke ({reason})."
+    "error": "Det virkede ikke ({reason}).",
+    "sport": "Disciplin: {sport}",
+    "sportReason": "Disciplin ændret: {reason}",
+    "editHowTo": "Ret fremgangsmåden",
+    "resetHowTo": "Brug standardfremgangsmåden",
+    "segmentMinutes": "Minutter",
+    "segmentZone": "Zone",
+    "segmentDetail": "Hvad du gør",
+    "focusLines": "Fokus, én pr. linje",
+    "howToSum": "{sum} af {total} min",
+    "howTo": "Sådan gør du"
   },
   "DraftingCard": {
     "drafting": "Momentum laver et udkast til ugen… cirka {seconds} sekunder.",
@@ -1022,5 +1033,21 @@
     "realNameWarning": "Det er dit rigtige navn. Momentum bruger det præcis, som du har skrevet det.",
     "useAnyway": "Brug det alligevel",
     "pickAnother": "Vælg noget andet"
+  },
+  "HowTo": {
+    "warmUp": "Opvarmning",
+    "steady": "Rolig del",
+    "main": "Hovedsæt",
+    "coolDown": "Nedkøling",
+    "minutes": "min",
+    "focus": "Fokus",
+    "momentumCue": "Fra Momentum",
+    "byCoach": "Skrevet af træneren",
+    "sports": {
+      "swim": "svøm",
+      "bike": "cykel",
+      "run": "løb",
+      "brick": "brick-session"
+    }
   }
 }

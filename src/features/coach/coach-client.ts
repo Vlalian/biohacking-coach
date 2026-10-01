@@ -114,7 +114,23 @@ export interface CoachTool {
 export interface CoachReply {
   text: string;
   toolCalls: CoachToolCall[];
+  /**
+   * What the answering call spent of its `max_tokens`, and why it stopped — the
+   * call that made the tool call, or the only call for a text reply. Optional so
+   * fakes and the disabled path need not invent it.
+   */
+  usage?: CoachUsage;
 }
+
+export interface CoachUsage {
+  outputTokens: number;
+  stopReason: string | null;
+}
+
+const usageOf = (m: { usage?: { output_tokens?: number }; stop_reason?: string | null }): CoachUsage => ({
+  outputTokens: m.usage?.output_tokens ?? 0,
+  stopReason: m.stop_reason ?? null,
+});
 
 /**
  * The Coach is switched off for this process: `COACH_DISABLED=1`, honoured
@@ -238,7 +254,7 @@ async function callCoachLive(input: CoachCallInput): Promise<CoachReply> {
     // of the transcript entirely, rather than storing a blank Coach message the
     // athlete sees and every later request replays.
     if (text === '') throw new EmptyCoachReplyError(first.stop_reason);
-    return { text, toolCalls: [] };
+    return { text, toolCalls: [], usage: usageOf(first) };
   }
 
   // The Coach called a tool. Answer every call — the resolver's result, or the
@@ -275,6 +291,7 @@ async function callCoachLive(input: CoachCallInput): Promise<CoachReply> {
   return {
     text,
     toolCalls: toolUses.map((use) => ({ name: use.name, input: use.input })),
+    usage: usageOf(first),
   };
 }
 

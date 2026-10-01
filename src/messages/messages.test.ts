@@ -80,6 +80,8 @@ describe('message catalogues', () => {
       path === 'Calendar.minutes' ||
       // Same "min" as Calendar.minutes, on the Detected Activity card.
       path === 'Detected.minutes' ||
+      // And on each segment of a session's how-to (training-architecture/26).
+      path === 'HowTo.minutes' ||
       path === 'AthletePage.informationLink' ||
       path === 'Shell.viewInformation' ||
       // The theme-cycle's "System" option (follow the OS) — genuinely spelled

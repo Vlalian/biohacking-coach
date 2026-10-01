@@ -182,6 +182,12 @@ export const sessions = pgTable(
     // import and a later API sync dedupe on; null for everything the app
     // itself wrote and for an activity with no start time (ballot 9).
     externalId: text('external_id'),
+    // What someone *wrote* about how to do this session
+    // (`training-architecture/26`): Momentum's one cue, and the Head Coach's
+    // own how-to when they edited it (final). The how-to itself is computed at
+    // render from the templates, so it is never stored; null means nobody
+    // wrote anything. Shape: `StoredHowTo` in `features/session/how-to.ts`.
+    howTo: jsonb('how_to'),
     // Session Feedback — two 1–5 smiley scores and a comment, set on rating.
     feedbackBody: integer('feedback_body'),
     feedbackMind: integer('feedback_mind'),
