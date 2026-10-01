@@ -29,6 +29,7 @@ const getLastDeclinedDraft = vi.fn(async (): Promise<unknown> => null);
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
 const logWeekDraftClamped = vi.fn();
+const logWeekDraftUsage = vi.fn();
 const getLinkForAthlete = vi.fn();
 const getCoachByUserId = vi.fn();
 const getRoster = vi.fn();
@@ -59,7 +60,7 @@ vi.mock('./presence-repository', () => ({ getPresenceStage }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState, getLastDeclinedDraft }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logWeekDraftClamped }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logWeekDraftClamped, logWeekDraftUsage }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getLanguageForAthlete }));
 
@@ -224,6 +225,17 @@ describe('ensureWeekDrafted — a valid reply is staged once, as the Coach', () 
       citations: [expect.objectContaining({ sourceId: 's1' })],
     });
     expect(recordWeekDraft.mock.calls[0][0].skeleton).toHaveLength(7);
+  });
+
+  it('logs how much of DRAFT_MAX_TOKENS the draft used, so a live draft shows whether the cap holds (training-architecture/26)', async () => {
+    callCoach.mockResolvedValue({ ...toolReply({ sessions: PROPOSED }), usage: { outputTokens: 1234, stopReason: 'tool_use' } });
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(logWeekDraftUsage).toHaveBeenCalledWith(ATHLETE, { outputTokens: 1234, maxTokens: 1400, stopReason: 'tool_use' });
+  });
+
+  it('logs no usage line for a reply that carries none, rather than one with no numbers', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(logWeekDraftUsage).not.toHaveBeenCalled();
   });
 
   it('still drafts when retrieval throws — ungrounded, said so in the prompt, and logged', async () => {

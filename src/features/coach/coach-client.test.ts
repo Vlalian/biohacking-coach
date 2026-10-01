@@ -271,7 +271,7 @@ describe('callCoach — COACH_DISABLED (frontend-quality/07)', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('COACH_DISABLED', '1');
     create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: {} });
-    await expect(callCoach(input)).resolves.toEqual({ text: 'hi', toolCalls: [] });
+    await expect(callCoach(input)).resolves.toMatchObject({ text: 'hi', toolCalls: [] });
     expect(create).toHaveBeenCalledTimes(1);
   });
 
@@ -390,3 +390,35 @@ describe('callCoach — one client per process, built with the timeout and retry
   });
 
 });
+
+describe('callCoach — reports how much of the budget the answering call used (training-architecture/26)', () => {
+  it('carries the output tokens and stop reason of the call that made the tool call', async () => {
+    create
+      .mockResolvedValueOnce({
+        content: [{ type: 'tool_use', id: 't1', name: 'propose', input: {} }],
+        usage: { output_tokens: 1234 },
+        stop_reason: 'tool_use',
+      })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'done' }], usage: { output_tokens: 9 }, stop_reason: 'end_turn' });
+    const reply = await callCoach({
+      system: 'S',
+      messages: [{ role: 'user', content: 'plan my week' }],
+      maxTokens: 1400,
+      tools: [{ name: 'propose', description: 'd', input_schema: { type: 'object' } }],
+    });
+    expect(reply.usage).toEqual({ outputTokens: 1234, stopReason: 'tool_use' });
+  });
+
+  it('reports zero tokens and no reason when the API sends no usage', async () => {
+    create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }] });
+    const reply = await callCoach({ system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 100 });
+    expect(reply.usage).toEqual({ outputTokens: 0, stopReason: null });
+  });
+
+  it('carries them on a text-only reply too', async () => {
+    create.mockResolvedValue({ content: [{ type: 'text', text: 'hi' }], usage: { output_tokens: 3 }, stop_reason: 'end_turn' });
+    const reply = await callCoach({ system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 100 });
+    expect(reply.usage).toEqual({ outputTokens: 3, stopReason: 'end_turn' });
+  });
+});
+

@@ -9,6 +9,7 @@ import {
   logLookupFailure,
   logCoachDrift,
   logWeekDraftClamped,
+  logWeekDraftUsage,
 } from './coach-log';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
@@ -373,3 +374,25 @@ describe('logWeekDraftClamped (training-architecture/48, R2)', () => {
     expect(() => logWeekDraftClamped('a1', { drafted: 1, clampedTo: 1, baseline: 1, reasoned: true })).not.toThrow();
   });
 });
+
+describe('logWeekDraftUsage (training-architecture/26: is DRAFT_MAX_TOKENS enough?)', () => {
+  it('records the tokens the draft used against its cap, and why it stopped', () => {
+    const s = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    logWeekDraftUsage('a1', { outputTokens: 1234, maxTokens: 1400, stopReason: 'tool_use' });
+    expect(JSON.parse(s.mock.calls[0][0] as string)).toEqual({
+      event: 'week_draft_usage',
+      athleteId: 'a1',
+      outputTokens: 1234,
+      maxTokens: 1400,
+      stopReason: 'tool_use',
+    });
+  });
+
+  it('never throws, even when the console does', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {
+      throw new Error('console gone');
+    });
+    expect(() => logWeekDraftUsage('a1', { outputTokens: 1, maxTokens: 2, stopReason: null })).not.toThrow();
+  });
+});
+

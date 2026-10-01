@@ -1,4 +1,4 @@
-import { logCoachFailure } from '@/lib/coach-log';
+import { logCoachFailure, logWeekDraftUsage } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
@@ -413,6 +413,7 @@ async function askCoach(
     }),
   );
   if (reply === 'coach-failed') return reply;
+  if (reply.usage) logWeekDraftUsage(athleteId, { ...reply.usage, maxTokens: DRAFT_MAX_TOKENS });
 
   const proposal = proposalFrom(athleteId, reply, window);
   if (!proposal) return 'malformed';
