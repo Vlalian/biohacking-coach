@@ -224,14 +224,7 @@ async function appendInOrder(
   if (entries.length === 0) return [];
 
   for (let attempt = 0; ; attempt++) {
-    const [last] = await getDb()
-      .select({ seq: messages.seq })
-      .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(desc(messages.seq))
-      .limit(1);
-
-    const startSeq = nextSeq(last ? [last] : []);
+    const startSeq = await readNextSeq(conversationId);
     try {
       const rows = await getDb()
         .insert(messages)
@@ -241,9 +234,21 @@ async function appendInOrder(
         .returning();
       return rows.map(toMessage);
     } catch (error) {
+      // Stryker disable next-line EqualityOperator — `>=` vs `>` is three retries or four before the same error surfaces; no caller can tell
       if (attempt >= SEQ_RETRIES || !isSeqConflict(error)) throw error;
     }
   }
+}
+
+/** The seq the next message in this conversation takes: one past the highest stored, or 0. */
+async function readNextSeq(conversationId: string): Promise<number> {
+  const highest = await getDb()
+    .select({ seq: messages.seq })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(desc(messages.seq))
+    .limit(1);
+  return nextSeq(highest);
 }
 
 // ── Coach Briefing (slice 13) ─────────────────────────────────────────────────

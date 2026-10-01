@@ -1,63 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { and, eq } from 'drizzle-orm';
-import {
-  athlete as athleteTable,
-  events as eventsTable,
-  pastRace as pastRaceTable,
-  race as raceTable,
-  type RaceRow,
-} from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { athlete as athleteTable, events as eventsTable, race as raceTable } from '@/db/schema';
+import { createTestDatabase, seedAthlete, type TestDatabase } from '@/test/pglite';
 
-const rows: RaceRow[] = [];
+/**
+ * Races against a real Postgres (`src/test/pglite.ts`, `code-health/30`): each
+ * test writes through the repository and reads the rows back, so what is
+ * asserted is what a caller would find stored — never which statements were
+ * issued to get there. The partial unique index that allows one Target Race per
+ * athlete is the migrated one, enforced as Postgres enforces it.
+ */
 
-const orderBy = vi.fn(() => Promise.resolve(rows));
-const selectWhere = vi.fn(() => ({ orderBy }));
-
-const inserted: unknown[] = [];
-const insertTables: unknown[] = [];
-const returning = vi.fn(() => Promise.resolve([{ id: 'race_new' }]));
-const insertValues = vi.fn((v: unknown) => {
-  inserted.push(v);
-  return { returning };
-});
-
-const updates: { set: unknown; where: unknown }[] = [];
-const updateTables: unknown[] = [];
-const updateWhere = vi.fn((w: unknown) => {
-  updates[updates.length - 1].where = w;
-  return Promise.resolve();
-});
-const set = vi.fn((v: unknown) => {
-  updates.push({ set: v, where: null });
-  return { where: updateWhere };
-});
-
-// Like the driver, a batch refuses anything that is not a statement.
-const batch = vi.fn((statements: unknown[]) =>
-  statements.every((s) => s != null) ? Promise.all(statements) : Promise.reject(new TypeError('not a statement')),
-);
-
-const deletes: unknown[] = [];
-const deleteWhere = vi.fn((w: unknown) => {
-  deletes.push(w);
-  return Promise.resolve();
-});
-
-vi.mock('@/db', () => ({
-  getDb: () => ({
-    select: () => ({ from: () => ({ where: selectWhere }) }),
-    insert: (table: unknown) => {
-      insertTables.push(table);
-      return { values: insertValues };
-    },
-    update: (table: unknown) => {
-      updateTables.push(table);
-      return { set };
-    },
-    delete: () => ({ where: deleteWhere }),
-    batch,
-  }),
-}));
+let testDb: TestDatabase;
+vi.mock('@/db', () => ({ getDb: () => testDb.db }));
 
 const {
   createRace,
@@ -74,257 +29,430 @@ const {
   addRace,
 } = await import('./race-repository');
 
-function race(overrides: Partial<RaceRow> = {}): RaceRow {
-  return {
-    id: 'race_1',
-    athleteId: 'athlete_1',
-    name: 'Ironman Copenhagen',
-    date: '2027-08-15',
-    distance: 'Full',
-    isTarget: true,
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
+// Booting and migrating is seconds; the default five would fail on a cold start.
+beforeAll(async () => {
+  testDb = await createTestDatabase();
+}, 60_000);
 
-beforeEach(() => {
-  rows.length = 0;
-  inserted.length = 0;
-  updates.length = 0;
-  updateTables.length = 0;
-  deletes.length = 0;
-  batch.mockClear();
+afterEach(async () => {
+  await testDb.reset();
 });
 
-describe('a Race is a record of its own', () => {
-  it('is created with a name, a date and a distance, and answers with its id', async () => {
-    const id = await createRace('athlete_1', {
-      name: 'Ironman Copenhagen',
-      date: '2027-08-15',
-      distance: 'Full',
-    });
+const anAthlete = (tag: string) => seedAthlete(testDb.db, tag);
 
-    expect(id).toBe('race_new');
-    expect(inserted[0]).toMatchObject({
-      athleteId: 'athlete_1',
-      name: 'Ironman Copenhagen',
-      date: '2027-08-15',
-      distance: 'Full',
-    });
+const COPENHAGEN = { name: 'Ironman Copenhagen', date: '2027-08-15', distance: 'Full' as const };
+const KALMAR = { name: 'Ironman Kalmar', date: '2028-08-19', distance: 'Full' as const };
+const ODENSE = { name: 'Olympic Odense', date: '2027-03-01', distance: 'Olympic' as const };
+
+/** What is stored for an athlete, in the shape a reader cares about. */
+async function stored(athleteId: string) {
+  return (await getRaces(athleteId)).map((r) => ({
+    name: r.name,
+    date: r.date,
+    distance: r.distance,
+    isTarget: r.isTarget,
+  }));
+}
+
+describe('a Race is a record of its own', () => {
+  it('is stored with its name, date and distance, and the id that comes back is the stored row', async () => {
+    const athleteId = await anAthlete('a');
+
+    const id = await createRace(athleteId, COPENHAGEN);
+
+    const [row] = await getRaces(athleteId);
+    expect(row.id).toBe(id);
+    expect(row).toMatchObject({ athleteId, ...COPENHAGEN });
   });
 
-  it('reads back what an athlete has', async () => {
-    rows.push(race(), race({ id: 'race_2', name: 'Kalmar', isTarget: false }));
-    expect((await getRaces('athlete_1')).map((r) => r.name)).toEqual([
+  it('reads back every race the athlete has, earliest first', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, KALMAR, { asTarget: false });
+    await createRace(athleteId, COPENHAGEN);
+    await createRace(athleteId, ODENSE, { asTarget: false });
+
+    expect((await getRaces(athleteId)).map((r) => r.name)).toEqual([
+      'Olympic Odense',
       'Ironman Copenhagen',
-      'Kalmar',
+      'Ironman Kalmar',
     ]);
+  });
+
+  it('reads only the asking athlete’s races', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await createRace(theirs, COPENHAGEN);
+
+    expect(await getRaces(mine)).toEqual([]);
   });
 
   it('lets an athlete have none at all', async () => {
     // Zero races is a real, expected state, not an error: "ready to start the
     // next block" is as valid a goal as a start line.
-    expect(await getRaces('athlete_1')).toEqual([]);
-    expect(await getTargetRace('athlete_1')).toBeNull();
-  });
-});
-
-describe('the Target Race is one of them, and it rotates', () => {
-  it('is the athlete race flagged as the target', async () => {
-    rows.push(race({ id: 'race_2', name: 'Kalmar' }));
-    expect((await getTargetRace('athlete_1'))?.name).toBe('Kalmar');
-  });
-
-  it('asks the database for the flagged race, not merely for the athlete', () => {
-    // The filter is the whole query — the mocked driver returns whatever it is
-    // given, so a `where` that dropped `is_target` would still pass the test
-    // above while returning a race the athlete is not pointed at. Comparing
-    // against the clause drizzle itself builds is what makes that observable.
-    expect(selectWhere).toHaveBeenCalledWith(
-      and(eq(raceTable.athleteId, 'athlete_1'), eq(raceTable.isTarget, true)),
-    );
-  });
-
-  it('moves the flag rather than adding a second one', async () => {
-    // Being the target is a property that rotates as races pass, not a
-    // permanent one. Clearing and setting go in a single `db.batch` — the
-    // partial unique index allows one target per athlete, so two separate round
-    // trips could land the set before the clear and be rejected by the database.
-    await setTargetRace('athlete_1', 'race_2');
-
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(updates).toHaveLength(2);
-    expect(updates[0].set).toEqual({ isTarget: false });
-    expect(updates[1].set).toEqual({ isTarget: true });
-  });
-});
-
-describe('editing the Target Race after onboarding', () => {
-  it('updates the race the athlete already has, rather than adding another', async () => {
-    rows.push(race({ id: 'race_1' }));
-
-    await upsertTargetRace('athlete_1', {
-      name: 'Ironman Kalmar',
-      date: '2028-08-19',
-      distance: 'Full',
-    });
-
-    expect(inserted).toHaveLength(0);
-    expect(updates).toHaveLength(1);
-    expect(updates[0].set).toEqual({
-      name: 'Ironman Kalmar',
-      date: '2028-08-19',
-      distance: 'Full',
-    });
-  });
-
-  it('creates one when the athlete has no Target Race yet', async () => {
-    // An athlete who onboarded with "no race yet" and has since booked one.
-    await upsertTargetRace('athlete_1', {
-      name: 'Ironman Kalmar',
-      date: '2028-08-19',
-      distance: 'Full',
-    });
-
-    expect(updates).toHaveLength(0);
-    expect(inserted[0]).toMatchObject({
-      athleteId: 'athlete_1',
-      name: 'Ironman Kalmar',
-      isTarget: true,
-    });
-  });
-
-  it('clears the target without deleting the races themselves', async () => {
-    // A race that has been run is a record, and slice 09 reads them. Only the
-    // pointer is cleared, which is what "between races" actually means.
-    await clearTargetRace('athlete_1');
-
-    expect(updates).toHaveLength(1);
-    expect(updates[0].set).toEqual({ isTarget: false });
+    const athleteId = await anAthlete('a');
+    expect(await getRaces(athleteId)).toEqual([]);
+    expect(await getTargetRace(athleteId)).toBeNull();
   });
 });
 
 describe('what a Race is created as by default', () => {
   it('is the Target Race unless told otherwise', async () => {
-    await createRace('athlete_1', {
-      name: 'Ironman Copenhagen',
-      date: '2027-08-15',
-      distance: 'Full',
-    });
-    expect(inserted[0]).toMatchObject({ isTarget: true });
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+    expect((await getTargetRace(athleteId))?.name).toBe('Ironman Copenhagen');
   });
 
   it('is not the target when added alongside an existing one (slice 09)', async () => {
-    await createRace(
-      'athlete_1',
-      { name: 'Kalmar', date: '2028-08-19', distance: 'Full' },
-      { asTarget: false },
-    );
-    expect(inserted[0]).toMatchObject({ isTarget: false });
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+    await createRace(athleteId, KALMAR, { asTarget: false });
+
+    expect(await stored(athleteId)).toEqual([
+      { ...COPENHAGEN, isTarget: true },
+      { ...KALMAR, isTarget: false },
+    ]);
+  });
+
+  it('cannot be a second target: the database holds one per athlete', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    await expect(createRace(athleteId, KALMAR)).rejects.toThrow();
+    expect(await stored(athleteId)).toEqual([{ ...COPENHAGEN, isTarget: true }]);
+  });
+});
+
+describe('the Target Race is one of them, and it rotates', () => {
+  it('is the race flagged as the target, not merely the athlete’s first', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, ODENSE, { asTarget: false });
+    await createRace(athleteId, KALMAR);
+
+    expect((await getTargetRace(athleteId))?.name).toBe('Ironman Kalmar');
+  });
+
+  it('is the asking athlete’s own target', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await createRace(theirs, COPENHAGEN);
+
+    expect(await getTargetRace(mine)).toBeNull();
+  });
+
+  it('moves the flag rather than adding a second one', async () => {
+    // Clear and set go in one batch: the partial unique index allows one target
+    // per athlete, so a set landing before the clear would be refused.
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+    const kalmar = await createRace(athleteId, KALMAR, { asTarget: false });
+
+    await setTargetRace(athleteId, kalmar);
+
+    expect(await stored(athleteId)).toEqual([
+      { ...COPENHAGEN, isTarget: false },
+      { ...KALMAR, isTarget: true },
+    ]);
+  });
+
+  it('leaves another athlete’s target where it was', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    const myKalmar = await createRace(mine, KALMAR, { asTarget: false });
+    await createRace(theirs, COPENHAGEN);
+
+    await setTargetRace(mine, myKalmar);
+
+    expect((await getTargetRace(theirs))?.name).toBe('Ironman Copenhagen');
+  });
+
+  it('cannot point one athlete at another athlete’s race', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await createRace(mine, COPENHAGEN);
+    const theirKalmar = await createRace(theirs, KALMAR, { asTarget: false });
+
+    await setTargetRace(mine, theirKalmar);
+
+    expect(await getTargetRace(theirs)).toBeNull();
+    expect(await getTargetRace(mine)).toBeNull();
+  });
+});
+
+describe('editing the Target Race after onboarding', () => {
+  it('updates the race the athlete already has, rather than adding another', async () => {
+    const athleteId = await anAthlete('a');
+    const id = await createRace(athleteId, COPENHAGEN);
+
+    await upsertTargetRace(athleteId, KALMAR);
+
+    const races = await getRaces(athleteId);
+    expect(races).toHaveLength(1);
+    expect(races[0]).toMatchObject({ id, ...KALMAR, isTarget: true });
+  });
+
+  it('edits only the target, not a race beside it', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, ODENSE, { asTarget: false });
+    await createRace(athleteId, COPENHAGEN);
+
+    await upsertTargetRace(athleteId, KALMAR);
+
+    expect(await stored(athleteId)).toEqual([
+      { ...ODENSE, isTarget: false },
+      { ...KALMAR, isTarget: true },
+    ]);
+  });
+
+  it('creates one, as the target, when the athlete has no Target Race yet', async () => {
+    // An athlete who onboarded with "no race yet" and has since booked one.
+    const athleteId = await anAthlete('a');
+
+    await upsertTargetRace(athleteId, KALMAR);
+
+    expect(await stored(athleteId)).toEqual([{ ...KALMAR, isTarget: true }]);
+  });
+
+  it('clears the target without deleting the races themselves', async () => {
+    // A race that has been run is a record, and slice 09 reads them. Only the
+    // pointer is cleared, which is what "between races" actually means.
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    await clearTargetRace(athleteId);
+
+    expect(await stored(athleteId)).toEqual([{ ...COPENHAGEN, isTarget: false }]);
+    expect(await getTargetRace(athleteId)).toBeNull();
+  });
+
+  it('clears only the asking athlete’s target', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await createRace(mine, COPENHAGEN);
+    await createRace(theirs, KALMAR);
+
+    await clearTargetRace(mine);
+
+    expect((await getTargetRace(theirs))?.name).toBe('Ironman Kalmar');
   });
 });
 
 describe('removing a Race (slice 09)', () => {
-  it('deletes only the acting athlete’s race — the athlete id is in the WHERE, not just the race id', async () => {
-    // A race id alone would let anyone holding one delete another athlete's
-    // record (ADR 0006). Asserted against the clause drizzle builds, the same
-    // way the target read is.
-    await deleteRace('athlete_1', 'race_2');
+  it('deletes the athlete’s race and keeps the rest', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+    const kalmar = await createRace(athleteId, KALMAR, { asTarget: false });
 
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]).toEqual(and(eq(raceTable.athleteId, 'athlete_1'), eq(raceTable.id, 'race_2')));
+    await deleteRace(athleteId, kalmar);
+
+    expect(await stored(athleteId)).toEqual([{ ...COPENHAGEN, isTarget: true }]);
+  });
+
+  it('a race id alone deletes nothing that is not the caller’s (ADR 0006)', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    const theirRace = await createRace(theirs, COPENHAGEN);
+
+    await deleteRace(mine, theirRace);
+
+    expect(await getRaces(theirs)).toHaveLength(1);
+  });
+});
+
+describe('the batch the target rotation relies on', () => {
+  it('a batch whose second statement fails leaves the first unwritten', async () => {
+    // What makes `setTargetRace` safe is that neon-http runs a batch as one
+    // transaction. The in-process stand-in must do the same, or the tests above
+    // would pass against a batch that half-applies.
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+    const db = testDb.db;
+
+    await expect(
+      db.batch([
+        db.update(raceTable).set({ isTarget: false }),
+        db.insert(raceTable).values({ athleteId: 'not-a-uuid', ...KALMAR }),
+      ]),
+    ).rejects.toThrow();
+
+    expect(await stored(athleteId)).toEqual([{ ...COPENHAGEN, isTarget: true }]);
   });
 });
 
 describe('past races — the races the athlete has finished (training-architecture/35)', () => {
   const HALF = { distance: 'Half' as const, date: '2025-08-16', finishSeconds: null, note: null };
+  const OLYMPIC = { distance: 'Olympic' as const, date: '2024-06-01', finishSeconds: 9000, note: 'first' };
 
-  it('replacePastRaces deletes the athlete’s rows and inserts the new ones in one batch', async () => {
-    await replacePastRaces('athlete_1', [HALF, { ...HALF, distance: 'Olympic', date: '2024-06-01' }]);
-    expect(deletes).toEqual([eq(pastRaceTable.athleteId, 'athlete_1')]);
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(inserted).toEqual([
-      [
-        expect.objectContaining({ athleteId: 'athlete_1', distance: 'Half', date: '2025-08-16' }),
-        expect.objectContaining({ athleteId: 'athlete_1', distance: 'Olympic', date: '2024-06-01' }),
-      ],
-    ]);
+  const pastOf = async (athleteId: string) =>
+    (await getPastRaces(athleteId)).map((r) => ({
+      distance: r.distance,
+      date: r.date,
+      finishSeconds: r.finishSeconds,
+      note: r.note,
+    }));
+
+  it('replacePastRaces stores the list, earliest first', async () => {
+    const athleteId = await anAthlete('a');
+
+    await replacePastRaces(athleteId, [HALF, OLYMPIC]);
+
+    expect(await pastOf(athleteId)).toEqual([OLYMPIC, HALF]);
   });
 
-  it('replacePastRaces with no rows only clears — an empty insert is not a statement', async () => {
-    await replacePastRaces('athlete_1', []);
-    expect(deletes).toEqual([eq(pastRaceTable.athleteId, 'athlete_1')]);
-    expect(batch).not.toHaveBeenCalled();
-    expect(inserted).toEqual([]);
+  it('replacePastRaces replaces rather than appends, so a re-run cannot double the list', async () => {
+    const athleteId = await anAthlete('a');
+    await replacePastRaces(athleteId, [HALF, OLYMPIC]);
+
+    await replacePastRaces(athleteId, [HALF]);
+
+    expect(await pastOf(athleteId)).toEqual([HALF]);
   });
 
-  it('getPastRaces reads the athlete’s rows, earliest first', async () => {
-    await getPastRaces('athlete_1');
-    expect(selectWhere).toHaveBeenCalledWith(eq(pastRaceTable.athleteId, 'athlete_1'));
-    expect(orderBy).toHaveBeenCalled();
+  it('replacePastRaces with no rows empties the list', async () => {
+    const athleteId = await anAthlete('a');
+    await replacePastRaces(athleteId, [HALF]);
+
+    await replacePastRaces(athleteId, []);
+
+    expect(await getPastRaces(athleteId)).toEqual([]);
   });
 
-  it('addPastRace inserts for the athlete and returns the id; deletePastRace is athlete-scoped', async () => {
-    expect(await addPastRace('athlete_1', HALF)).toBe('race_new');
-    expect(inserted[0]).toEqual({ athleteId: 'athlete_1', ...HALF });
-    expect(returning).toHaveBeenCalledWith({ id: pastRaceTable.id });
-    await deletePastRace('athlete_1', 'pr_2');
-    expect(deletes).toEqual([and(eq(pastRaceTable.athleteId, 'athlete_1'), eq(pastRaceTable.id, 'pr_2'))]);
+  it('replacePastRaces touches only the athlete it is given', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await replacePastRaces(theirs, [HALF]);
+
+    await replacePastRaces(mine, []);
+    await replacePastRaces(mine, [OLYMPIC]);
+
+    expect(await pastOf(theirs)).toEqual([HALF]);
+  });
+
+  it('a replace that fails keeps the list it would have cleared', async () => {
+    const athleteId = await anAthlete('a');
+    await replacePastRaces(athleteId, [HALF]);
+
+    await expect(
+      replacePastRaces(athleteId, [{ ...OLYMPIC, date: 'not a date' }]),
+    ).rejects.toThrow();
+
+    expect(await pastOf(athleteId)).toEqual([HALF]);
+  });
+
+  it('addPastRace stores one more and answers with its id; deletePastRace removes it', async () => {
+    const athleteId = await anAthlete('a');
+    await addPastRace(athleteId, HALF);
+
+    const id = await addPastRace(athleteId, OLYMPIC);
+    expect((await getPastRaces(athleteId)).find((r) => r.id === id)).toMatchObject(OLYMPIC);
+
+    await deletePastRace(athleteId, id);
+    expect(await pastOf(athleteId)).toEqual([HALF]);
+  });
+
+  it('deletePastRace deletes nothing that is not the caller’s (ADR 0006)', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    const theirRace = await addPastRace(theirs, HALF);
+
+    await deletePastRace(mine, theirRace);
+
+    expect(await pastOf(theirs)).toEqual([HALF]);
+  });
+
+  it('getPastRaces reads only the asking athlete’s', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await addPastRace(theirs, HALF);
+
+    expect(await getPastRaces(mine)).toEqual([]);
   });
 });
 
 describe('addRace: the race, its target flag, the mirror and the event in one batch (CodeRabbit, PR #115)', () => {
-  const kbh = { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' as const };
+  const KBH = { name: 'IM Kbh', date: '2027-09-15', distance: 'Full' as const };
 
-  beforeEach(() => {
-    inserted.length = 0;
-    insertTables.length = 0;
+  const mirrorOf = async (athleteId: string) =>
+    (await testDb.db.select({ raceTarget: athleteTable.raceTarget }).from(athleteTable).where(eq(athleteTable.id, athleteId)))[0]
+      .raceTarget;
+  const raceAddedEvents = () => testDb.db.select().from(eventsTable).where(eq(eventsTable.type, 'race_added'));
+
+  it('stores a tune-up with its race_added event, and touches neither the target nor the mirror', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    const id = await addRace(athleteId, KBH, 'none');
+
+    expect(await stored(athleteId)).toEqual([
+      { ...COPENHAGEN, isTarget: true },
+      { ...KBH, isTarget: false },
+    ]);
+    expect(await mirrorOf(athleteId)).toBeNull();
+    expect(await raceAddedEvents()).toEqual([
+      expect.objectContaining({
+        athleteId,
+        actorType: 'athlete',
+        actorId: athleteId,
+        payload: { raceId: id, ...KBH, isTarget: false },
+      }),
+    ]);
   });
 
-  it('writes a tune-up and its race_added event together, and touches no target', async () => {
-    const id = await addRace('athlete_1', kbh, 'none');
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(insertTables).toEqual([raceTable, eventsTable]);
-    expect(inserted[0]).toEqual({ id, athleteId: 'athlete_1', ...kbh, isTarget: false });
-    expect(inserted[1]).toEqual({
-      athleteId: 'athlete_1',
-      actorType: 'athlete',
-      actorId: 'athlete_1',
-      type: 'race_added',
-      payload: { raceId: id, ...kbh, isTarget: false },
-    });
-    expect(updates).toEqual([]);
+  it('stores a first race as the target, with the mirror and the event', async () => {
+    const athleteId = await anAthlete('a');
+
+    const id = await addRace(athleteId, KBH, 'first');
+
+    expect((await getTargetRace(athleteId))?.id).toBe(id);
+    expect(await mirrorOf(athleteId)).toBe('IM Kbh');
+    expect((await raceAddedEvents()).map((e) => e.payload)).toEqual([{ raceId: id, ...KBH, isTarget: true }]);
   });
 
-  it('writes a first race as the target, with the mirror, in the same batch', async () => {
-    const id = await addRace('athlete_1', kbh, 'first');
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(inserted[0]).toMatchObject({ id, isTarget: true });
-    expect(updateTables).toEqual([athleteTable]);
-    expect(updates[0].set).toMatchObject({ raceTarget: 'IM Kbh' });
-    expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
+  it('replaces a target: the old flag is cleared before the new race lands flagged', async () => {
+    // The partial unique index allows one target per athlete, so a batch that
+    // inserted the flagged race before clearing the old flag would be refused.
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    const id = await addRace(athleteId, KBH, 'replace');
+
+    expect(await stored(athleteId)).toEqual([
+      { ...COPENHAGEN, isTarget: false },
+      { ...KBH, isTarget: true },
+    ]);
+    expect((await getTargetRace(athleteId))?.id).toBe(id);
+    expect(await mirrorOf(athleteId)).toBe('IM Kbh');
   });
 
-  it('replaces a target by clearing the old flag before the new race is inserted flagged', async () => {
-    const id = await addRace('athlete_1', kbh, 'replace');
-    expect(batch).toHaveBeenCalledTimes(1);
-    expect(updateTables).toEqual([raceTable, athleteTable]);
-    expect(updates[0]).toEqual({ set: { isTarget: false }, where: eq(raceTable.athleteId, 'athlete_1') });
-    expect(inserted[0]).toMatchObject({ id, isTarget: true });
-    expect(inserted[1]).toMatchObject({ payload: { raceId: id, isTarget: true } });
-    // The partial unique index allows one target, so the batch must run the
-    // clear before the flagged insert, or the database rejects the write.
-    const [clear] = updateWhere.mock.results.slice(-2).map((r) => r.value);
-    const [insert] = insertValues.mock.results.slice(-2).map((r) => r.value);
-    const statements = batch.mock.calls[0][0];
-    expect(statements[0]).toBe(clear);
-    expect(statements[1]).toBe(insert);
+  it('replaces only the asking athlete’s target', async () => {
+    const mine = await anAthlete('a');
+    const theirs = await anAthlete('b');
+    await createRace(theirs, COPENHAGEN);
+
+    await addRace(mine, KBH, 'replace');
+
+    expect((await getTargetRace(theirs))?.name).toBe('Ironman Copenhagen');
+    expect(await mirrorOf(theirs)).toBeNull();
   });
 
-  it('gives the race a fresh id each time, the same one the event carries', async () => {
-    const a = await addRace('athlete_1', kbh, 'none');
-    const b = await addRace('athlete_1', kbh, 'none');
+  it('writes nothing when a part of the batch fails — no race without its event', async () => {
+    const athleteId = await anAthlete('a');
+    await createRace(athleteId, COPENHAGEN);
+
+    // 'first' beside an existing target: the flagged insert is refused by the
+    // index, and the event and mirror in the same batch must go with it.
+    await expect(addRace(athleteId, KBH, 'first')).rejects.toThrow();
+
+    expect(await stored(athleteId)).toEqual([{ ...COPENHAGEN, isTarget: true }]);
+    expect(await raceAddedEvents()).toEqual([]);
+    expect(await mirrorOf(athleteId)).toBeNull();
+  });
+
+  it('gives each race a fresh id, the one its event carries', async () => {
+    const athleteId = await anAthlete('a');
+    const a = await addRace(athleteId, KBH, 'none');
+    const b = await addRace(athleteId, KBH, 'none');
+
     expect(a).not.toBe(b);
-    expect(a).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await raceAddedEvents()).map((e) => (e.payload as { raceId: string }).raceId).sort()).toEqual([a, b].sort());
   });
 });

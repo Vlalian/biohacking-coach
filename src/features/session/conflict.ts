@@ -58,6 +58,15 @@ export type SessionConflict = {
 /** The subset of a session a write can set, as strings for display. */
 export type AttemptedChange = Partial<Record<ConflictField, string | null>>;
 
+/**
+ * A duration as a conflict shows what the writer tried: minutes as text, or
+ * null when they cleared it. The athlete's edit and the Head Coach's edit both
+ * report one, and had each written the conversion out for itself.
+ */
+export function attemptedDuration(minutes: number | null): string | null {
+  return minutes === null ? null : String(minutes);
+}
+
 const COMPARED: readonly ConflictField[] = [
   'date',
   'type',
@@ -73,8 +82,7 @@ const COMPARED: readonly ConflictField[] = [
 
 /** Renders a stored value as the string the divergence list compares and shows. */
 function display(value: string | number | boolean | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
+  const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
 }
 
@@ -137,6 +145,8 @@ export function isRedundant(conflict: SessionConflict): boolean {
   if (conflict.intent === 'delete') return conflict.current === null;
 
   // An edit is redundant when the winner already set everything it wanted. A
-  // deleted row is never that: there is nothing left to have wanted.
-  return conflict.current !== null && conflict.divergences.length === 0;
+  // deleted row is never that: there is nothing left to have wanted — and
+  // `describeConflict` reports a deleted row as the `deleted` divergence, so
+  // an empty list already means the row is there.
+  return conflict.divergences.length === 0;
 }

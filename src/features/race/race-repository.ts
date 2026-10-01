@@ -96,7 +96,6 @@ export async function addRace(athleteId: string, newRace: NewRace, addedAs: Adde
     payload: { raceId: id, ...newRace, isTarget } satisfies RaceAdded,
   });
   if (!isTarget) {
-    // Stryker disable next-line ArrayDeclaration — equivalent under the unit mock, which cannot apply a batch; atomicity is db.batch's job, and the fake-db ticket will make it testable.
     await db.batch([insert, event]);
     return id;
   }
@@ -108,7 +107,6 @@ export async function addRace(athleteId: string, newRace: NewRace, addedAs: Adde
     .update(athlete)
     .set({ raceTarget: newRace.name, updatedAt: new Date() })
     .where(eq(athlete.id, athleteId));
-  // Stryker disable next-line ArrayDeclaration — equivalent under the unit mock, which cannot apply a batch; atomicity is db.batch's job, and the fake-db ticket will make it testable.
   await (clear ? db.batch([clear, insert, mirror, event]) : db.batch([insert, mirror, event]));
   return id;
 }
