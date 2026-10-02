@@ -1,6 +1,6 @@
 import type { Session } from '@/features/session/session';
 import type { SessionMoveFact } from '@/features/session/session-move-repository';
-import { logPatternsDetected } from '@/lib/coach-log';
+import { logPatternsDetected, type PatternSurface } from '@/lib/coach-log';
 import type { LinkVisibility } from './link-visibility';
 import { detectPatterns, patternHistoryOf, topPatterns, visiblePatterns, type Pattern } from './pattern-insight';
 
@@ -14,7 +14,7 @@ import { detectPatterns, patternHistoryOf, topPatterns, visiblePatterns, type Pa
  */
 export function surfacePatterns(
   athleteId: string,
-  surface: 'coach_chat' | 'briefing',
+  surface: PatternSurface,
   context: { patternSessions: Session[]; patternMoves: SessionMoveFact[] },
   today: string,
   visibility?: LinkVisibility,

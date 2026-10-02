@@ -404,6 +404,17 @@ describe('boundaries: the recent week of a shift', () => {
     ]);
   });
 
+  it('needs three earlier ratings to compare the recent week with', () => {
+    // Review finding, ruling 6: a baseline of one or two sessions is not a normal.
+    // Two earlier weeks of three sessions (indexes 0-5), then last week (6-8) all Body 1. Mind keeps every session rated.
+    const two = weeks(3, 3, (i) => (i < 6 ? { body: i < 2 ? 4 : null, mind: 4 } : { body: 1 }));
+    expect(familyOf(detect(two), 'shift').filter((p) => p.subject === 'body')).toEqual([]);
+    const three = weeks(3, 3, (i) => (i < 6 ? { body: i < 3 ? 4 : null, mind: 4 } : { body: 1 }));
+    expect(familyOf(detect(three), 'shift').filter((p) => p.subject === 'body')).toEqual([
+      expect.objectContaining({ numbers: { baseline: 4, recent: 1 } }),
+    ]);
+  });
+
   it('names no shift for a measure with nothing before the recent week', () => {
     // Body is rated only last week; Mind carries the history.
     const history = weeks(6, 3, (i) => ({ body: i >= 15 ? 1 : null }));

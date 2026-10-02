@@ -324,20 +324,21 @@ const PATTERNS_RULES =
   `Never raise one out of nowhere. Say it as an observation, never a verdict ("I've noticed… worth talking about?"). ` +
   'Say how sure you are: one marked as resting on few sessions is a hunch, and you say so. You may quote the numbers. ' +
   'A skipped or moved weekday means the day may be wrong, not the body: never call it pushing back. ' +
+  'For one, point the athlete to the fix they can make now, marking that weekday unavailable themselves; do not propose a change to the week for it. ' +
   'These are the only patterns you may name.';
 
 /** Below this many sessions a pattern is a hunch, and its line says so (ruling 11: Declared Uncertainty). */
 const FEW_SESSIONS = 10;
 
-const n = (x: number | undefined): number => Math.round((x ?? 0) * 10) / 10;
+const roundTenth = (x: number | undefined): number => Math.round((x ?? 0) * 10) / 10;
 const capital = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
 
 /** One plain sentence per family, built from the numbers the detector found. */
 const PATTERN_LINE: Record<PatternFamily, (p: Pattern) => string> = {
-  shift: (p) => `${capital(p.subject)} ratings have gone ${p.direction}: usually ${n(p.numbers.baseline)}, lately ${n(p.numbers.recent)}`,
+  shift: (p) => `${capital(p.subject)} ratings have gone ${p.direction}: usually ${roundTenth(p.numbers.baseline)}, lately ${roundTenth(p.numbers.recent)}`,
   kind: (p) =>
     `${capital(p.metric as string)} ratings for ${p.subject} sessions run ${p.direction === 'down' ? 'lower' : 'higher'}: ` +
-    `${n(p.numbers.median)} against ${n(p.numbers.others)} for the rest`,
+    `${roundTenth(p.numbers.median)} against ${roundTenth(p.numbers.others)} for the rest`,
   schedule: (p) =>
     p.numbers.skipped === undefined
       ? `Sessions are often moved away from ${p.subject}: ${p.numbers.moved} times`
@@ -345,8 +346,8 @@ const PATTERN_LINE: Record<PatternFamily, (p: Pattern) => string> = {
   'body-push-back': (p) => `A skip has followed a low Body rating ${p.numbers.pairs} times`,
   'effort-drift': (p) =>
     p.metric === 'pace'
-      ? `Pace on similar ${p.subject} sessions has gone ${p.direction}: ${n(p.numbers.baseline)} to ${n(p.numbers.recent)} metres a minute`
-      : `Average heart rate on similar ${p.subject} sessions has gone ${p.direction}: ${n(p.numbers.baseline)} to ${n(p.numbers.recent)}`,
+      ? `Pace on similar ${p.subject} sessions has gone ${p.direction}: ${roundTenth(p.numbers.baseline)} to ${roundTenth(p.numbers.recent)} metres a minute`
+      : `Average heart rate on similar ${p.subject} sessions has gone ${p.direction}: ${roundTenth(p.numbers.baseline)} to ${roundTenth(p.numbers.recent)}`,
   'low-body-after-intensity': (p) => `Body has been low the session after an Intensity session ${p.numbers.times} times`,
   'sleep-intensity': (p) => `An Intensity session was pushed back after a short night ${p.numbers.times} times`,
   'pulse-push-back': (p) => `Sessions were pushed back with a raised resting pulse ${p.numbers.times} times`,

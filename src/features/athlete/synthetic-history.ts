@@ -542,6 +542,8 @@ export function toSessionRows(
  * the app does not have, which is the failure `NO_CHECK_IN` exists to stop. No
  * device summary either: the generator writes none.
  */
+// Export-for-test: the generator plants a dip for Pattern Insight to find, and
+// only a test can prove it does; seeding itself never needs PatternSession rows.
 export function toPatternHistory(sessions: readonly SyntheticSession[]): PatternSession[] {
   return sessions.map((s) => ({
     date: s.date,

@@ -289,8 +289,8 @@ describe('Session Moves, reflection comments and what the athlete said lately (t
     expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
     vi.clearAllMocks();
     await readAthleteContext('a1', TODAY, briefingInclude(link(true, true), true));
-    // It reads moves for Pattern Insight's twelve weeks, never the week's move signal.
-    expect(repo.getSessionMovesSince).not.toHaveBeenCalledWith('a1', THIS_WEEK);
+    // It reads moves once, for Pattern Insight's twelve weeks, and never the week's move signal.
+    expect(repo.getSessionMovesSince.mock.calls).toEqual([['a1', '2026-07-06']]);
     expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
   });
 
@@ -502,6 +502,10 @@ describe('the slices', () => {
 describe('the history Pattern Insight reads (training-architecture/50)', () => {
   const TWELVE_WEEKS_BACK = '2026-07-06';
 
+  // Asserted on the range the repositories are asked for, because that range is
+  // the contract: the repository mocks here return what they are given and do not
+  // apply a date range, so the window is visible nowhere else. The patterns built
+  // from what comes back are tested in `pattern-insight-service.test.ts`.
   it('reads twelve weeks of sessions and moves, through the end of this week', async () => {
     await readAthleteContext('a1', TODAY, { signals: ['patterns'] });
     expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', TWELVE_WEEKS_BACK, NEXT_WEEK);

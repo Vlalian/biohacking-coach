@@ -199,6 +199,12 @@ describe('patternsBlock — what Momentum is handed (training-architecture/50)',
     expect(patternsBlock([up])).toContain('- Mind ratings for swimming sessions run higher: 5 against 2 for the rest (18 sessions).');
   });
 
+  it('a schedule pattern points to the fix the athlete can make, and proposes nothing (Mads, 2026-10-01)', () => {
+    const text = patternsBlock([tuesdays]) as string;
+    expect(text).toMatch(/marking that weekday unavailable themselves/i);
+    expect(text).toMatch(/do not propose a change to the week for it/i);
+  });
+
   it('ten sessions is enough to stop calling it a hunch', () => {
     expect(patternsBlock([{ ...tuesdays, sample: 10 }])).toContain('3 of 4 (10 sessions).');
     expect(patternsBlock([{ ...tuesdays, sample: 9 }])).toContain('3 of 4 (rests on few sessions).');

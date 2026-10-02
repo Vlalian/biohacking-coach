@@ -1,6 +1,9 @@
 import type { BlockSetProblem } from '@/features/coach/training-blocks';
 import { refusalReason, type RefusalReason } from './identifiers';
 import type { Pattern } from '@/features/coach/pattern-insight';
+
+/** Where a pattern was detected for: the two surfaces that receive them (`training-architecture/50`). */
+export type PatternSurface = 'coach_chat' | 'briefing';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
 /**
@@ -339,7 +342,7 @@ export function logWeekDraftClamped(
  */
 export function logPatternsDetected(
   athleteId: string,
-  surface: 'coach_chat' | 'briefing',
+  surface: PatternSurface,
   found: readonly Pattern[],
   said: readonly Pattern[],
 ): void {

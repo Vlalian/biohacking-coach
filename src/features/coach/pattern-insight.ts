@@ -81,7 +81,7 @@ export interface Pattern {
 }
 
 /** Mads's starting values (ruling 7): tuned from the testers' data, not here. */
-export const PATTERN_THRESHOLDS = {
+const PATTERN_THRESHOLDS = {
   minWeeks: 3,
   minRatedSessions: 6,
   robustDeviations: 2,
@@ -142,8 +142,8 @@ function shiftOf(sessions: readonly PatternSession[], metric: 'body' | 'mind', t
   const rated = sessions.filter((x) => x[metric] !== null);
   const baseline = rated.filter((x) => x.date < since).map((x) => x[metric] as number);
   const recent = rated.filter((x) => x.date >= since).map((x) => x[metric] as number);
-  // An empty baseline has no median, so its strength is not a number and never strong enough.
-  if (recent.length < 2) return [];
+  // Ruling 6 asks for enough in the compared set: a normal needs at least three earlier ratings.
+  if (recent.length < 2 || baseline.length < T.minHeldOccurrences) return [];
   const [was, now] = [median(baseline), median(recent)];
   const strength = robustDeviations(now, baseline, RATING_FLOOR);
   if (!strongEnough(strength)) return [];
