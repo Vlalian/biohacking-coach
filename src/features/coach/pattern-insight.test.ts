@@ -580,6 +580,14 @@ describe('boundaries: pairing a session with the one before it', () => {
     ]);
   });
 
+  it('a skipped Intensity session is not intensity work, so the low Body after it is not this pattern', () => {
+    // CodeRabbit on #123: the pairing included skips, so a skipped Intensity session still counted.
+    const history = weeks(4, 4, (i) =>
+      i % 4 === 0 ? { type: 'Intensity', status: 'skipped', body: null, mind: null } : i % 4 === 1 ? { body: 1 } : {},
+    );
+    expect(familyOf(detect(history), 'low-body-after-intensity')).toEqual([]);
+  });
+
   it('only the session right after an Intensity one, and only a rated one', () => {
     const notIntensity = weeks(4, 4, (i) => (i % 4 === 1 ? { body: 1 } : {}));
     expect(familyOf(detect(notIntensity), 'low-body-after-intensity')).toEqual([]);

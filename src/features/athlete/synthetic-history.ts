@@ -457,10 +457,10 @@ export function generateSyntheticHistory(
       const reflection = skipped ? null : reflectionFor(afterIntensity, random);
       sessions.push(buildSession(profile, type, date, skipped, reflection, random));
 
-      // A skip leaves this untouched on purpose: a skipped session is filtered
-      // out of the history the detector reads, so from its point of view the
-      // next *completed* session is still the one following the intensity work.
-      if (!skipped) afterIntensity = type === 'Intensity';
+      // The detector reads skips too, and pairs each session with the one
+      // right before it, so the dip belongs only on the session straight after
+      // a *completed* Intensity session. A skip ends it either way.
+      afterIntensity = !skipped && type === 'Intensity';
     }
 
     const blocked = blockedDayFor(today, week, taken);

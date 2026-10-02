@@ -323,7 +323,9 @@ function pushBackOf(sessions: readonly PatternSession[], bodies: readonly number
 /** The old rule that needs only ratings and Session Type, on the robust baseline and the stored, capitalised type. */
 function lowBodyAfterIntensityOf(sessions: readonly PatternSession[], bodies: readonly number[]): Pattern[] {
   const held = pairs(sessions).filter(
-    ([before, x]) => before.type === 'Intensity' && x.body !== null && isLowBody(x.body, bodies),
+    // A skipped Intensity session is no intensity work: only a completed one counts (CodeRabbit on #123).
+    ([before, x]) =>
+      before.type === 'Intensity' && before.status === 'completed' && x.body !== null && isLowBody(x.body, bodies),
   ).length;
   return heldPattern('low-body-after-intensity', 'Intensity', { times: held }, held);
 }
