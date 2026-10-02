@@ -578,6 +578,24 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
 
       expect(stagedMinutes()).toEqual([70, 70]);
     });
+
+    it('keeps the arithmetic’s sport for each day unless Momentum said why (training-architecture/26)', async () => {
+      const input = {
+        sessions: [
+          { date: '2026-09-17', type: 'Endurance', durationMinutes: 100, zone: 'Z2', note: null, sport: 'swim' },
+          { date: '2026-09-18', type: 'Endurance', durationMinutes: 100, zone: 'Z2', note: null, sport: 'bike', sportReason: 'sore calf' },
+        ],
+      };
+      callCoach.mockResolvedValue({ text: 'Swapped.', toolCalls: [{ name: 'propose_week_plan', input }] });
+
+      await sendCoachChatMessage(ATHLETE, 'c1', 'calf is sore', TODAY);
+
+      const staged = (recordProposal.mock.calls[0] as unknown[])[2] as { sport: string; sportReason?: string }[];
+      expect(staged.map((x) => [x.sport, x.sportReason])).toEqual([
+        ['bike', undefined],
+        ['bike', 'sore calf'],
+      ]);
+    });
   });
 
   it('stages nothing, but still stores the turn, when the plan falls outside the window', async () => {
@@ -709,6 +727,7 @@ describe('Coach Chat sees the week', () => {
     origin: 'coach',
     isTraining: true,
     summary: null,
+    howTo: null,
     ...over,
   });
 

@@ -1,12 +1,27 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { PLAN_TYPES } from '@/features/coach/weekly-session';
 import type { WeekDraft } from '@/features/coach/week-draft';
+import type { HowTo } from '@/features/session/how-to';
+import { HowToBlock } from '@/components/session/how-to-block';
 import { addDays } from '@/lib/date';
+import type { Locale } from '@/i18n/routing';
 import { approveWeekDraftAction, type ApproveActionResult } from './week-draft-actions';
+import {
+  addedRow,
+  focusText,
+  howToOfRow,
+  rowsOf,
+  segmentMinutes,
+  startEditing,
+  toSessions,
+  withFocusText,
+  withSegment,
+  type DraftRow,
+} from './week-draft-rows';
 
 /**
  * The Head Coach's review of the week the Coach drafted, a day before the
@@ -30,28 +45,13 @@ import { approveWeekDraftAction, type ApproveActionResult } from './week-draft-a
  *
  * Renders nothing when there is no draft to review, and nothing after the
  * coach has approved (the approved version is no longer "waiting").
+ *
+ * Each card shows the session's how-to (`training-architecture/26`, E6): the
+ * template fitted to the card as it stands, Momentum's cue, and the sport with
+ * Momentum's reason when it changed it. The coach can edit the how-to; their
+ * text is then final, stored on the session and never refitted. The row
+ * rules live in `week-draft-rows.ts`.
  */
-
-type Row = { key: number; date: string; type: string; durationMinutes: string; zone: string; note: string };
-
-const rowsOf = (draft: WeekDraft): Row[] =>
-  draft.sessions.map((s, key) => ({
-    key,
-    date: s.date,
-    type: s.type,
-    durationMinutes: s.durationMinutes === null ? '' : String(s.durationMinutes),
-    zone: s.zone ?? '',
-    note: s.note ?? '',
-  }));
-
-const toSessions = (rows: Row[]) =>
-  rows.map((r) => ({
-    date: r.date,
-    type: r.type,
-    durationMinutes: r.durationMinutes.trim() === '' ? null : Number(r.durationMinutes),
-    zone: r.zone.trim() === '' ? null : r.zone,
-    note: r.note.trim() === '' ? null : r.note,
-  }));
 
 /** Monday through Sunday of the draft's week — the only days a session may sit on. */
 const daysOf = (weekStart: string): string[] => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -67,7 +67,8 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
   const t = useTranslations('WeekDraftReview');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [rows, setRows] = useState<Row[]>(draft ? rowsOf(draft) : []);
+  const locale = useLocale() as Locale;
+  const [rows, setRows] = useState<DraftRow[]>(draft ? rowsOf(draft.sessions) : []);
   // Keys outlive removals: the next added row must not reuse a removed row's.
   const [nextKey, setNextKey] = useState(draft ? draft.sessions.length : 0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -76,13 +77,16 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
 
   const days = daysOf(draft.weekStart);
 
-  const edit = (key: number, field: keyof Omit<Row, 'key'>, value: string) =>
+  const edit = (key: number, field: 'date' | 'type' | 'durationMinutes' | 'zone' | 'note', value: string) =>
     setRows((r) => r.map((x) => (x.key === key ? { ...x, [field]: value } : x)));
+
+  const setHowTo = (key: number, coachHowTo: HowTo | null) =>
+    setRows((r) => r.map((x) => (x.key === key ? { ...x, coachHowTo } : x)));
 
   const remove = (key: number) => setRows((r) => r.filter((x) => x.key !== key));
 
   const add = () => {
-    setRows((r) => [...r, { key: nextKey, date: days[0], type: PLAN_TYPES[0], durationMinutes: '', zone: '', note: '' }]);
+    setRows((r) => [...r, addedRow(nextKey, days[0], PLAN_TYPES[0])]);
     setNextKey((k) => k + 1);
   };
 
@@ -165,6 +169,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
                 onChange={(e) => edit(row.key, 'note', e.target.value)}
               />
             </label>
+            <RowHowTo row={row} locale={locale} field={field} onChange={(howTo) => setHowTo(row.key, howTo)} />
           </li>
         ))}
       </ol>
@@ -186,5 +191,89 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
 
       {notice && <p className="mt-2 font-body text-sm text-muted-foreground">{notice}</p>}
     </section>
+  );
+}
+
+/**
+ * One card's how-to: read-only until the coach chooses to edit it, then each
+ * segment's minutes, zone and what to do, and the focus a cue per line. The
+ * sum is shown against the session's minutes, since the server refuses a
+ * how-to that does not add up.
+ */
+function RowHowTo({
+  row,
+  locale,
+  field,
+  onChange,
+}: {
+  row: DraftRow;
+  locale: Locale;
+  field: string;
+  onChange: (howTo: HowTo | null) => void;
+}) {
+  const t = useTranslations('WeekDraftReview');
+  // The sport and the segment names as the read-only block names them, never the stored key.
+  const names = useTranslations('HowTo');
+  const view = howToOfRow(row, locale);
+  const label = 'flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground';
+  const button = 'inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal';
+  const editing = row.coachHowTo;
+  const start = () => onChange(startEditing(row, locale));
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3" data-row-how-to>
+      <p className="font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">{t('howTo')}</p>
+      {row.sport && <p className="font-body text-sm text-foreground">{t('sport', { sport: names(`sports.${row.sport}`) })}</p>}
+      {row.sportReason && <p className="font-body text-sm text-muted-foreground">{t('sportReason', { reason: row.sportReason })}</p>}
+      {view && !editing && <HowToBlock howTo={view} />}
+      {editing ? (
+        <div className="flex flex-col gap-3">
+          {editing.segments.map((segment, i) => (
+            <div key={i} className="flex flex-wrap items-end gap-3" data-edit-segment={segment.name}>
+              <span className="w-full font-body text-sm font-semibold text-foreground sm:w-28">{names(segment.name)}</span>
+              <label className={label}>
+                {t('segmentMinutes')}
+                <input
+                  type="number"
+                  min={1}
+                  className={`w-20 ${field}`}
+                  value={String(segment.minutes)}
+                  onChange={(e) => onChange(withSegment(editing, i, 'minutes', e.target.value))}
+                />
+              </label>
+              <label className={label}>
+                {t('segmentZone')}
+                <input className={`w-16 ${field}`} value={segment.zone} onChange={(e) => onChange(withSegment(editing, i, 'zone', e.target.value))} />
+              </label>
+              <label className={`${label} min-w-0 flex-1`}>
+                {t('segmentDetail')}
+                <input className={`w-full ${field}`} value={segment.detail ?? ''} onChange={(e) => onChange(withSegment(editing, i, 'detail', e.target.value))} />
+              </label>
+            </div>
+          ))}
+          <p className="font-body text-sm text-muted-foreground" data-how-to-sum>
+            {t('howToSum', { sum: segmentMinutes(editing), total: row.durationMinutes || '—' })}
+          </p>
+          <label className={label}>
+            {t('focusLines')}
+            <textarea
+              className={`w-full field-sizing-content resize-none ${field}`}
+              rows={Math.max(editing.focus.length, 1)}
+              value={focusText(editing)}
+              onChange={(e) => onChange(withFocusText(editing, e.target.value))}
+            />
+          </label>
+          <button type="button" data-action="reset-how-to" onClick={() => onChange(null)} className={`self-start ${button}`}>
+            {t('resetHowTo')}
+          </button>
+        </div>
+      ) : (
+        view && (
+          <button type="button" data-action="edit-how-to" onClick={start} className={`self-start ${button}`}>
+            {t('editHowTo')}
+          </button>
+        )
+      )}
+    </div>
   );
 }

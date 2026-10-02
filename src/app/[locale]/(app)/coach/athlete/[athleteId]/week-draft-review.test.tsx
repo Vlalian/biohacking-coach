@@ -13,6 +13,8 @@ vi.mock('next-intl', () => ({
     `${key}(${Object.entries(values)
       .map(([k, v]) => `${k}=${v}`)
       .join(',')})`,
+  // The how-to is fitted in the viewer's language (training-architecture/26).
+  useLocale: () => 'en',
 }));
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 // The server actions' import chains reach auth and the database; a first
@@ -126,6 +128,57 @@ describe('WeekDraftReview', () => {
   it('renders nothing when there is no draft, and nothing once the draft is the approved version', () => {
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={null} />)).toBe('');
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, approved: true }} />)).toBe('');
+  });
+
+  describe('the how-to on each card (training-architecture/26, E6)', () => {
+    const cards = (markup: string) => markup.match(/<li\b[^>]*>[\s\S]*?<\/li>/g) ?? [];
+
+    it('shows every session its fitted how-to after the note, with an edit and no form until the coach asks', () => {
+      for (const card of cards(html)) {
+        expect(card).toContain('data-segment="warmUp"');
+        expect(card.indexOf('data-field="note"')).toBeLessThan(card.indexOf('data-row-how-to'));
+        expect(card.match(/data-action="edit-how-to"/g)).toHaveLength(1);
+        expect(card).not.toContain('data-edit-segment');
+      }
+    });
+
+    it('shows the sport, and Momentum’s reason and cue when it gave them', () => {
+      const sessions = [{ ...DRAFT.sessions[0], sport: 'bike' as const, sportReason: 'knee', cue: 'Spin light.' }];
+      const [card] = cards(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions }} />));
+      // The sport by its name in the viewer's language, never the stored key.
+      expect(card).toContain('sport(sport=sports.bike())');
+      expect(card).toContain('sportReason(reason=knee)');
+      expect(card).toContain('Spin light.');
+      expect(card).toContain('momentumCue()');
+    });
+
+    it('opens the coach’s own how-to as a form: each segment, the sum against the session, the focus, and a way back', () => {
+      const coachHowTo = {
+        segments: [
+          { name: 'warmUp' as const, minutes: 10, zone: 'Z2' as const, detail: null },
+          { name: 'main' as const, minutes: 45, zone: 'Z3' as const, detail: 'Hills' },
+        ],
+        focus: ['Seated', 'Steady'],
+      };
+      const sessions = [{ ...DRAFT.sessions[0], coachHowTo }];
+      const [card] = cards(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions }} />));
+      expect(card?.match(/data-edit-segment=/g)).toHaveLength(2);
+      // Each segment labelled in the viewer's language, as the read-only block labels it.
+      expect(card).toMatch(/data-edit-segment="warmUp"[^>]*><span[^>]*>warmUp\(\)<\/span>/);
+      expect(card).toContain('value="Hills"');
+      expect(card).toContain('howToSum(sum=55,total=60)');
+      expect(card).toMatch(/<textarea[^>]*rows="2"[^>]*>Seated\nSteady<\/textarea>/);
+      expect(card).toContain('data-action="reset-how-to"');
+      expect(card).not.toContain('data-action="edit-how-to"');
+      expect(card).not.toContain('data-segment="warmUp"');
+    });
+
+    it('offers nothing to edit on a session with no minutes yet', () => {
+      const sessions = [{ ...DRAFT.sessions[0], durationMinutes: null }];
+      const [card] = cards(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions }} />));
+      expect(card).not.toContain('data-action="edit-how-to"');
+      expect(card).not.toContain('data-segment');
+    });
   });
 
   it('still offers add and approve on a draft the Coach left empty — the coach can build the week from nothing', () => {

@@ -1,4 +1,4 @@
-import { logCoachFailure } from '@/lib/coach-log';
+import { logCoachFailure, logWeekDraftUsage } from '@/lib/coach-log';
 import { weekStartOf } from '@/lib/date';
 import { getAthleteById } from '@/features/athlete/athlete-repository';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
@@ -9,6 +9,7 @@ import { knowledgeSearch } from '@/features/knowledge-oracle/knowledge-repositor
 import { retrievePassages, type RetrievalResult } from '@/features/knowledge-oracle/retrieval';
 import type { PlanningWindow } from './planning-window';
 import { arithmeticInWindow, heldToBand } from './volume-band';
+import { withSwaps } from './sport-swap';
 import { callCoach, type CoachReply, isCoachDisabled } from './coach-client';
 import { buildWeeklyContext, renderWeekDraftPrompt, type BaselineSession } from './prompts';
 import { draftContextOf, draftInclude, readAthleteContext } from './athlete-context';
@@ -22,6 +23,7 @@ import {
   whatChangedFrom,
   volumeReasonFrom,
   isAdjusted,
+  withArithmeticSports,
   type ProposedSession,
 } from './weekly-session';
 import {
@@ -62,7 +64,15 @@ import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
  * write, and this module does not import the means to make one.
  */
 
-const DRAFT_MAX_TOKENS = 1400;
+/**
+ * Raised from 1400 for testing (Mads, 2026-10-01: "remove the cap for now, and let
+ * testers run without it"). The API always needs a cap, so this is the practical
+ * ceiling instead: past about 4,000 tokens a reply runs into the 60 s request
+ * timeout in `coach-client.ts` before it reaches the cap. Coach Chat uses the same
+ * value. `week_draft_usage` logs what each draft really spends; set the cap from
+ * those numbers once testing has produced some.
+ */
+const DRAFT_MAX_TOKENS = 4096;
 const DRAFT_ACK = 'Staged as a proposal for the athlete. Reply with one word.';
 
 /** Why a run ended where it did. Returned for the log and the tests; the trigger ignores it. */
@@ -411,13 +421,17 @@ async function askCoach(
     }),
   );
   if (reply === 'coach-failed') return reply;
+  if (reply.usage) logWeekDraftUsage(athleteId, { ...reply.usage, maxTokens: DRAFT_MAX_TOKENS });
 
   const proposal = proposalFrom(athleteId, reply, window);
   if (!proposal) return 'malformed';
-  const sessions = heldToBand(athleteId, proposal.sessions, gathered.baseline, proposal.volumeReason);
+  // The arithmetic's sport unless Momentum said why not (`training-architecture/26`, E4).
+  const sports = withArithmeticSports(proposal.sessions, gathered.baseline);
+  const sessions = heldToBand(athleteId, sports.sessions, gathered.baseline, proposal.volumeReason);
   return {
     sessions,
-    whatChanged: proposal.whatChanged,
+    // Worded in the Athlete Language: the athlete reads it in the narration (Mads, 2026-09-30).
+    whatChanged: withSwaps(proposal.whatChanged, sports.swaps, gathered.language),
     citations: gathered.grounding.citations,
     skeleton: gathered.skeleton,
     // Computed, never the Coach's word for it (R4): internal, for statistics.
@@ -474,7 +488,13 @@ async function gatherContext(
   window: PlanningWindow,
   unavailableDates: string[],
   declined: DeclinedDraft | null,
-): Promise<{ system: string; skeleton: SkeletonDay[]; grounding: RetrievalResult; baseline: BaselineSession[] }> {
+): Promise<{
+  system: string;
+  skeleton: SkeletonDay[];
+  grounding: RetrievalResult;
+  baseline: BaselineSession[];
+  language: string | null;
+}> {
   // The drafted week, not this one: the history the draft reads counts back
   // from the week it is writing (`training-architecture/44`).
   const draftedWeek = weekStartOf(window.start);
@@ -508,7 +528,13 @@ async function gatherContext(
   };
   // The band and the adjusted flag (`training-architecture/48`) compare the
   // draft with the arithmetic's sessions it could have kept: the window's days.
-  return { system: renderWeekDraftPrompt(ctx), skeleton, grounding, baseline: arithmeticInWindow(baseline, window) };
+  return {
+    system: renderWeekDraftPrompt(ctx),
+    skeleton,
+    grounding,
+    baseline: arithmeticInWindow(baseline, window),
+    language: context.language,
+  };
 }
 
 const NO_GROUNDING: RetrievalResult = { passages: [], citations: [] };

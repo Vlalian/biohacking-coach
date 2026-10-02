@@ -29,6 +29,7 @@ const getLastDeclinedDraft = vi.fn(async (): Promise<unknown> => null);
 const recordWeekDraft = vi.fn();
 const logCoachFailure = vi.fn();
 const logWeekDraftClamped = vi.fn();
+const logWeekDraftUsage = vi.fn();
 const getLinkForAthlete = vi.fn();
 const getCoachByUserId = vi.fn();
 const getRoster = vi.fn();
@@ -59,7 +60,7 @@ vi.mock('./presence-repository', () => ({ getPresenceStage }));
 vi.mock('./training-block-service', () => ({ getResolvedBlocks }));
 vi.mock('@/features/race/race-repository', () => ({ getRaces }));
 vi.mock('./week-draft-repository', () => ({ getWeekDraftHistory, recordWeekDraft, getCalendarProposalState, getLastDeclinedDraft }));
-vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logWeekDraftClamped }));
+vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logWeekDraftClamped, logWeekDraftUsage }));
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getLanguageForAthlete }));
 
@@ -224,6 +225,17 @@ describe('ensureWeekDrafted — a valid reply is staged once, as the Coach', () 
       citations: [expect.objectContaining({ sourceId: 's1' })],
     });
     expect(recordWeekDraft.mock.calls[0][0].skeleton).toHaveLength(7);
+  });
+
+  it('logs how much of DRAFT_MAX_TOKENS the draft used, so a live draft shows whether the cap holds (training-architecture/26)', async () => {
+    callCoach.mockResolvedValue({ ...toolReply({ sessions: PROPOSED }), usage: { outputTokens: 1234, stopReason: 'tool_use' } });
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(logWeekDraftUsage).toHaveBeenCalledWith(ATHLETE, { outputTokens: 1234, maxTokens: 4096, stopReason: 'tool_use' });
+  });
+
+  it('logs no usage line for a reply that carries none, rather than one with no numbers', async () => {
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(logWeekDraftUsage).not.toHaveBeenCalled();
   });
 
   it('still drafts when retrieval throws — ungrounded, said so in the prompt, and logged', async () => {
@@ -757,6 +769,42 @@ describe('the draft is held to the band around the arithmetic (training-architec
     callCoach.mockResolvedValue(toolReply({ sessions: PROPOSED, volumeReason: 'knee' }));
     await ensureWeekDrafted(ATHLETE, TODAY);
     expect(logWeekDraftClamped).not.toHaveBeenCalled();
+  });
+});
+
+describe('the draft keeps the arithmetic’s sport unless Momentum says why (training-architecture/26, E4)', () => {
+  const BASELINE = [
+    { date: '2026-09-22', sport: 'bike', type: 'Endurance', durationMinutes: 60, zone: 'Z2', title: 'Easy ride' },
+    { date: '2026-09-23', sport: 'run', type: 'Intensity', durationMinutes: 45, zone: 'Z4', title: 'Run intervals' },
+    { date: '2026-09-27', sport: 'bike', type: 'Endurance', durationMinutes: 150, zone: 'Z2', title: 'Long ride' },
+  ];
+
+  beforeEach(() => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    recordWeekDraft.mockResolvedValue('drafted');
+    getArithmeticSessionsForWeek.mockResolvedValue(BASELINE);
+  });
+
+  it('reverts an unexplained swap, keeps an explained one, and says so in what changed', async () => {
+    const sessions = [
+      { ...PROPOSED[0], sport: 'run' },
+      { ...PROPOSED[1], sport: 'bike', sportReason: 'knee: run → bike', cue: 'Seated efforts, spare the knee.' },
+      PROPOSED[2],
+    ];
+    callCoach.mockResolvedValue(toolReply({ sessions, whatChanged: 'Eased the run load.' }));
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    const recorded = recordWeekDraft.mock.calls[0][0];
+    expect(recorded.sessions.map((x: { sport: string }) => x.sport)).toEqual(['bike', 'bike', 'bike']);
+    expect(recorded.sessions[1]).toMatchObject({ sportReason: 'knee: run → bike', cue: 'Seated efforts, spare the knee.' });
+    expect(recorded.whatChanged).toBe('Eased the run load. Wednesday: run → bike (knee: run → bike)');
+  });
+
+  it('writes the swap line in the Athlete Language: the weekday and the sports in Danish, the reason as written', async () => {
+    getLanguageForAthlete.mockResolvedValue('da');
+    const sessions = [PROPOSED[0], { ...PROPOSED[1], sport: 'bike', sportReason: 'knæ' }, PROPOSED[2]];
+    callCoach.mockResolvedValue(toolReply({ sessions, whatChanged: null }));
+    await ensureWeekDrafted(ATHLETE, TODAY);
+    expect(recordWeekDraft.mock.calls[0][0].whatChanged).toBe('Onsdag: løb → cykel (knæ)');
   });
 });
 

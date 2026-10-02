@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
 import { isImportedHistory } from '@/features/session/session';
+import { howToOf } from '@/features/session/how-to';
+import { HowToBlock } from '@/components/session/how-to-block';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
 import {
@@ -565,6 +567,8 @@ export function ViewBody({
     unavailable: policy.ownReport && rules.unavailable,
   };
   const imported = isImportedHistory(session);
+  // Only the arithmetic's and Momentum's sessions have one (`training-architecture/26`).
+  const howTo = howToOf(session, locale === 'da' ? 'da' : 'en');
 
   return (
     <div className="space-y-6 px-5 py-5">
@@ -610,6 +614,15 @@ export function ViewBody({
               {t('readOnlyNote')}
             </p>
           )}
+        </section>
+      )}
+
+      {howTo && (
+        <section>
+          <SectionLabel>{t('howTo')}</SectionLabel>
+          <div className="mt-2">
+            <HowToBlock howTo={howTo} />
+          </div>
         </section>
       )}
 

@@ -127,6 +127,7 @@ export function beginCreate(
     parked: false,
     sport: null,
     summary: null,
+    howTo: null,
     dayOrder: Math.max(-1, ...sameDay) + 1,
     title: null,
     zone: null,

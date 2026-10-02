@@ -40,6 +40,7 @@ function history(): Session[] {
         isTraining: true,
         summary: null,
         version: 1,
+        howTo: null,
       };
       out.push({ ...row, ...over } as Session);
     }

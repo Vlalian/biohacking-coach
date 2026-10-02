@@ -445,7 +445,8 @@
     "formZone": "Zone",
     "formTitle": "Title",
     "formNote": "Note",
-    "save": "Save"
+    "save": "Save",
+    "howTo": "How to do it"
   },
   "History": {
     "title": "Training history",
@@ -940,7 +941,17 @@
     "approved": "Approved. It reaches the athlete on their planning day.",
     "approvedChanged": "Approved with your changes. The athlete will be told you shaped it.",
     "stale": "This draft was replaced. Reload to see the current one.",
-    "error": "That didn't work ({reason})."
+    "error": "That didn't work ({reason}).",
+    "sport": "Sport: {sport}",
+    "sportReason": "Sport changed: {reason}",
+    "editHowTo": "Edit how-to",
+    "resetHowTo": "Use the standard how-to",
+    "segmentMinutes": "Minutes",
+    "segmentZone": "Zone",
+    "segmentDetail": "What to do",
+    "focusLines": "Focus, one per line",
+    "howToSum": "{sum} of {total} min",
+    "howTo": "How to do it"
   },
   "DraftingCard": {
     "drafting": "Momentum is drafting the week… about {seconds} seconds.",
@@ -1022,5 +1033,21 @@
     "realNameWarning": "That is your real name. Momentum will use it exactly as you typed it.",
     "useAnyway": "Use it anyway",
     "pickAnother": "Pick something else"
+  },
+  "HowTo": {
+    "warmUp": "Warm-up",
+    "steady": "Steady",
+    "main": "Main set",
+    "coolDown": "Cool-down",
+    "minutes": "min",
+    "focus": "Focus",
+    "momentumCue": "From Momentum",
+    "byCoach": "Written by the coach",
+    "sports": {
+      "swim": "swim",
+      "bike": "bike",
+      "run": "run",
+      "brick": "brick"
+    }
   }
 }

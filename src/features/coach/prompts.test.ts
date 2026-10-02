@@ -118,6 +118,19 @@ describe('no real identity reaches a prompt (slice 15, GDPR decision 1)', () => 
     );
   });
 
+  // training-architecture/26: the new fields ride in the staged week too, so the
+  // walk covers them — the cue, the sport reason and the coach's own how-to.
+  it('refuses a staged week whose cue, sport reason or coach how-to carries an identifier — Coach Chat', () => {
+    const window = { start: '2026-08-12', end: '2026-08-16', excludedDates: [], fellThrough: false };
+    const clean = { date: '2026-08-13', type: 'Endurance' as const, durationMinutes: 60, zone: 'Z2', note: null };
+    const coachHowTo = { segments: [{ name: 'main' as const, minutes: 60, zone: 'Z2' as const, detail: 'call +45 12345678' }], focus: [] };
+    for (const leak of [{ cue: 'mail me at a@b.dk' }, { sportReason: 'ask a@b.dk' }, { coachHowTo }]) {
+      expect(() => buildChatPrompt(BASE, '2026-08-12', null, [], { window, stagedProposal: [{ ...clean, ...leak }] })).toThrow(
+        /identifier/i,
+      );
+    }
+  });
+
 });
 
 describe('the Preferred Name — the one name the athlete chose to send (preferred-name/02)', () => {

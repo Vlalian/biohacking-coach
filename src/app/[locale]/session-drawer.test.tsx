@@ -100,6 +100,7 @@ function session(overrides: Partial<Session> = {}): Session {
     origin: 'coach',
     isTraining: true,
     summary: null,
+    howTo: null,
     ...overrides,
   };
 }
@@ -402,6 +403,67 @@ describe('ViewBody as the Head Coach', () => {
 
     for (const key of Object.values(CONTENT_REFUSAL_KEY)) {
       expect(Object.keys(en), `no message for "${key}"`).toContain(key);
+    }
+  });
+});
+
+/**
+ * `training-architecture/26` — the how-to sits between the note and the
+ * reflection, for the arithmetic's and Momentum's sessions only. The block
+ * itself is `how-to-block.test.tsx`; this is the wiring.
+ */
+const { HowToBlock } = await import('@/components/session/how-to-block');
+
+describe('ViewBody how-to', () => {
+  /** The how-to block's element in an unrendered tree, if there is one. */
+  function howToIn(node: ReactNode): { howTo: { segments: { name: string }[]; focus: string[]; cue: string | null } } | null {
+    if (Array.isArray(node)) return node.map(howToIn).find((x) => x) ?? null;
+    if (!node || typeof node !== 'object' || !('props' in node)) return null;
+    const el = node as { type: unknown; props: { children?: ReactNode; howTo?: never } };
+    if (el.type === HowToBlock) return el.props as never;
+    return howToIn(el.props.children);
+  }
+
+  const body = (s: Session, locale = 'en') =>
+    ViewBody({
+      session: s,
+      policy: athleteDrawerPolicy(s),
+      fromImport: false,
+      todayKey: TODAY,
+      locale,
+      pending: false,
+      t: ((key: string) => key) as never,
+      onMarkComplete: vi.fn(),
+      onSkip: vi.fn(),
+      onMarkUnavailable: vi.fn(),
+      onUndoImport: vi.fn(),
+      onDiscussWithCoach: vi.fn(),
+      onRate: vi.fn(),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+    });
+
+  it('shows Momentum’s session its how-to, after the note and before the reflection', () => {
+    const s = session({ type: 'Endurance', sport: 'bike', duration: 90, zone: 'Z2', note: 'flat route', howTo: { cue: 'Spin light.' } });
+    const shown = labels(body(s));
+    expect(shown.indexOf('note')).toBeLessThan(shown.indexOf('howTo'));
+    expect(shown.indexOf('howTo')).toBeLessThan(shown.indexOf('reflection'));
+    const props = howToIn(body(s));
+    expect(props?.howTo.segments.map((x) => x.name)).toEqual(['warmUp', 'main', 'coolDown']);
+    expect(props?.howTo.cue).toBe('Spin light.');
+  });
+
+  it('fits it in the athlete’s language', () => {
+    const s = session({ origin: 'arithmetic', type: 'Intensity', sport: 'run', duration: 60, zone: 'Z4' });
+    expect(howToIn(body(s, 'da'))?.howTo.focus[0]).toMatch(/opvarmningen/);
+    expect(howToIn(body(s, 'en'))?.howTo.focus[0]).toMatch(/warm-up/);
+  });
+
+  it('shows none on the athlete’s own session, a prescribed one, or imported history', () => {
+    for (const origin of ['athlete', 'head_coach', 'garmin'] as const) {
+      const s = session({ origin, type: 'Endurance', duration: 60 });
+      expect(labels(body(s))).not.toContain('howTo');
+      expect(howToIn(body(s))).toBeNull();
     }
   });
 });

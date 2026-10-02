@@ -314,6 +314,7 @@ describe('patternHistoryOf: the stored session as Pattern Insight reads it', () 
     isTraining: true,
     summary: { avgHr: 150, distanceM: 9000 },
     version: 1,
+    howTo: null,
     ...over,
   });
 

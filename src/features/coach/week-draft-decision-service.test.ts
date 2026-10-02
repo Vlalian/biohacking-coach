@@ -73,6 +73,28 @@ describe('acceptWeekDraft', () => {
     });
   });
 
+  it('writes the sport, Momentum’s cue and the Head Coach’s approved how-to onto the rows (training-architecture/26)', async () => {
+    const coach = {
+      segments: [
+        { name: 'warmUp', minutes: 10, zone: 'Z2', detail: null },
+        { name: 'main', minutes: 30, zone: 'Z4', detail: '6 × 2 min' },
+        { name: 'coolDown', minutes: 5, zone: 'Z2', detail: null },
+      ],
+      focus: ['Hold the cadence'],
+    };
+    const sessions = [
+      { ...SESSIONS[0], sport: 'swim', cue: 'Long, relaxed strokes.' },
+      { ...SESSIONS[1], sport: 'run', coachHowTo: coach },
+      SESSIONS[2],
+    ];
+    getCalendarProposalState.mockResolvedValue({ kind: 'proposal', draft: { ...DRAFT, sessions } });
+    await acceptWeekDraft(ATHLETE, 'd1', '2026-09-18');
+    const rows = replaceCoachPlanForDateRange.mock.calls[0][3];
+    expect(rows[0]).toMatchObject({ sport: 'swim', howTo: { cue: 'Long, relaxed strokes.' } });
+    expect(rows[1]).toMatchObject({ sport: 'run', howTo: { coach } });
+    expect(rows[2]).not.toHaveProperty('howTo');
+  });
+
   it('accepted after its Monday, writes the whole week as drafted — past days planned, never skipped — and says how many', async () => {
     // Wednesday the 23rd: Monday and Tuesday are gone.
     const result = await acceptWeekDraft(ATHLETE, 'd1', '2026-09-23');

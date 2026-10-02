@@ -63,7 +63,8 @@ export async function acceptWeekDraft(athlete: Athlete, draftId: string, today: 
     unavailableDates,
     chosenFirstDay(athlete.profile, today),
   );
-  const validated = validateProposedPlan({ sessions: draft.sessions }, window);
+  // An approved draft can carry the Head Coach's own how-to (`training-architecture/26`, E6).
+  const validated = validateProposedPlan({ sessions: draft.sessions }, window, { coachHowTo: true });
   if (!validated.ok || validated.sessions.length !== draft.sessions.length) return { ok: false, reason: 'invalid' };
 
   const rows = proposedToNewSessionRows(validated.sessions, athlete.id);

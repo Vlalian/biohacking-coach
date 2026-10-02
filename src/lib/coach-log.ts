@@ -366,3 +366,22 @@ export function logPatternsDetected(
   }
 }
 
+/**
+ * One line per week draft: the output tokens the drafting call used against
+ * `DRAFT_MAX_TOKENS`, and its stop reason (`training-architecture/26`). The tool
+ * gained `sport` and a `cue` per session; this is how a live draft shows whether
+ * the cap still holds, and a `max_tokens` stop says plainly that it did not.
+ * Numbers only — no athlete text. On `warn`, the level the lint rule allows
+ * besides `error`, as `logWeekDraftClamped` is.
+ */
+export function logWeekDraftUsage(
+  athleteId: string,
+  usage: { outputTokens: number; maxTokens: number; stopReason: string | null },
+): void {
+  try {
+    console.warn(JSON.stringify({ event: 'week_draft_usage', athleteId, ...usage }));
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}
+

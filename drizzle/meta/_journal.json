@@ -232,6 +232,13 @@
       "when": 1790334969276,
       "tag": "0032_history_import",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790711635952,
+      "tag": "0033_session_how_to",
+      "breakpoints": true
     }
   ]
 }

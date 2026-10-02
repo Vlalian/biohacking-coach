@@ -1,6 +1,9 @@
 import type { Athlete } from '@/features/athlete/athlete';
 import type { EquipmentItem } from '@/features/equipment/equipment';
 import { isImportedHistory, isUnrecorded, type Session } from '@/features/session/session';
+import { coachHowToFrom, cueFrom, type HowTo, type StoredHowTo } from '@/features/session/how-to';
+import { isFreeOfShapedIdentifiers } from '@/lib/identifiers';
+import { HOW_TO_SPORTS, type HowToSport } from '@/features/session/how-to-templates';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
@@ -439,6 +442,18 @@ export interface ProposedSession {
   durationMinutes: number | null;
   zone: string | null;
   note: string | null;
+  /**
+   * The discipline (`training-architecture/26`, E4): the arithmetic's for that
+   * day unless Momentum stated a reason to change it. Absent on a session
+   * nothing gave a sport, and on every draft stored before the field existed.
+   */
+  sport?: HowToSport;
+  /** Momentum's reason for a sport the arithmetic did not have on that day. */
+  sportReason?: string;
+  /** Momentum's one personal cue on how to do this session (E5). */
+  cue?: string;
+  /** The Head Coach's own how-to, set in their review of the draft (E6: final). */
+  coachHowTo?: HowTo;
 }
 
 /**
@@ -494,6 +509,22 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
             },
             zone: { type: 'string', description: 'Intensity zone, e.g. Z2.' },
             note: { type: 'string', description: 'One short coaching line.' },
+            sport: {
+              type: 'string',
+              enum: [...HOW_TO_SPORTS],
+              description:
+                "The discipline. Keep the baseline week's sport for that day; the server keeps it unless you give sportReason.",
+            },
+            sportReason: {
+              type: 'string',
+              description:
+                "Only when sport differs from the baseline week's on that day: the athlete's reason, in their language (e.g. 'knee: run → bike').",
+            },
+            cue: {
+              type: 'string',
+              description:
+                "Optional: one sentence, at most 140 characters, in the athlete's language, on how this athlete should do this session. The app adds the structure and the standard cues; do not repeat them.",
+            },
           },
           required: ['date', 'type', 'durationMinutes', 'zone', 'note'],
         },
@@ -669,12 +700,21 @@ export type ValidatePlanResult =
  * request. The window's own `start` subsumes the past-date rule: it is never
  * earlier than today.
  */
-export function validateProposedPlan(input: unknown, window: PlanningWindow): ValidatePlanResult {
+export function validateProposedPlan(
+  input: unknown,
+  window: PlanningWindow,
+  /**
+   * `coachHowTo: true` only where a Head Coach's edit can be on the input: the
+   * approval, and the athlete's accept of an approved draft. Momentum's tool
+   * input never carries the coach's text, whatever it sends.
+   */
+  { coachHowTo = false }: { coachHowTo?: boolean } = {},
+): ValidatePlanResult {
   const raw = sessionsArrayFrom(input);
   if (!raw) return { ok: false, reason: 'malformed' };
 
   const sessions = raw
-    .map((entry) => proposedSessionFrom(entry, window))
+    .map((entry) => proposedSessionFrom(entry, window, coachHowTo))
     .filter((s): s is ProposedSession => s !== null);
 
   if (sessions.length === 0) return { ok: false, reason: 'empty' };
@@ -704,7 +744,7 @@ function sessionsArrayFrom(input: unknown): unknown[] | null {
  * that survive" and the surviving rules live in one place. A dropped row is
  * silent by design — the plan the athlete confirms is only ever what passed.
  */
-function proposedSessionFrom(entry: unknown, window: PlanningWindow): ProposedSession | null {
+function proposedSessionFrom(entry: unknown, window: PlanningWindow, coachHowTo: boolean): ProposedSession | null {
   // Stryker disable next-line ConditionalExpression: equivalent. Dropping the
   // typeof half changes nothing observable - a primitive's `.date` is undefined,
   // and isPlannableDay refuses that on the very next line. The guard earns its
@@ -715,13 +755,112 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow): ProposedSe
   if (!isPlannableDay(s.date, window)) return null;
   if (!isPlanType(s.type)) return null;
 
-  return {
+  const session: ProposedSession = {
     date: s.date,
     type: s.type,
     durationMinutes: positiveMinutes(s.durationMinutes),
     zone: optionalString(s.zone),
     note: optionalString(s.note),
+    ...howToFieldsOf(s),
   };
+  return coachHowTo ? withCoachHowTo(session, s.coachHowTo) : session;
+}
+
+/** Momentum's sport, its reason and its cue, each only when it has a usable value (`training-architecture/26`). */
+function howToFieldsOf(s: Record<string, unknown>): Pick<ProposedSession, 'sport' | 'sportReason' | 'cue'> {
+  return presentOnly({ sport: howToSportOf(s.sport), sportReason: sportReasonFrom(s.sportReason), cue: cueFrom(s.cue) });
+}
+
+/**
+ * Momentum's reason for a sport swap, trimmed, or null. A reason carrying a
+ * shaped identifier is dropped like a cue, and the swap reverts with it: a
+ * staged week is walked by the chat prompt's identifier assertion, and a
+ * reason kept here would refuse every later chat turn.
+ */
+function sportReasonFrom(value: unknown): string | null {
+  const reason = optionalString(value)?.trim() ?? null;
+  return isFreeOfShapedIdentifiers(reason) ? reason : null;
+}
+
+/**
+ * The session with the Head Coach's how-to, or null when they sent one that
+ * does not fit it — refused as a whole, like any other bad row of theirs.
+ */
+function withCoachHowTo(session: ProposedSession, raw: unknown): ProposedSession | null {
+  if (raw === undefined || raw === null) return session;
+  const howTo = coachHowToFrom(raw, session.durationMinutes);
+  return howTo && { ...session, coachHowTo: howTo };
+}
+
+/**
+ * The fields that have a value. The optional fields are left off rather than
+ * set to null, so a session that never had them — every draft stored before
+ * `training-architecture/26` — reads back exactly as it was written.
+ */
+function presentOnly<T extends Record<string, unknown>>(fields: T): Partial<{ [K in keyof T]: NonNullable<T[K]> }> {
+  return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== null && v !== undefined)) as Partial<{
+    [K in keyof T]: NonNullable<T[K]>;
+  }>;
+}
+
+function howToSportOf(value: unknown): HowToSport | null {
+  return (HOW_TO_SPORTS as readonly unknown[]).includes(value) ? (value as HowToSport) : null;
+}
+
+/**
+ * The sport a drafted session keeps (`training-architecture/26`, E4): the
+ * arithmetic's for that day by default. Momentum's own choice stands when it
+ * matches one of the arithmetic's sessions that day, when it gave a reason, or
+ * on a day the arithmetic wrote no known sport for.
+ */
+function sportOf(
+  session: Pick<ProposedSession, 'sport' | 'sportReason'>,
+  arithmeticDay: readonly { sport: string }[],
+): HowToSport | undefined {
+  const planned = knownSports(arithmeticDay);
+  if (session.sport && (planned.includes(session.sport) || session.sportReason)) return session.sport;
+  return planned[0] ?? session.sport;
+}
+
+/** The known sports among a day's arithmetic sessions, in order. */
+function knownSports(day: readonly { sport: string }[]): HowToSport[] {
+  return day.map((x) => howToSportOf(x.sport)).filter((x): x is HowToSport => x !== null);
+}
+
+/** A sport Momentum swapped on a day, and the reason it gave. */
+export interface SportSwap {
+  date: string;
+  from: HowToSport;
+  to: HowToSport;
+  reason: string;
+}
+
+/**
+ * A proposed week held to the arithmetic's sports day by day, and each swap
+ * Momentum explained, for `whatChanged` (E4: the reason shows in the draft and
+ * in the coach's review; `sport-swap.ts` words it in the Athlete Language). A
+ * reason on a session whose sport did not change explains nothing and is
+ * dropped.
+ */
+export function withArithmeticSports(
+  sessions: ProposedSession[],
+  baseline: readonly { date: string; sport: string }[],
+): { sessions: ProposedSession[]; swaps: SportSwap[] } {
+  const swaps: SportSwap[] = [];
+  const held = sessions.map((session) => {
+    const day = baseline.filter((x) => x.date === session.date);
+    const sport = sportOf(session, day);
+    const planned = knownSports(day);
+    // sportOf keeps a sport the arithmetic did not have only with a reason.
+    const swapped = planned.length > 0 && !planned.includes(sport as HowToSport);
+    // A swap is kept only with a reason (sportOf), so both are there when it is one.
+    if (swapped) swaps.push({ date: session.date, from: planned[0], to: sport as HowToSport, reason: session.sportReason as string });
+    const rest = { ...session };
+    delete rest.sport;
+    delete rest.sportReason;
+    return { ...rest, ...presentOnly({ sport, sportReason: swapped ? session.sportReason : undefined }) };
+  });
+  return { sessions: held, swaps };
 }
 
 /**
@@ -780,6 +919,13 @@ export function proposedToNewSessionRows(
       zone: s.zone,
       note: s.note,
       dayOrder,
+      ...presentOnly({ sport: s.sport, howTo: storedHowToOf(s) }),
     };
   });
+}
+
+/** What was written about how to do it, as `sessions.how_to` stores it; null when nothing was. */
+function storedHowToOf(s: ProposedSession): StoredHowTo | null {
+  const stored = presentOnly({ cue: s.cue, coach: s.coachHowTo });
+  return Object.keys(stored).length > 0 ? stored : null;
 }
