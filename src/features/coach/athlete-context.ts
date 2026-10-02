@@ -65,7 +65,9 @@ export type ContextSignal =
   /** This week's Session Moves. */
   | 'moves'
   /** The athlete's own recent Coach Chat lines (E2) — the draft only. */
-  | 'chat';
+  | 'chat'
+  /** Twelve weeks of sessions and Session Moves for Pattern Insight (`training-architecture/50`) — Chat and the Briefing. */
+  | 'patterns';
 
 /**
  * Which signals to read. A signal left out is not fetched. `historyBefore` is
@@ -105,6 +107,10 @@ export interface AthleteContext {
   moves: SessionMoveFact[];
   /** The athlete's own Coach Chat lines of the last seven days, as stored. */
   chatLines: string[];
+  /** Pattern Insight's history: twelve weeks of sessions, through the end of this week. */
+  patternSessions: Session[];
+  /** The Session Moves of the same twelve weeks. */
+  patternMoves: SessionMoveFact[];
 }
 
 /** The draft's signals: everything it plans from except the unavailable dates, which its gate already read. */
@@ -122,7 +128,7 @@ export function draftInclude(draftedWeek: string): ContextInclude {
  */
 export function chatInclude(today: string): ContextInclude {
   return {
-    signals: ['equipment', 'checkIn', 'body', 'races', 'presence', 'unavailable', 'week', 'health', 'moves'],
+    signals: ['equipment', 'checkIn', 'body', 'races', 'presence', 'unavailable', 'week', 'health', 'moves', 'patterns'],
     historyBefore: nextWeekOf(today),
   };
 }
@@ -134,9 +140,17 @@ export function chatInclude(today: string): ContextInclude {
  */
 const REPORT_SIGNALS: readonly ContextSignal[] = ['profile', 'body', 'races', 'reflections'];
 
+/**
+ * Pattern history is read even when reports are withheld: schedule patterns are
+ * built from statuses and moves, which the coach always sees. The report-built
+ * ones are dropped by `visiblePatterns`, after detection.
+ */
 export function briefingInclude(link: CoachingLink, sharesReports: boolean): ContextInclude {
-  return { signals: REPORT_SIGNALS.filter(() => sharesReports), link };
+  return { signals: [...REPORT_SIGNALS.filter(() => sharesReports), 'patterns'], link };
 }
+
+/** How far back Pattern Insight looks: three weeks is its minimum, and the rest is the baseline. */
+const PATTERN_WEEKS = 12;
 
 /** One read, or its "not read" value when the signal is not included. */
 function when<T, E>(included: boolean, read: () => Promise<T>, absent: E): Promise<T | E> {
@@ -176,6 +190,7 @@ export async function readAthleteContext(
 ): Promise<AthleteContext> {
   const has = (signal: ContextSignal) => include.signals.includes(signal);
   const thisWeek = weekStartOf(today);
+  const patternsSince = addDays(thisWeek, -7 * PATTERN_WEEKS);
   const [
     athlete,
     language,
@@ -193,6 +208,8 @@ export async function readAthleteContext(
     health,
     moves,
     chatLines,
+    patternSessions,
+    patternMoves,
   ] = await Promise.all([
     when(has('profile'), () => getAthleteById(athleteId), null),
     when(has('language'), () => getLanguageForAthlete(athleteId), null),
@@ -211,6 +228,8 @@ export async function readAthleteContext(
     when(has('health'), () => openHealth(athleteId), NO_HEALTH),
     when(has('moves'), () => getSessionMovesSince(athleteId, thisWeek), []),
     when(has('chat'), () => getRecentAthleteChatLines(athleteId, addDays(today, -7)), []),
+    when(has('patterns'), () => getSessionsInRange(athleteId, patternsSince, nextWeekOf(today)), []),
+    when(has('patterns'), () => getSessionMovesSince(athleteId, patternsSince), []),
   ]);
   return {
     athlete: athlete ?? null,
@@ -229,6 +248,8 @@ export async function readAthleteContext(
     health,
     moves,
     chatLines,
+    patternSessions,
+    patternMoves,
   };
 }
 

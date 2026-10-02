@@ -1,5 +1,9 @@
 import type { BlockSetProblem } from '@/features/coach/training-blocks';
 import { refusalReason, type RefusalReason } from './identifiers';
+import type { Pattern } from '@/features/coach/pattern-insight';
+
+/** Where a pattern was detected for: the two surfaces that receive them (`training-architecture/50`). */
+export type PatternSurface = 'coach_chat' | 'briefing';
 import { EmptyCoachReplyError } from '@/features/coach/coach-client';
 
 /**
@@ -324,6 +328,39 @@ export function logWeekDraftClamped(
 ): void {
   try {
     console.warn(JSON.stringify({ event: 'week_draft_clamped', athleteId, ...clamp }));
+  } catch {
+    // Deliberately silent: see logCoachFailure.
+  }
+}
+
+/**
+ * One line per Pattern Insight detection (`training-architecture/50`, ruling
+ * 7), said or not, so the threshold can be tuned from the testers' data rather
+ * than guessed. The subject is a weekday, Session Type, sport or `body`/`mind`
+ * from a closed set: never athlete text. A warning, not an error: nothing
+ * failed.
+ */
+export function logPatternsDetected(
+  athleteId: string,
+  surface: PatternSurface,
+  found: readonly Pattern[],
+  said: readonly Pattern[],
+): void {
+  try {
+    for (const p of found) {
+      console.warn(
+        JSON.stringify({
+          event: 'pattern_detected',
+          athleteId,
+          surface,
+          family: p.family,
+          subject: p.subject,
+          strength: p.strength,
+          sample: p.sample,
+          said: said.includes(p),
+        }),
+      );
+    }
   } catch {
     // Deliberately silent: see logCoachFailure.
   }

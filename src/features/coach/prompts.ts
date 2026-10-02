@@ -12,8 +12,10 @@ import {
   healthFactsBlock,
   type HealthFacts,
   type ReflectionComment,
+  patternsBlock,
   type PromptBlock,
 } from './prompt-blocks';
+import type { Pattern } from './pattern-insight';
 import type { PlanningWindow } from './planning-window';
 import type { DeclinedDraft, DeclineReason, SkeletonDay } from './week-draft';
 import type { ProposedSession, WeekSummary } from './weekly-session';
@@ -423,10 +425,10 @@ const PRESENCE_COLD_START = `PRESENCE — COLD START:
 You know this athlete only from onboarding and what they tell you now: no reflections, no check-ins, no history. Don't fake familiarity or recall a week you haven't seen. Ask one grounding question before you assume — where they are physically right now — and explain your reasoning more than usual; this is their first exposure to how you coach.`;
 
 const PRESENCE_BUILDING = `PRESENCE — BUILDING:
-You have a week or two of their reflections and check-ins. Reference something specific you actually have; say plainly the picture is still forming. Declare uncertainty where evidence is thin — two consistent weeks is "starting to notice a pattern", never more.`;
+You have a week or two of their reflections and check-ins. Reference something specific you actually have; say plainly the picture is still forming. Declare uncertainty where evidence is thin — two consistent weeks is a hunch, never more. Name a pattern only if it is listed under PATTERNS.`;
 
 const PRESENCE_FULL = `PRESENCE — FULL:
-Several weeks of reflections and check-ins. Synthesise their self-assessment, session feedback and signals; name patterns, strong sessions and warnings, and flag gaps between how they read themselves and what the data says.`;
+Several weeks of reflections and check-ins. Synthesise their self-assessment, session feedback and signals; name strong sessions and warnings, and a pattern only if it is listed under PATTERNS, and flag gaps between how they read themselves and what the data says.`;
 
 /** The stage's instructions, or nothing when a caller supplied no stage. */
 function presenceBlock(stage: PresenceStage | undefined): PromptBlock {
@@ -535,6 +537,8 @@ export interface ChatSignals {
   health: HealthFacts;
   moves: SessionMoveFact[];
   comments: ReflectionComment[];
+  /** The strongest code-found patterns (`training-architecture/50`); absent reads as none. */
+  patterns?: Pattern[];
 }
 
 export function buildChatPrompt(
@@ -1021,7 +1025,7 @@ function chatExcerptBlock(lines: string[] | undefined): PromptBlock {
 /** Coach Chat's athlete signals: the recent weeks, then the ones the draft reads too. */
 function chatSignalBlocks(signals: ChatSignals | null): PromptBlock[] {
   if (!signals) return [];
-  return [recentWeeksBlock(signals.recentWeeks), ...athleteSignalBlocks(signals)];
+  return [recentWeeksBlock(signals.recentWeeks), ...athleteSignalBlocks(signals), patternsBlock(signals.patterns ?? [])];
 }
 
 /**

@@ -286,11 +286,12 @@ describe('Session Moves, reflection comments and what the athlete said lately (t
     expect(repo.getRecentAthleteChatLines).toHaveBeenCalledTimes(1);
     vi.clearAllMocks();
     await readAthleteContext('a1', TODAY, chatInclude(TODAY));
-    expect(repo.getSessionMovesSince).toHaveBeenCalledTimes(1);
+    expect(repo.getSessionMovesSince).toHaveBeenCalledWith('a1', THIS_WEEK);
     expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
     vi.clearAllMocks();
     await readAthleteContext('a1', TODAY, briefingInclude(link(true, true), true));
-    expect(repo.getSessionMovesSince).not.toHaveBeenCalled();
+    // It reads moves once, for Pattern Insight's twelve weeks, and never the week's move signal.
+    expect(repo.getSessionMovesSince.mock.calls).toEqual([['a1', '2026-07-06']]);
     expect(repo.getRecentAthleteChatLines).not.toHaveBeenCalled();
   });
 
@@ -498,3 +499,38 @@ describe('the slices', () => {
     ]);
   });
 });
+
+describe('the history Pattern Insight reads (training-architecture/50)', () => {
+  const TWELVE_WEEKS_BACK = '2026-07-06';
+
+  // Asserted on the range the repositories are asked for, because that range is
+  // the contract: the repository mocks here return what they are given and do not
+  // apply a date range, so the window is visible nowhere else. The patterns built
+  // from what comes back are tested in `pattern-insight-service.test.ts`.
+  it('reads twelve weeks of sessions and moves, through the end of this week', async () => {
+    await readAthleteContext('a1', TODAY, { signals: ['patterns'] });
+    expect(repo.getSessionsInRange).toHaveBeenCalledWith('a1', TWELVE_WEEKS_BACK, NEXT_WEEK);
+    expect(repo.getSessionMovesSince).toHaveBeenCalledWith('a1', TWELVE_WEEKS_BACK);
+  });
+
+  it('passes what it read on as the pattern history', async () => {
+    const history = [session({ date: '2026-08-04' })];
+    const moves = [{ from: '2026-08-04', to: '2026-08-05', by: 'athlete' }];
+    repo.getSessionsInRange.mockResolvedValue(history);
+    repo.getSessionMovesSince.mockResolvedValue(moves);
+    const ctx = await readAthleteContext('a1', TODAY, { signals: ['patterns'] });
+    expect(ctx.patternSessions).toEqual(history);
+    expect(ctx.patternMoves).toEqual(moves);
+  });
+
+  it('Coach Chat and the Briefing read it, whether or not reports are shared; the draft never does', async () => {
+    for (const include of [chatInclude(TODAY), briefingInclude(link(false, false), false), briefingInclude(link(true, true), true)]) {
+      expect(include.signals).toContain('patterns');
+    }
+    expect(draftInclude(NEXT_WEEK).signals).not.toContain('patterns');
+    const ctx = await readAthleteContext('a1', TODAY, draftInclude(NEXT_WEEK));
+    expect(ctx.patternSessions).toEqual([]);
+    expect(ctx.patternMoves).toEqual([]);
+  });
+});
+

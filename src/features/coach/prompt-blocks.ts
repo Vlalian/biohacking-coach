@@ -1,3 +1,4 @@
+import type { Pattern, PatternFamily } from './pattern-insight';
 import type { EquipmentCategory, EquipmentItem } from '@/features/equipment/equipment';
 import type { Onboarding } from './check-in';
 import type { WeekSummary } from './weekly-session';
@@ -309,3 +310,65 @@ export function languageDirective(language?: string): string {
   }
   return '';
 }
+
+// ── Pattern Insight (training-architecture/50) ────────────────────────────────
+
+export const PATTERNS_HEADING = "PATTERNS (found by code in this athlete's own history, strongest first):";
+
+/**
+ * How Momentum may use them (rulings 3, 9, 11; 2026-09-29 on Schedule). Said
+ * once, after the list, so every pattern line can stay a plain fact.
+ */
+const PATTERNS_RULES =
+  'Mention one only when the conversation touches it: how training is going, why the plan is as it is, tiredness. ' +
+  `Never raise one out of nowhere. Say it as an observation, never a verdict ("I've noticed… worth talking about?"). ` +
+  'Say how sure you are: one marked as resting on few sessions is a hunch, and you say so. You may quote the numbers. ' +
+  'A skipped or moved weekday means the day may be wrong, not the body: never call it pushing back. ' +
+  'For one, point the athlete to the fix they can make now, marking that weekday unavailable themselves; do not propose a change to the week for it. ' +
+  'These are the only patterns you may name.';
+
+/** Below this many sessions a pattern is a hunch, and its line says so (ruling 11: Declared Uncertainty). */
+const FEW_SESSIONS = 10;
+
+const roundTenth = (x: number | undefined): number => Math.round((x ?? 0) * 10) / 10;
+const capital = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
+
+/** One plain sentence per family, built from the numbers the detector found. */
+const PATTERN_LINE: Record<PatternFamily, (p: Pattern) => string> = {
+  shift: (p) => `${capital(p.subject)} ratings have gone ${p.direction}: usually ${roundTenth(p.numbers.baseline)}, lately ${roundTenth(p.numbers.recent)}`,
+  kind: (p) =>
+    `${capital(p.metric as string)} ratings for ${p.subject} sessions run ${p.direction === 'down' ? 'lower' : 'higher'}: ` +
+    `${roundTenth(p.numbers.median)} against ${roundTenth(p.numbers.others)} for the rest`,
+  schedule: (p) =>
+    p.numbers.skipped === undefined
+      ? `Sessions are often moved away from ${p.subject}: ${p.numbers.moved} times`
+      : `${p.subject} sessions are often skipped: ${p.numbers.skipped} of ${p.numbers.of}`,
+  'body-push-back': (p) => `A skip has followed a low Body rating ${p.numbers.pairs} times`,
+  'effort-drift': (p) =>
+    p.metric === 'pace'
+      ? `Pace on similar ${p.subject} sessions has gone ${p.direction}: ${roundTenth(p.numbers.baseline)} to ${roundTenth(p.numbers.recent)} metres a minute`
+      : `Average heart rate on similar ${p.subject} sessions has gone ${p.direction}: ${roundTenth(p.numbers.baseline)} to ${roundTenth(p.numbers.recent)}`,
+  'low-body-after-intensity': (p) => `Body has been low the session after an Intensity session ${p.numbers.times} times`,
+  'sleep-intensity': (p) => `An Intensity session was pushed back after a short night ${p.numbers.times} times`,
+  'pulse-push-back': (p) => `Sessions were pushed back with a raised resting pulse ${p.numbers.times} times`,
+  'sleep-mind': (p) => `Mind was low after a short night ${p.numbers.times} times`,
+};
+
+/** One line per pattern, with how many sessions it rests on (ruling 11); Coach Chat and the Briefing share them. */
+export function patternLines(patterns: readonly Pattern[]): string[] {
+  return patterns.map((p) => {
+    const sure = p.sample < FEW_SESSIONS ? 'rests on few sessions' : `${p.sample} sessions`;
+    return `- ${PATTERN_LINE[p.family](p)} (${sure}).`;
+  });
+}
+
+/**
+ * The patterns handed to Coach Chat. With none, it says so: Momentum names
+ * only code-found patterns (ruling 3), and an absent section would leave it
+ * free to invent one.
+ */
+export function patternsBlock(patterns: readonly Pattern[]): PromptBlock {
+  if (patterns.length === 0) return 'PATTERNS: none found. Do not name a pattern of your own.';
+  return [PATTERNS_HEADING, ...patternLines(patterns), PATTERNS_RULES].join('\n');
+}
+

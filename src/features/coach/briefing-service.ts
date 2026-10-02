@@ -8,6 +8,7 @@ import { canSeeAthleteReports } from './link-visibility';
 import { currentPhase, staleLastBlockOf } from './training-blocks';
 import { getLatestUnrealisticFlag } from './training-block-repository';
 import { briefingContextOf, briefingInclude, readAthleteContext } from './athlete-context';
+import { surfacePatterns } from './pattern-insight-service';
 import {
   appendBriefingMessages,
   createBriefing,
@@ -126,7 +127,10 @@ export async function buildBriefingContextFor(
   };
 
   const { reports, transcripts } = briefingContextOf(context, { today, phase });
-  return buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName });
+  // Code-found patterns, after Link Visibility (`training-architecture/50`,
+  // ruling 10): one built from reports the athlete does not share is dropped.
+  const patterns = surfacePatterns(athleteId, 'briefing', context, today, link.visibility);
+  return buildBriefingContext({ today, plan, blocks, reports, transcripts, language, preferredName, patterns });
 }
 
 export interface BriefingState {

@@ -6,6 +6,7 @@ import type { SessionContext } from './check-in';
 import { weekFrom } from './week';
 import { buildChatPrompt } from './prompts';
 import { chatContextOf, chatInclude, readAthleteContext } from './athlete-context';
+import { surfacePatterns } from './pattern-insight-service';
 import { takeConversationTurn, type ConversationTurnResult } from './conversation-turn';
 import { getLatestOpenConversation, getMessages } from './conversation-repository';
 import type { Message } from './conversation';
@@ -134,6 +135,9 @@ async function renderSystem(
   );
 
   const { checkIn, weekSessions, signals } = chatContextOf(context, athlete, { today, language, planWrittenAt });
+  // Momentum may name only what code found in this athlete's own history
+  // (`training-architecture/50`); with none, the prompt says it has none.
+  const patterns = surfacePatterns(athlete.id, 'coach_chat', context, today);
 
   // The Reference is matched against the week by id here, where ids still
   // exist; downstream of this call nothing knows what a session id is.
@@ -148,7 +152,7 @@ async function renderSystem(
       // resolved at the user seam by the action and threaded here as plain
       // data, beside the language and for the same reason.
       preferredName,
-      signals,
+      { ...signals, patterns },
     ),
     window,
   };

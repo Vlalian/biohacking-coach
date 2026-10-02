@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { addDays } from '@/lib/date';
 import type { Session } from '@/features/session/session';
 import type { Message } from './conversation';
 import { READINESS_SCORE_TOKENS } from '@/test/readiness-tokens';
@@ -977,5 +978,58 @@ describe('what the athlete’s body allows reaches Coach Chat too (training-arch
     capacityFor.mockResolvedValue(null);
     await sendCoachChatMessage(ATHLETE, null, 'intervals tomorrow?', '2026-08-12');
     expect(callCoach.mock.calls[0][0].system).not.toContain('CAPACITY');
+  });
+});
+
+describe('Pattern Insight reaches Coach Chat (training-architecture/50)', () => {
+  beforeEach(() => callCoach.mockClear());
+  const lastSystem = () => callCoach.mock.calls.at(-1)![0].system as string;
+
+  /** Four weeks of Tuesday/Thursday/Saturday, every Tuesday skipped. */
+  function skippedTuesdays() {
+    const sessions = [];
+    for (const monday of ['2026-07-13', '2026-07-20', '2026-07-27', '2026-08-03']) {
+      for (const [offset, status] of [[1, 'skipped'], [3, 'completed'], [5, 'completed']] as const) {
+        sessions.push({
+          id: `s-${monday}-${offset}`,
+          date: addDays(monday, offset),
+          type: 'Endurance',
+          status,
+          parked: false,
+          dayOrder: 0,
+          title: null,
+          duration: 60,
+          zone: null,
+          note: null,
+          sport: null,
+          feedbackBody: status === 'completed' ? 4 : null,
+          feedbackMind: status === 'completed' ? 4 : null,
+          feedbackComment: null,
+          origin: 'coach',
+          isTraining: true,
+          summary: null,
+          version: 1,
+        });
+      }
+    }
+    return sessions;
+  }
+
+  it('hands the prompt the patterns found in the athlete\'s own history', async () => {
+    const repo = await import('@/features/session/session-repository');
+    vi.mocked(repo.getSessionsInRange).mockResolvedValue(skippedTuesdays() as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await sendCoachChatMessage(ATHLETE, null, 'why is Tuesday so hard?', '2026-08-12', 'en', null);
+    const logged = warn.mock.calls.map(([line]) => JSON.parse(line as string)).filter((l) => l.event === 'pattern_detected');
+    expect(logged.map((l) => l.surface)).toContain('coach_chat');
+
+    expect(lastSystem()).toContain('- Tuesday sessions are often skipped: 4 of 4');
+    vi.mocked(repo.getSessionsInRange).mockResolvedValue([]);
+  });
+
+  it('with no history to speak of, tells Momentum it has no patterns', async () => {
+    await sendCoachChatMessage(ATHLETE, null, 'hello', '2026-08-12', 'en', null);
+    expect(lastSystem()).toContain('PATTERNS: none found. Do not name a pattern of your own.');
   });
 });

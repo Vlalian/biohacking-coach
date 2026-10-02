@@ -194,10 +194,10 @@ describe('the Presence Arc in Coach Chat (training-architecture/21)', () => {
     expect(prompt).not.toContain('PRESENCE — COLD START');
   });
 
-  it('full: synthesises and names patterns', () => {
+  it('full: synthesises, and names only the patterns code found (training-architecture/50)', () => {
     const prompt = at('full');
     expect(prompt).toContain('PRESENCE — FULL:');
-    expect(prompt).toContain('name patterns');
+    expect(prompt).toContain('a pattern only if it is listed under PATTERNS');
     expect(prompt).not.toContain('PRESENCE — BUILDING');
   });
 
@@ -1145,5 +1145,39 @@ describe('Coach Chat reads the athlete signals the draft does (training-architec
         comments: [{ date: '2026-08-11', sessionType: 'Endurance', comment: 'ring 12345678' }],
       }),
     ).toThrow();
+  });
+});
+
+describe('Pattern Insight in Coach Chat (training-architecture/50)', () => {
+  const SIGNALS = { recentWeeks: [], health: { injuries: [], illnesses: [] }, moves: [], comments: [] };
+  const tuesdays = {
+    family: 'schedule' as const,
+    subject: 'Tuesday',
+    direction: null,
+    numbers: { skipped: 3, of: 4 },
+    sample: 4,
+    strength: 3,
+    section: 'always' as const,
+  };
+
+  it('hands Momentum the patterns it was given, with the rules for saying one', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-12', null, [], null, null, { ...SIGNALS, patterns: [tuesdays] });
+    expect(prompt).toContain("PATTERNS (found by code in this athlete's own history, strongest first):");
+    expect(prompt).toContain('- Tuesday sessions are often skipped: 3 of 4 (rests on few sessions).');
+    expect(prompt).toMatch(/only when the conversation touches it/i);
+  });
+
+  it('with none found, says it has none and may not name its own', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-12', null, [], null, null, { ...SIGNALS, patterns: [] });
+    expect(prompt).toContain('PATTERNS: none found. Do not name a pattern of your own.');
+  });
+
+  it('no Presence stage tells Momentum to find patterns of its own any more', () => {
+    for (const presenceStage of ['building', 'full'] as const) {
+      const prompt = buildChatPrompt({ ...BASE, presenceStage }, '2026-08-12', null, [], null, null, { ...SIGNALS, patterns: [] });
+      expect(prompt).not.toMatch(/name patterns, strong sessions/);
+      expect(prompt).not.toMatch(/starting to notice a pattern/);
+      expect(prompt).toMatch(/a pattern only if it is listed under PATTERNS/);
+    }
   });
 });

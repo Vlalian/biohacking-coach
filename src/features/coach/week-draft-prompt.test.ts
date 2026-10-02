@@ -475,3 +475,11 @@ describe('the rules on how far the draft moves the baseline (training-architectu
     expect(renderWeekDraftPrompt(ctx())).not.toContain('volumeReason');
   });
 });
+
+describe('the draft is not shaped by Pattern Insight (training-architecture/50, ruling 2)', () => {
+  it('carries no patterns section and no instruction about patterns', () => {
+    const out = renderWeekDraftPrompt(ctx());
+    expect(out).not.toContain('PATTERNS');
+    expect(out).not.toMatch(/pattern/i);
+  });
+});

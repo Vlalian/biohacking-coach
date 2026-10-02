@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { addDays } from '@/lib/date';
 import { capacityStatement } from '@/features/health/capacity';
 
 const {
@@ -47,10 +48,17 @@ const { getTargetRace, getRaces } = vi.hoisted(() => ({
 vi.mock('@/features/race/race-repository', () => ({ getTargetRace, getRaces }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getPreferredNameForAthlete }));
+const { getSessionsInRange, getSessionMovesSince } = vi.hoisted(() => ({
+  getSessionsInRange: vi.fn(async (): Promise<unknown[]> => []),
+  getSessionMovesSince: vi.fn(async (): Promise<unknown[]> => []),
+}));
 vi.mock('@/features/session/session-repository', () => ({
   getBriefingPlan,
   getBriefingReflections,
+  // Pattern Insight's twelve weeks (`training-architecture/50`). None by default.
+  getSessionsInRange,
 }));
+vi.mock('@/features/session/session-move-repository', () => ({ getSessionMovesSince }));
 vi.mock('./coach-client', () => ({ callCoach, EmptyCoachReplyError: class EmptyCoachReplyError extends Error {} }));
 const { getResolvedBlocks, getLatestUnrealisticFlag } = vi.hoisted(() => ({
   getResolvedBlocks: vi.fn(async (): Promise<unknown> => ({ race: null, set: null, blocks: [] })),
@@ -649,3 +657,85 @@ describe('buildBriefingContextFor — the length script reads what the model rea
     expect(renderBriefingPrompt(ctx)).toContain('PLAN');
   });
 });
+
+describe('Pattern Insight reaches the Briefing through Link Visibility (training-architecture/50)', () => {
+  afterEach(() => getSessionsInRange.mockResolvedValue([]));
+
+  /** Four weeks: Thursday rated 1, then Saturday skipped, every week. */
+  function lowThenSkipped() {
+    const rows = [];
+    for (const monday of ['2026-07-06', '2026-07-13', '2026-07-20', '2026-07-27']) {
+      for (const [offset, over] of [
+        [1, {}],
+        [3, { feedbackBody: 1 }],
+        [5, { status: 'skipped', feedbackBody: null, feedbackMind: null }],
+      ] as const) {
+        rows.push({
+          id: `s-${monday}-${offset}`,
+          date: addDays(monday, offset),
+          type: 'Endurance',
+          status: 'completed',
+          parked: false,
+          dayOrder: 0,
+          title: null,
+          duration: 60,
+          zone: null,
+          note: null,
+          sport: null,
+          feedbackBody: 4,
+          feedbackMind: 4,
+          feedbackComment: null,
+          origin: 'coach',
+          isTraining: true,
+          summary: null,
+          version: 1,
+          ...over,
+        });
+      }
+    }
+    return rows;
+  }
+
+  it('drops patterns built from reports the athlete does not share, and keeps the schedule', async () => {
+    const { buildBriefingContextFor } = await import('./briefing-service');
+    getSessionsInRange.mockResolvedValue(lowThenSkipped());
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const hidden = await buildBriefingContextFor(activeLink(false, false), TODAY);
+    expect(hidden.patterns?.map((p) => p.family)).toEqual(['schedule']);
+    // Logged as the Briefing's, so the tuning can tell the two surfaces apart.
+    expect(warn.mock.calls.map(([line]) => JSON.parse(line as string).surface)).toContain('briefing');
+
+    // Shared, the reports' patterns compete too, and the strongest three win.
+    const shared = await buildBriefingContextFor(activeLink(true, false), TODAY);
+    expect(shared.patterns?.some((p) => p.section === 'reports')).toBe(true);
+    expect(shared.patterns?.length).toBeLessThanOrEqual(3);
+  });
+
+  it('renders them after the reports, as observations with how sure each is', async () => {
+    const { buildBriefingContextFor } = await import('./briefing-service');
+    const { renderBriefingPrompt } = await import('./briefing');
+    getSessionsInRange.mockResolvedValue(lowThenSkipped());
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const prompt = renderBriefingPrompt(await buildBriefingContextFor(activeLink(false, false), TODAY));
+    expect(prompt).toMatch(/PATTERNS \(found by code[\s\S]*- Saturday sessions are often skipped: 4 of 4/);
+    expect(prompt).toContain(
+      [
+        "PATTERNS (found by code in this athlete's own history, strongest first):",
+        '- Saturday sessions are often skipped: 4 of 4 (rests on few sessions).',
+        'Report these as observations',
+      ].join('\n'),
+    );
+  });
+
+  it('with none found, the Briefing carries no patterns section', async () => {
+    const { buildBriefingContextFor } = await import('./briefing-service');
+    const { renderBriefingPrompt } = await import('./briefing');
+    const ctx = await buildBriefingContextFor(activeLink(true, true), TODAY);
+    expect(ctx.patterns).toEqual([]);
+    expect(renderBriefingPrompt(ctx)).not.toContain('PATTERNS');
+  });
+});
+

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateSyntheticHistory,
-  toSessionHistory,
+  toPatternHistory,
   SYNTHETIC_PROFILES,
   type SyntheticProfile,
   PERSONA_LABELS,
@@ -13,6 +13,7 @@ import {
 } from './synthetic-history';
 import { currentPhase, trainingBlocks } from '@/features/coach/training-blocks';
 import { detectPatterns } from '@/features/coach/pattern-insight';
+import { dateKey } from '@/lib/date';
 
 /**
  * The generator behind the two athletes a Head Coach evaluates the product
@@ -145,7 +146,8 @@ describe('generateSyntheticHistory', () => {
       const { sessions } = generateSyntheticHistory(profile, 10, TODAY, 1234);
       // Through the real detector, on the real shape it consumes. Asserting the
       // data "looks correlated" would prove nothing about what the Coach sees.
-      expect(detectPatterns(toSessionHistory(sessions)).length).toBeGreaterThan(0);
+      const found = detectPatterns({ sessions: toPatternHistory(sessions), moves: [], today: dateKey(TODAY) });
+      expect(found.map((p) => p.family)).toContain('low-body-after-intensity');
     }
   });
 
@@ -201,41 +203,37 @@ describe('generateSyntheticHistory', () => {
   });
 });
 
-describe('toSessionHistory', () => {
-  it('hands the detector only completed sessions', () => {
+describe('toPatternHistory', () => {
+  it('hands the detector every session, a skip as a skip', () => {
     const { sessions } = generate();
-    const history = toSessionHistory(sessions);
-    // A skip is not evidence about the athlete's body — it is the absence of
-    // evidence, and feeding it in as a session would let a skipped week read as
-    // a bad week.
-    expect(history).toHaveLength(
-      sessions.filter((s) => s.status === 'completed').length,
-    );
+    const history = toPatternHistory(sessions);
+    // Skips are evidence now: on one weekday they are a schedule pattern, after
+    // a low rating they are body push-back.
+    expect(history).toHaveLength(sessions.length);
+    expect(history.map((h) => h.status)).toEqual(sessions.map((s) => s.status));
   });
 
-  it('omits a score the athlete never gave, rather than sending a null', () => {
+  it('carries a score the athlete never gave as null, which the detector reads as unrated', () => {
     const { sessions } = generate();
-    const unrated = sessions.find(
-      (s) => s.status === 'completed' && s.feedbackBody === null,
-    );
+    const unrated = sessions.find((s) => s.status === 'completed' && s.feedbackBody === null);
     expect(unrated).toBeDefined();
-
-    const item = toSessionHistory([unrated!])[0];
-    // `SessionHistoryItem`'s fields are optional and the detector tests them
-    // with `!== undefined`. A present-but-null score would pass that test and
-    // then be compared as a number, which is how a rating nobody gave becomes a
-    // pattern about them.
-    expect('bodyFeedback' in item).toBe(false);
-    expect('mindFeedback' in item).toBe(false);
-    expect(item.sessionType).toBe(unrated!.type.toLowerCase());
+    expect(toPatternHistory([unrated!])[0]).toMatchObject({ body: null, mind: null, type: unrated!.type });
   });
 
-  it('carries the scores through when they exist', () => {
+  it('carries the scores and the stored Session Type through, and invents no device data', () => {
     const { sessions } = generate();
     const rated = sessions.find((s) => s.feedbackBody !== null)!;
-    const item = toSessionHistory([rated])[0];
-    expect(item.bodyFeedback).toBe(rated.feedbackBody);
-    expect(item.mindFeedback).toBe(rated.feedbackMind);
+    expect(toPatternHistory([rated])[0]).toEqual({
+      date: rated.date,
+      type: rated.type,
+      sport: null,
+      status: rated.status,
+      duration: rated.duration,
+      body: rated.feedbackBody,
+      mind: rated.feedbackMind,
+      avgHr: null,
+      distanceM: null,
+    });
   });
 });
 
