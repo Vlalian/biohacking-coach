@@ -413,22 +413,49 @@ export type UndoResult =
   | { ok: false; reason: 'not-found' | 'not-owner' | 'not-imported' };
 
 /**
- * The session ids this athlete completed by accepting a Detected Activity.
+ * The session ids "Undo import" is offered on: exactly those
+ * {@link undoDetectedImport} will act on.
  *
- * Read from the event log rather than a column: `garmin_imported` already
- * records exactly this, and a column duplicating it is a second thing that can
- * disagree. One small query per Training Plan render, kept off the hot session
- * read.
+ * Read from the event log rather than a column: the import events already
+ * record this, and a column duplicating it is a second thing that can
+ * disagree. Read the way undo reads it — the newest import event per session
+ * decides, and an Athlete Session or a session no longer completed is not
+ * undoable. Listing every session with any `garmin_imported` event offered the
+ * button after an undo, after an undo and a manual completion, and on an
+ * unmatched upload's Athlete Session, and each click failed `not-imported`
+ * (code-health/34 A4). Two small queries per Training Plan render, kept off
+ * the hot session read.
  */
 export async function listImportedSessionIds(athleteId: string): Promise<string[]> {
-  const rows = await getDb()
-    .select({ payload: events.payload })
+  const db = getDb();
+  const log = await db
+    .select({ type: events.type, payload: events.payload })
     .from(events)
-    .where(and(eq(events.athleteId, athleteId), eq(events.type, 'garmin_imported')));
+    .where(and(eq(events.athleteId, athleteId), inArray(events.type, [...IMPORT_STATE_EVENTS])))
+    .orderBy(desc(events.createdAt));
 
-  return rows
-    .map((r) => (r.payload as { sessionId?: string } | null)?.sessionId)
-    .filter((id): id is string => typeof id === 'string');
+  const rows = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.athleteId, athleteId),
+        inArray(sessions.id, importsInForce(log)),
+        eq(sessions.status, 'completed'),
+        ne(sessions.origin, 'athlete'),
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
+/** The sessions whose newest import event, in a newest-first log, is an import. */
+function importsInForce(log: { type: string; payload: unknown }[]): string[] {
+  const newest = new Map<string, { type: string }>();
+  for (const event of log) {
+    const sessionId = (event.payload as { sessionId?: string } | null)?.sessionId;
+    if (sessionId && !newest.has(sessionId)) newest.set(sessionId, event);
+  }
+  return [...newest].filter(([, event]) => isActiveImport(event)).map(([id]) => id);
 }
 
 /**
