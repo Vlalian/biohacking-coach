@@ -186,9 +186,14 @@ describe('the feedback store is not readable from any Head Coach surface', () =>
       'app/[locale]/(app)/layout.tsx',
       'app/[locale]/message-feedback-actions.ts',
       // Note what is absent: `message-thumbs.tsx`, the client control, talks to
-      // the server action and never to the store. The store has exactly one
-      // caller on the write path and one on the read path.
+      // the server action and never to the store. The app has exactly one caller
+      // on the write path and one on the read path.
       'db/schema.ts',
+      // The builders' terminal readout (`npm run feedback`, showable-version/48).
+      // Its only caller is `scripts/feedback.ts`, outside src/, and the
+      // cross-athlete-readout guard above keeps every page and action from
+      // importing it, so this is no Head Coach surface.
+      'features/feedback/feedback-report-repository.ts',
       'features/feedback/message-feedback-repository.ts',
     ]);
   });

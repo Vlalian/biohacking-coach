@@ -1,6 +1,6 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNotNull } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { athleteFeedback, conversations, messages } from '@/db/schema';
+import { athleteFeedback, conversations, messageFeedback, messages, sessions, type MessageRating } from '@/db/schema';
 import type { MessageRole } from '@/features/coach/conversation';
 import type { FeedbackReportInput, ReportInterview } from './feedback-report';
 
@@ -19,11 +19,15 @@ import type { FeedbackReportInput, ReportInterview } from './feedback-report';
  * this module is the script.
  */
 
-/** Every Feedback Interview and every `athlete_feedback` row, in three reads. */
+/**
+ * Every Feedback Interview, every `athlete_feedback` row, every thumbs rating
+ * and every Session Reflection that carries a comment, in five reads
+ * (showable-version/48).
+ */
 export async function getFeedbackReportInput(): Promise<FeedbackReportInput> {
   const db = getDb();
 
-  const [conversationRows, messageRows, feedbackRows] = await Promise.all([
+  const [conversationRows, messageRows, feedbackRows, thumbRows, reflectionRows] = await Promise.all([
     db
       .select({
         id: conversations.id,
@@ -43,6 +47,7 @@ export async function getFeedbackReportInput(): Promise<FeedbackReportInput> {
         role: messages.role,
         content: messages.content,
         createdAt: messages.createdAt,
+        seq: messages.seq,
       })
       .from(messages)
       .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -51,6 +56,7 @@ export async function getFeedbackReportInput(): Promise<FeedbackReportInput> {
 
     db
       .select({
+        id: athleteFeedback.id,
         athleteId: athleteFeedback.athleteId,
         kind: athleteFeedback.kind,
         body: athleteFeedback.body,
@@ -61,6 +67,38 @@ export async function getFeedbackReportInput(): Promise<FeedbackReportInput> {
       })
       .from(athleteFeedback)
       .orderBy(asc(athleteFeedback.createdAt)),
+
+    // Thumbs sit only on Momentum's messages; the join brings the message text
+    // the rating is about. Every row is feedback, so there is nothing to filter.
+    db
+      .select({
+        athleteId: messageFeedback.athleteId,
+        messageId: messageFeedback.messageId,
+        rating: messageFeedback.rating,
+        comment: messageFeedback.comment,
+        messageText: messages.content,
+        updatedAt: messageFeedback.updatedAt,
+      })
+      .from(messageFeedback)
+      .innerJoin(messages, eq(messageFeedback.messageId, messages.id))
+      .orderBy(asc(messageFeedback.updatedAt)),
+
+    // A reflection is feedback only when the athlete wrote something.
+    db
+      .select({
+        athleteId: sessions.athleteId,
+        sessionId: sessions.id,
+        date: sessions.date,
+        type: sessions.type,
+        body: sessions.feedbackBody,
+        mind: sessions.feedbackMind,
+        comment: sessions.feedbackComment,
+        ratedAt: sessions.ratedAt,
+        updatedAt: sessions.updatedAt,
+      })
+      .from(sessions)
+      .where(isNotNull(sessions.feedbackComment))
+      .orderBy(asc(sessions.date)),
   ]);
 
   const interviews: ReportInterview[] = conversationRows.map((c) => ({
@@ -69,8 +107,20 @@ export async function getFeedbackReportInput(): Promise<FeedbackReportInput> {
     startedAt: c.createdAt,
     turns: messageRows
       .filter((m) => m.conversationId === c.id)
-      .map((m) => ({ role: m.role as MessageRole, content: m.content, createdAt: m.createdAt })),
+      .map((m) => ({ role: m.role as MessageRole, content: m.content, createdAt: m.createdAt, seq: m.seq })),
   }));
 
-  return { interviews, feedback: feedbackRows };
+  return {
+    interviews,
+    feedback: feedbackRows,
+    // The column's check constraint holds `rating` to up/down.
+    thumbs: thumbRows.map((t) => ({ ...t, rating: t.rating as MessageRating })),
+    // A comment always comes with `ratedAt` from the app; a seeded one may not,
+    // and it is shown dated by its row's last change rather than dropped.
+    reflections: reflectionRows.map(({ updatedAt, ratedAt, comment, ...r }) => ({
+      ...r,
+      comment: comment as string,
+      ratedAt: ratedAt ?? updatedAt,
+    })),
+  };
 }

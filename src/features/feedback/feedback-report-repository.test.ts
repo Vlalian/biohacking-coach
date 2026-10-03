@@ -42,27 +42,31 @@ beforeEach(() => {
 
 describe('getFeedbackReportInput', () => {
   it('reads only the feedback kind, for the conversations and for their turns', async () => {
-    queue = [[], [], []];
+    queue = [[], [], [], [], []];
     await getFeedbackReportInput();
 
-    // Two filtered reads: conversations, then messages joined to them. The
-    // athlete_feedback read has no where — every row is a feedback row.
+    // Two kind-filtered reads: conversations, then messages joined to them. The
+    // athlete_feedback and thumbs reads have no where — every row of theirs is
+    // feedback — and the reflections read filters on a comment instead.
     const rendered = whereArgs.map((arg) => new PgDialect().sqlToQuery(arg as SQL));
-    expect(rendered).toHaveLength(2);
-    for (const q of rendered) {
+    const kindFilters = rendered.filter((q) => q.sql.includes('"kind"'));
+    expect(kindFilters).toHaveLength(2);
+    for (const q of kindFilters) {
       expect(q.sql).toContain('"kind" = ');
       expect(q.params).toEqual(['feedback']);
     }
   });
 
   it('asks for opaque ids and the words, never a column that could name anybody', async () => {
-    queue = [[], [], []];
+    queue = [[], [], [], [], []];
     await getFeedbackReportInput();
 
     expect(selectArgs.map((p) => Object.keys(p as object))).toEqual([
       ['id', 'athleteId', 'createdAt'],
-      ['conversationId', 'role', 'content', 'createdAt'],
-      ['athleteId', 'kind', 'body', 'view', 'conversationId', 'coachFailureReason', 'createdAt'],
+      ['conversationId', 'role', 'content', 'createdAt', 'seq'],
+      ['id', 'athleteId', 'kind', 'body', 'view', 'conversationId', 'coachFailureReason', 'createdAt'],
+      ['athleteId', 'messageId', 'rating', 'comment', 'messageText', 'updatedAt'],
+      ['athleteId', 'sessionId', 'date', 'type', 'body', 'mind', 'comment', 'ratedAt', 'updatedAt'],
     ]);
   });
 
@@ -74,9 +78,9 @@ describe('getFeedbackReportInput', () => {
         { id: 'conv_2', athleteId: 'athlete_2', createdAt: t0 },
       ],
       [
-        { conversationId: 'conv_1', role: 'athlete', content: 'one', createdAt: t0 },
-        { conversationId: 'conv_2', role: 'athlete', content: 'other', createdAt: t0 },
-        { conversationId: 'conv_1', role: 'coach_ai', content: 'two', createdAt: t0 },
+        { conversationId: 'conv_1', role: 'athlete', content: 'one', createdAt: t0, seq: 1 },
+        { conversationId: 'conv_2', role: 'athlete', content: 'other', createdAt: t0, seq: 1 },
+        { conversationId: 'conv_1', role: 'coach_ai', content: 'two', createdAt: t0, seq: 2 },
       ],
       [
         {
@@ -99,17 +103,42 @@ describe('getFeedbackReportInput', () => {
         conversationId: 'conv_1',
         startedAt: t0,
         turns: [
-          { role: 'athlete', content: 'one', createdAt: t0 },
-          { role: 'coach_ai', content: 'two', createdAt: t0 },
+          { role: 'athlete', content: 'one', createdAt: t0, seq: 1 },
+          { role: 'coach_ai', content: 'two', createdAt: t0, seq: 2 },
         ],
       },
       {
         athleteId: 'athlete_2',
         conversationId: 'conv_2',
         startedAt: t0,
-        turns: [{ role: 'athlete', content: 'other', createdAt: t0 }],
+        turns: [{ role: 'athlete', content: 'other', createdAt: t0, seq: 1 }],
       },
     ]);
     expect(input.feedback).toEqual([expect.objectContaining({ kind: 'trust_signal', body: 'no' })]);
+  });
+
+  it('reads thumbs with the text of the message they pin, and reflections that carry a comment', async () => {
+    const now = new Date('2026-09-30T08:00:00Z');
+    queue = [
+      [],
+      [],
+      [],
+      [{ athleteId: 'a', messageId: 'm', rating: 'up', comment: null, messageText: 'hi', updatedAt: now }],
+      [{ athleteId: 'a', sessionId: 's', date: '2026-09-28', type: 'Endurance', body: 3, mind: 3, comment: 'ok', ratedAt: now }],
+    ];
+    const input = await getFeedbackReportInput();
+
+    expect(input.thumbs).toEqual([{ athleteId: 'a', messageId: 'm', rating: 'up', comment: null, messageText: 'hi', updatedAt: now }]);
+    expect(input.reflections).toEqual([{ athleteId: 'a', sessionId: 's', date: '2026-09-28', type: 'Endurance', body: 3, mind: 3, comment: 'ok', ratedAt: now }]);
+    const reflectionWhere = new PgDialect().sqlToQuery(whereArgs.at(-1) as SQL);
+    expect(reflectionWhere.sql).toContain('"feedback_comment" is not null');
+  });
+
+  it('dates a reflection comment with no rating time by its row’s last change, rather than dropping it', async () => {
+    const changed = new Date('2026-09-25T10:00:00Z');
+    queue = [[], [], [], [], [{ athleteId: 'a', sessionId: 's', date: '2026-09-25', type: 'Endurance', body: null, mind: null, comment: 'seeded', ratedAt: null, updatedAt: changed }]];
+    const input = await getFeedbackReportInput();
+
+    expect(input.reflections).toEqual([{ athleteId: 'a', sessionId: 's', date: '2026-09-25', type: 'Endurance', body: null, mind: null, comment: 'seeded', ratedAt: changed }]);
   });
 });
