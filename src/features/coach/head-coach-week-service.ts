@@ -6,7 +6,8 @@ import { draftLanded } from './week-draft-service';
 import { chosenFirstDay, ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
 import { getUnavailableDates } from '@/features/availability/availability-repository';
 import { fixedConstraintsOf, validateProposedPlan, type ProposedSession } from './weekly-session';
-import { weekWindow } from './week-draft';
+import { wholeWeekWindow } from './week-draft';
+import { addDays } from '@/lib/date';
 import type { PlanningWindow } from './planning-window';
 import { getPendingWeekDraft, recordWeekDraftApproval } from './week-draft-repository';
 
@@ -113,17 +114,20 @@ export async function approveWeekDraft(params: {
 }
 
 /**
- * The draft's week bounded by the athlete's own limits — their Fixed
- * Constraints, Unavailable dates and chosen first day — which the athlete's
- * accept (`week-draft-decision-service.ts`) refuses a session for breaking.
- * Without them a coach could approve a week the athlete then cannot accept
- * (code-health/34 A1). Null when the week has nothing left to plan.
+ * The window the athlete's accept (`week-draft-decision-service.ts`) will
+ * validate this week against: the draft's whole week, as drafted (Mads,
+ * 2026-09-15), bounded by the athlete's own limits, which are their Fixed
+ * Constraints, Unavailable dates and chosen first day. Without the limits a
+ * coach could approve a week the athlete then cannot accept (code-health/34
+ * A1); and the whole week, not only the days from today, so a midweek approval
+ * keeps the week's earlier sessions as the accept will (Mads, 2026-10-03).
+ * Null once the week has ended: nothing is left to plan.
  */
 async function athleteLimits(athleteId: string, weekStart: string, today: string): Promise<PlanningWindow | null> {
+  if (addDays(weekStart, 6) < today) return null;
   const athlete = await getAthleteById(athleteId);
-  return weekWindow(
+  return wholeWeekWindow(
     weekStart,
-    today,
     fixedConstraintsOf({ profile: athlete?.profile ?? null }),
     await getUnavailableDates(athleteId),
     chosenFirstDay(athlete?.profile, today),

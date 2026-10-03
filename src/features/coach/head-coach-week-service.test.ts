@@ -185,6 +185,15 @@ describe('approveWeekDraft', () => {
     });
   });
 
+  it('approves the draft’s whole week midweek, an earlier day’s session included, as the athlete’s accept will take it', async () => {
+    // Mads, 2026-10-03: the coach's approval takes the week as drafted, the
+    // window the athlete's accept uses (2026-09-15 ruling), not only the days
+    // from today. Thursday's approval of a week starting Monday keeps Tuesday.
+    expect(await approve({ today: '2026-09-24' })).toEqual({ ok: true, changed: false });
+    // ...up to and including the week's last day.
+    expect(await approve({ today: '2026-09-27' })).toEqual({ ok: true, changed: false });
+  });
+
   it('refuses invalid when the draft’s week has already ended — nothing left to plan', async () => {
     expect(await approve({ today: '2026-10-05' })).toEqual({ ok: false, reason: 'invalid' });
     expect(recordWeekDraftApproval).not.toHaveBeenCalled();
