@@ -63,7 +63,8 @@ export type SleepRow = { day: number; hours: number; feeling: number };
 export const PEAK_WINDOW_LABELS = ['5s', '1m', '5m', '20m', '60m'] as const;
 export type PeakWindowLabel = (typeof PEAK_WINDOW_LABELS)[number];
 
-export type PeaksRow = { label: string } & Partial<
+/** One month's best rolling means. `week` is how many weeks ago its newest session was. */
+export type PeaksRow = { label: string; week: number } & Partial<
   Record<PeakWindowLabel, number>
 >;
 
@@ -113,8 +114,9 @@ export function emptyDataset(): InfoDataset {
  * Clips a dataset to the last `weeks` weeks — the single place windowing
  * happens; panels render whatever they are given. Week numbers count down
  * toward now (0 = current), so "last N weeks" keeps entries with `week < N`.
- * Sleep is daily (day counts down too); peaks are monthly bests, clipped to
- * ~one row per 4 weeks of window. Race facts are about the future and are
+ * Sleep is daily (day counts down too); peaks are monthly bests, kept when the
+ * month's newest session falls inside the window — by time, never by row
+ * count, since a month without wearable data has no row (code-health/34 A5). Race facts are about the future and are
  * never clipped.
  */
 export function windowDataset(
@@ -122,15 +124,14 @@ export function windowDataset(
   weeks: number | null,
 ): InfoDataset {
   if (weeks == null) return dataset; // 'all history'
-  const months = Math.max(1, Math.ceil(weeks / 4));
   return {
     ...dataset,
     sessions: dataset.sessions.filter((s) => s.week < weeks),
     weekly: dataset.weekly.filter((w) => w.week < weeks),
     checkins: dataset.checkins.filter((c) => c.week < weeks),
     sleep: dataset.sleep.filter((d) => d.day < weeks * 7),
-    peaksPower: dataset.peaksPower.slice(-months),
-    peaksHr: dataset.peaksHr.slice(-months),
+    peaksPower: dataset.peaksPower.filter((p) => p.week < weeks),
+    peaksHr: dataset.peaksHr.filter((p) => p.week < weeks),
     bests: dataset.bests.filter((b) => b.week < weeks),
   };
 }

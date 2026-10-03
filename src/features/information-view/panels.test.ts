@@ -46,7 +46,7 @@ const ONE_WEEK = {
   zones: null,
   longest: 30,
 };
-const ONE_PEAK = { label: 'Jul', '5s': 700, '1m': 350, '5m': 260, '20m': 220, '60m': 195 };
+const ONE_PEAK = { label: 'Jul', week: 0, '5s': 700, '1m': 350, '5m': 260, '20m': 220, '60m': 195 };
 
 function oneReadingFor(id: string): InfoDataset {
   const D = emptyDataset();
@@ -87,7 +87,7 @@ function oneReadingFor(id: string): InfoDataset {
       D.bests.push({ date: TODAY, week: 0, metricKey: 'bestPower5s', sport: 'bike', value: '850 W' });
       return D;
     case 'peaks-hr':
-      D.peaksHr.push({ label: 'Jul', '5s': 190, '1m': 182, '5m': 176, '20m': 170, '60m': 162 });
+      D.peaksHr.push({ label: 'Jul', week: 0, '5s': 190, '1m': 182, '5m': 176, '20m': 170, '60m': 162 });
       return D;
     case 'period':
       // "One reading" for a comparison is the smallest pair of blocks: two

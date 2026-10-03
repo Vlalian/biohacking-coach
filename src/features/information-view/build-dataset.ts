@@ -254,9 +254,11 @@ function buildPeaksAndBests(D: InfoDataset, streams: StreamsInput): void {
       if (!series) continue;
       let row = monthly[key].get(monthKey);
       if (!row) {
-        row = { label: monthLabel };
+        row = { label: monthLabel, week: s.week };
         monthly[key].set(monthKey, row);
       }
+      // Sessions run oldest → newest, so the last one in the month dates its row.
+      row.week = s.week;
       for (const [label, win] of PEAK_WINDOWS) {
         const best = bestRollingMean(series, win);
         if (best == null) continue;

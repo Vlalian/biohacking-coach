@@ -202,6 +202,24 @@ describe('buildDataset — peaks and bests', () => {
     expect(D.peaksPower.map((r) => r['5s'])).toEqual([170, 270]);
   });
 
+  it('dates each month’s row by its newest session, so a time range can clip it (code-health/34 A5)', () => {
+    const power = Array.from({ length: 8 }, (_, i) => 100 + i * 10);
+    const stream = { t: power.map((_, i) => i * 10), powerW: power };
+    const D = buildDataset(
+      [
+        input({ id: 'early', date: '2026-06-01', sport: 'cycling' }), // 6 weeks ago
+        input({ id: 'late', date: '2026-06-22', sport: 'cycling' }), // 3 weeks ago
+        input({ id: 'now', date: '2026-07-13', sport: 'cycling' }), // this week
+      ],
+      { early: stream, late: stream, now: stream },
+      TODAY,
+    );
+    expect(D.peaksPower.map((r) => [r.label, r.week])).toEqual([
+      ['Jun', 3],
+      ['Jul', 0],
+    ]);
+  });
+
   it('no streams → no peaks, no bests', () => {
     const D = buildDataset([input()], {}, TODAY);
     expect(D.peaksPower).toHaveLength(0);

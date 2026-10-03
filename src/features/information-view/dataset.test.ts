@@ -81,6 +81,21 @@ describe('windowDataset — time-range clipping', () => {
     });
   }
 
+  it('clips peaks by time, not by row count: a short range shows no months from long ago (code-health/34 A5)', () => {
+    // A month only has a peaks row when it had wearable data. Clipped by count,
+    // "last 4 weeks" kept the newest row however old it was; an athlete whose
+    // strap went unused for months saw peaks from then as if they were recent.
+    const D = emptyDataset();
+    D.peaksPower = [
+      { label: 'Mar', week: 20, '5s': 900 },
+      { label: 'Apr', week: 16, '5s': 910 },
+    ];
+    D.peaksHr = [{ label: 'Apr', week: 16, '5s': 180 }];
+    expect(windowDataset(D, 4).peaksPower).toEqual([]);
+    expect(windowDataset(D, 4).peaksHr).toEqual([]);
+    expect(windowDataset(D, 17).peaksPower.map((r) => r.label)).toEqual(['Apr']);
+  });
+
   it('keeps the newest entries, oldest → newest order intact', () => {
     expect(windowDataset(rich, 4).weekly.map((x) => x.week)).toEqual([3, 2, 1, 0]);
   });

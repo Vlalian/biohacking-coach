@@ -186,6 +186,7 @@ export function syntheticDataset(
       const g = i / months.length;
       D.peaksPower.push({
         label: m,
+        week: (months.length - 1 - i) * 4,
         '5s': Math.round(680 + g * 190 + rnd() * 30),
         '1m': Math.round(340 + g * 80 + rnd() * 20),
         '5m': Math.round(255 + g * 50 + rnd() * 15),
@@ -194,6 +195,7 @@ export function syntheticDataset(
       });
       D.peaksHr.push({
         label: m,
+        week: (months.length - 1 - i) * 4,
         '5s': Math.round(186 + rnd() * 8),
         '1m': Math.round(180 + rnd() * 6),
         '5m': Math.round(174 + rnd() * 5),
