@@ -1,7 +1,7 @@
 // TEST FIXTURES ONLY — never import this from app code.
 //
 // It builds FIT and GPX files byte by byte so the decode path can be tested
-// without a real export. Same rule as `information-view/synthetic-fixtures.ts`:
+// without a real export. Same rule as `src/test/synthetic-dataset.ts`:
 // invented data must never reach a real athlete's record.
 
 /**
@@ -36,7 +36,7 @@
 // with each other, not necessarily with Garmin. What a shared implementation
 // still proves is the property the corrupt-upload guard rests on — bytes altered
 // after writing no longer match the checksum stored with them.
-import { fitCrc } from './garmin';
+import { fitCrc } from '@/features/garmin/garmin';
 
 /** Seconds between the Unix epoch and the FIT epoch (1989-12-31T00:00:00Z). */
 const FIT_EPOCH_OFFSET_S = 631_065_600;

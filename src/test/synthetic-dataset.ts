@@ -1,4 +1,4 @@
-import { emptyDataset, type InfoDataset } from './dataset';
+import { emptyDataset, type InfoDataset } from '@/features/information-view/dataset';
 
 /**
  * TEST FIXTURES ONLY — never import this from app code.

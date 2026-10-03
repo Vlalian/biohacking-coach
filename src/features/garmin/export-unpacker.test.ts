@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
-import { buildFitFile } from './fit-fixture';
+import { buildFitFile } from '@/test/fit-fixture';
 import { unpackZipStream, type UnpackedEntry } from './export-unpacker';
 
 /**

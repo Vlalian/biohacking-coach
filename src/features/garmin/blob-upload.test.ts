@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
-import { buildFitFile, buildGpxFile } from './fit-fixture';
+import { buildFitFile, buildGpxFile } from '@/test/fit-fixture';
 import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_DETECTION_UPLOAD_BYTES, maxUploadBytes, MAX_ACTIVITY_BYTES, MAX_UPLOAD_INFLATED_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**

@@ -3,7 +3,7 @@ import { buildViewModel } from './view-model';
 import { emptyDataset } from './dataset';
 import { DEFAULT_FAVORITES } from './layout';
 import { PANELS } from './panels';
-import { syntheticDataset } from './synthetic-fixtures';
+import { syntheticDataset } from '@/test/synthetic-dataset';
 
 const TODAY = '2026-07-14';
 const rich = syntheticDataset('rich', TODAY);

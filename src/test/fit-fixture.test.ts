@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { parseFit, parseGpx, fitCrc } from './garmin';
+import { buildFitFile, buildGpxFile } from '@/test/fit-fixture';
+import { parseFit, parseGpx, fitCrc } from '@/features/garmin/garmin';
 
 /**
  * The FIT decode path, tested for the first time.

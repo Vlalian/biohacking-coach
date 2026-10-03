@@ -150,7 +150,7 @@ describe('parseUpload', () => {
   });
 
   it('reads a FIT file into its activities, by a name in any case', async () => {
-    const { buildFitFile } = await import('./fit-fixture');
+    const { buildFitFile } = await import('@/test/fit-fixture');
     const read = await parseUpload('ride.Fit', buildFitFile());
     expect(read.ok && read.sessions).toHaveLength(1);
   });

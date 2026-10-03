@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
-import { buildFitFile, buildGpxFile } from './fit-fixture';
+import { buildFitFile, buildGpxFile } from '@/test/fit-fixture';
 import type { ParsedSession } from './garmin';
 
 /**

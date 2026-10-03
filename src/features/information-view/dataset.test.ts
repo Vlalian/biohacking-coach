@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { emptyDataset, windowDataset } from './dataset';
-import { syntheticDataset, SYNTHETIC_STATES } from './synthetic-fixtures';
+import { syntheticDataset, SYNTHETIC_STATES } from '@/test/synthetic-dataset';
 
 const TODAY = '2026-07-14';
 

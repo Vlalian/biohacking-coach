@@ -8,7 +8,7 @@ import {
   sportSplit,
 } from './panels';
 import { emptyDataset, type InfoDataset } from './dataset';
-import { syntheticDataset } from './synthetic-fixtures';
+import { syntheticDataset } from '@/test/synthetic-dataset';
 
 const TODAY = '2026-07-14';
 const rich = syntheticDataset('rich', TODAY);
