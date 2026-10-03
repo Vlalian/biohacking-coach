@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { extractArticleText } from './jats';
 
 /**
@@ -50,11 +50,49 @@ const ARTICLE = `<?xml version="1.0" encoding="UTF-8"?>
 </article>`;
 
 describe('extractArticleText', () => {
-  const text = extractArticleText(ARTICLE);
+  // Extracted per test, not once in the describe body: run there, it happens
+  // before any test does, so the mutation run saw no test reach the extractor
+  // and most of its survivors meant nothing (code-health/34).
+  let text: string;
+  beforeEach(() => {
+    text = extractArticleText(ARTICLE);
+  });
 
   it('returns the abstract and the body prose', () => {
     expect(text).toContain('A two-week taper produced the largest gain.');
     expect(text).toContain('Twelve trials met the inclusion criteria.');
+  });
+
+  it('keeps a number inside inline markup exactly as the paper wrote it (code-health/34 A3)', () => {
+    // The XML parser's default turned a tag holding only a number into a
+    // number: 0.50 became 0.5 and 007 became 7, in passages cited to athletes
+    // under the paper's name.
+    const xml = `<article><body><p>An effect of <italic>0.50</italic> over <bold>007</bold> days, d = <italic>1e3</italic>.</p></body></article>`;
+    expect(extractArticleText(xml)).toContain('An effect of 0.50 over 007 days, d = 1e3.');
+  });
+
+  it('decodes the five XML built-in entities in the prose', () => {
+    const xml = `<article><body><p>Smith &amp; Jones found &lt;5% and &gt;2 &quot;fast&quot; &apos;sets&apos;.</p></body></article>`;
+    expect(extractArticleText(xml)).toBe(`Smith & Jones found <5% and >2 "fast" 'sets'.`);
+  });
+
+  it('keeps an abstract written as bare text a paragraph of its own, apart from the body', () => {
+    // Not every abstract wraps its text in <p>; one that does not must not run
+    // into the body's first sentence.
+    const xml = `<article><front><abstract>Plain abstract.</abstract></front><body><p>Body prose.</p></body></article>`;
+    expect(extractArticleText(xml)).toBe('Plain abstract.\n\nBody prose.');
+  });
+
+  it('keeps each section title and paragraph a paragraph of its own', () => {
+    const xml = `<article><body><sec><title>Methods</title><p>First.</p><p>Second.</p></sec></body></article>`;
+    expect(extractArticleText(xml)).toBe('Methods\n\nFirst.\n\nSecond.');
+  });
+
+  it('returns exactly the part an article has, when it has only a body or only an abstract', () => {
+    expect(extractArticleText(`<article><body><p>Only a body.</p></body></article>`)).toBe('Only a body.');
+    expect(extractArticleText(`<article><front><abstract><p>Only an abstract.</p></abstract></front></article>`)).toBe(
+      'Only an abstract.',
+    );
   });
 
   it('keeps inline markup inside the sentence it belongs to', () => {

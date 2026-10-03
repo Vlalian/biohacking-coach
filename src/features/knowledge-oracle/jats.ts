@@ -60,28 +60,19 @@ function tagOf(node: OrderedNode): string | undefined {
 }
 
 function walk(nodes: unknown, out: string[]): void {
+  // Not an array only for a node that is missing (no abstract, no body).
   if (!Array.isArray(nodes)) return;
 
-  for (const raw of nodes) {
-    if (typeof raw !== 'object' || raw === null) continue;
-    const node = raw as OrderedNode;
-    const tag = tagOf(node);
-    if (!tag) continue;
-
-    if (tag === '#text') {
-      const text = node['#text'];
-      // Numbers appear here as numbers — a JATS `<p>` can be the string "2018".
-      if (typeof text === 'string' || typeof text === 'number') {
-        out.push(String(text));
-      }
-      continue;
+  // The parser's ordered output: every node is an object with exactly one tag
+  // key beside the ignored ':@', and `#text` is always a string under
+  // `parseTagValue: false`. So no guard here for shapes it never produces.
+  for (const node of nodes as OrderedNode[]) {
+    const tag = tagOf(node) as string;
+    if (tag === '#text') out.push(node['#text'] as string);
+    else if (!SKIP.has(tag)) {
+      walk(node[tag], out);
+      if (BLOCK.has(tag)) out.push('\n\n');
     }
-
-    if (SKIP.has(tag)) continue;
-
-    walk(node[tag], out);
-
-    if (BLOCK.has(tag)) out.push('\n\n');
   }
 }
 
@@ -168,18 +159,24 @@ function tidy(text: string): string {
 export function extractArticleText(xml: string): string {
   const parser = new XMLParser({
     preserveOrder: true,
+    // Attributes land under ':@', which `tagOf` skips and `walk` never reads.
+    // Stryker disable next-line BooleanLiteral: equivalent, keeping them changes nothing
     ignoreAttributes: true,
     // Handles the five XML built-ins only. Numeric references are dealt with
     // afterwards by `decodeCharacterReferences` — see the note there.
     processEntities: true,
     trimValues: false,
+    // Text stays text. The default parses a tag holding only a number into a
+    // number, so `<italic>0.50</italic>` came out as 0.5 and 007 as 7, in a
+    // passage cited under the paper's name (code-health/34 A3).
+    parseTagValue: false,
   });
 
   let document: unknown;
   try {
     document = parser.parse(xml);
   } catch {
-    return '';
+    // Unparseable: `document` stays undefined, finds no article, and the text is ''.
   }
 
   // The search starts at the `article` node, not at the whole document, because
@@ -189,18 +186,10 @@ export function extractArticleText(xml: string): string {
   // path cached it as a successful fetch, and the words of an error page would
   // be chunked, embedded, and eventually cited to an athlete as published
   // science under a real paper's attribution.
+  // No `article`, or one without an abstract or body, collects to nothing: a
+  // missing node walks to '' and `tidy` drops the empty paragraph.
   const article = find(document, 'article');
-  if (article === undefined) return '';
-
-  const abstract = find(article, 'abstract');
-  const body = find(article, 'body');
-
-  const text = [
-    abstract === undefined ? '' : collect(abstract),
-    body === undefined ? '' : collect(body),
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const text = [collect(find(article, 'abstract')), collect(find(article, 'body'))].join('\n\n');
 
   return tidy(decodeCharacterReferences(text));
 }
