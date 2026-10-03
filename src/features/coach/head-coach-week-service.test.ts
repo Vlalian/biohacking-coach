@@ -8,11 +8,13 @@ const mergeAthleteProfile = vi.fn();
 const insertValues = vi.fn((values?: Record<string, unknown>) => Promise.resolve({ values }));
 const getPendingWeekDraft = vi.fn();
 const recordWeekDraftApproval = vi.fn();
+const getUnavailableDates = vi.fn();
 
 vi.mock('@/db', () => ({ getDb: () => ({ insert: () => ({ values: insertValues }) }) }));
 vi.mock('./coach-repository', () => ({ getActiveLink }));
 vi.mock('@/features/athlete/athlete-repository', () => ({ getAthleteById, mergeAthleteProfile }));
 vi.mock('./week-draft-repository', () => ({ getPendingWeekDraft, recordWeekDraftApproval }));
+vi.mock('@/features/availability/availability-repository', () => ({ getUnavailableDates }));
 const draftLanded = vi.fn(async () => true);
 vi.mock('./week-draft-service', () => ({ draftLanded }));
 
@@ -45,6 +47,7 @@ beforeEach(() => {
   mergeAthleteProfile.mockResolvedValue(undefined);
   getPendingWeekDraft.mockResolvedValue(DRAFT);
   recordWeekDraftApproval.mockResolvedValue(undefined);
+  getUnavailableDates.mockResolvedValue([]);
 });
 
 describe('setWeeklySessionDayAsHeadCoach', () => {
@@ -142,6 +145,44 @@ describe('approveWeekDraft', () => {
     expect(await approve({ sessions: reshaped })).toEqual({ ok: true, changed: true });
     const recorded = recordWeekDraftApproval.mock.calls[0][0].sessions;
     expect(recorded.map((r: { date: string }) => r.date)).toEqual(['2026-09-23', '2026-09-27', '2026-09-25']);
+  });
+
+  describe('the athlete’s own exclusions hold, as they will on the athlete’s accept (code-health/34 A1)', () => {
+    // An approval the athlete's accept would refuse is worse than a refusal
+    // here: the coach is told it went through, and the athlete is then told the
+    // whole week is invalid. 2026-09-22 is a Tuesday.
+    it('refuses a session the coach put on one of the athlete’s Fixed Constraint weekdays', async () => {
+      getAthleteById.mockResolvedValue({ id: ATHLETE, profile: { fixedConstraints: ['Tuesday'] } });
+      expect(await approve()).toEqual({ ok: false, reason: 'invalid' });
+      expect(recordWeekDraftApproval).not.toHaveBeenCalled();
+    });
+
+    it('refuses a session on a date the athlete marked Unavailable, read for this athlete', async () => {
+      getUnavailableDates.mockResolvedValue(['2026-09-27']);
+      expect(await approve()).toEqual({ ok: false, reason: 'invalid' });
+      expect(getUnavailableDates).toHaveBeenCalledWith(ATHLETE);
+      expect(recordWeekDraftApproval).not.toHaveBeenCalled();
+    });
+
+    it('refuses a session before the athlete’s chosen first training day', async () => {
+      getAthleteById.mockResolvedValue({ id: ATHLETE, profile: { onboardingAnswers: { firstDay: '2026-09-24' } } });
+      expect(await approve()).toEqual({ ok: false, reason: 'invalid' });
+      expect(recordWeekDraftApproval).not.toHaveBeenCalled();
+    });
+
+    it('approves against the week alone when no athlete row can be read, rather than failing', async () => {
+      getAthleteById.mockResolvedValue(undefined);
+      expect(await approve()).toEqual({ ok: true, changed: false });
+    });
+
+    it('still approves a week that keeps clear of all three', async () => {
+      getAthleteById.mockResolvedValue({
+        id: ATHLETE,
+        profile: { fixedConstraints: ['Monday'], onboardingAnswers: { firstDay: '2026-09-22' } },
+      });
+      getUnavailableDates.mockResolvedValue(['2026-09-24']);
+      expect(await approve()).toEqual({ ok: true, changed: false });
+    });
   });
 
   it('refuses invalid when the draft’s week has already ended — nothing left to plan', async () => {

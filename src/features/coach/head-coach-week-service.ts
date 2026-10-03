@@ -3,9 +3,11 @@ import { getDb } from '@/db';
 import { events } from '@/db/schema';
 import { getActiveLink } from './coach-repository';
 import { draftLanded } from './week-draft-service';
-import { ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
-import { validateProposedPlan, type ProposedSession } from './weekly-session';
+import { chosenFirstDay, ONBOARDING_OPTIONS } from '@/features/onboarding/onboarding-flow';
+import { getUnavailableDates } from '@/features/availability/availability-repository';
+import { fixedConstraintsOf, validateProposedPlan, type ProposedSession } from './weekly-session';
 import { weekWindow } from './week-draft';
+import type { PlanningWindow } from './planning-window';
 import { getPendingWeekDraft, recordWeekDraftApproval } from './week-draft-repository';
 
 /**
@@ -84,7 +86,7 @@ export async function approveWeekDraft(params: {
   const pending = await getPendingWeekDraft(athleteId, weekStart);
   if (!pending || pending.id !== draftId) return { ok: false, reason: 'stale' };
 
-  const accepted = acceptedSessions(weekStart, today, sessions);
+  const accepted = acceptedSessions(await athleteLimits(athleteId, weekStart, today), sessions);
   if (!accepted) return { ok: false, reason: 'invalid' };
   // All or nothing. The validator drops a bad row and keeps the rest, which is
   // right for the Coach's model output and wrong for a person's edits: a coach
@@ -111,12 +113,25 @@ export async function approveWeekDraft(params: {
 }
 
 /**
- * The coach's sessions as the server accepts them for that week, or null — the
- * same validator the athlete's accept uses, against the
- * draft's own week.
+ * The draft's week bounded by the athlete's own limits — their Fixed
+ * Constraints, Unavailable dates and chosen first day — which the athlete's
+ * accept (`week-draft-decision-service.ts`) refuses a session for breaking.
+ * Without them a coach could approve a week the athlete then cannot accept
+ * (code-health/34 A1). Null when the week has nothing left to plan.
  */
-function acceptedSessions(weekStart: string, today: string, sessions: unknown): ProposedSession[] | null {
-  const window = weekWindow(weekStart, today);
+async function athleteLimits(athleteId: string, weekStart: string, today: string): Promise<PlanningWindow | null> {
+  const athlete = await getAthleteById(athleteId);
+  return weekWindow(
+    weekStart,
+    today,
+    fixedConstraintsOf({ profile: athlete?.profile ?? null }),
+    await getUnavailableDates(athleteId),
+    chosenFirstDay(athlete?.profile, today),
+  );
+}
+
+/** The coach's sessions as the server accepts them inside that window, or null. */
+function acceptedSessions(window: PlanningWindow | null, sessions: unknown): ProposedSession[] | null {
   if (!window) return null;
   // The one place a coach's own how-to is taken in (`training-architecture/26`, E6).
   const validated = validateProposedPlan({ sessions }, window, { coachHowTo: true });
