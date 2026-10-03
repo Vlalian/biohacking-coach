@@ -39,12 +39,15 @@ const EMAIL_SHAPED = /[^\s@]+@[^\s@]+/;
  * it refused Oracle input carrying a long numeric identifier and told the
  * athlete their content looked like contact details.
  *
- * The trailing `(?![\d\s-]*\d)` is what makes the ceiling bind. Without it the
+ * The trailing `(?![\s-]?\d)` is what makes the ceiling bind. Without it the
  * pattern simply matched the first fifteen digits of a longer run and called
  * that a phone number — the bare branch is protected by its closing `\b`, and
- * the `+` branch had no equivalent.
+ * the `+` branch had no equivalent. It looks past exactly the one separator the
+ * number itself allows between digits, no more: it once skipped any run of
+ * spaces and hyphens, so " - 10 km" after a number read as the number running
+ * on, and a real number reached the prompt (code-health/34 A2).
  */
-const PHONE_SHAPED = /\+\d(?:[\s-]?\d){7,14}(?![\d\s-]*\d)|\b\d{8,15}\b/;
+const PHONE_SHAPED = /\+\d(?:[\s-]?\d){7,14}(?![\s-]?\d)|\b\d{8,15}\b/;
 
 const SHAPED_IDENTIFIERS: ReadonlyArray<{ kind: string; pattern: RegExp }> = [
   { kind: 'email', pattern: EMAIL_SHAPED },

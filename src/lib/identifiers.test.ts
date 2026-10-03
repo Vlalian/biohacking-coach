@@ -180,6 +180,22 @@ describe('gaps the hardening gate found in this file', () => {
     expect(shapedIdentifierIn('+123456789012345678')).toBeNull();
   });
 
+  it('catches a spaced number whatever prose follows it (code-health/34 A2)', () => {
+    // The ceiling's lookahead used to skip any run of spaces and hyphens before
+    // the next digit, while the number itself allows one separator between
+    // digits. So a number followed by " - 10 km", by two spaces and a digit, or
+    // by a date was read as running on past fifteen digits, and let through to
+    // the prompt.
+    expect(shapedIdentifierIn('+45 12 34 56 78 - 10 km')).toBe('phone');
+    expect(shapedIdentifierIn('+45 12 34 56 78  3 sets')).toBe('phone');
+    // A number followed by ONE space and more digits stays ambiguous by design:
+    // that is exactly how the number's own groups are separated, so it reads as
+    // a run past the ceiling. The ceiling exists so long ids are not refused.
+    // ...and the ceiling still binds when the digits really do run on, with a
+    // single separator between each.
+    expect(shapedIdentifierIn('+12 34 56 78 90 12 34 56')).toBeNull();
+  });
+
   it('leaves ordinary training numbers alone', () => {
     // The values this guard sits in front of, every day: a date, a duration, a
     // pulse and an interval set. A regex that ate these would make the guard
