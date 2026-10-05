@@ -49,6 +49,12 @@ export const CoachOverlayContext = createContext<{
    */
   chatSeed: ChatSeed | null;
   setChatSeed: (seed: ChatSeed | null) => void;
+  /**
+   * Switches View on the Coach's behalf (`coach-actions/02`). Takes a string
+   * because the Coach's action payload is data; the shell narrows it to the
+   * Views this athlete can reach and ignores the rest.
+   */
+  openView: (view: string) => void;
 } | null>(null);
 
 /** The server's Coach Chat state, as `coach-chat.tsx` restores it. */

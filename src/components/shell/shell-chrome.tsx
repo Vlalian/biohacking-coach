@@ -111,6 +111,10 @@ export function ShellChrome({
         dismissCheckInOffer: () => setCheckInOfferDismissed(true),
         chatSeed,
         setChatSeed,
+        openView: (view) => {
+          const target = availableViews.find((v) => v === view);
+          if (target) router.push(VIEW_PATH[target]);
+        },
       }}
     >
       <AppShell

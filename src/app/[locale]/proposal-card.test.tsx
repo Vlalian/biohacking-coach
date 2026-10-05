@@ -45,6 +45,7 @@ const overlay = {
   dismissCheckInOffer: vi.fn(),
   chatSeed: null,
   setChatSeed: vi.fn(),
+  openView: vi.fn(),
 };
 
 describe('ProposalCard', () => {
