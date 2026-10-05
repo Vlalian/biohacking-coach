@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HOURS_PER_WEEK_MAX, HOURS_PER_WEEK_MIN } from '@/features/onboarding/onboarding-flow';
 import { renderToStaticMarkup } from 'react-dom/server';
+import en from '@/messages/en.json';
+import da from '@/messages/da.json';
 
 /**
  * `showable-version/40` — the order of Settings' sections, and the hours field
@@ -8,7 +10,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
  * so the order is the same claim in both locales.
  */
 vi.mock('next-intl', () => ({
-  useTranslations: () => (key: string) => key,
+  // Values are appended as `key|name=value`, so a test can see what a message was filled with.
+  useTranslations: () => (key: string, values?: Record<string, unknown>) =>
+    values ? `${key}|${Object.entries(values).map(([name, value]) => `${name}=${value}`).join('|')}` : key,
   useFormatter: () => ({ dateTime: () => 'date' }),
 }));
 vi.mock('next-themes', () => ({ useTheme: () => ({ theme: 'system', setTheme: () => {} }) }));
@@ -89,6 +93,17 @@ describe('SettingsView', () => {
     expect(html).toMatch(
       new RegExp(`id="settings-hours"[^>]*min="${HOURS_PER_WEEK_MIN}"[^>]*max="${HOURS_PER_WEEK_MAX}"[^>]*value="9"|value="9"[^>]*id="settings-hours"`),
     );
+  });
+
+  it('fills the hours hint from HOURS_PER_WEEK_MAX', () => {
+    expect(render(null)).toContain(`hoursNote|max=${HOURS_PER_WEEK_MAX}`);
+  });
+
+  it('writes the hours hint with a {max} placeholder in English and Danish, no literal bound', () => {
+    for (const messages of [en, da]) {
+      expect(messages.Settings.hoursNote).toContain('{max}');
+      expect(messages.Settings.hoursNote).not.toMatch(/\b(30|50)\b/);
+    }
   });
 
   it('offers the history upload in Training while it is open, and the count and the remove once it is used', () => {
