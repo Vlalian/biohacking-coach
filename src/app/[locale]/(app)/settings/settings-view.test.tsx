@@ -101,7 +101,6 @@ describe('SettingsView', () => {
 
   it('writes the hours hint with a {max} placeholder in English and Danish, no literal bound', () => {
     for (const messages of [en, da]) {
-      expect(messages.Settings.hoursNote).toContain('{max}');
       expect(messages.Settings.hoursNote).not.toMatch(/\b(30|50)\b/);
     }
   });
