@@ -139,10 +139,8 @@ export function actionsFromToolCalls(
   calls: readonly CoachToolCall[],
   catalog: readonly CoachActionDefinition[] = COACH_ACTION_CATALOG,
 ): CoachAction[] {
-  const actions: CoachAction[] = [];
-  for (const call of calls) {
+  return calls.flatMap((call) => {
     const result = validateCoachAction(call, catalog);
-    if (result.ok) actions.push(result.action);
-  }
-  return actions;
+    return result.ok ? [result.action] : [];
+  });
 }
