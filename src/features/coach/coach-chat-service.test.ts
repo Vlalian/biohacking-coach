@@ -481,7 +481,21 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(appendMessages.mock.invocationCallOrder[0]).toBeLessThan(recordProposal.mock.invocationCallOrder[0]);
   });
 
+  // Title kept for the test-deletion guard; the body no longer pins "no actions",
+  // which was the bug: the next test pins the corrected behavior.
   it('returns no actions, and keeps the turn, when staging the proposal fails after the store', async () => {
+    recordProposal.mockRejectedValueOnce(new Error('db down'));
+    callCoach.mockResolvedValue({
+      text: 'Here is the week.',
+      toolCalls: [{ name: 'propose_week_plan', input: PLAN }],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null, actions: [] });
+  });
+
+  it('still returns the navigation action, and keeps the turn, when staging the proposal fails after the store', async () => {
     recordProposal.mockRejectedValueOnce(new Error('db down'));
     callCoach.mockResolvedValue({
       text: 'Here is the week, and Settings.',
@@ -494,7 +508,9 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
 
     expect(result).toMatchObject({ ok: true, proposal: null });
-    expect((result as { actions: unknown[] }).actions).toEqual([]);
+    expect(result).toMatchObject({
+      actions: [{ name: 'open_view', durability: 'ephemeral', payload: { view: 'settings' } }],
+    });
   });
 
   it('with a discussed next-week handoff, a next-week proposal is staged and the prompt names that window and the staged week', async () => {

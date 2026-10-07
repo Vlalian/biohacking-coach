@@ -17,9 +17,14 @@ const COACH_ACTION_HANDLERS: Readonly<Record<string, Handler>> = {
   },
 };
 
-/** Runs each action through the handler registered under its name; skips any with none. */
+/**
+ * Runs each ephemeral action through the handler registered under its name;
+ * skips any with none. Durable actions are proposed, never performed (ADR 0008),
+ * so they are not run here whatever handlers exist.
+ */
 export function performCoachActions(actions: readonly CoachAction[], ctx: CoachActionContext): void {
   for (const action of actions) {
+    if (action.durability !== 'ephemeral') continue;
     COACH_ACTION_HANDLERS[action.name]?.(action.payload, ctx);
   }
 }

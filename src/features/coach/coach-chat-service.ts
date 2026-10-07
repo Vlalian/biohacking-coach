@@ -312,8 +312,10 @@ export async function sendCoachChatMessage(
         ...proposalTurnTools(grounding),
         citations: () => grounding.citations(),
         onStored: async (id, reply) => {
-          proposal = await stageChatProposal(athlete.id, id, window, reply);
+          // Actions first: staging can throw after the store, and the Coach's
+          // words already promise what the actions do.
           actions = actionsFromToolCalls(reply.toolCalls);
+          proposal = await stageChatProposal(athlete.id, id, window, reply);
         },
       };
     },

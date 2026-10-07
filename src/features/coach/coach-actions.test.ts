@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   COACH_ACTION_CATALOG,
   actionsFromToolCalls,
+  coachActionReply,
   coachActionTools,
   validateCoachAction,
 } from './coach-actions';
@@ -149,6 +150,42 @@ describe('a second, unrelated action needs only a catalog entry', () => {
       ok: false,
       reason: 'unknown-action',
     });
+  });
+});
+
+describe('coachActionReply — what the Coach is told comes from the entry, not from the resolver', () => {
+  const ringBell = {
+    name: 'ring_bell',
+    description: 'Ring the bell.',
+    durability: 'ephemeral' as const,
+    payload: { times: { kind: 'integer' as const, min: 1, max: 3, description: 'How many rings.' } },
+    ack: 'The bell rang.',
+    refusedAck: 'The bell stayed silent.',
+  };
+  const catalog = [...COACH_ACTION_CATALOG, ringBell];
+
+  it('answers a performed action with its own entry’s words', () => {
+    expect(coachActionReply({ name: 'ring_bell', input: { times: 2 } }, catalog)).toBe('The bell rang.');
+    expect(coachActionReply({ name: 'open_view', input: { view: 'settings' } }, catalog)).toMatch(/is now open/i);
+  });
+
+  it('answers a refused action with its own entry’s refusal words', () => {
+    expect(coachActionReply({ name: 'ring_bell', input: { times: 9 } }, catalog)).toBe('The bell stayed silent.');
+    expect(coachActionReply({ name: 'open_view', input: { view: 'roster' } }, catalog)).toMatch(/nothing opened/i);
+  });
+
+  it('never tells the Coach a View opened for an action that opens none', () => {
+    expect(coachActionReply({ name: 'ring_bell', input: { times: 1 } }, catalog)).not.toMatch(/View/);
+  });
+
+  it('is null for a name outside the catalog, so the caller can route it elsewhere', () => {
+    expect(coachActionReply({ name: 'propose_week_plan', input: {} }, catalog)).toBeNull();
+  });
+
+  it('falls back to neutral words for an entry that declares none', () => {
+    const bare = { ...ringBell, ack: undefined, refusedAck: undefined };
+    expect(coachActionReply({ name: 'ring_bell', input: { times: 1 } }, [bare])).not.toMatch(/View/);
+    expect(coachActionReply({ name: 'ring_bell', input: { times: 7 } }, [bare])).not.toMatch(/View/);
   });
 });
 

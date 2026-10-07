@@ -23,7 +23,14 @@ export interface CoachActionDefinition {
   /** Ephemeral actions are performed; durable ones are proposed (ADR 0008). */
   readonly durability: 'ephemeral' | 'durable';
   readonly payload: Readonly<Record<string, PayloadField>>;
+  /** What the Coach is told after the action was performed. Neutral words when omitted. */
+  readonly ack?: string;
+  /** What the Coach is told when the action was refused: nothing happened. Neutral words when omitted. */
+  readonly refusedAck?: string;
 }
+
+const DEFAULT_ACK = 'That action was performed. Say briefly what happened.';
+const DEFAULT_REFUSED_ACK = 'Nothing happened — that action was not available. Say in words what to do instead.';
 
 /** A validated action: selection only, never content. */
 export interface CoachAction {
@@ -60,6 +67,8 @@ export const COACH_ACTION_CATALOG: readonly CoachActionDefinition[] = [
         description: 'The View to open.',
       },
     },
+    ack: 'That View is now open on the athlete’s screen. Say briefly where they are now.',
+    refusedAck: 'Nothing opened — that action was not available. Say in words where to find it instead.',
   },
 ];
 
@@ -146,6 +155,22 @@ export function coachActionTools(catalog: readonly CoachActionDefinition[] = COA
       additionalProperties: false,
     },
   }));
+}
+
+/**
+ * What the Coach is told about a catalog action call: the entry's `ack` when it
+ * validates, its `refusedAck` when it does not. Null when the name is outside
+ * the catalog, so the caller can route the call elsewhere.
+ */
+export function coachActionReply(
+  call: CoachToolCall,
+  catalog: readonly CoachActionDefinition[] = COACH_ACTION_CATALOG,
+): string | null {
+  const entry = catalog.find((e) => e.name === call.name);
+  if (!entry) return null;
+  return validateCoachAction(call, catalog).ok
+    ? (entry.ack ?? DEFAULT_ACK)
+    : (entry.refusedAck ?? DEFAULT_REFUSED_ACK);
 }
 
 /** Whether a tool call names a catalog entry, valid or not. */
