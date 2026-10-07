@@ -414,7 +414,7 @@
       "distance": "Distance {km} km",
       "avgHr": "Average heart rate {bpm} bpm"
     },
-    "readOnlyNote": "This session's content comes from Momentum or your coach — you can move or skip it.",
+    "readOnlyNote": "You can move or skip this session, but its content stays as planned.",
     "createLabel": "New session",
     "createType": "Type",
     "createDuration": "Duration (min)",

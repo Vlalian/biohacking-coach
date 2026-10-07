@@ -414,7 +414,7 @@
       "distance": "Afstand {km} km",
       "avgHr": "Gennemsnitspuls {bpm} slag/min"
     },
-    "readOnlyNote": "Indholdet kommer fra Momentum eller din træner — du kan flytte eller springe det over.",
+    "readOnlyNote": "Du kan flytte eller springe denne session over, men indholdet står fast.",
     "createLabel": "Ny session",
     "createType": "Type",
     "createDuration": "Varighed (min)",

@@ -609,7 +609,7 @@ export function ViewBody({
           >
             {session.note}
           </p>
-          {!policy.content && !imported && (
+          {!policy.content && !policy.explainsRefusals && !imported && (
             <p className="mt-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
               {t('readOnlyNote')}
             </p>
