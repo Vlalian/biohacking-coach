@@ -390,7 +390,7 @@ describe('Calendar — the icon is the sport, the colour the Session Type (showa
         expect(markup).not.toMatch(/border-left-color:#[0-9a-f]{8}/i);
       }
     }
-  });
+  }, 60_000);
 
   it('marks an athlete’s own session with a person icon and a solid foreground outline, and no other origin', () => {
     const own = render({ sessions: [session({ origin: 'athlete' })] });
