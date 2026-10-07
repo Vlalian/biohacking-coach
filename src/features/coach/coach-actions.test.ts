@@ -13,6 +13,14 @@ import {
 // the payload's View list is the athlete's reachable Views, not every ViewId.
 const OPENABLE = ['training-plan', 'information', 'equipment', 'glossary', 'settings', 'privacy'];
 
+describe('the open_view tool description', () => {
+  it('tells the Coach to open a View on request and still answer in words', () => {
+    const entry = COACH_ACTION_CATALOG.find((e) => e.name === 'open_view')!;
+    expect(entry.description).toMatch(/asks to be taken there/);
+    expect(entry.description).toMatch(/still answer in words/);
+  });
+});
+
 describe('the catalog declares its entries as data', () => {
   // #C1: opening a View is ephemeral; the Coach performs it, no confirmation.
   it('declares open_view with its name, durability and payload shape', () => {

@@ -481,6 +481,22 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(appendMessages.mock.invocationCallOrder[0]).toBeLessThan(recordProposal.mock.invocationCallOrder[0]);
   });
 
+  it('returns no actions, and keeps the turn, when staging the proposal fails after the store', async () => {
+    recordProposal.mockRejectedValueOnce(new Error('db down'));
+    callCoach.mockResolvedValue({
+      text: 'Here is the week, and Settings.',
+      toolCalls: [
+        { name: 'propose_week_plan', input: PLAN },
+        { name: 'open_view', input: { view: 'settings' } },
+      ],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect((result as { actions: unknown[] }).actions).toEqual([]);
+  });
+
   it('with a discussed next-week handoff, a next-week proposal is staged and the prompt names that window and the staged week', async () => {
     getDiscussedWeek.mockResolvedValue('2026-09-21');
     const staged = [{ ...PLAN.sessions[0], date: '2026-09-22', note: 'the drafted note' }];
