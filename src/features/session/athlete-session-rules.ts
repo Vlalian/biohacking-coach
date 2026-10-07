@@ -8,6 +8,8 @@
  * directly rather than through a mocked database.
  */
 
+import { isSessionSport, type SessionSport } from './session-sport';
+
 /** The Athlete Session types (CONTEXT.md): Mobility and Other coexist with
  *  Rest; Strength and Other-as-training follow the training rules. */
 export const ATHLETE_SESSION_TYPES = ['Mobility', 'Strength', 'Other'] as const;
@@ -50,6 +52,7 @@ export type AthleteSessionDraft = {
   durationMin: number | null;
   isTraining: boolean;
   note: string | null;
+  sport: SessionSport | null;
 };
 
 export type AthleteSessionDraftResult =
@@ -65,9 +68,13 @@ export function validateAthleteSessionDraft(input: {
   durationMin: unknown;
   isTraining: boolean;
   note: unknown;
+  /** One of the seven sports, or absent/null for none. */
+  sport?: unknown;
 }): AthleteSessionDraftResult {
   if (!isValidAthleteSessionType(input.type)) return { ok: false, reason: 'invalid' };
   if (!isValidDuration(input.durationMin)) return { ok: false, reason: 'invalid' };
+  const sport = input.sport ?? null;
+  if (sport !== null && !isSessionSport(sport)) return { ok: false, reason: 'invalid' };
 
   return {
     ok: true,
@@ -76,6 +83,7 @@ export function validateAthleteSessionDraft(input: {
       durationMin: input.durationMin,
       isTraining: input.isTraining,
       note: normalizeNote(input.note),
+      sport,
     },
   };
 }

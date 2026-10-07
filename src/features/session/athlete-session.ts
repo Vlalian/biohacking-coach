@@ -38,11 +38,13 @@ export async function createAthleteSession(params: {
   durationMin: number | null;
   isTraining: boolean;
   note: string | null;
+  /** One of the seven sports, or none. */
+  sport?: string | null;
   today: string;
 }): Promise<CreateAthleteSessionResult> {
-  const { athleteId, date, type, durationMin, isTraining, note, today } = params;
+  const { athleteId, date, type, durationMin, isTraining, note, sport, today } = params;
 
-  const validated = validateAthleteSessionDraft({ type, durationMin, isTraining, note });
+  const validated = validateAthleteSessionDraft({ type, durationMin, isTraining, note, sport });
   if (!validated.ok) return validated;
   const { draft } = validated;
 
@@ -59,6 +61,7 @@ export async function createAthleteSession(params: {
       isTraining: draft.isTraining,
       duration: draft.durationMin,
       note: draft.note,
+      sport: draft.sport,
       // Allocated in the INSERT itself, not by counting first: a select-then-
       // insert races, and two sessions added to the same day at once would both
       // read the same count and land on the same dayOrder — which is the column
@@ -111,14 +114,16 @@ export async function updateAthleteSession(params: {
   durationMin: number | null;
   isTraining: boolean;
   note: string | null;
+  /** One of the seven sports, or none. */
+  sport?: string | null;
   expectedVersion: number;
 }): Promise<AthleteSessionWriteResult> {
-  const { athleteId, sessionId, type, durationMin, isTraining, note, expectedVersion } = params;
+  const { athleteId, sessionId, type, durationMin, isTraining, note, sport, expectedVersion } = params;
 
   const found = await loadOwnedAthleteSession(sessionId, athleteId);
   if (!found.ok) return found;
 
-  const validated = validateAthleteSessionDraft({ type, durationMin, isTraining, note });
+  const validated = validateAthleteSessionDraft({ type, durationMin, isTraining, note, sport });
   if (!validated.ok) return validated;
   const { draft } = validated;
 
@@ -134,6 +139,7 @@ export async function updateAthleteSession(params: {
       duration: draft.durationMin,
       isTraining: draft.isTraining,
       note: draft.note,
+      sport: draft.sport,
     },
     attempted: {
       type: draft.type,

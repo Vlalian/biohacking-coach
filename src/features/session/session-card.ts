@@ -1,4 +1,5 @@
 import type { Session } from './session';
+import type { SessionSport } from './session-sport';
 
 /**
  * What a session looks like as a card on the Training Plan calendar
@@ -21,13 +22,38 @@ import type { Session } from './session';
  *   (`training-architecture/25`) — but the treatment is defined for when one is.
  * - `missed` — skipped or unavailable: struck through.
  */
-export type CardState = 'done' | 'accepted' | 'arithmetic' | 'proposed' | 'missed';
+export type CardState = 'done' | 'accepted' | 'arithmetic' | 'athlete' | 'proposed' | 'missed';
 
 /** The status decides first — a completed arithmetic session is done — and then who wrote it. */
 export function cardState(session: Pick<Session, 'status' | 'origin'>): CardState {
   if (session.status === 'completed') return 'done';
   if (session.status === 'skipped' || session.status === 'unavailable') return 'missed';
-  return session.origin === 'arithmetic' ? 'arithmetic' : 'accepted';
+  if (session.origin === 'arithmetic') return 'arithmetic';
+  return session.origin === 'athlete' ? 'athlete' : 'accepted';
+}
+
+/** Who is looking at the calendar: the athlete, or a Head Coach reading it. */
+export type CardViewer = 'athlete' | 'head_coach';
+
+/** The `Calendar` catalogue key for a card's author line, and the name it fills. */
+export type AuthorLabel =
+  | { key: 'authorYou' }
+  | { key: 'authorNamed'; name: string }
+  | { key: 'authorAthlete' };
+
+/**
+ * The screen-reader line that says whose session an athlete-authored card is:
+ * "Your session" to the athlete, "{name}'s session" to a Head Coach, or "The
+ * athlete's session" when the athlete has no name. Null for every other origin.
+ */
+export function authorLabel(
+  session: Pick<Session, 'origin'>,
+  { viewer, athleteName }: { viewer: CardViewer; athleteName: string | null },
+): AuthorLabel | null {
+  if (session.origin !== 'athlete') return null;
+  if (viewer === 'athlete') return { key: 'authorYou' };
+  const name = athleteName?.trim();
+  return name ? { key: 'authorNamed', name } : { key: 'authorAthlete' };
 }
 
 /** The lucide icon names a card can carry. Checked against `lucide-react` 1.25. */
@@ -35,19 +61,15 @@ export type CardIcon =
   | 'Waves'
   | 'Bike'
   | 'Footprints'
-  | 'Activity'
-  | 'Zap'
-  | 'Gauge'
-  | 'Leaf'
-  | 'Moon'
+  | 'BrickWall'
   | 'Dumbbell'
   | 'StretchHorizontal'
+  | 'Shapes'
   | 'Circle';
 
 /**
- * The raw sports a session can carry, by discipline: the arithmetic's short
- * names and the Garmin labels `build-dataset.ts` already reads the same way.
- * A brick is two disciplines and gets neither; it falls back to its type.
+ * The icon for each sport: the seven of `SESSION_SPORTS`, plus the Garmin
+ * labels `build-dataset.ts` already reads the same way, folded into them.
  */
 const SPORT_ICON = new Map<string, CardIcon>(Object.entries({
   swim: 'Waves',
@@ -62,24 +84,33 @@ const SPORT_ICON = new Map<string, CardIcon>(Object.entries({
   running: 'Footprints',
   trail_running: 'Footprints',
   treadmill_running: 'Footprints',
+  brick: 'BrickWall',
+  strength: 'Dumbbell',
+  strength_training: 'Dumbbell',
+  mobility: 'StretchHorizontal',
+  misc: 'Shapes',
 }) as [string, CardIcon][]);
 
-const TYPE_ICON = new Map<string, CardIcon>(Object.entries({
-  Endurance: 'Activity',
-  Intensity: 'Zap',
-  Tempo: 'Gauge',
-  Recovery: 'Leaf',
-  Rest: 'Moon',
-  Strength: 'Dumbbell',
-  Mobility: 'StretchHorizontal',
-}) as [string, CardIcon][]);
+const ICON_SPORT: Partial<Record<CardIcon, SessionSport>> = {
+  Waves: 'swim',
+  Bike: 'bike',
+  Footprints: 'run',
+  BrickWall: 'brick',
+  Dumbbell: 'strength',
+  StretchHorizontal: 'mobility',
+  Shapes: 'misc',
+};
 
-/** The discipline's icon when the sport names one, else the Session Type's, else a plain circle. */
-export function cardIcon(session: Pick<Session, 'sport' | 'type'>): CardIcon {
-  // Maps, not object literals: a file label such as "constructor" must not
+/** The sport the card's icon stands for, so the icon can be named; null for `Circle`. */
+export function cardSport(session: Pick<Session, 'sport'>): SessionSport | null {
+  return ICON_SPORT[cardIcon(session)] ?? null;
+}
+
+/** The sport's icon, else a plain circle. The Session Type is colour, never an icon. */
+export function cardIcon(session: Pick<Session, 'sport'> & { type?: string }): CardIcon {
+  // A Map, not an object literal: a file label such as "constructor" must not
   // read an inherited property off Object.prototype.
-  const bySport = session.sport ? SPORT_ICON.get(session.sport.toLowerCase()) : undefined;
-  return bySport ?? TYPE_ICON.get(session.type) ?? 'Circle';
+  return (session.sport ? SPORT_ICON.get(session.sport.toLowerCase()) : undefined) ?? 'Circle';
 }
 
 /** The card's three lines of text. `meta` holds only the parts the session has. */

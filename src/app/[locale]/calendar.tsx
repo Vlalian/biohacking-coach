@@ -4,20 +4,18 @@ import { useState, useTransition } from 'react';
 import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import {
-  Activity,
   Bike,
+  BrickWall,
   Check,
   Circle,
   Dumbbell,
   Flag,
   Footprints,
-  Gauge,
-  Leaf,
-  Moon,
   Plus,
+  Shapes,
   StretchHorizontal,
+  User,
   Waves,
-  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import type { Session } from '@/features/session/session';
@@ -36,7 +34,17 @@ import {
   type Writes,
 } from '@/features/session/calendar-writes';
 import { DEFAULT_TYPE_COLOR, TYPE_COLORS } from '@/features/session/type-colors';
-import { cardIcon, cardLines, cardState, type CardIcon, type CardState } from '@/features/session/session-card';
+import {
+  authorLabel,
+  cardIcon,
+  cardLines,
+  cardSport,
+  cardState,
+  type CardIcon,
+  type CardState,
+  type CardViewer,
+} from '@/features/session/session-card';
+import type { SessionSport } from '@/features/session/session-sport';
 import { moveSessionAction } from './move-actions';
 import { markUnavailableDateAction, clearUnavailableDateAction } from './availability-actions';
 import { RatingModal } from './rating-modal';
@@ -250,6 +258,7 @@ export function Calendar({
   readOnly = false,
   onMove,
   coachAthleteId,
+  athleteName = null,
   proposal = null,
   health = [],
   phase = null,
@@ -257,6 +266,8 @@ export function Calendar({
   addPanel,
 }: {
   sessions: Session[];
+  /** The athlete's name, for the Head Coach's "{name}'s session" on a card the athlete wrote. */
+  athleteName?: string | null;
   /**
    * The athlete's Races, each drawn on its date as a day block — the target
    * distinct from a tune-up (`training-architecture/37`, ruling 2). Empty by
@@ -570,6 +581,8 @@ export function Calendar({
               key={week.isoWeekStart}
               week={week}
               readOnly={readOnly}
+              viewer={coachAthleteId ? 'head_coach' : 'athlete'}
+              athleteName={athleteName}
               canOpenSession={!readOnly || Boolean(coachAthleteId)}
               canDrag={canDrag}
               todayKey={todayKey}
@@ -669,9 +682,13 @@ function WeekRow({
   onDropDay,
   onToggleAvailability,
   health,
+  viewer,
+  athleteName,
 }: {
   week: Week;
   readOnly: boolean;
+  viewer: CardViewer;
+  athleteName: string | null;
   /** Every span, open and closed: a day's marks outlive the record (28a).
    *  Null when the athlete withholds their reports — the row then draws none. */
   health: HealthSpan[] | null;
@@ -806,6 +823,8 @@ function WeekRow({
                     key={s.id}
                     session={s}
                     t={t}
+                    viewer={viewer}
+                    athleteName={athleteName}
                     canDrag={canDrag}
                     refusal={liftRefusal(s, todayKey, inFlight.has(s.id))}
                     // Omitted only where there is genuinely no drawer to
@@ -923,36 +942,29 @@ const CARD_ICON: Record<CardIcon, LucideIcon> = {
   Waves,
   Bike,
   Footprints,
-  Activity,
-  Zap,
-  Gauge,
-  Leaf,
-  Moon,
+  BrickWall,
   Dumbbell,
   StretchHorizontal,
+  Shapes,
   Circle,
 };
 
 /**
- * One treatment per state (`showable-version/37`, ruling 3), on top of the
- * card's base. The left stripe is always the Session Type colour; only how
- * strongly it shows changes.
+ * One treatment per state (`showable-version/37`, ruling 3; the athlete's own
+ * in `52`), on top of the card's base. The left stripe is always the Session
+ * Type colour at full strength; the state shows in border and fill.
  */
-const CARD_TREATMENT: Record<CardState, { className: string; stripeOpacity: number }> = {
-  // The block arithmetic's fill: provisional, so dashed and a fainter stripe.
-  arithmetic: { className: 'border-dashed bg-card', stripeOpacity: 0.6 },
-  accepted: { className: 'bg-card', stripeOpacity: 1 },
-  done: { className: 'bg-muted/60', stripeOpacity: 1 },
+const CARD_TREATMENT: Record<CardState, { className: string }> = {
+  // The block arithmetic's fill: provisional, so dashed.
+  arithmetic: { className: 'border-dashed border-border bg-card' },
+  accepted: { className: 'border-border bg-card' },
+  // The athlete's own session: a solid foreground outline, and a person icon on the card.
+  athlete: { className: 'border-foreground bg-card' },
+  done: { className: 'border-border bg-muted/60' },
   // A ghost: nothing feeds it yet (a drafted week lives in the card above the grid).
-  proposed: { className: 'border-dashed bg-transparent opacity-70 shadow-none', stripeOpacity: 1 },
-  missed: { className: 'bg-card opacity-50 line-through', stripeOpacity: 1 },
+  proposed: { className: 'border-dashed border-border bg-transparent opacity-70 shadow-none' },
+  missed: { className: 'border-border bg-card opacity-50 line-through' },
 };
-
-/** `#rrggbb` at an opacity, as `#rrggbbaa` — the stripe of a provisional card. */
-function withAlpha(hex: string, opacity: number): string {
-  if (opacity >= 1) return hex;
-  return `${hex}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`;
-}
 
 /**
  * A session on the calendar (`showable-version/37`): about 72 px on desktop —
@@ -968,9 +980,13 @@ function SessionCard({
   onOpen,
   onDragStart,
   onDragEnd,
+  viewer,
+  athleteName,
 }: {
   session: Session;
   t: ReturnType<typeof useTranslations<'Calendar'>>;
+  viewer: CardViewer;
+  athleteName: string | null;
   canDrag: boolean;
   /**
    * Why this session cannot be lifted, or null when it can — the reason rather
@@ -994,6 +1010,9 @@ function SessionCard({
   const state = cardState(session);
   const iconName = cardIcon(session);
   const Icon = CARD_ICON[iconName];
+  const sport = cardSport(session);
+  const howTo = useTranslations('HowTo');
+  const sportName = (s: SessionSport) => howTo(`sports.${s}`);
   const lines = cardLines(session);
   const treatment = CARD_TREATMENT[state];
   const draggable = canDrag && refusal === null;
@@ -1009,13 +1028,14 @@ function SessionCard({
   // Drag is deliberately independent of opening: the Head Coach may re-place a
   // session (ADR 0003, 2026-08-21 amendment) on a calendar they cannot open.
   const className = [
-    'block min-h-[72px] w-full border border-border border-l-4 px-2.5 py-2 text-left shadow-sm transition-all',
+    'block min-h-[72px] w-full border border-l-4 px-2.5 py-2 text-left shadow-sm transition-all',
     treatment.className,
     draggable ? 'cursor-grab active:cursor-grabbing hover:-translate-y-0.5 hover:shadow-md' : '',
     onOpen ? 'cursor-pointer' : '',
     // Parked keeps its own mark on top of "missed": held by a Rest block, it
-    // comes back on its own (CONTEXT.md, Displacement).
-    session.parked ? 'border-dashed opacity-70' : '',
+    // comes back on its own (CONTEXT.md, Displacement). An athlete's own
+    // session keeps its solid outline, so the dash never replaces its mark.
+    session.parked ? (state === 'athlete' ? 'opacity-70' : 'border-dashed opacity-70') : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -1023,10 +1043,22 @@ function SessionCard({
   const content = (
     <>
       <span className="flex items-center gap-1.5">
-        <Icon data-card-icon={iconName} className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        {sport ? (
+          <Icon
+            data-card-icon={iconName}
+            role="img"
+            aria-label={sportName(sport)}
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+          />
+        ) : (
+          <Icon data-card-icon={iconName} className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
         <span className="block min-w-0 flex-1 truncate font-display text-[15px] font-bold uppercase italic leading-tight text-foreground">
           {lines.title}
         </span>
+        {session.origin === 'athlete' && (
+          <User data-card-author="athlete" className="h-3.5 w-3.5 shrink-0 text-foreground" aria-hidden="true" />
+        )}
         {state === 'done' && <Check data-card-done="" className="h-4 w-4 shrink-0 text-foreground" aria-hidden="true" />}
       </span>
       {meta && (
@@ -1048,10 +1080,19 @@ function SessionCard({
   // the children-derived name, so it must carry the refusal too).
   // The session's own title, not `lines.title`: an untitled card's title is its
   // type, and a screen reader should hear it once.
-  const label = [session.title, session.type, session.status, meta, refusalText].filter(Boolean).join(' · ');
+  // The author line sits after the meta, so the "type · status" prefix still matches.
+  const author = authorLabel(session, { viewer, athleteName });
+  const authorText = author
+    ? author.key === 'authorNamed'
+      ? t('authorNamed', { name: author.name })
+      : t(author.key)
+    : null;
+  const label = [session.title, session.type, session.status, meta, authorText, refusalText]
+    .filter(Boolean)
+    .join(' · ');
   // The hover tooltip carries the refusal; unset when there is nothing to say.
   const title = refusalText;
-  const style = { borderLeftColor: withAlpha(typeColor(session.type), treatment.stripeOpacity) };
+  const style = { borderLeftColor: typeColor(session.type) };
 
   if (!onOpen) {
     return (

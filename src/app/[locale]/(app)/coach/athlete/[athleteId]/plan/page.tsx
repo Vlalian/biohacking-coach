@@ -84,6 +84,7 @@ export default async function CoachAthletePlanPage({
         unavailableDates={view.unavailableDates}
         todayKey={todayKey}
         health={view.health}
+        athleteName={displayNameFor(preferredName)}
       />
     </>
   );

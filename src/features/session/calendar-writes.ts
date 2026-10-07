@@ -104,7 +104,9 @@ function landing(key: string, sent: Session | null, outcome: WriteOutcome): Writ
 }
 
 /** What the athlete typed into the create form, in the calendar's own fields. */
-type SessionDraft = Pick<Session, 'date' | 'type' | 'duration' | 'isTraining' | 'note'>;
+type SessionDraft = Pick<Session, 'date' | 'type' | 'duration' | 'isTraining' | 'note'> & {
+  sport?: string | null;
+};
 
 /**
  * Adds the athlete's new session at once, under a placeholder key, pending the
@@ -125,7 +127,7 @@ export function beginCreate(
     ...draft,
     status: createdStatusFor(draft.date, today),
     parked: false,
-    sport: null,
+    sport: draft.sport ?? null,
     summary: null,
     howTo: null,
     dayOrder: Math.max(-1, ...sameDay) + 1,

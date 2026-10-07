@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { PRESCRIBABLE_TYPES } from '@/features/session/type-colors';
+import { SportSelect } from '@/components/session/sport-select';
+import type { SessionSport } from '@/features/session/session-sport';
 import { prescribeSessionAction } from './prescribe-actions';
 import type { CalendarWriter } from '@/app/[locale]/calendar';
 import { answerOf, beginAdd } from '@/features/session/calendar-writes';
@@ -39,9 +41,11 @@ type FormState = {
   zone: string;
   title: string;
   note: string;
+  /** One of the seven sports, or '' for none. */
+  sport: string;
 };
 
-const EMPTY: FormState = { date: '', type: 'Endurance', duration: '', zone: '', title: '', note: '' };
+const EMPTY: FormState = { date: '', type: 'Endurance', duration: '', zone: '', title: '', note: '', sport: '' };
 
 function toInput(form: FormState) {
   const duration = form.duration.trim() === '' ? null : Number(form.duration);
@@ -52,6 +56,7 @@ function toInput(form: FormState) {
     zone: form.zone.trim() || null,
     title: form.title.trim() || null,
     note: form.note.trim() || null,
+    sport: form.sport || null,
   };
 }
 
@@ -63,6 +68,7 @@ export function PrescribePanel({
   writer: CalendarWriter;
 }) {
   const t = useTranslations('Prescribe');
+  const howTo = useTranslations('HowTo');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -123,6 +129,16 @@ export function PrescribePanel({
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
+          {t('sport')}
+          <SportSelect
+            value={form.sport}
+            onChange={(sport) => setForm((f) => ({ ...f, sport }))}
+            noneLabel={t('sportNone')}
+            sportName={(s) => howTo(`sports.${s as SessionSport}`)}
+            className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal"
+          />
         </label>
         <label className="flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground">
           {t('duration')}

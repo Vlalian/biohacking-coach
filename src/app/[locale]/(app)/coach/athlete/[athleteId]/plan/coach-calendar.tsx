@@ -23,8 +23,11 @@ export function CoachCalendar({
   unavailableDates,
   todayKey,
   health,
+  athleteName,
 }: {
   athleteId: string;
+  /** For the "{name}'s session" label on a card the athlete wrote; null when they have no name. */
+  athleteName: string | null;
   sessions: Session[];
   unavailableDates: string[];
   todayKey: string;
@@ -41,6 +44,7 @@ export function CoachCalendar({
       health={health}
       readOnly
       coachAthleteId={athleteId}
+      athleteName={athleteName}
       onMove={(sessionId, targetDate, expectedVersion) =>
         moveSessionAsCoachAction(athleteId, sessionId, targetDate, expectedVersion)
       }

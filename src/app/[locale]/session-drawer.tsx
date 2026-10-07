@@ -19,6 +19,8 @@ import type { Session } from '@/features/session/session';
 import { isImportedHistory } from '@/features/session/session';
 import { howToOf } from '@/features/session/how-to';
 import { HowToBlock } from '@/components/session/how-to-block';
+import { SportSelect } from '@/components/session/sport-select';
+import { isSessionSport, type SessionSport } from '@/features/session/session-sport';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
 import {
@@ -400,6 +402,7 @@ export function SessionDrawer({
                   duration: input.durationMin,
                   isTraining: input.isTraining,
                   note: input.note,
+                  sport: input.sport,
                 };
                 write(
                   key,
@@ -442,6 +445,7 @@ export function SessionDrawer({
                 durationMin: session.duration,
                 isTraining: session.isTraining,
                 note: session.note ?? '',
+                sport: session.sport,
               }}
               onSubmit={(input) =>
                 write(
@@ -452,6 +456,7 @@ export function SessionDrawer({
                       duration: input.durationMin,
                       isTraining: input.isTraining,
                       note: input.note,
+                      sport: input.sport,
                     }),
                   () => updateAthleteSessionAction(session.id, input, session.version),
                   onClose,
@@ -770,8 +775,12 @@ function HeadCoachSessionForm({
     zone: string | null;
     title: string | null;
     note: string | null;
+    sport: string | null;
   }) => void;
 }) {
+  const howTo = useTranslations('HowTo');
+  // The stored sport when it is one of the seven (a Garmin label is not), else none.
+  const [sport, setSport] = useState<string>(isSessionSport(session.sport) ? session.sport : '');
   const [date, setDate] = useState(session.date);
   const [type, setType] = useState(session.type);
   const [duration, setDuration] = useState(session.duration?.toString() ?? '');
@@ -793,6 +802,7 @@ function HeadCoachSessionForm({
           zone: zone.trim() || null,
           title: title.trim() || null,
           note: note.trim() || null,
+          sport: sport || null,
         });
       }}
     >
@@ -815,6 +825,15 @@ function HeadCoachSessionForm({
             </option>
           ))}
         </select>
+      </Field>
+      <Field label={t('formSport')}>
+        <SportSelect
+          value={sport}
+          onChange={setSport}
+          noneLabel={t('sportNone')}
+          sportName={(s) => howTo(`sports.${s as SessionSport}`)}
+          className={FIELD}
+        />
       </Field>
       <Field label={t('formDuration')}>
         <input
@@ -871,14 +890,18 @@ function AthleteSessionForm({
   locale: string;
   pending: boolean;
   t: ReturnType<typeof useTranslations<'SessionDrawer'>>;
-  initial?: { type: string; durationMin: number | null; isTraining: boolean; note: string };
+  initial?: { type: string; durationMin: number | null; isTraining: boolean; note: string; sport: string | null };
   onSubmit: (input: {
     type: string;
     durationMin: number | null;
     isTraining: boolean;
     note: string | null;
+    sport: string | null;
   }) => void;
 }) {
+  const howTo = useTranslations('HowTo');
+  // None picked by default; an edit starts from the stored sport when it is one of the seven.
+  const [sport, setSport] = useState<string>(isSessionSport(initial?.sport) ? initial.sport : '');
   const [type, setType] = useState(initial?.type ?? ATHLETE_SESSION_TYPES[0]);
   const [durationMin, setDurationMin] = useState<number | null>(initial?.durationMin ?? 30);
   const [isTraining, setIsTraining] = useState(initial?.isTraining ?? true);
@@ -890,7 +913,7 @@ function AthleteSessionForm({
       className="space-y-5 px-5 py-5"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ type, durationMin, isTraining, note: note.trim() || null });
+        onSubmit({ type, durationMin, isTraining, note: note.trim() || null, sport: sport || null });
       }}
     >
       <div>
@@ -927,6 +950,17 @@ function AthleteSessionForm({
           ))}
         </div>
       </div>
+
+      <label className="block">
+        <SectionLabel>{t('createSport')}</SectionLabel>
+        <SportSelect
+          value={sport}
+          onChange={setSport}
+          noneLabel={t('sportNone')}
+          sportName={(s) => howTo(`sports.${s as SessionSport}`)}
+          className="mt-2 w-full border border-border bg-background h-11 px-3 font-body text-base text-foreground outline-none focus:border-signal"
+        />
+      </label>
 
       <label className="block">
         <SectionLabel>{t('createDuration')}</SectionLabel>

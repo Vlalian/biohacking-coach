@@ -1,5 +1,5 @@
 import { howToFor, howToOf, type HowTo, type HowToSegment, type HowToView, type Zone } from '@/features/session/how-to';
-import type { HowToSport } from '@/features/session/how-to-templates';
+import type { SessionSport } from '@/features/session/session-sport';
 import type { ProposedSession } from '@/features/coach/weekly-session';
 import type { Locale } from '@/i18n/routing';
 
@@ -22,7 +22,7 @@ export interface DraftRow {
   durationMinutes: string;
   zone: string;
   note: string;
-  sport: HowToSport | null;
+  sport: SessionSport | null;
   sportReason: string | null;
   cue: string | null;
   /** The coach's own how-to, or null while they have not edited it. */

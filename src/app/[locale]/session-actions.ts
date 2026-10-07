@@ -74,6 +74,7 @@ export async function createAthleteSessionAction(input: {
   durationMin: number | null;
   isTraining: boolean;
   note: string | null;
+  sport?: string | null;
 }): Promise<CreateAthleteSessionResult | AuthFailure> {
   if (!isValidDateKey(input.date)) return { ok: false, reason: 'invalid' };
 
@@ -87,6 +88,7 @@ export async function createAthleteSessionAction(input: {
     durationMin: input.durationMin,
     isTraining: input.isTraining,
     note: input.note,
+    sport: input.sport,
     today: today(),
   });
   return result;
@@ -94,7 +96,7 @@ export async function createAthleteSessionAction(input: {
 
 export async function updateAthleteSessionAction(
   sessionId: string,
-  input: { type: string; durationMin: number | null; isTraining: boolean; note: string | null },
+  input: { type: string; durationMin: number | null; isTraining: boolean; note: string | null; sport?: string | null },
   expectedVersion: number,
 ): Promise<AthleteSessionWriteResult | AuthFailure> {
   const athleteId = await resolveAthleteId();
@@ -107,6 +109,7 @@ export async function updateAthleteSessionAction(
     durationMin: input.durationMin,
     isTraining: input.isTraining,
     note: input.note,
+    sport: input.sport,
     expectedVersion,
   });
   return result;

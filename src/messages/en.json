@@ -290,6 +290,8 @@
     "editTitle": "Edit session",
     "date": "Date",
     "type": "Session type",
+    "sport": "Sport",
+    "sportNone": "No sport",
     "duration": "Duration (min)",
     "zone": "Intensity zone",
     "sessionTitle": "Title",
@@ -358,6 +360,9 @@
     "emptyTitle": "Your plan starts here",
     "emptyBody": "Once Momentum has planned your first week, it appears on this grid.",
     "legend": "Session Type",
+    "authorYou": "Your session",
+    "authorNamed": "{name}'s session",
+    "authorAthlete": "The athlete's session",
     "today": "Today",
     "double": "Double",
     "bouncePastDay": "That day has already happened — a move says when a session is scheduled, and nothing is scheduled into the past. If you did it that day, log it there instead.",
@@ -417,6 +422,7 @@
     "readOnlyNote": "This session's content comes from Momentum or your coach — you can move or skip it.",
     "createLabel": "New session",
     "createType": "Type",
+    "createSport": "Sport",
     "createDuration": "Duration (min)",
     "createNote": "Note",
     "createTrainingToggle": "Counts as training",
@@ -441,6 +447,8 @@
     "refusalAuthorsContent": "This session belongs to whoever wrote it.",
     "formDate": "Date",
     "formType": "Type",
+    "formSport": "Sport",
+    "sportNone": "No sport",
     "formDuration": "Duration (minutes)",
     "formZone": "Zone",
     "formTitle": "Title",
@@ -1047,7 +1055,10 @@
       "swim": "swim",
       "bike": "bike",
       "run": "run",
-      "brick": "brick"
+      "brick": "brick",
+      "strength": "strength",
+      "mobility": "mobility",
+      "misc": "misc"
     }
   }
 }

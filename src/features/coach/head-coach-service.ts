@@ -10,6 +10,7 @@ import { casDeleteSession, casUpdateSession } from '@/features/session/versioned
 import { attemptedDuration, type SessionConflict } from '@/features/session/conflict';
 import { prescribedSessionOf, prescriptionColumns, type PrescriptionInput } from './prescription';
 import type { Session } from '@/features/session/session';
+import { isSessionSport } from '@/features/session/session-sport';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -68,13 +69,27 @@ export type HeadCoachActionResult =
   // carries what won, because the Head Coach has no other way to find out.
   | { ok: false; reason: 'conflict'; conflict: SessionConflict };
 
+/** A prescription always answers with the session it wrote. */
+export type PrescribeResult =
+  | { ok: true; sessionId: string; session: Session }
+  | Extract<HeadCoachActionResult, { ok: false }>;
+
 export type { PrescriptionInput };
+
+/**
+ * The columns an event records. The sport is a label on the card, not a change
+ * the audit trail has ever carried, so the event payload stays as it was.
+ */
+function auditedColumns({ sport: _sport, ...rest }: ReturnType<typeof prescriptionColumns>) {
+  return rest;
+}
 
 function isValidPrescription(input: PrescriptionInput): boolean {
   return (
     isValidDateKey(input.date) &&
     typeof input.type === 'string' &&
-    input.type.trim().length > 0
+    input.type.trim().length > 0 &&
+    (input.sport === undefined || input.sport === null || isSessionSport(input.sport))
   );
 }
 
@@ -169,7 +184,7 @@ export async function prescribeSession(params: {
   athleteId: string;
   input: PrescriptionInput;
   today: string;
-}): Promise<HeadCoachActionResult> {
+}): Promise<PrescribeResult> {
   const { headCoachId, athleteId, input, today } = params;
 
   const link = await getActiveLink(headCoachId, athleteId);
@@ -195,7 +210,7 @@ export async function prescribeSession(params: {
       actorType: 'head_coach',
       actorId: headCoachId,
       type: 'session_prescribed',
-      payload: { sessionId: id, ...prescriptionColumns(input) },
+      payload: { sessionId: id, ...auditedColumns(prescriptionColumns(input)) },
     }),
   ]);
 
@@ -258,7 +273,7 @@ export async function editPrescribedSession(params: {
       actorType: 'head_coach',
       actorId: headCoachId,
       type: 'session_edited',
-      payload: { sessionId, from: { date: target.date }, to: columns },
+      payload: { sessionId, from: { date: target.date }, to: auditedColumns(columns) },
     },
   });
 

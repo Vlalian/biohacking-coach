@@ -44,6 +44,7 @@ export type SessionContentColumns = {
   title?: string | null;
   note?: string | null;
   isTraining?: boolean;
+  sport?: string | null;
 };
 
 /**

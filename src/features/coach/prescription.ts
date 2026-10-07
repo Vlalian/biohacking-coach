@@ -10,6 +10,8 @@ export type PrescriptionInput = {
   title?: string | null;
   note?: string | null;
   isTraining?: boolean;
+  /** One of the seven sports (`SESSION_SPORTS`), or none. The service refuses any other. */
+  sport?: string | null;
 };
 
 /**
@@ -29,6 +31,7 @@ export function prescriptionColumns(input: PrescriptionInput) {
     title: input.title ?? null,
     note: input.note ?? null,
     isTraining: input.isTraining ?? true,
+    sport: input.sport ?? null,
   };
 }
 
@@ -44,7 +47,6 @@ export function prescribedSessionOf(id: string, input: PrescriptionInput, versio
     ...prescriptionColumns(input),
     status: 'planned',
     parked: false,
-    sport: null,
     summary: null,
     howTo: null,
     dayOrder: 0,

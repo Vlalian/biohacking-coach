@@ -3,7 +3,7 @@ import type { EquipmentItem } from '@/features/equipment/equipment';
 import { isImportedHistory, isUnrecorded, type Session } from '@/features/session/session';
 import { coachHowToFrom, cueFrom, type HowTo, type StoredHowTo } from '@/features/session/how-to';
 import { isFreeOfShapedIdentifiers } from '@/lib/identifiers';
-import { HOW_TO_SPORTS, type HowToSport } from '@/features/session/how-to-templates';
+import { SESSION_SPORTS, isSessionSport, type SessionSport } from '@/features/session/session-sport';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
@@ -447,7 +447,7 @@ export interface ProposedSession {
    * day unless Momentum stated a reason to change it. Absent on a session
    * nothing gave a sport, and on every draft stored before the field existed.
    */
-  sport?: HowToSport;
+  sport?: SessionSport;
   /** Momentum's reason for a sport the arithmetic did not have on that day. */
   sportReason?: string;
   /** Momentum's one personal cue on how to do this session (E5). */
@@ -511,7 +511,7 @@ export const PROPOSE_WEEK_PLAN_TOOL = {
             note: { type: 'string', description: 'One short coaching line.' },
             sport: {
               type: 'string',
-              enum: [...HOW_TO_SPORTS],
+              enum: [...SESSION_SPORTS],
               description:
                 "The discipline. Keep the baseline week's sport for that day; the server keeps it unless you give sportReason.",
             },
@@ -754,6 +754,9 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow, coachHowTo:
 
   if (!isPlannableDay(s.date, window)) return null;
   if (!isPlanType(s.type)) return null;
+  // A sport outside the seven is dropped with its session, like an unknown type;
+  // no sport at all keeps the session with none.
+  if (s.sport !== undefined && s.sport !== null && !isSessionSport(s.sport)) return null;
 
   const session: ProposedSession = {
     date: s.date,
@@ -803,8 +806,8 @@ function presentOnly<T extends Record<string, unknown>>(fields: T): Partial<{ [K
   }>;
 }
 
-function howToSportOf(value: unknown): HowToSport | null {
-  return (HOW_TO_SPORTS as readonly unknown[]).includes(value) ? (value as HowToSport) : null;
+function howToSportOf(value: unknown): SessionSport | null {
+  return isSessionSport(value) ? value : null;
 }
 
 /**
@@ -816,22 +819,22 @@ function howToSportOf(value: unknown): HowToSport | null {
 function sportOf(
   session: Pick<ProposedSession, 'sport' | 'sportReason'>,
   arithmeticDay: readonly { sport: string }[],
-): HowToSport | undefined {
+): SessionSport | undefined {
   const planned = knownSports(arithmeticDay);
   if (session.sport && (planned.includes(session.sport) || session.sportReason)) return session.sport;
   return planned[0] ?? session.sport;
 }
 
 /** The known sports among a day's arithmetic sessions, in order. */
-function knownSports(day: readonly { sport: string }[]): HowToSport[] {
-  return day.map((x) => howToSportOf(x.sport)).filter((x): x is HowToSport => x !== null);
+function knownSports(day: readonly { sport: string }[]): SessionSport[] {
+  return day.map((x) => howToSportOf(x.sport)).filter((x): x is SessionSport => x !== null);
 }
 
 /** A sport Momentum swapped on a day, and the reason it gave. */
 export interface SportSwap {
   date: string;
-  from: HowToSport;
-  to: HowToSport;
+  from: SessionSport;
+  to: SessionSport;
   reason: string;
 }
 
@@ -852,9 +855,9 @@ export function withArithmeticSports(
     const sport = sportOf(session, day);
     const planned = knownSports(day);
     // sportOf keeps a sport the arithmetic did not have only with a reason.
-    const swapped = planned.length > 0 && !planned.includes(sport as HowToSport);
+    const swapped = planned.length > 0 && !planned.includes(sport as SessionSport);
     // A swap is kept only with a reason (sportOf), so both are there when it is one.
-    if (swapped) swaps.push({ date: session.date, from: planned[0], to: sport as HowToSport, reason: session.sportReason as string });
+    if (swapped) swaps.push({ date: session.date, from: planned[0], to: sport as SessionSport, reason: session.sportReason as string });
     const rest = { ...session };
     delete rest.sport;
     delete rest.sportReason;

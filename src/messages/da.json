@@ -290,6 +290,8 @@
     "editTitle": "Rediger session",
     "date": "Dato",
     "type": "Sessionstype",
+    "sport": "Sportsgren",
+    "sportNone": "Ingen sportsgren",
     "duration": "Varighed (min)",
     "zone": "Intensitetszone",
     "sessionTitle": "Titel",
@@ -358,6 +360,9 @@
     "emptyTitle": "Din plan starter her",
     "emptyBody": "Når Momentum har planlagt din første uge, vises den her.",
     "legend": "Session Type",
+    "authorYou": "Din session",
+    "authorNamed": "{name}s egen session",
+    "authorAthlete": "Atletens session",
     "today": "I dag",
     "double": "Dobbelt",
     "bouncePastDay": "Den dag er allerede overstået — et flyt siger, hvornår en session er planlagt, og intet planlægges bagud. Har du trænet den dag, så registrér det dér i stedet.",
@@ -417,6 +422,7 @@
     "readOnlyNote": "Indholdet kommer fra Momentum eller din træner — du kan flytte eller springe det over.",
     "createLabel": "Ny session",
     "createType": "Type",
+    "createSport": "Sportsgren",
     "createDuration": "Varighed (min)",
     "createNote": "Notat",
     "createTrainingToggle": "Tæller som træning",
@@ -441,6 +447,8 @@
     "refusalAuthorsContent": "Denne session tilhører den, der har skrevet den.",
     "formDate": "Dato",
     "formType": "Sessionstype",
+    "formSport": "Sportsgren",
+    "sportNone": "Ingen sportsgren",
     "formDuration": "Varighed (minutter)",
     "formZone": "Zone",
     "formTitle": "Titel",
@@ -1047,7 +1055,10 @@
       "swim": "svøm",
       "bike": "cykel",
       "run": "løb",
-      "brick": "brick-session"
+      "brick": "brick-session",
+      "strength": "styrke",
+      "mobility": "mobilitet",
+      "misc": "andet"
     }
   }
 }
