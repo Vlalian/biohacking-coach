@@ -13,9 +13,10 @@ import type { SessionSport } from './session-sport';
  * The card's treatment. One each, so the athlete tells them apart at a glance:
  *
  * - `arithmetic` — the block structure's own fill (`training-architecture/34`),
- *   not yet replaced by a Coach's week: dashed, the stripe faded.
- * - `accepted` — the plan: the Coach's week, the Head Coach's prescription, the
- *   athlete's own session. Solid.
+ *   not yet replaced by a Coach's week: dashed.
+ * - `accepted` — the plan: the Coach's week, the Head Coach's prescription. Solid.
+ * - `athlete` — a session the athlete wrote themselves (`showable-version/52`):
+ *   a solid foreground outline and a person mark.
  * - `done` — completed. Muted fill, a check.
  * - `proposed` — a drafted week drawn on the grid: a ghost. Nothing feeds it
  *   today — a proposal lives in the card above the grid only

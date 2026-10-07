@@ -1,6 +1,6 @@
 'use client';
 
-import { SESSION_SPORTS } from '@/features/session/session-sport';
+import { SESSION_SPORTS, type SessionSport } from '@/features/session/session-sport';
 
 /**
  * The closed sport list as a picker (`showable-version/52`): one empty "no
@@ -18,7 +18,7 @@ export function SportSelect({
   value: string;
   onChange: (value: string) => void;
   noneLabel: string;
-  sportName: (sport: string) => string;
+  sportName: (sport: SessionSport) => string;
   className?: string;
 }) {
   return (

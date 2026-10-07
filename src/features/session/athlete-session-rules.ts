@@ -8,7 +8,7 @@
  * directly rather than through a mocked database.
  */
 
-import { isSessionSport, type SessionSport } from './session-sport';
+import { isOptionalSessionSport, type SessionSport } from './session-sport';
 
 /** The Athlete Session types (CONTEXT.md): Mobility and Other coexist with
  *  Rest; Strength and Other-as-training follow the training rules. */
@@ -73,8 +73,7 @@ export function validateAthleteSessionDraft(input: {
 }): AthleteSessionDraftResult {
   if (!isValidAthleteSessionType(input.type)) return { ok: false, reason: 'invalid' };
   if (!isValidDuration(input.durationMin)) return { ok: false, reason: 'invalid' };
-  const sport = input.sport ?? null;
-  if (sport !== null && !isSessionSport(sport)) return { ok: false, reason: 'invalid' };
+  if (!isOptionalSessionSport(input.sport)) return { ok: false, reason: 'invalid' };
 
   return {
     ok: true,
@@ -83,7 +82,7 @@ export function validateAthleteSessionDraft(input: {
       durationMin: input.durationMin,
       isTraining: input.isTraining,
       note: normalizeNote(input.note),
-      sport,
+      sport: input.sport ?? null,
     },
   };
 }

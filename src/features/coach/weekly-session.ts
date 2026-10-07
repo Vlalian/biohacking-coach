@@ -3,7 +3,7 @@ import type { EquipmentItem } from '@/features/equipment/equipment';
 import { isImportedHistory, isUnrecorded, type Session } from '@/features/session/session';
 import { coachHowToFrom, cueFrom, type HowTo, type StoredHowTo } from '@/features/session/how-to';
 import { isFreeOfShapedIdentifiers } from '@/lib/identifiers';
-import { SESSION_SPORTS, isSessionSport, type SessionSport } from '@/features/session/session-sport';
+import { SESSION_SPORTS, isOptionalSessionSport, isSessionSport, type SessionSport } from '@/features/session/session-sport';
 import type { NewSessionRow, RaceRow } from '@/db/schema';
 import { addDays, dateKey, isValidDateKey, weekStartOf } from '@/lib/date';
 import {
@@ -756,7 +756,7 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow, coachHowTo:
   if (!isPlanType(s.type)) return null;
   // A sport outside the seven is dropped with its session, like an unknown type;
   // no sport at all keeps the session with none.
-  if (s.sport !== undefined && s.sport !== null && !isSessionSport(s.sport)) return null;
+  if (!isOptionalSessionSport(s.sport)) return null;
 
   const session: ProposedSession = {
     date: s.date,

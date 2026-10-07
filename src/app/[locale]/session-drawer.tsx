@@ -20,7 +20,7 @@ import { isImportedHistory } from '@/features/session/session';
 import { howToOf } from '@/features/session/how-to';
 import { HowToBlock } from '@/components/session/how-to-block';
 import { SportSelect } from '@/components/session/sport-select';
-import { isSessionSport, type SessionSport } from '@/features/session/session-sport';
+import { isSessionSport } from '@/features/session/session-sport';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
 import {
@@ -831,7 +831,7 @@ function HeadCoachSessionForm({
           value={sport}
           onChange={setSport}
           noneLabel={t('sportNone')}
-          sportName={(s) => howTo(`sports.${s as SessionSport}`)}
+          sportName={(s) => howTo(`sports.${s}`)}
           className={FIELD}
         />
       </Field>
@@ -957,7 +957,7 @@ function AthleteSessionForm({
           value={sport}
           onChange={setSport}
           noneLabel={t('sportNone')}
-          sportName={(s) => howTo(`sports.${s as SessionSport}`)}
+          sportName={(s) => howTo(`sports.${s}`)}
           className="mt-2 w-full border border-border bg-background h-11 px-3 font-body text-base text-foreground outline-none focus:border-signal"
         />
       </label>

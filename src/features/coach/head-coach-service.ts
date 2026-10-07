@@ -10,7 +10,7 @@ import { casDeleteSession, casUpdateSession } from '@/features/session/versioned
 import { attemptedDuration, type SessionConflict } from '@/features/session/conflict';
 import { prescribedSessionOf, prescriptionColumns, type PrescriptionInput } from './prescription';
 import type { Session } from '@/features/session/session';
-import { isSessionSport } from '@/features/session/session-sport';
+import { isOptionalSessionSport } from '@/features/session/session-sport';
 
 /**
  * The Head Coach acts on a linked athlete's plan — add, edit, delete — under
@@ -89,7 +89,7 @@ function isValidPrescription(input: PrescriptionInput): boolean {
     isValidDateKey(input.date) &&
     typeof input.type === 'string' &&
     input.type.trim().length > 0 &&
-    (input.sport === undefined || input.sport === null || isSessionSport(input.sport))
+    isOptionalSessionSport(input.sport)
   );
 }
 

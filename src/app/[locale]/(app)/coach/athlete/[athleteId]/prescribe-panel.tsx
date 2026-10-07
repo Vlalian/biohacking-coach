@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import { PRESCRIBABLE_TYPES } from '@/features/session/type-colors';
 import { SportSelect } from '@/components/session/sport-select';
-import type { SessionSport } from '@/features/session/session-sport';
 import { prescribeSessionAction } from './prescribe-actions';
 import type { CalendarWriter } from '@/app/[locale]/calendar';
 import { answerOf, beginAdd } from '@/features/session/calendar-writes';
@@ -136,7 +135,7 @@ export function PrescribePanel({
             value={form.sport}
             onChange={(sport) => setForm((f) => ({ ...f, sport }))}
             noneLabel={t('sportNone')}
-            sportName={(s) => howTo(`sports.${s as SessionSport}`)}
+            sportName={(s) => howTo(`sports.${s}`)}
             className="h-11 border border-border bg-background px-3 font-body text-base normal-case tracking-normal text-foreground outline-none focus:border-signal"
           />
         </label>

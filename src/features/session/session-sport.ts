@@ -10,3 +10,8 @@ export type SessionSport = (typeof SESSION_SPORTS)[number];
 export function isSessionSport(value: unknown): value is SessionSport {
   return typeof value === 'string' && (SESSION_SPORTS as readonly string[]).includes(value);
 }
+
+/** A sport is optional: absent or null is fine, anything else must be one of the seven. */
+export function isOptionalSessionSport(value: unknown): value is SessionSport | null | undefined {
+  return value === undefined || value === null || isSessionSport(value);
+}
