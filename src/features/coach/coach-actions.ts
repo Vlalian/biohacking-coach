@@ -71,8 +71,10 @@ function checkEnum(field: Extract<PayloadField, { kind: 'enum' }>, value: unknow
 }
 
 function checkInteger(field: Extract<PayloadField, { kind: 'integer' }>, value: unknown): FieldVerdict {
-  if (typeof value !== 'number' || !Number.isInteger(value)) return 'malformed';
-  return value >= field.min && value <= field.max ? 'ok' : 'out-of-range';
+  // Number.isInteger is false for every non-number, so no separate typeof test is needed.
+  if (!Number.isInteger(value)) return 'malformed';
+  const n = value as number;
+  return n >= field.min && n <= field.max ? 'ok' : 'out-of-range';
 }
 
 function checkField(field: PayloadField, value: unknown): FieldVerdict {
