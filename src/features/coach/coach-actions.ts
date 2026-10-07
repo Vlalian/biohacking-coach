@@ -63,17 +63,46 @@ export const COACH_ACTION_CATALOG: readonly CoachActionDefinition[] = [
   },
 ];
 
-function checkField(field: PayloadField, value: unknown): 'ok' | 'malformed' | 'out-of-range' {
+type FieldVerdict = 'ok' | 'malformed' | 'out-of-range';
+
+function checkEnum(field: Extract<PayloadField, { kind: 'enum' }>, value: unknown): FieldVerdict {
+  if (typeof value !== 'string') return 'malformed';
+  return field.values.includes(value) ? 'ok' : 'out-of-range';
+}
+
+function checkInteger(field: Extract<PayloadField, { kind: 'integer' }>, value: unknown): FieldVerdict {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 'malformed';
+  return value >= field.min && value <= field.max ? 'ok' : 'out-of-range';
+}
+
+function checkField(field: PayloadField, value: unknown): FieldVerdict {
   switch (field.kind) {
     case 'enum':
-      if (typeof value !== 'string') return 'malformed';
-      return field.values.includes(value) ? 'ok' : 'out-of-range';
+      return checkEnum(field, value);
     case 'integer':
-      if (typeof value !== 'number' || !Number.isInteger(value)) return 'malformed';
-      return value >= field.min && value <= field.max ? 'ok' : 'out-of-range';
+      return checkInteger(field, value);
     case 'string':
       return typeof value === 'string' ? 'ok' : 'malformed';
   }
+}
+
+function isPlainRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === 'object' && input !== null && !Array.isArray(input);
+}
+
+/** Checks the input against the entry's declared fields; only those fields reach the payload. */
+function checkPayload(
+  entry: CoachActionDefinition,
+  input: unknown,
+): { ok: true; payload: Record<string, unknown> } | { ok: false; reason: CoachActionRefusal } {
+  if (!isPlainRecord(input)) return { ok: false, reason: 'malformed' };
+  const payload: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(entry.payload)) {
+    const verdict = checkField(field, input[key]);
+    if (verdict !== 'ok') return { ok: false, reason: verdict };
+    payload[key] = input[key];
+  }
+  return { ok: true, payload };
 }
 
 /**
@@ -87,18 +116,9 @@ export function validateCoachAction(
 ): CoachActionValidation {
   const entry = catalog.find((e) => e.name === call.name);
   if (!entry) return { ok: false, reason: 'unknown-action' };
-  const input = call.input;
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-    return { ok: false, reason: 'malformed' };
-  }
-  const record = input as Record<string, unknown>;
-  const payload: Record<string, unknown> = {};
-  for (const [key, field] of Object.entries(entry.payload)) {
-    const verdict = checkField(field, record[key]);
-    if (verdict !== 'ok') return { ok: false, reason: verdict };
-    payload[key] = record[key];
-  }
-  return { ok: true, action: { name: entry.name, durability: entry.durability, payload } };
+  const result = checkPayload(entry, call.input);
+  if (!result.ok) return result;
+  return { ok: true, action: { name: entry.name, durability: entry.durability, payload: result.payload } };
 }
 
 function fieldSchema(field: PayloadField): Record<string, unknown> {
