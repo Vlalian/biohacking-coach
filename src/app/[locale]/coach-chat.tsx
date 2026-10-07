@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { AlertTriangle, Check, CornerDownLeft, X } from 'lucide-react';
 import { Link } from '@/i18n/navigation';
 import { useCoachOverlay } from '@/components/shell/coach-overlay-context';
+import { performCoachActions } from './coach-action-handlers';
 import { sendCoachChatMessageAction } from './chat-actions';
 import { PlanProposalCard, type UiPlanProposal } from './plan-proposal-card';
 import { usePlanDecision } from './use-plan-decision';
@@ -53,7 +54,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
   const tWeekly = useTranslations('WeeklySession');
   const [pending, startTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
-  const { reference, setReference } = useCoachOverlay();
+  const { reference, setReference, openView } = useCoachOverlay();
 
   const [conversationId, setConversationId] = useState<string | null>(
     initial?.conversationId ?? null,
@@ -122,6 +123,7 @@ export function CoachChat({ initial }: { initial: CoachChatInitial | null }) {
       setMessages(result.messages);
       setReference(null);
       decision.receive(result.proposal);
+      performCoachActions(result.actions, { openView });
     });
   }
 

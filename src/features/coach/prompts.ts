@@ -654,6 +654,8 @@ ${[
     // brought in, and the two lines the Weekly Session carried before it.
     ...chatPlanningBlocks(planning),
 
+    appMapBlock(),
+
     CONSTRAINT_SIGNALS,
 
     referenceBlock(sessionContext, phase),
@@ -664,6 +666,25 @@ ${[
 
     guidedTourBlock(presenceStage, equipmentLines.length > 0),
   ]);
+}
+
+/**
+ * The Views the athlete can open, and what lives in each (`coach-actions/02`).
+ * Without it the Coach cannot answer "where do I change my language?". Prompt
+ * text, not a search index; and a request, not a control — the server refuses
+ * any View outside the catalog's list however the model behaves.
+ */
+function appMapBlock(): string {
+  return (
+    'APP MAP: The app has six Views. Training plan: the calendar of planned sessions. ' +
+    'Information: your training and bodily information. ' +
+    'Equipment: the bike, shoes and watch you train on. ' +
+    'Glossary: the training terms used in the plan and in messages. ' +
+    'Settings (language, theme, name, email, training preferences, sharing, downloading or deleting your data). ' +
+    'Privacy: how your data is handled. ' +
+    'You can open a View for the athlete with the open_view tool. Open a View only when the athlete asks ' +
+    'where something is or asks to be taken there, and still answer in words.'
+  );
 }
 
 /**
