@@ -408,6 +408,88 @@ describe('ViewBody as the Head Coach', () => {
 });
 
 /**
+ * showable-version/54 — the drawer said two things about who made a session.
+ * `readOnlyNote` is athlete-facing copy; it must not render for the Head Coach,
+ * and it must name no author. A session needs a note, or the note block that
+ * holds `readOnlyNote` is not rendered at all.
+ */
+describe('ViewBody provenance copy (showable-version/54)', () => {
+  /** The athlete's drawer with the real English wording for `readOnlyNote`. */
+  async function renderAthleteWithRealNote(s: Session) {
+    const en = (await import('@/messages/en.json')).default.SessionDrawer;
+    return {
+      en,
+      shown: labels(
+        ViewBody({
+          session: s,
+          policy: athleteDrawerPolicy(s),
+          fromImport: false,
+          todayKey: TODAY,
+          locale: 'en',
+          pending: false,
+          t: ((key: string) => (key === 'readOnlyNote' ? en.readOnlyNote : key)) as never,
+          onMarkComplete: vi.fn(),
+          onSkip: vi.fn(),
+          onMarkUnavailable: vi.fn(),
+          onUndoImport: vi.fn(),
+          onDiscussWithCoach: vi.fn(),
+          onRate: vi.fn(),
+          onEdit: vi.fn(),
+          onDelete: vi.fn(),
+        }),
+      ),
+    };
+  }
+
+  it('shows the Head Coach only the athlete-own refusal, not the athlete-facing note', () => {
+    const shown = renderAsCoach(session({ origin: 'athlete', note: 'Easy spin' }));
+
+    expect(shown).toContain('refusalAthletesOwn');
+    expect(shown).not.toContain('readOnlyNote');
+  });
+
+  it.each(['coach', 'head_coach'] as const)(
+    'tells the athlete on a %s session they may move or skip it, naming no author',
+    async (origin) => {
+      const { en, shown } = await renderAthleteWithRealNote(
+        session({ origin, note: 'Easy spin' }),
+      );
+
+      expect(shown).toContain(en.readOnlyNote);
+      expect(shown).not.toContain('refusalAthletesOwn');
+      expect(en.readOnlyNote).toMatch(/move/i);
+      expect(en.readOnlyNote).toMatch(/skip/i);
+      expect(en.readOnlyNote).not.toMatch(/momentum|coach/i);
+    },
+  );
+
+  it('shows an arithmetic session no author claim', async () => {
+    const { en, shown } = await renderAthleteWithRealNote(
+      session({ origin: 'arithmetic', note: 'Easy spin' }),
+    );
+
+    expect(shown).toContain(en.readOnlyNote);
+    expect(shown.filter((line) => line === en.readOnlyNote).join(' ')).not.toMatch(
+      /momentum|coach/i,
+    );
+  });
+
+  it('words the English read-only note without Momentum or coach', async () => {
+    const en = (await import('@/messages/en.json')).default.SessionDrawer;
+
+    expect(en.readOnlyNote).not.toMatch(/momentum/i);
+    expect(en.readOnlyNote).not.toMatch(/coach/i);
+  });
+
+  it('words the Danish read-only note without Momentum or træner', async () => {
+    const da = (await import('@/messages/da.json')).default.SessionDrawer;
+
+    expect(da.readOnlyNote).not.toMatch(/momentum/i);
+    expect(da.readOnlyNote).not.toMatch(/træner/i);
+  });
+});
+
+/**
  * `training-architecture/26` — the how-to sits between the note and the
  * reflection, for the arithmetic's and Momentum's sessions only. The block
  * itself is `how-to-block.test.tsx`; this is the wiring.
