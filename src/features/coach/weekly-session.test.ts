@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Athlete } from '@/features/athlete/athlete';
 import type { Session } from '@/features/session/session';
+import { cardIcon } from '@/features/session/session-card';
+import { SESSION_SPORTS } from '@/features/session/session-sport';
 import {
   buildWeeklyCheckIn,
   proposedToNewSessionRows,
@@ -1054,9 +1056,31 @@ describe('sport, sportReason and cue (training-architecture/26)', () => {
     expect(proposedToNewSessionRows([p], 'a1')[0]).toMatchObject({ sport: 'bike', howTo: { cue: 'Spin light, spare the knee.' } });
   });
 
-  it('keeps a stated reason for the sport, trimmed, and drops an unknown sport or a blank reason', () => {
+  it('keeps a stated reason for the sport, trimmed, and drops a blank reason', () => {
     expect(validated({ ...ROW, sport: 'bike', sportReason: '  knee  ' })[0]).toMatchObject({ sportReason: 'knee' });
-    expect(validated({ ...ROW, sport: 'cycling', sportReason: ' ' })[0]).toEqual(ROW);
+    expect(validated({ ...ROW, sport: 'bike', sportReason: ' ' })[0]).toEqual({ ...ROW, sport: 'bike' });
+  });
+
+  it('drops a session whose sport is outside the seven, keeps one with no sport, and keeps the new sports', () => {
+    expect(validated({ ...ROW, sport: 'cycling' })).toEqual([]);
+    expect(validated({ ...ROW, sport: 'Bike' })).toEqual([]);
+    expect(validated({ ...ROW })).toEqual([ROW]);
+    expect(validated({ ...ROW, sport: null })).toEqual([ROW]);
+    expect(validated({ ...ROW, sport: 'strength' })).toEqual([{ ...ROW, sport: 'strength' }]);
+  });
+
+  it('writes the sport of every drafted session onto the row, the three new sports included', () => {
+    const dates = ['2026-07-30', '2026-07-31', '2026-08-01'];
+    const result = validateProposedPlan(
+      { sessions: ['strength', 'mobility', 'misc'].map((sport, i) => ({ ...ROW, date: dates[i], sport })) },
+      WINDOW,
+    );
+    if (!result.ok) throw new Error('expected the week to validate');
+    expect(proposedToNewSessionRows(result.sessions, 'a1').map((row) => row.sport)).toEqual([
+      'strength',
+      'mobility',
+      'misc',
+    ]);
   });
 
   it('drops a cue that is too long or carries an identifier, keeping the session', () => {
@@ -1135,9 +1159,16 @@ describe('sport, sportReason and cue (training-architecture/26)', () => {
     expect(unknown).toEqual({ sessions: [{ ...ROW, sport: 'swim' }], swaps: [] });
   });
 
+  it('offers exactly the seven sports on the tool, and every one has a card icon other than Circle', () => {
+    const item = PROPOSE_WEEK_PLAN_TOOL.input_schema.properties.sessions.items;
+    expect(item.properties.sport.enum).toEqual([...SESSION_SPORTS]);
+    for (const sport of item.properties.sport.enum) {
+      expect(cardIcon({ sport, type: 'Other' })).not.toBe('Circle');
+    }
+  });
+
   it('offers the three fields on the tool, none of them required', () => {
     const item = PROPOSE_WEEK_PLAN_TOOL.input_schema.properties.sessions.items;
-    expect(item.properties.sport.enum).toEqual(['swim', 'bike', 'run', 'brick']);
     expect(Object.keys(item.properties)).toEqual(expect.arrayContaining(['sport', 'sportReason', 'cue']));
     expect(item.required).not.toContain('sport');
     expect(item.required).not.toContain('cue');

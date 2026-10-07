@@ -80,8 +80,18 @@ describe('validateAthleteSessionDraft', () => {
       }),
     ).toEqual({
       ok: true,
-      draft: { type: 'Strength', durationMin: 45, isTraining: true, note: 'gym' },
+      draft: { type: 'Strength', durationMin: 45, isTraining: true, note: 'gym', sport: null },
     });
+  });
+
+  it('takes a sport from the seven, or none, and refuses any other as invalid', () => {
+    const base = { type: 'Strength', durationMin: 30, isTraining: true, note: null };
+    expect(validateAthleteSessionDraft({ ...base, sport: 'misc' })).toMatchObject({ ok: true, draft: { sport: 'misc' } });
+    expect(validateAthleteSessionDraft({ ...base, sport: null })).toMatchObject({ ok: true, draft: { sport: null } });
+    expect(validateAthleteSessionDraft({ ...base })).toMatchObject({ ok: true, draft: { sport: null } });
+    for (const sport of ['cycling', 'Swim', '', 3]) {
+      expect(validateAthleteSessionDraft({ ...base, sport })).toEqual({ ok: false, reason: 'invalid' });
+    }
   });
 
   it('refuses an invalid type or duration as data, never by throwing', () => {

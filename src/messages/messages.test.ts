@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { routing } from '@/i18n/routing';
+import { SESSION_SPORTS } from '@/features/session/session-sport';
 import en from './en.json';
 import da from './da.json';
 
@@ -38,6 +39,15 @@ describe('message catalogues', () => {
         .sort();
 
       expect(paths, `locale "${locale}" has drifted`).toEqual(reference);
+    }
+  });
+
+  it('names the seven sports, the picker and the author labels in both locales', () => {
+    for (const messages of [en, da]) {
+      expect(Object.keys(messages.HowTo.sports).sort()).toEqual([...SESSION_SPORTS].sort());
+      for (const key of ['authorYou', 'authorNamed', 'authorAthlete']) expect(messages.Calendar).toHaveProperty(key);
+      for (const key of ['formSport', 'createSport', 'sportNone']) expect(messages.SessionDrawer).toHaveProperty(key);
+      for (const key of ['sport', 'sportNone']) expect(messages.Prescribe).toHaveProperty(key);
     }
   });
 

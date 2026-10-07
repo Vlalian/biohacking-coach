@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Session } from './session';
-import { cardIcon, cardLines, cardState } from './session-card';
+import { authorLabel, cardIcon, cardLines, cardState } from './session-card';
+import { SESSION_SPORTS } from './session-sport';
 
 /**
  * `showable-version/37` — a session on the Training Plan calendar is a card.
@@ -37,7 +38,15 @@ describe('cardState', () => {
     expect(cardState(s({ status: 'planned', origin: 'arithmetic' }))).toBe('arithmetic');
     expect(cardState(s({ status: 'planned', origin: 'coach' }))).toBe('accepted');
     expect(cardState(s({ status: 'planned', origin: 'head_coach' }))).toBe('accepted');
-    expect(cardState(s({ status: 'planned', origin: 'athlete' }))).toBe('accepted');
+    expect(cardState(s({ status: 'planned', origin: 'athlete' }))).toBe('athlete');
+  });
+
+  it('names the athlete state for a planned athlete session, and lets done and missed win', () => {
+    expect(cardState(s({ status: 'planned', origin: 'athlete' }))).toBe('athlete');
+    expect(cardState(s({ status: 'completed', origin: 'athlete' }))).toBe('done');
+    expect(cardState(s({ status: 'skipped', origin: 'athlete' }))).toBe('missed');
+    expect(cardState(s({ status: 'unavailable', origin: 'athlete', parked: true }))).toBe('missed');
+    expect(cardState(s({ status: 'planned', origin: 'coach' }))).toBe('accepted');
   });
 
   it('a completed arithmetic session is done, and a skipped one missed — the status wins over the origin', () => {
@@ -46,11 +55,36 @@ describe('cardState', () => {
   });
 });
 
+describe('authorLabel', () => {
+  it('names the author for the athlete and for the Head Coach, and for nobody else', () => {
+    const own = { origin: 'athlete' as const };
+    expect(authorLabel(own, { viewer: 'athlete', athleteName: null })).toEqual({ key: 'authorYou' });
+    expect(authorLabel(own, { viewer: 'head_coach', athleteName: 'Mia' })).toEqual({ key: 'authorNamed', name: 'Mia' });
+    expect(authorLabel(own, { viewer: 'head_coach', athleteName: null })).toEqual({ key: 'authorAthlete' });
+    expect(authorLabel(own, { viewer: 'head_coach', athleteName: '  ' })).toEqual({ key: 'authorAthlete' });
+    for (const origin of ['coach', 'head_coach', 'arithmetic', 'garmin'] as const) {
+      expect(authorLabel({ origin }, { viewer: 'athlete', athleteName: 'Mia' })).toBeNull();
+    }
+  });
+});
+
 describe('cardIcon', () => {
-  it('picks the discipline icon when the sport is known, the Session Type icon otherwise', () => {
-    expect(cardIcon(s({ sport: 'cycling', type: 'Endurance' }))).toBe('Bike');
-    expect(cardIcon(s({ sport: null, type: 'Intensity' }))).toBe('Zap');
-    expect(cardIcon(s({ sport: null, type: 'Unheard' }))).toBe('Circle');
+  it('gives the seven sports seven distinct icons, and a Garmin label the sport it names', () => {
+    const icons = SESSION_SPORTS.map((sport) => cardIcon(s({ sport })));
+    expect(icons).toEqual(['Waves', 'Bike', 'Footprints', 'BrickWall', 'Dumbbell', 'StretchHorizontal', 'Shapes']);
+    expect(new Set(icons).size).toBe(7);
+    expect(cardIcon(s({ sport: 'brick' }))).not.toBe(cardIcon(s({ sport: 'bike' })));
+    expect(cardIcon(s({ sport: 'Cycling' }))).toBe('Bike');
+    expect(cardIcon(s({ sport: 'strength_training' }))).toBe('Dumbbell');
+  });
+
+  it('shows Circle without a known sport, whatever the Session Type, and ignores the type with one', () => {
+    for (const type of ['Endurance', 'Intensity', 'Tempo', 'Recovery', 'Rest', 'Strength', 'Mobility', 'Other']) {
+      expect(cardIcon(s({ sport: null, type }))).toBe('Circle');
+      expect(cardIcon(s({ sport: 'kayaking', type }))).toBe('Circle');
+      expect(cardIcon(s({ sport: 'constructor', type }))).toBe('Circle');
+    }
+    expect(cardIcon(s({ sport: 'run', type: 'Intensity' }))).toBe(cardIcon(s({ sport: 'run', type: 'Recovery' })));
   });
 
   it('reads the arithmetic’s short names and a Garmin import’s raw ones alike, in any case', () => {
@@ -63,19 +97,6 @@ describe('cardIcon', () => {
     }
   });
 
-  it('falls back to the Session Type for a sport it has no discipline for — a brick, strength, an unknown file label', () => {
-    expect(cardIcon(s({ sport: 'brick', type: 'Endurance' }))).toBe('Activity');
-    expect(cardIcon(s({ sport: 'strength_training', type: 'Strength' }))).toBe('Dumbbell');
-    expect(cardIcon(s({ sport: 'constructor', type: 'toString' }))).toBe('Circle');
-  });
-
-  it('gives every Session Type its own icon', () => {
-    const icons = ['Endurance', 'Intensity', 'Tempo', 'Recovery', 'Rest', 'Strength', 'Mobility'].map((type) =>
-      cardIcon(s({ type })),
-    );
-    expect(icons).toEqual(['Activity', 'Zap', 'Gauge', 'Leaf', 'Moon', 'Dumbbell', 'StretchHorizontal']);
-    expect(cardIcon(s({ type: 'Other' }))).toBe('Circle');
-  });
 });
 
 describe('cardLines', () => {

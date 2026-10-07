@@ -126,6 +126,34 @@ describe('prescribeSession — the Head Coach adds a Prescribed Session', () => 
     });
   });
 
+  it('stores the sport on prescribe and edit, and refuses one outside the seven as invalid', async () => {
+    const added = await prescribeSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      input: { ...VALID, sport: 'brick' },
+      today: TODAY,
+    });
+    if (!added.ok) throw new Error('expected the prescription to land');
+    expect((await sessionById(added.sessionId)).sport).toBe('brick');
+    expect(added.session.sport).toBe('brick');
+
+    expect((await edit(added.sessionId, { input: { ...VALID, sport: 'run' }, expectedVersion: 1 })).ok).toBe(true);
+    expect((await sessionById(added.sessionId)).sport).toBe('run');
+
+    const refused = await prescribeSession({
+      headCoachId: COACH,
+      athleteId: ATHLETE,
+      input: { ...VALID, sport: 'cycling' },
+      today: TODAY,
+    });
+    expect(refused).toEqual({ ok: false, reason: 'invalid' });
+    expect(reasonOf(await edit(added.sessionId, { input: { ...VALID, sport: 'cycling' }, expectedVersion: 2 }))).toBe(
+      'invalid',
+    );
+    expect((await sessionById(added.sessionId)).sport).toBe('run');
+    expect(await allSessions()).toHaveLength(1);
+  });
+
   it('records a session_prescribed event by the Head Coach, not yet narrated, carrying what was prescribed', async () => {
     const result = await prescribeSession({
       headCoachId: COACH,

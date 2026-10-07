@@ -26,6 +26,7 @@ describe('prescriptionColumns', () => {
       title: 'Cruise intervals',
       note: '3 x 10 min',
       isTraining: false,
+      sport: null,
     });
   });
 
@@ -38,7 +39,14 @@ describe('prescriptionColumns', () => {
       title: null,
       note: null,
       isTraining: true,
+      sport: null,
     });
+  });
+
+  it('writes the sport into the columns and the prescribed session', () => {
+    expect(prescriptionColumns({ date: '2026-09-24', type: 'Tempo', sport: 'bike' })).toMatchObject({ sport: 'bike' });
+    expect(prescriptionColumns({ date: '2026-09-24', type: 'Tempo' })).toMatchObject({ sport: null });
+    expect(prescribedSessionOf('s1', { date: '2026-09-24', type: 'Tempo', sport: 'brick' }, 1).sport).toBe('brick');
   });
 });
 

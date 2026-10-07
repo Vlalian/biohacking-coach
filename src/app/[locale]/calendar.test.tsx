@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Session } from '@/features/session/session';
+import { TYPE_COLORS } from '@/features/session/type-colors';
 
 /**
  * The Head Coach's calendar is read-only in every respect but placement, and
@@ -374,6 +375,51 @@ describe('Calendar — every week expanded, sessions as cards (showable-version/
   it('says an untitled card’s type once, not as title and type both', () => {
     const html = render({ sessions: [session({ type: 'Strength', title: null, status: 'completed', duration: null, zone: null })] });
     expect(html).toContain('aria-label="Strength · completed · bounceFrozen"');
+  });
+});
+
+describe('Calendar — the icon is the sport, the colour the Session Type (showable-version/52)', () => {
+  const cardTag = (html: string) => html.match(/<(?:button|div)[^>]*data-card-state="[^"]*"[^>]*>/)?.[0] ?? '';
+  const labelOf = (html: string) => cardTag(html).match(/aria-label="([^"]*)"/)?.[1] ?? '';
+
+  it('draws every Session Type stripe at full opacity, the arithmetic fill included', () => {
+    for (const type of Object.keys(TYPE_COLORS)) {
+      for (const origin of ['arithmetic', 'coach', 'athlete'] as const) {
+        const markup = render({ sessions: [session({ type, origin })] });
+        expect(markup).toContain(`border-left-color:${TYPE_COLORS[type]}`);
+        expect(markup).not.toMatch(/border-left-color:#[0-9a-f]{8}/i);
+      }
+    }
+  });
+
+  it('marks an athlete’s own session with a person icon and a solid foreground outline, and no other origin', () => {
+    const own = render({ sessions: [session({ origin: 'athlete' })] });
+    expect(own).toContain('data-card-author="athlete"');
+    expect(cardTag(own)).toContain('border-foreground');
+    expect(cardTag(own)).not.toContain('border-dashed');
+    const parked = render({ sessions: [session({ origin: 'athlete', parked: true })] });
+    expect(cardTag(parked)).not.toContain('border-dashed');
+    for (const origin of ['coach', 'head_coach', 'arithmetic'] as const) {
+      expect(render({ sessions: [session({ origin })] })).not.toContain('data-card-author');
+    }
+  });
+
+  it('puts the author label in the card’s accessible name', () => {
+    expect(labelOf(render({ sessions: [session({ origin: 'athlete' })] }))).toContain('authorYou');
+    const asCoach = { readOnly: true, coachAthleteId: 'ath_1', sessions: [session({ origin: 'athlete' })] };
+    expect(labelOf(render({ ...asCoach, athleteName: 'Mia' }))).toContain('authorNamed');
+    expect(labelOf(render({ ...asCoach, athleteName: null }))).toContain('authorAthlete');
+    expect(labelOf(render({ sessions: [session({ origin: 'coach' })] }))).not.toContain('author');
+  });
+
+  it('names the sport on the icon, and hides Circle from assistive technology', () => {
+    const bike = render({ sessions: [session({ sport: 'bike' })] });
+    expect(bike).toContain('data-card-icon="Bike"');
+    expect(bike).toContain('aria-label="sports.bike"');
+    expect(bike).toContain('role="img"');
+    const none = render({ sessions: [session({ sport: null })] });
+    expect(none).toContain('data-card-icon="Circle"');
+    expect(none).not.toContain('aria-label="sports.');
   });
 });
 

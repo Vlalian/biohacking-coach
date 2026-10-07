@@ -502,3 +502,56 @@ describe('SessionDrawer — the day\'s "+" offers Session or Race (training-arch
     expect(html).toContain('raceTitle');
   });
 });
+
+describe('SessionDrawer — the forms offer the seven sports (showable-version/52)', () => {
+  const SEVEN = ['', 'swim', 'bike', 'run', 'brick', 'strength', 'mobility', 'misc'];
+  const sportSelect = /<select[^>]*data-field="sport"[^>]*>([\s\S]*?)<\/select>/;
+  const options = (html: string) =>
+    [...(html.match(sportSelect)?.[1] ?? '').matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]);
+  const picked = (html: string, value: string) =>
+    new RegExp(`<option(?=[^>]*\\bselected)[^>]*value="${value}"`).test(html.match(sportSelect)?.[1] ?? '');
+  const drawer = (state: Parameters<typeof SessionDrawer>[0]['state'], over: { coachAthleteId?: string; sessions?: Session[] } = {}) =>
+    renderToStaticMarkup(
+      <SessionDrawer
+        state={state}
+        sessions={over.sessions ?? []}
+        coachAthleteId={over.coachAthleteId}
+        importedSessionIds={[]}
+        locale="en"
+        todayKey={TODAY}
+        onClose={() => {}}
+        onRate={() => {}}
+        onEditRequest={() => {}}
+        onChoose={() => {}}
+        currentTargetRace={null}
+        onBeginWrite={() => {}}
+        onSettleWrite={() => {}}
+        inFlightIds={[]}
+      />,
+    );
+
+  it('offers the seven sports on the athlete’s create form, none picked', () => {
+    const html = drawer({ open: true, mode: 'create', date: '2027-08-16' });
+    expect(options(html)).toEqual(SEVEN);
+    expect(picked(html, '')).toBe(true);
+    expect(picked(html, 'misc')).toBe(false);
+  });
+
+  it('offers the seven on the athlete’s edit form, the stored sport picked', () => {
+    const html = drawer(
+      { open: true, mode: 'edit', sessionId: 's1' },
+      { sessions: [session({ origin: 'athlete', type: 'Strength', sport: 'mobility' })] },
+    );
+    expect(options(html)).toEqual(SEVEN);
+    expect(picked(html, 'mobility')).toBe(true);
+  });
+
+  it('offers the seven on the Head Coach’s edit form, the stored sport picked', () => {
+    const html = drawer(
+      { open: true, mode: 'edit', sessionId: 's1' },
+      { coachAthleteId: 'ath_1', sessions: [session({ origin: 'head_coach', sport: 'run' })] },
+    );
+    expect(options(html)).toEqual(SEVEN);
+    expect(picked(html, 'run')).toBe(true);
+  });
+});

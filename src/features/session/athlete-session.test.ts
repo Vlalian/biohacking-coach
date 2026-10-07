@@ -163,6 +163,22 @@ describe('createAthleteSession', () => {
     expect(await create({ durationMin: 0 })).toEqual({ ok: false, reason: 'invalid' });
     expect(await allSessions()).toEqual([]);
   });
+
+  it('stores the sport picked on create and on edit, and writes nothing for a foreign one', async () => {
+    const created = await create({ sport: 'strength' });
+    if (!created.ok) throw new Error('expected the session to land');
+    expect((await sessionById(created.session.id)).sport).toBe('strength');
+    expect(created.session.sport).toBe('strength');
+
+    const id = await aSession();
+    expect((await update(id, { sport: 'mobility' })).ok).toBe(true);
+    expect((await sessionById(id)).sport).toBe('mobility');
+
+    expect(await create({ sport: 'cycling' })).toEqual({ ok: false, reason: 'invalid' });
+    expect(await update(id, { sport: 'cycling', expectedVersion: 2 })).toEqual({ ok: false, reason: 'invalid' });
+    expect((await sessionById(id)).sport).toBe('mobility');
+    expect(await allSessions()).toHaveLength(2);
+  });
 });
 
 describe('updateAthleteSession', () => {

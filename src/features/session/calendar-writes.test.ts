@@ -142,6 +142,12 @@ describe('a create', () => {
     expect(inFlightIds(writes)).toEqual(['tmp:1']);
   });
 
+  it('carries the sport the athlete picked into the placeholder', () => {
+    const writes = beginCreate(NO_WRITES, [], 'tmp:1', { ...draft, sport: 'misc' }, TODAY);
+
+    expect(writes.inFlight['tmp:1']).toMatchObject({ sport: 'misc', origin: 'athlete' });
+  });
+
   it('appears completed on or before today, planned after it — the server’s rule', () => {
     const past = beginCreate(NO_WRITES, [], 'tmp:1', { ...draft, date: TODAY }, TODAY);
     const future = beginCreate(NO_WRITES, [], 'tmp:2', { ...draft, date: '2026-09-24' }, TODAY);
