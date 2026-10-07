@@ -637,7 +637,7 @@ function HoursPerWeekField({
       <label htmlFor="settings-hours" className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
         {t('hoursLabel')}
       </label>
-      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('hoursNote')}</p>
+      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('hoursNote', { max: HOURS_PER_WEEK_MAX })}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <input
           id="settings-hours"
