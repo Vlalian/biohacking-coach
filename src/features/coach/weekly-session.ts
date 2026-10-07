@@ -752,11 +752,7 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow, coachHowTo:
   if (!entry || typeof entry !== 'object') return null;
   const s = entry as Record<string, unknown>;
 
-  if (!isPlannableDay(s.date, window)) return null;
-  if (!isPlanType(s.type)) return null;
-  // A sport outside the seven is dropped with its session, like an unknown type;
-  // no sport at all keeps the session with none.
-  if (!isOptionalSessionSport(s.sport)) return null;
+  if (!hasValidFields(s, window)) return null;
 
   const session: ProposedSession = {
     date: s.date,
@@ -767,6 +763,18 @@ function proposedSessionFrom(entry: unknown, window: PlanningWindow, coachHowTo:
     ...howToFieldsOf(s),
   };
   return coachHowTo ? withCoachHowTo(session, s.coachHowTo) : session;
+}
+
+/**
+ * Whether a row names a plannable day, a Session Type and, if any, one of the
+ * seven sports. A sport outside the seven is dropped with its session, like an
+ * unknown type; no sport at all keeps the session with none.
+ */
+function hasValidFields(
+  s: Record<string, unknown>,
+  window: PlanningWindow,
+): s is Record<string, unknown> & { date: string; type: PlanType } {
+  return isPlannableDay(s.date, window) && isPlanType(s.type) && isOptionalSessionSport(s.sport);
 }
 
 /** Momentum's sport, its reason and its cue, each only when it has a usable value (`training-architecture/26`). */

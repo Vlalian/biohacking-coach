@@ -26,13 +26,17 @@ export function prescriptionColumns(input: PrescriptionInput) {
   return {
     date: input.date,
     type: input.type.trim(),
-    duration: input.duration ?? null,
-    zone: input.zone ?? null,
-    title: input.title ?? null,
-    note: input.note ?? null,
+    duration: orNull(input.duration),
+    zone: orNull(input.zone),
+    title: orNull(input.title),
+    note: orNull(input.note),
     isTraining: input.isTraining ?? true,
-    sport: input.sport ?? null,
+    sport: orNull(input.sport),
   };
+}
+
+function orNull<T>(value: T | null | undefined): T | null {
+  return value ?? null;
 }
 
 /**
