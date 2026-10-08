@@ -60,7 +60,12 @@ export default async function CoachAthletePlanPage({
       {/* Keyed by the draft: the panel copies the rows into state, and a
           refresh that brought a different draft must not land in the old
           rows (CodeRabbit, PR #69 — the same fix the block panel got). */}
-      <WeekDraftReview key={view.pendingDraft?.id ?? 'none'} athleteId={athleteId} draft={view.pendingDraft} />
+      <WeekDraftReview
+        key={view.pendingDraft?.id ?? 'none'}
+        athleteId={athleteId}
+        draft={view.pendingDraft}
+        targetRaceDate={view.targetRace?.date ?? null}
+      />
       {/* The same slot while that draft is still being written by the shell's
           after(): says so, and re-reads until the review panel above has a
           draft to show (training-architecture/29). */}
@@ -84,6 +89,7 @@ export default async function CoachAthletePlanPage({
         unavailableDates={view.unavailableDates}
         todayKey={todayKey}
         health={view.health}
+        targetRaceDate={view.targetRace?.date ?? null}
       />
     </>
   );

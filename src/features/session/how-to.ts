@@ -9,6 +9,7 @@ import {
   type MainSetForm,
   type SwimRepeatsForm,
 } from './how-to-templates';
+import type { RacePhase } from './race-phase';
 
 /**
  * A session's how-to (`training-architecture/26`): what to do, in order, and
@@ -117,17 +118,18 @@ const HOW_TO_ORIGINS: readonly string[] = ['arithmetic', 'coach'];
  * none: one the athlete or the Head Coach created, imported history, or a
  * session with no minutes to fit.
  */
-export function howToOf(session: PlannedForHowTo, locale: Locale): HowToView | null {
+export function howToOf(session: PlannedForHowTo, locale: Locale, phase?: RacePhase): HowToView | null {
   if (!HOW_TO_ORIGINS.includes(session.origin)) return null;
   const stored = session.howTo ?? {};
   if (stored.coach) return { ...stored.coach, cue: null, byCoach: true };
-  return fittedView(session, stored.cue ?? null, locale);
+  return fittedView(session, stored.cue ?? null, locale, phase);
 }
 
-function fittedView(session: PlannedForHowTo, cue: string | null, locale: Locale): HowToView | null {
+function fittedView(session: PlannedForHowTo, cue: string | null, locale: Locale, phase?: RacePhase): HowToView | null {
   const fitted = howToFor(
     { type: session.type, sport: session.sport, durationMinutes: session.duration, zone: session.zone },
     locale,
+    phase,
   );
   return fitted && { ...fitted, cue, byCoach: false };
 }
@@ -136,13 +138,13 @@ function fittedView(session: PlannedForHowTo, cue: string | null, locale: Locale
  * The template for this session's type and sport, fitted to its minutes and
  * zone. Null without minutes, or for a type no template covers.
  */
-export function howToFor(session: HowToInput, locale: Locale): HowTo | null {
+export function howToFor(session: HowToInput, locale: Locale, phase?: RacePhase): HowTo | null {
   const template = templateFor(session.type, session.sport);
   if (!template || session.durationMinutes === null) return null;
   const minutes = session.durationMinutes;
   const zone = mainZone(session.type, session.zone);
   return {
-    segments: segmentsOf(template, minutes, zone, session.sport === 'swim', locale),
+    segments: segmentsOf(template, minutes, zone, session.sport === 'swim', locale, phase),
     focus: focusOf(template, minutes, locale),
   };
 }
@@ -165,7 +167,14 @@ function easier(a: Zone, b: Zone): Zone {
   return ZONES[Math.min(ZONES.indexOf(a), ZONES.indexOf(b))];
 }
 
-function segmentsOf(template: HowToTemplate, minutes: number, zone: Zone, swim: boolean, locale: Locale): HowToSegment[] {
+function segmentsOf(
+  template: HowToTemplate,
+  minutes: number,
+  zone: Zone,
+  swim: boolean,
+  locale: Locale,
+  phase?: RacePhase,
+): HowToSegment[] {
   const unset = REPEATS_ONLY.includes(template.type) ? noSetLine(zone, locale) : null;
   if (minutes < SHORTEST_SPLIT) return [segment('main', minutes, zone, unset)];
   const warm = warmUpMinutes(minutes);
@@ -174,7 +183,7 @@ function segmentsOf(template: HowToTemplate, minutes: number, zone: Zone, swim: 
   const easy = easier(EASY_ZONE, zone);
   return [
     segment('warmUp', warm, easy, swim ? SWIM_WARM_UP : null),
-    ...mainSegments(template.main, minutes - warm - cool, zone, easy, unset, locale),
+    ...mainSegments(template.main, minutes - warm - cool, zone, easy, unset, locale, phase),
     segment('coolDown', cool, easy, swim ? SWIM_COOL_DOWN : null),
   ];
 }
@@ -220,8 +229,9 @@ function mainSegments(
   easy: Zone,
   unset: string | null,
   locale: Locale,
+  phase?: RacePhase,
 ): HowToSegment[] {
-  const set = fittedSet(form, minutes, locale);
+  const set = fittedSet(form, minutes, locale, phase);
   if (!set) return [segment('main', minutes, zone, unset)];
   const setMinutes = Math.ceil(set.seconds / 60);
   const steady = minutes - setMinutes;
@@ -229,9 +239,9 @@ function mainSegments(
   return steady > 0 ? [segment('steady', steady, easy, null), main] : [main];
 }
 
-function fittedSet(form: MainSetForm | null, minutes: number, locale: Locale): FittedSet | null {
+function fittedSet(form: MainSetForm | null, minutes: number, locale: Locale, phase?: RacePhase): FittedSet | null {
   if (!form) return null;
-  if ('workMinutes' in form) return intervals(form, minutes, locale);
+  if ('workMinutes' in form) return intervals(form, minutes, locale, phase);
   if ('bikeMinutes' in form) return brick(form, minutes, locale);
   return swimRepeats(form, minutes, locale);
 }
@@ -250,17 +260,23 @@ function repsFitting(seconds: number, unit: number, gap: number, range: { min: n
  * The template's reps, or, when the fewest of them do not fit, the same count
  * of shorter reps: a minute shorter at a time, down to the form's shortest.
  */
-function intervals(form: IntervalsForm, minutes: number, locale: Locale): FittedSet | null {
+function intervals(form: IntervalsForm, minutes: number, locale: Locale, phase?: RacePhase): FittedSet | null {
   for (let workMinutes = form.workMinutes; workMinutes >= form.shortestWorkMinutes; workMinutes--) {
-    const set = intervalsOf(form, workMinutes, minutes, locale);
+    const set = intervalsOf(form, workMinutes, minutes, locale, phase);
     if (set) return set;
   }
   return null;
 }
 
-function intervalsOf(form: IntervalsForm, workMinutes: number, minutes: number, locale: Locale): FittedSet | null {
+function intervalsOf(
+  form: IntervalsForm,
+  workMinutes: number,
+  minutes: number,
+  locale: Locale,
+  phase?: RacePhase,
+): FittedSet | null {
   const work = workMinutes * 60;
-  const rest = form.rest(work);
+  const rest = form.rest(work, phase);
   const reps = repsFitting(minutes * 60, work, rest.seconds, form.reps);
   if (reps === null) return null;
   const [between, full] = locale === 'da' ? ['imellem', ' (fuld restitution)'] : ['between', ' (full recovery)'];

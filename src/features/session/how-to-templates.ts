@@ -22,6 +22,8 @@
  * later). The ticket is not done while any shipped entry says false.
  */
 
+import type { RacePhase } from './race-phase';
+
 /** The disciplines a template is written for. The arithmetic's own names (`block-sessions.ts`). */
 export const HOW_TO_SPORTS = ['swim', 'bike', 'run', 'brick'] as const;
 export type HowToSport = (typeof HOW_TO_SPORTS)[number];
@@ -36,7 +38,7 @@ export interface Rest {
 }
 
 /** The rest a rep of this many seconds of work is followed by. */
-export type RestRule = (workSeconds: number) => Rest;
+export type RestRule = (workSeconds: number, phase?: RacePhase) => Rest;
 
 /**
  * Distancens Arkitektur §08 (Hvem gør hvad): rep length is the clearest driver
@@ -60,15 +62,18 @@ const FULL_RECOVERY_SECONDS = 120;
  * "shorter than or about equal to the work".
  *
  * The same section finds the Training Phase a fourth driver: full recovery
- * belongs early and in base, the tighter rest near the target race. The
- * how-to sees only the session's own fields, so that refinement is not here:
- * Mads ruled it out of 26 on 2026-09-30, and it is filed as
- * `training-architecture/55`.
+ * belongs early and in base, the tighter rest near the target race. Mads ruled
+ * on 2026-10-01 that the phase is the days to the Target Race
+ * ({@link racePhaseOf}): in the `close` phase every rep rests as long as it
+ * worked, a tight, heart-rate-loaded set. Any other phase, or none, keeps the
+ * rep-length rule.
  */
-const INTENSITY_REST: RestRule = (workSeconds) =>
-  workSeconds < LONG_REP_SECONDS
-    ? { seconds: FULL_RECOVERY_SECONDS, fullRecovery: true }
-    : { seconds: workSeconds, fullRecovery: false };
+const INTENSITY_REST: RestRule = (workSeconds, phase) =>
+  phase === 'close'
+    ? { seconds: workSeconds, fullRecovery: false }
+    : workSeconds < LONG_REP_SECONDS
+      ? { seconds: FULL_RECOVERY_SECONDS, fullRecovery: true }
+      : { seconds: workSeconds, fullRecovery: false };
 
 /** §08 threshold/tempo: the rest is a share of the work time, about a sixth to a half. */
 const TEMPO_REST_SHARE = 0.25;

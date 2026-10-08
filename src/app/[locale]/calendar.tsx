@@ -254,9 +254,16 @@ export function Calendar({
   health = [],
   phase = null,
   races = [],
+  targetRaceDate,
   addPanel,
 }: {
   sessions: Session[];
+  /**
+   * The Target Race date, where `races` does not carry it (the Head Coach's
+   * calendar draws no race day). Sets the rest the drawer's how-to gives
+   * (`racePhaseOf`); defaults to the target among `races`.
+   */
+  targetRaceDate?: string | null;
   /**
    * The athlete's Races, each drawn on its date as a day block — the target
    * distinct from a tune-up (`training-architecture/37`, ruling 2). Empty by
@@ -619,6 +626,7 @@ export function Calendar({
               setDrawer({ open: true, mode: kind === 'race' ? 'create-race' : 'create', date })
             }
             currentTargetRace={races.find((r) => r.isTarget) ?? null}
+            targetRaceDate={targetRaceDate ?? races.find((r) => r.isTarget)?.date ?? null}
           />
         )}
 

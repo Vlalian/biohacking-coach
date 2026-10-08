@@ -63,7 +63,16 @@ const daysOf = (weekStart: string): string[] => Array.from({ length: 7 }, (_, i)
  */
 const rowsFor = (note: string): number => note.split('\n').length;
 
-export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft: WeekDraft | null }) {
+export function WeekDraftReview({
+  athleteId,
+  draft,
+  targetRaceDate = null,
+}: {
+  athleteId: string;
+  draft: WeekDraft | null;
+  /** The athlete's Target Race date, which sets the rest between Intensity reps (`racePhaseOf`). */
+  targetRaceDate?: string | null;
+}) {
   const t = useTranslations('WeekDraftReview');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -169,7 +178,7 @@ export function WeekDraftReview({ athleteId, draft }: { athleteId: string; draft
                 onChange={(e) => edit(row.key, 'note', e.target.value)}
               />
             </label>
-            <RowHowTo row={row} locale={locale} field={field} onChange={(howTo) => setHowTo(row.key, howTo)} />
+            <RowHowTo row={row} locale={locale} field={field} targetRaceDate={targetRaceDate} onChange={(howTo) => setHowTo(row.key, howTo)} />
           </li>
         ))}
       </ol>
@@ -204,21 +213,23 @@ function RowHowTo({
   row,
   locale,
   field,
+  targetRaceDate,
   onChange,
 }: {
   row: DraftRow;
   locale: Locale;
   field: string;
+  targetRaceDate: string | null;
   onChange: (howTo: HowTo | null) => void;
 }) {
   const t = useTranslations('WeekDraftReview');
   // The sport and the segment names as the read-only block names them, never the stored key.
   const names = useTranslations('HowTo');
-  const view = howToOfRow(row, locale);
+  const view = howToOfRow(row, locale, targetRaceDate);
   const label = 'flex flex-col gap-1.5 font-body text-[13px] uppercase tracking-[0.12em] text-muted-foreground';
   const button = 'inline-flex h-10 items-center border border-border px-4 font-body text-[15px] font-medium text-foreground transition-colors hover:border-signal hover:text-signal';
   const editing = row.coachHowTo;
-  const start = () => onChange(startEditing(row, locale));
+  const start = () => onChange(startEditing(row, locale, targetRaceDate));
 
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3" data-row-how-to>

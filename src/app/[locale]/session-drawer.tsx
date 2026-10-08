@@ -18,6 +18,7 @@ import {
 import type { Session } from '@/features/session/session';
 import { isImportedHistory } from '@/features/session/session';
 import { howToOf } from '@/features/session/how-to';
+import { racePhaseOf } from '@/features/session/race-phase';
 import { HowToBlock } from '@/components/session/how-to-block';
 import type { SessionConflict } from '@/features/session/conflict';
 import { prescriptionColumns } from '@/features/coach/prescription';
@@ -189,7 +190,10 @@ export function SessionDrawer({
   inFlightIds,
   onChoose,
   currentTargetRace = null,
+  targetRaceDate = null,
 }: {
+  /** The athlete's Target Race date, handed to the session it opens (`racePhaseOf`). */
+  targetRaceDate?: string | null;
   state: DrawerState;
   /**
    * The answer to the "+"'s question (`training-architecture/37`): a session
@@ -466,6 +470,7 @@ export function SessionDrawer({
                   : athleteDrawerPolicy(session)
               }
               session={session}
+              targetRaceDate={targetRaceDate}
               fromImport={importedSessionIds.includes(session.id)}
               todayKey={todayKey}
               locale={locale}
@@ -530,8 +535,11 @@ export function ViewBody({
   onRate,
   onEdit,
   onDelete,
+  targetRaceDate,
 }: {
   session: Session;
+  /** The athlete's Target Race date; within 56 days of it the how-to rests Intensity reps tight (`racePhaseOf`). */
+  targetRaceDate?: string | null;
   /** Completed by accepting a Detected Activity, so the accept is reversible. */
   fromImport: boolean;
   todayKey: string;
@@ -568,7 +576,7 @@ export function ViewBody({
   };
   const imported = isImportedHistory(session);
   // Only the arithmetic's and Momentum's sessions have one (`training-architecture/26`).
-  const howTo = howToOf(session, locale === 'da' ? 'da' : 'en');
+  const howTo = howToOf(session, locale === 'da' ? 'da' : 'en', racePhaseOf(session.date, targetRaceDate ?? null));
 
   return (
     <div className="space-y-6 px-5 py-5">

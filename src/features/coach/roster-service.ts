@@ -130,6 +130,12 @@ export type CoachAthleteView = {
   dataset: InfoDataset;
   /** The Training Blocks — always visible; null when the athlete has no Target Race. */
   blocks: CoachBlocksView | null;
+  /**
+   * The Target Race, kept apart from `blocks`: `blocks` is null on an Open
+   * Horizon, which includes a race under 8 weeks away, exactly where the how-to's
+   * rest needs the date (`racePhaseOf`, `training-architecture/55`). Null with no race.
+   */
+  targetRace: { name: string; date: string } | null;
 };
 
 export async function getCoachAthleteView(
@@ -213,6 +219,7 @@ export async function getCoachAthleteView(
     openHealth: health && openHealthFromSpans(health),
     dataset,
     blocks: blocksViewOf(horizon, todayKey),
+    targetRace: horizon.race && { name: horizon.race.name, date: horizon.race.date },
     weeklySessionDay,
     pendingDraft,
     draftInFlight: inFlight,

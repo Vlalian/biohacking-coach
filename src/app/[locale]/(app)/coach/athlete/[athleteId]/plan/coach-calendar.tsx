@@ -23,8 +23,11 @@ export function CoachCalendar({
   unavailableDates,
   todayKey,
   health,
+  targetRaceDate,
 }: {
   athleteId: string;
+  /** The athlete's Target Race date, for the drawer's how-to rest. The coach's calendar draws no race day, so it comes apart from `races`. */
+  targetRaceDate: string | null;
   sessions: Session[];
   unavailableDates: string[];
   todayKey: string;
@@ -39,6 +42,7 @@ export function CoachCalendar({
       unavailableDates={unavailableDates}
       todayKey={todayKey}
       health={health}
+      targetRaceDate={targetRaceDate}
       readOnly
       coachAthleteId={athleteId}
       onMove={(sessionId, targetDate, expectedVersion) =>
