@@ -468,6 +468,73 @@ describe('ViewBody how-to', () => {
   });
 });
 
+/**
+ * `training-architecture/55` — the rest between Intensity reps follows the
+ * phase: the drawer is handed the Target Race date and reads the phase off the
+ * session's own date.
+ */
+describe('ViewBody how-to rest by Target Race date (training-architecture/55)', () => {
+  const run = session({ origin: 'arithmetic', type: 'Intensity', sport: 'run', duration: 60, zone: 'Z4', date: '2026-10-10' });
+
+  function mainDetail(targetRaceDate: string | null): string | null {
+    const tree = ViewBody({
+      session: run,
+      policy: athleteDrawerPolicy(run),
+      fromImport: false,
+      todayKey: TODAY,
+      locale: 'en',
+      pending: false,
+      t: ((key: string) => key) as never,
+      onMarkComplete: vi.fn(),
+      onSkip: vi.fn(),
+      onMarkUnavailable: vi.fn(),
+      onUndoImport: vi.fn(),
+      onDiscussWithCoach: vi.fn(),
+      onRate: vi.fn(),
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+      targetRaceDate,
+    } as never);
+    const find = (node: ReactNode): { segments: { name: string; detail: string | null }[] } | null => {
+      if (Array.isArray(node)) return node.map(find).find((x) => x) ?? null;
+      if (!node || typeof node !== 'object' || !('props' in node)) return null;
+      const el = node as { type: unknown; props: { children?: ReactNode; howTo?: never } };
+      if (el.type === HowToBlock) return (el.props as { howTo: never }).howTo;
+      return find(el.props.children);
+    };
+    return find(tree)!.segments.find((x) => x.name === 'main')!.detail;
+  }
+
+  it('shows the close-to-race rest in the drawer, and today’s rule from 56 days out', () => {
+    expect(mainDetail('2026-12-04')).toBe('10 × 1 min, 1 min Z1 between'); // 55 days
+    expect(mainDetail('2026-12-05')).toBe('10 × 1 min, 2 min Z1 between (full recovery)'); // 56 days
+    expect(mainDetail(null)).toBe('10 × 1 min, 2 min Z1 between (full recovery)');
+  });
+
+  it('hands the Target Race date from SessionDrawer to the session it opens', () => {
+    const html = renderToStaticMarkup(
+      <SessionDrawer
+        state={{ open: true, mode: 'view', sessionId: run.id }}
+        sessions={[run]}
+        importedSessionIds={[]}
+        locale="en"
+        todayKey={TODAY}
+        onClose={() => {}}
+        onRate={() => {}}
+        onEditRequest={() => {}}
+        onChoose={() => {}}
+        currentTargetRace={{ name: 'IM Kbh' }}
+        targetRaceDate="2026-11-20"
+        onBeginWrite={() => {}}
+        onSettleWrite={() => {}}
+        inFlightIds={[]}
+      />,
+    );
+    expect(html).toContain('1 min Z1 between');
+    expect(html).not.toContain('full recovery');
+  });
+});
+
 describe('SessionDrawer — the day\'s "+" offers Session or Race (training-architecture/37)', () => {
   const drawer = (state: Parameters<typeof SessionDrawer>[0]['state']) =>
     renderToStaticMarkup(

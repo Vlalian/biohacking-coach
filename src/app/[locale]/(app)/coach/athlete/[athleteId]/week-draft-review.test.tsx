@@ -125,6 +125,23 @@ describe('WeekDraftReview', () => {
     expect(page.indexOf('<WeekDraftReview')).toBeLessThan(page.indexOf('<DraftingCard'));
   });
 
+  it('renders the close-to-race rest on a card when WeekDraftReview has the race date (training-architecture/55)', () => {
+    const sessions = [{ date: '2026-09-24', type: 'Intensity' as const, durationMinutes: 60, zone: 'Z4', note: null, sport: 'run' as const }];
+    const withRace = (race: string | null) =>
+      renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, sessions }} targetRaceDate={race} />);
+    expect(withRace('2026-10-30')).toContain('1 min Z1 between');
+    expect(withRace('2026-10-30')).not.toContain('full recovery');
+    expect(withRace(null)).toContain('full recovery');
+  });
+
+  it('passes the Target Race date from the coach page to the review and the calendar, and from Calendar to the drawer (training-architecture/55)', () => {
+    const page = readFileSync(fileURLToPath(new URL('./plan/page.tsx', import.meta.url)), 'utf8');
+    expect(page).toMatch(/<WeekDraftReview[\s\S]*?targetRaceDate=\{view\.targetRace\?\.date/);
+    expect(page).toMatch(/<CoachCalendar[\s\S]*?targetRaceDate=\{view\.targetRace\?\.date/);
+    const calendar = readFileSync(fileURLToPath(new URL('../../../../calendar.tsx', import.meta.url)), 'utf8');
+    expect(calendar).toMatch(/<SessionDrawer[\s\S]*?targetRaceDate=\{targetRaceDate \?\? races\.find/);
+  });
+
   it('renders nothing when there is no draft, and nothing once the draft is the approved version', () => {
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={null} />)).toBe('');
     expect(renderToStaticMarkup(<WeekDraftReview athleteId="a1" draft={{ ...DRAFT, approved: true }} />)).toBe('');

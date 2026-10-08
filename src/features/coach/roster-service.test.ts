@@ -407,6 +407,19 @@ describe('getCoachAthleteView — the Training Blocks are plan structure (traini
     expect(getResolvedBlocks).toHaveBeenCalledWith('a1', TODAY);
   });
 
+  it('carries the Target Race when the race is too close for blocks, and null with no race (training-architecture/55)', async () => {
+    getActiveLink.mockResolvedValue(activeLink(false, false));
+    getResolvedBlocks.mockResolvedValue({
+      race: { ...RACE, date: '2026-11-20' }, set: null, blocks: [], horizon: 'open', raceTooClose: true,
+    });
+    const close = await getCoachAthleteView('coach_1', 'a1', TODAY);
+    expect(close!.blocks).toBeNull();
+    expect(close!.targetRace).toEqual({ name: 'IM', date: '2026-11-20' });
+
+    getResolvedBlocks.mockResolvedValue({ race: null, set: null, blocks: [], horizon: 'open', raceTooClose: false });
+    expect((await getCoachAthleteView('coach_1', 'a1', TODAY))!.targetRace).toBeNull();
+  });
+
   it('carries version 0 and today as the start when nothing is stored yet — the arithmetic draft', async () => {
     getActiveLink.mockResolvedValue(activeLink(false, false));
     getResolvedBlocks.mockResolvedValue({ race: RACE, set: null, blocks: BLOCKS });
