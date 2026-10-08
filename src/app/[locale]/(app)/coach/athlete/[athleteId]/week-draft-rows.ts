@@ -75,12 +75,12 @@ function minutesOf(row: DraftRow): number | null {
 }
 
 /** The how-to the card shows: the coach's own when they wrote one, else the template fitted to the row as it stands. */
-export function howToOfRow(row: DraftRow, locale: Locale, targetRaceDate?: string | null): HowToView | null {
+export function howToOfRow(row: DraftRow, locale: Locale, targetRaceDate: string | null = null): HowToView | null {
   // An empty zone is no zone the how-to can use, so it takes the type's.
   return howToOf(
     { origin: 'coach', type: row.type, sport: row.sport, duration: minutesOf(row), zone: row.zone, howTo: { cue: row.cue, coach: row.coachHowTo } },
     locale,
-    racePhaseOf(row.date, targetRaceDate ?? null),
+    racePhaseOf(row.date, targetRaceDate),
   );
 }
 
@@ -89,11 +89,11 @@ export function howToOfRow(row: DraftRow, locale: Locale, targetRaceDate?: strin
  * as the last focus line so keeping it is the default. Null for a row with no
  * how-to to start from (no minutes yet).
  */
-export function startEditing(row: DraftRow, locale: Locale, targetRaceDate?: string | null): HowTo | null {
+export function startEditing(row: DraftRow, locale: Locale, targetRaceDate: string | null = null): HowTo | null {
   const fitted = howToFor(
     { type: row.type, sport: row.sport, durationMinutes: minutesOf(row), zone: row.zone },
     locale,
-    racePhaseOf(row.date, targetRaceDate ?? null),
+    racePhaseOf(row.date, targetRaceDate),
   );
   return fitted && { ...fitted, focus: row.cue ? [...fitted.focus, row.cue] : fitted.focus };
 }

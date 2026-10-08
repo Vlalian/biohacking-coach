@@ -69,11 +69,9 @@ const FULL_RECOVERY_SECONDS = 120;
  * rep-length rule.
  */
 const INTENSITY_REST: RestRule = (workSeconds, phase) =>
-  phase === 'close'
-    ? { seconds: workSeconds, fullRecovery: false }
-    : workSeconds < LONG_REP_SECONDS
-      ? { seconds: FULL_RECOVERY_SECONDS, fullRecovery: true }
-      : { seconds: workSeconds, fullRecovery: false };
+  workSeconds < LONG_REP_SECONDS && phase !== 'close'
+    ? { seconds: FULL_RECOVERY_SECONDS, fullRecovery: true }
+    : { seconds: workSeconds, fullRecovery: false };
 
 /** §08 threshold/tempo: the rest is a share of the work time, about a sixth to a half. */
 const TEMPO_REST_SHARE = 0.25;
