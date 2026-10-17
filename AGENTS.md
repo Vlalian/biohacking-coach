@@ -30,18 +30,22 @@ Rules only. Each rule names its source by number; the list is at the end. Where 
     ([stale-next-cache.md](docs/rules/stale-next-cache.md)). [1]
 11. Before repeating a document's claim about the code, grep first. When doc and code disagree, the code
     is true and the doc gets fixed out loud ([verify-doc-claims.md](docs/rules/verify-doc-claims.md)). [1]
-12. Never push or merge without consent from Mads. Never touch `main`. [2]
-13. Edit, do not delete. Delete only a file you created yourself in this same session. [2]
+12. Never merge into `dev` or `main`, and never push `dev` or `main`, without Mads' consent. A flow run
+    pushes only its own ticket branch and opens a draft PR. [2]
+13. Prefer deletion inside a change: dead code, redundant guards and stubs first, a legacy API in the same
+    change its callers move, a test that only covered a removed implementation once the new interface has
+    its test (Principles). Data, branches and outside services (Neon, production, Vercel) are never deleted
+    without Mads' consent (Autonomy 2). [2, 4]
 14. Stage by path only. No `git add -A`, `git add .` or `git commit -a`: name each file you changed. [2]
 
 ## The fence
 
-1. Never retype content that comes from another repo. It enters only through the step that brings it
-   in. [3]
-2. Locked files are never edited, not even for a typo (here: `docs/adr/**`, `CONTEXT.md`, `AGENTS.md`).
-   If a change seems needed, propose it. [3]
-3. Every change to where something came from is one appended line in its log. Never edit existing
-   lines. [3]
+1. Content from another repo or tool (a Lovable build, upstream skills or rules) enters only by a ticket
+   Mads agreed, and names its source. Never retype or paste it otherwise. [2, 3]
+2. Locked files are never edited, not even for a typo, without Mads' consent (here: `docs/adr/**`,
+   `CONTEXT.md`, `AGENTS.md`). If a change seems needed, propose it. A build of a ticket Mads agreed may
+   change only what that ticket needs. [2, 3]
+3. Where content came from is named in its ticket and its commit message. [2, 3]
 4. Upstream changes are classified, never merged automatically. You may draft the PR; only a human
    merges it. [3]
 5. The decisions ledger is law (here: `docs/adr/`). Nothing you write may contradict an active decision.
@@ -53,28 +57,33 @@ Rules only. Each rule names its source by number; the list is at the end. Where 
 1. Before you ask the human which approach to take, classify the question. If running something could
    answer it, try it and let the result decide. Ask only product or preference calls no experiment can
    settle. [4]
-2. Under a full-autonomy grant, decide the calls the grant covers, act, and report each one. For a call
-   only the human can make, apply a default and report it with what they could tell you to do instead.
-   [4]
+2. Under a full-autonomy grant, decide the calls the grant covers, act, and report each one. A product
+   call, or anything rule 12 covers, waits for Mads under any grant. [2, 4]
 3. Before any code, name the data shape and the structure that organises it. [4]
 4. Green is not safe. Nothing merges before an independent verdict on each PR. [4]
-5. Treat bot reviewers sceptically: judge each comment on its merits; fix, dismiss with a concrete
-   reason, or ask. [4]
-6. A skill or tool that breaks mid-task is fixed in its own PR. Do not block on it, and do not work
-   around it silently. [4]
-7. Long, unattended or multi-phase work keeps a decision trail the human can audit later. [4]
+5. Judge each CodeRabbit or bot comment on its merits: fix the real ones in the PR's review round,
+   dismiss noise with a concrete reason. Every comment is recorded either way. A fix touches only that
+   PR's change. [2, 4]
+6. A skill or tool that breaks mid-task is never worked around silently. Record it and propose the fix
+   to Mads; a role session stops and escalates as its skill says. Other work goes on. [2, 4]
+7. Long, unattended or multi-phase work leaves a decision trail in the flow's own records: the run's
+   decision log, the PR body and the ticket's comments. Start no other log. [2, 4]
 8. Before reporting or acting on a number you measured, check what limits it and that it measured the
    work you think it did. [4]
 
 ## Autonomy
 
-1. Reversible work proceeds without asking. [4]
+1. Reversible work inside a ticket's run proceeds without asking. A product call, or anything rule 12
+   covers, waits for Mads. [2, 4]
 2. Always pause before an irreversible write: force-pushing a shared branch, deploying, deleting data,
    messaging people. [4]
 3. "Don't stop", "going to bed" or "run until done" means keep going. [4]
 4. No is an acceptable answer: give your real judgement. Candour over agreement. [4]
 
 ## Subagents
+
+These apply when you spawn a subagent yourself. The workflow's roles are not your subagents; their
+order and hand-offs are the dispatcher's. [2]
 
 1. You own every subagent's work. Review its diff and write your own summary. [4]
 2. A second opinion is the same prompt against a different model. [4]
@@ -89,15 +98,17 @@ the lever; model the domain; boundary discipline; type-system discipline; idempo
 callers then delete the legacy API; separate before serialising shared state; prove it works; fix root
 causes; sequence work into verifiable units; test behaviour, not implementation; explain the number;
 guard the context window; never block on the human for reversible work; encode lessons in structure.
-Each is stated in the workflow repo's `AGENTS.md`. [4]
+Each is stated in the workflow repo's `AGENTS.md`. Exhaust the design space happens in the plan or
+ticket: a build never adds prototypes its ticket does not list. [2, 4]
 
 ## Repo upkeep
 
 1. When you add, rename or change a skill, rule or doc page, update every index that lists it in the
    same change. [5]
 2. Run the manifest or config validator after touching a manifest. [5]
-3. No em-dashes in this repo's prose. Rewrite the sentence with a comma, colon, period or parentheses;
-   never substitute the character blindly. [5]
+3. New or edited prose has no em-dashes: rewrite the sentence with a comma, colon, period or parentheses,
+   never substitute the character blindly. Existing prose changes only when you edit that sentence
+   anyway. [2, 5]
 4. Keep this file short: detail lives behind links. [5]
 
 ## Agent skills
@@ -113,7 +124,7 @@ Each is stated in the workflow repo's `AGENTS.md`. [4]
 
 1. Kilstrup M. Working rules for biohacking-coach (docs/rules/) [Internet]. GitHub: Vlalian/biohacking-coach;
    2026 [cited 2026 Oct 7]. Available from: https://github.com/Vlalian/biohacking-coach/tree/dev/docs/rules
-2. Kilstrup M. Rules for agents, given in chat to Claude Code [unpublished]. 2026 Oct 7.
+2. Kilstrup M. Rules for agents, given in chat to Claude Code [unpublished]. 2026 Oct 7-17.
 3. backnotprop. AGENTS.md: the fence. In: product-engineering [Internet]. GitHub; 2026 Aug 26 [cited
    2026 Oct 7]. Commit 1ad8694. Available from:
    https://github.com/backnotprop/product-engineering/blob/1ad8694/AGENTS.md
