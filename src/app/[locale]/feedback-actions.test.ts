@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FEEDBACK_MAX_LENGTH } from '@/features/feedback/feedback';
 
-const { resolveAthleteId, recordFeedback } = vi.hoisted(() => ({
+const { resolveAthleteId, recordFeedback, hasConsent } = vi.hoisted(() => ({
   resolveAthleteId: vi.fn(),
   recordFeedback: vi.fn((_row: unknown) => Promise.resolve()),
+  hasConsent: vi.fn(),
 }));
 
 vi.mock('./current-actor', () => ({ resolveAthleteId }));
 vi.mock('@/features/feedback/feedback-repository', () => ({ recordFeedback }));
+vi.mock('@/features/consent/consent-gate', () => ({ hasConsent }));
 
 const { submitFeedbackAction } = await import('./feedback-actions');
 
@@ -18,6 +20,15 @@ describe('submitFeedbackAction', () => {
   beforeEach(() => {
     resolveAthleteId.mockReset().mockResolvedValue('athlete_1');
     recordFeedback.mockClear();
+    hasConsent.mockReset().mockResolvedValue(true);
+  });
+
+  it('refuses feedback without the product-improvement consent and stores nothing', async () => {
+    hasConsent.mockResolvedValue(false);
+
+    expect(await submitFeedbackAction({ body: 'great', view: null })).toEqual({ ok: false, reason: 'consent-required' });
+    expect(stored()).toEqual([]);
+    expect(hasConsent).toHaveBeenCalledWith('athlete_1', 'product_improvement');
   });
 
   it('stores the text with the View the tester came from', async () => {

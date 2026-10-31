@@ -1,5 +1,5 @@
 import { getActiveConsents } from './consent-repository';
-import { missingRequiredConsents } from './consent';
+import { isConsented, missingRequiredConsents } from './consent';
 import type { ConsentPurpose } from './disclosure';
 
 /**
@@ -32,4 +32,14 @@ export async function assertAiCoachingConsent(
   const active = await getActiveConsents(athleteId);
   const missing = missingRequiredConsents(active);
   return missing.length === 0 ? { ok: true } : { ok: false, missing };
+}
+
+/**
+ * Whether the athlete has granted one purpose under the current disclosure
+ * version — the check for an optional or point-of-use purpose, where
+ * {@link assertAiCoachingConsent} covers only the required ones. A grant at a
+ * stale version does not count: the athlete agreed to different words.
+ */
+export async function hasConsent(athleteId: string, purpose: ConsentPurpose): Promise<boolean> {
+  return isConsented(await getActiveConsents(athleteId), purpose);
 }

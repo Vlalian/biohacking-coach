@@ -665,6 +665,8 @@
     "thumbUp": "Det her hjalp",
     "thumbDown": "Det her ramte forkert",
     "thumbComment": "Vil du tilføje noget? (valgfrit)",
+    "thumbConsentRequired": "Vurderinger gemmes kun, hvis du har sagt ja til “Hjælp med at forbedre produktet”.",
+    "thumbConsentRequiredLink": "Åbn Privatliv & samtykke",
     "thumbSave": "Gem"
   },
   "WeeklySession": {
@@ -855,6 +857,8 @@
     }
   },
   "Feedback": {
+    "consentRequired": "Feedback gemmes kun, hvis du har sagt ja til “Hjælp med at forbedre produktet”.",
+    "consentRequiredLink": "Åbn Privatliv & samtykke",
     "title": "Giv feedback",
     "intro": "Gik noget i stykker, irriterede det dig, eller virkede det godt? Skriv det her. En fra holdet læser hver besked, og Momentum ser den aldrig.",
     "guidanceWhat": "Hvad der skete.",

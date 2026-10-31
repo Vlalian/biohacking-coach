@@ -665,6 +665,8 @@
     "thumbUp": "This helped",
     "thumbDown": "This was off",
     "thumbComment": "Anything you want to add? (optional)",
+    "thumbConsentRequired": "Ratings are only saved if you allow it under “Help improve the product”.",
+    "thumbConsentRequiredLink": "Open Privacy & consent",
     "thumbSave": "Save"
   },
   "WeeklySession": {
@@ -855,6 +857,8 @@
     }
   },
   "Feedback": {
+    "consentRequired": "Feedback is only saved if you allow it under “Help improve the product”.",
+    "consentRequiredLink": "Open Privacy & consent",
     "title": "Give feedback",
     "intro": "Something broke, annoyed you or worked well? Tell us here. Someone on the team reads every note, and Momentum never sees it.",
     "guidanceWhat": "What happened.",

@@ -4,6 +4,7 @@ import { useState, useTransition, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check } from 'lucide-react';
 import { FEEDBACK_MAX_LENGTH } from '@/features/feedback/feedback';
+import { Link } from '@/i18n/navigation';
 import { submitFeedbackAction } from './feedback-actions';
 
 /**
@@ -26,7 +27,7 @@ export function FeedbackForm({
   const t = useTranslations('Feedback');
   const [pending, startTransition] = useTransition();
   const [body, setBody] = useState('');
-  const [state, setState] = useState<'idle' | 'sent' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'sent' | 'error' | 'consent'>('idle');
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -41,7 +42,7 @@ export function FeedbackForm({
       // keeps their text and gets the notice instead, as `coach-thread.tsx` does.
       try {
         const result = await submitFeedbackAction({ body, view: openedFrom });
-        setState(result.ok ? 'sent' : 'error');
+        setState(result.ok ? 'sent' : result.reason === 'consent-required' ? 'consent' : 'error');
         if (result.ok) setBody('');
       } catch {
         setState('error');
@@ -98,7 +99,18 @@ export function FeedbackForm({
                 ].join(' ')}
               >
                 {state === 'sent' && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
-                {state === 'sent' ? t('sent') : t('error')}
+                {state === 'sent' ? (
+                  t('sent')
+                ) : state === 'consent' ? (
+                  <span>
+                    {t('consentRequired')}{' '}
+                    <Link href="/privacy" className="underline">
+                      {t('consentRequiredLink')}
+                    </Link>
+                  </span>
+                ) : (
+                  t('error')
+                )}
               </span>
             )}
           </div>

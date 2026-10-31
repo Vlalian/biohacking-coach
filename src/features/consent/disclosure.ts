@@ -174,8 +174,16 @@ export function purposesToShow(
  * AI is Momentum and the human a coach / træner, as everywhere else since PR
  * #106; the meaning of each purpose is unchanged. Bumped before the tester
  * invite, so the only grants it invalidates are Mads's and the smoke accounts'.
+ *
+ * `2026-09-24` → `2026-10-31`: two purposes reworded (`garmin-connect-api/08`).
+ * `product_improvement` now names the feedback about the app, which is stored
+ * only with it (Mads reversed the 2026-09-01 ruling on 2026-10-31). `ai_coaching`
+ * stops saying the OpenAI query is "your training phase, your experience level,
+ * and your question": `buildOracleQuery` sends the question alone, which
+ * Momentum writes and which can carry conversation details. **Every tester
+ * re-consents once.**
  */
-export const DISCLOSURE_VERSION = '2026-09-24';
+export const DISCLOSURE_VERSION = '2026-10-31';
 
 /** Narrows an arbitrary string to a known purpose — untrusted input guard. */
 export function isConsentPurpose(value: string): value is ConsentPurpose {
@@ -240,7 +248,7 @@ const EN: DisclosureCopy = {
   purposes: {
     ai_coaching: {
       title: 'AI coaching',
-      body: 'Let Momentum (Claude, by Anthropic) process your training data — your plan, sessions, ratings, and the messages you send it — to coach you. When Momentum looks something up in its training-science library, a short pseudonymous query — your training phase, your experience level, and your question — goes to OpenAI to be turned into a search key; the search itself runs on our own database. Without this Momentum cannot work.',
+      body: 'Let Momentum (Claude, by Anthropic) process your training data — your plan, sessions, ratings, and the messages you send it — to coach you. When Momentum looks something up in its training-science library, it writes a short question, which goes to OpenAI to be turned into a search key; the question can include details from your conversation, and the search itself runs on our own database. Without this Momentum cannot work.',
     },
     health_data: {
       title: 'Health-related signals',
@@ -256,7 +264,7 @@ const EN: DisclosureCopy = {
     },
     product_improvement: {
       title: 'Help improve the product',
-      body: 'Allow your anonymised coaching interactions to be used to improve the app. This is entirely optional and never affects your coaching.',
+      body: 'Allow the feedback you send us about the app, and your anonymised coaching interactions, to be used to improve it. This is entirely optional and never affects your coaching.',
     },
   },
 };
@@ -285,7 +293,7 @@ const DA: DisclosureCopy = {
   purposes: {
     ai_coaching: {
       title: 'AI-coaching',
-      body: 'Lad Momentum (Claude fra Anthropic) behandle dine træningsdata — din plan, dine sessioner, dine vurderinger og de beskeder, du sender — for at coache dig. Når Momentum slår noget op i sit træningsfaglige bibliotek, sendes en kort pseudonym forespørgsel — din træningsfase, dit erfaringsniveau og dit spørgsmål — til OpenAI for at blive omdannet til en søgenøgle; selve søgningen kører på vores egen database. Uden dette kan Momentum ikke fungere.',
+      body: 'Lad Momentum (Claude fra Anthropic) behandle dine træningsdata — din plan, dine sessioner, dine vurderinger og de beskeder, du sender — for at coache dig. Når Momentum slår noget op i sit træningsfaglige bibliotek, skriver den et kort spørgsmål, som sendes til OpenAI for at blive omdannet til en søgenøgle; spørgsmålet kan indeholde detaljer fra jeres samtale, og selve søgningen kører på vores egen database. Uden dette kan Momentum ikke fungere.',
     },
     health_data: {
       title: 'Helbredsrelaterede signaler',
@@ -301,7 +309,7 @@ const DA: DisclosureCopy = {
     },
     product_improvement: {
       title: 'Hjælp med at forbedre produktet',
-      body: 'Tillad, at dine anonymiserede coaching-interaktioner bruges til at forbedre appen. Det er helt valgfrit og påvirker aldrig din coaching.',
+      body: 'Tillad, at den feedback, du sender os om appen, og dine anonymiserede coaching-interaktioner bruges til at forbedre den. Det er helt valgfrit og påvirker aldrig din coaching.',
     },
   },
 };
