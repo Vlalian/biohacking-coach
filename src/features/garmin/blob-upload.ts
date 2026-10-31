@@ -48,6 +48,22 @@ export const GARMIN_BLOB_ROOT = 'garmin/';
 /** How long an upload may sit in Blob before the sweep deletes it, read or not. */
 export const BLOB_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/** The UTC hour whose first cron run does the full pass whatever Blob holds. */
+const FULL_PASS_UTC_HOUR = 3;
+
+/** The cron runs every five minutes, so exactly one run starts inside this window. */
+const FULL_PASS_WINDOW_MINUTES = 5;
+
+/**
+ * Whether this cron run does the full pass even with Blob empty
+ * (`garmin-integration/09`): the run starting 03:00–03:04 UTC. Every other run
+ * with nothing in Blob leaves the database alone, so it can suspend; this one
+ * still fails, within a day, a running import that somehow lost its files.
+ */
+export function isDailyFullPass(now: Date): boolean {
+  return now.getUTCHours() === FULL_PASS_UTC_HOUR && now.getUTCMinutes() < FULL_PASS_WINDOW_MINUTES;
+}
+
 /** The part of an athlete the upload policy reads. */
 type PolicyAthlete = { id: string; profile: { historyImportedAt?: string | null } | null };
 
@@ -330,13 +346,15 @@ export type UnpackOutcome = {
  * also as done and failed. A zip read to its end leaves the list and is named
  * in `finishedZip`, for the caller to delete. With no zip left the import turns
  * to importing, and `total` settles on what is known then: the files that
- * failed plus every file left to read.
+ * failed plus every file left to read. With no file left either it is done at
+ * once, so a running import always has a file in Blob — what lets the cron
+ * skip the database when Blob is empty (`garmin-integration/09`).
  */
 export function advanceUnpack(
   row: ImportProgress,
   zipUrl: string | null,
   outcome: UnpackOutcome,
-): ImportProgress & { status: 'unpacking' | 'importing'; finishedZip: string | null } {
+): ImportProgress & { status: 'unpacking' | 'importing' | 'done'; finishedZip: string | null } {
   const appended = [...row.blobUrls, ...outcome.extracted];
   const blobUrls = outcome.complete ? appended.filter((url) => url !== zipUrl) : appended;
   const read = outcome.extracted.length + outcome.failed;
@@ -350,7 +368,7 @@ export function advanceUnpack(
     cursor: 0,
     total: unpacked ? counts.done + blobUrls.length : row.total + read,
     ...counts,
-    status: unpacked ? 'importing' : 'unpacking',
+    status: !unpacked ? 'unpacking' : blobUrls.length > 0 ? 'importing' : 'done',
     finishedZip: zipUrl,
   };
 }

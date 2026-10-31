@@ -14,7 +14,8 @@ const { get, del, list, put, head, BlobNotFoundError } = vi.hoisted(() => ({
 }));
 vi.mock('@vercel/blob', () => ({ get, del, list, put, head, BlobNotFoundError }));
 
-const { fetchBlob, openBlob, putBlob, deleteBlob, blobSize, deleteAthleteBlobs, deleteHistoryBlobs, sweepOldBlobs, blobWorkerDeps } = await import('./blob-store');
+const { fetchBlob, openBlob, putBlob, deleteBlob, blobSize, deleteAthleteBlobs, deleteHistoryBlobs, sweepOldBlobs, listGarminBlobs, blobWorkerDeps } = await import('./blob-store');
+const { requestNextImportRun } = await import('./import-chain');
 const { today } = await import('@/lib/date');
 
 const URL1 = 'https://s.private.blob.vercel-storage.com/garmin/history/a1/x.zip';
@@ -155,10 +156,50 @@ describe('sweepOldBlobs', () => {
     expect(list).toHaveBeenNthCalledWith(2, { prefix: 'garmin/', cursor: 'c1' });
     expect(del.mock.calls).toEqual([[['old']]]);
   });
+
+  it('sweeps from a listing it is given, without listing again', async () => {
+    const listed = [
+      { url: 'old', uploadedAt: hoursAgo(30) },
+      { url: 'fresh', uploadedAt: hoursAgo(1) },
+    ];
+    expect(await sweepOldBlobs(NOW, listed)).toBe(1);
+    expect(list).not.toHaveBeenCalled();
+    expect(del.mock.calls).toEqual([[['old']]]);
+  });
+
+  it('deletes nothing when nothing is old, and at most a page per delete', async () => {
+    expect(await sweepOldBlobs(NOW, [{ url: 'fresh', uploadedAt: hoursAgo(1) }])).toBe(0);
+    expect(del).not.toHaveBeenCalled();
+
+    const many = Array.from({ length: 1001 }, (_, i) => ({ url: `u${i}`, uploadedAt: hoursAgo(48) }));
+    expect(await sweepOldBlobs(NOW, many)).toBe(1001);
+    expect(del.mock.calls.map(([urls]) => urls.length)).toEqual([1000, 1]);
+  });
+});
+
+describe('listGarminBlobs', () => {
+  it('lists every page under garmin/ and deletes nothing', async () => {
+    const at = new Date('2026-09-25T12:00:00Z');
+    list
+      .mockResolvedValueOnce({ blobs: [{ url: 'a', uploadedAt: at }], hasMore: true, cursor: 'c1' })
+      .mockResolvedValueOnce({ blobs: [{ url: 'b', uploadedAt: at }], hasMore: false });
+
+    expect(await listGarminBlobs()).toEqual([
+      { url: 'a', uploadedAt: at },
+      { url: 'b', uploadedAt: at },
+    ]);
+    expect(list).toHaveBeenNthCalledWith(2, { prefix: 'garmin/', cursor: 'c1' });
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('is empty when Blob holds no Garmin upload', async () => {
+    list.mockResolvedValueOnce({ blobs: [], hasMore: false });
+    expect(await listGarminBlobs()).toEqual([]);
+  });
 });
 
 describe('blobWorkerDeps', () => {
-  it('is this adapter and the app clock, as the import worker wants them', () => {
-    expect(blobWorkerDeps).toEqual({ fetchBlob, openBlob, putBlob, deleteBlob, deleteHistoryBlobs, today });
+  it('is this adapter, the chained run, and the app clock, as the import worker wants them', () => {
+    expect(blobWorkerDeps).toEqual({ fetchBlob, openBlob, putBlob, deleteBlob, deleteHistoryBlobs, requestNextRun: requestNextImportRun, today });
   });
 });

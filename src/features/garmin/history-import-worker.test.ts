@@ -40,8 +40,18 @@ vi.mock('./history-import-service', () => ({
   failStalledImports,
 }));
 
-const { importNextChunk, runHistoryImport, resumeImports, timeBudget, IMPORT_TIME_BUDGET_MS, IMPORT_STALL_MS, STALLED_ERROR, importErrorText } =
-  await import('./history-import-worker');
+const {
+  importNextChunk,
+  runHistoryImport,
+  resumeImports,
+  timeBudget,
+  IMPORT_TIME_BUDGET_MS,
+  IMPORT_BUDGET_MARGIN_MS,
+  FIRST_RUN_BUDGET_MS,
+  IMPORT_STALL_MS,
+  STALLED_ERROR,
+  importErrorText,
+} = await import('./history-import-worker');
 
 const TODAY = '2026-09-25';
 const HOST = 'https://s.private.blob.vercel-storage.com/';
@@ -98,6 +108,7 @@ function deps(initial: Record<string, Uint8Array>) {
       const bytes = store.get(url);
       return bytes ? download(bytes) : null;
     }),
+    requestNextRun: vi.fn(async () => {}),
     putBlob: vi.fn(async (pathname: string, bytes: Uint8Array) => {
       store.set(`${HOST}${pathname}`, bytes);
       return `${HOST}${pathname}`;
@@ -215,12 +226,12 @@ describe('importNextChunk — unpacking', () => {
     expect(d.deleteBlob.mock.calls).toEqual([[ZIP_URL], [ZIP_URL_2]]);
   });
 
-  it('counts an archive that will not open, or a zip that is gone, as one failed file', async () => {
+  it('counts an archive that will not open, or a zip that is gone, as one failed file — and with nothing left is done', async () => {
     row = startRow({ blobUrls: [ZIP_URL, ZIP_URL_2] });
     const d = deps({ [ZIP_URL]: strToU8('not a zip at all') });
     await importNextChunk('imp1', d, never);
-    await importNextChunk('imp1', d, never);
-    expect(row).toMatchObject({ status: 'importing', blobUrls: [], total: 2, done: 2, failed: 2 });
+    expect(await importNextChunk('imp1', d, never)).toBe('done');
+    expect(row).toMatchObject({ status: 'done', blobUrls: [], total: 2, done: 2, failed: 2 });
     expect(d.putBlob).not.toHaveBeenCalled();
   });
 
@@ -508,7 +519,76 @@ describe('timeBudget', () => {
     vi.useRealTimers();
   });
 
-  it('leaves ten seconds of a minute for the write that is in flight', () => {
-    expect(IMPORT_TIME_BUDGET_MS).toBe(50_000);
+  it('runs longer than the old 50 s on the cron route, and keeps the first run under a minute', () => {
+    expect(IMPORT_TIME_BUDGET_MS).toBeGreaterThan(50_000);
+    expect(IMPORT_BUDGET_MARGIN_MS).toBeGreaterThanOrEqual(30_000);
+    expect(FIRST_RUN_BUDGET_MS).toBeLessThanOrEqual(50_000);
+  });
+});
+
+describe('the chained run (garmin-integration/08)', () => {
+  it('asks for the next run when time is up with work left', async () => {
+    const d = deps({ [ZIP_URL]: zipOf(60) });
+    let checks = 0;
+    await runHistoryImport('imp1', d, () => ++checks > 2);
+    expect(RUNNING.has(row.status)).toBe(true);
+    expect(d.requestNextRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for no next run when the import finishes', async () => {
+    const d = deps({ [ZIP_URL]: zipOf(3) });
+    await runHistoryImport('imp1', d, never);
+    expect(row.status).toBe('done');
+    expect(d.requestNextRun).not.toHaveBeenCalled();
+  });
+
+  it('asks for no next run after an error — the cron retries it', async () => {
+    row = startRow({ status: 'importing', blobUrls: [extracted(0)], total: 1 });
+    const d = deps({ [extracted(0)]: fitOn('2026-09-20') });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    importTrainingHistory.mockRejectedValue(new Error('db down'));
+    await runHistoryImport('imp1', d, never);
+    expect(d.requestNextRun).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it('asks for no next run for an import that is already finished', async () => {
+    row = startRow({ status: 'done', blobUrls: [] });
+    const d = deps({});
+    let checks = 0;
+    await runHistoryImport('imp1', d, () => ++checks > 1);
+    expect(d.requestNextRun).not.toHaveBeenCalled();
+  });
+
+  it('takes an import at once when the chained run passes no wait', async () => {
+    const now = new Date('2026-09-25T12:00:00Z');
+    row = startRow({ blobUrls: [FIT_URL], updatedAt: new Date('2026-09-25T11:59:59Z') });
+    importsToResume.mockResolvedValue(['imp1']);
+    const d = deps({ [FIT_URL]: fitOn('2026-09-20') });
+
+    expect(await resumeImports(d, now, never, IMPORT_STALL_MS, 0)).toEqual({ resumed: 1, failed: 0 });
+
+    expect(importsToResume).toHaveBeenCalledWith(now, 5);
+    expect(row.status).toBe('done');
+  });
+});
+
+describe('a running import always has a file in Blob (garmin-integration/09)', () => {
+  const cases: [string, Record<string, Uint8Array>, string[]][] = [
+    ['one export', { [ZIP_URL]: zipOf(60) }, [ZIP_URL]],
+    ['two exports and a plain file', { [ZIP_URL]: zipOf(30), [ZIP_URL_2]: zipOf(2), [FIT_URL]: fitOn('2026-09-22') }, [ZIP_URL, ZIP_URL_2, FIT_URL]],
+    ['an export that will not open', { [ZIP_URL]: strToU8('not a zip at all') }, [ZIP_URL]],
+    ['an export that is gone', {}, [ZIP_URL]],
+    ['an export with no activity in it', { [ZIP_URL]: zipSync({ 'readme.txt': strToU8('hello') }) }, [ZIP_URL]],
+  ];
+
+  it.each(cases)('holds after every step of %s, to the end', async (_name, files, blobUrls) => {
+    row = startRow({ blobUrls });
+    const d = deps(files);
+    for (let step = 0; step < 50 && RUNNING.has(row.status); step++) {
+      await importNextChunk('imp1', d, never);
+      if (RUNNING.has(row.status)) expect(d.store.size).toBeGreaterThan(0);
+    }
+    expect(row.status).toBe('done');
   });
 });

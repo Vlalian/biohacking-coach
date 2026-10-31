@@ -38,9 +38,11 @@ import {
  *   counted, the rest go through the history writer with the import's new
  *   counters in the same batch, and each blob is deleted once written.
  *
- * Steps run right after *Import* (`after()` in the action) and from the cron
- * every few minutes, so an import survives the athlete leaving the page and a
- * function timing out part-way. Every save is conditional on the status and
+ * Steps run right after *Import* (`after()` in the action), then from the cron
+ * route — chained at once while there is work left (`garmin-integration/08`),
+ * and every few minutes as the safety net — so an import survives the athlete
+ * leaving the page and a function timing out part-way. Every save is
+ * conditional on the status and
  * cursor it was read at, so two runs that overlap cannot both move it. Blob
  * and the clock come in as `deps`; the database goes through the
  * history-import service.
@@ -52,6 +54,8 @@ export type WorkerDeps = {
   deleteBlob: (url: string) => Promise<void>;
   /** Every history upload the athlete still has in Blob — what the bulk remove deletes, for a failed import. */
   deleteHistoryBlobs: (athleteId: string) => Promise<void>;
+  /** Asks for the next run at once, for an import whose run ran out of time (`garmin-integration/08`). Never throws. */
+  requestNextRun: () => Promise<void>;
   today: () => string;
 };
 
@@ -169,16 +173,21 @@ async function deleteQuietly(url: string, deps: WorkerDeps): Promise<void> {
 
 /**
  * Runs an import step after step until it is finished or `timeUp` says to
- * stop. An error stops the run without throwing — the import stays where it
- * was last saved, the error is kept on it without counting as progress, and
- * the cron picks it up again until it stalls ({@link resumeImports}). Only the
- * import id is logged, never a file or a URL.
+ * stop. When time runs out with work left it asks for the next run at once
+ * (`garmin-integration/08`); the cron would get there too, minutes later. An
+ * error stops the run without throwing and asks for no next run — the import
+ * stays where it was last saved, the error is kept on it without counting as
+ * progress, and the cron picks it up again until it stalls
+ * ({@link resumeImports}). Only the import id is logged, never a file or a URL.
  */
 export async function runHistoryImport(importId: string, deps: WorkerDeps, timeUp: () => boolean): Promise<void> {
   try {
+    let step: StepResult = 'stopped';
     while (!timeUp()) {
-      if (!importRunning(await importNextChunk(importId, deps, timeUp))) return;
+      step = await importNextChunk(importId, deps, timeUp);
+      if (!importRunning(step)) return;
     }
+    if (importRunning(step)) await deps.requestNextRun();
   } catch (error) {
     console.error('history import stopped', importId);
     await recordImportError(importId, importErrorText(error)).catch(() => {});
@@ -202,8 +211,12 @@ export function importErrorText(error: unknown): string {
   return text.slice(0, IMPORT_ERROR_MAX_CHARS);
 }
 
-/** How long an import must sit untouched before the cron takes it — a run started by *Import* may still hold it. */
-const RESUME_AFTER_MS = 60_000;
+/**
+ * How long an import must sit untouched before the cron takes it — a run
+ * started by *Import* may still hold it. A chained run takes it at once
+ * (`0`): the run that asked for it has stopped.
+ */
+export const RESUME_AFTER_MS = 60_000;
 
 /** At most this many imports per cron run. */
 const RESUME_LIMIT = 5;
@@ -222,13 +235,14 @@ export const STALLED_ERROR = 'stalled: no progress';
  * The cron's half. First every running import nothing has advanced for
  * `stallAfterMs` ends `failed` and its blobs go, so the athlete sees it stopped
  * and can remove it and start again. Then every import still running that
- * nothing has advanced for a minute runs in turn while time allows.
+ * nothing has advanced for `resumeAfterMs` runs in turn while time allows.
  */
 export async function resumeImports(
   deps: WorkerDeps,
   now: Date,
   timeUp: () => boolean,
   stallAfterMs: number,
+  resumeAfterMs: number = RESUME_AFTER_MS,
 ): Promise<{ resumed: number; failed: number }> {
   const failed = await failStalledImports(new Date(now.getTime() - stallAfterMs), STALLED_ERROR);
   for (const { athleteId } of failed) {
@@ -236,7 +250,7 @@ export async function resumeImports(
     await deps.deleteHistoryBlobs(athleteId).catch(() => {});
   }
 
-  const ids = await importsToResume(new Date(now.getTime() - RESUME_AFTER_MS), RESUME_LIMIT);
+  const ids = await importsToResume(new Date(now.getTime() - resumeAfterMs), RESUME_LIMIT);
   let resumed = 0;
   for (const id of ids) {
     if (timeUp()) break;
@@ -247,11 +261,30 @@ export async function resumeImports(
 }
 
 /**
- * How long a run keeps starting steps: under a minute, so a step that starts
- * just before the budget is out still finishes inside the function's time.
- * What is left over is the cron's.
+ * The time a run on the cron import route leaves unused, for the step that
+ * starts just before its budget is out, the sweep, and the last write.
+ *
+ * Export-for-test: the route's `maxDuration` must be a literal Next can read,
+ * so it cannot be derived from this; the route's test pins the two together.
  */
-export const IMPORT_TIME_BUDGET_MS = 50_000;
+export const IMPORT_BUDGET_MARGIN_MS = 60_000;
+
+/** The cron import route's `maxDuration`, in milliseconds — the Fluid Compute limit. */
+const IMPORT_ROUTE_MAX_MS = 300_000;
+
+/**
+ * How long a run on the cron import route keeps starting steps
+ * (`garmin-integration/08`): the route's whole limit but the margin.
+ */
+export const IMPORT_TIME_BUDGET_MS = IMPORT_ROUTE_MAX_MS - IMPORT_BUDGET_MARGIN_MS;
+
+/**
+ * How long the first run keeps starting steps — the one *Import* starts in its
+ * `after()`, under the calling page's own function limit, which no page raises.
+ * Under a minute so it fits any limit; then it hands on to the cron route's
+ * longer runs through the chain.
+ */
+export const FIRST_RUN_BUDGET_MS = 50_000;
 
 /** A `timeUp` for {@link runHistoryImport}: true once `ms` have passed since it was made. */
 export function timeBudget(ms: number): () => boolean {

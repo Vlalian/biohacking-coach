@@ -3,6 +3,7 @@ import 'server-only';
 import { BlobNotFoundError, del, get, head, list, put } from '@vercel/blob';
 import { today } from '@/lib/date';
 import { BLOB_MAX_AGE_MS, GARMIN_BLOB_ROOT, blobPrefix, type UploadKind } from './blob-upload';
+import { requestNextImportRun } from './import-chain';
 
 /**
  * The Garmin uploads' side of Vercel Blob (`garmin-integration/04`) — a thin
@@ -78,19 +79,35 @@ export async function deleteHistoryBlobs(athleteId: string): Promise<void> {
 /**
  * Deletes every Garmin upload older than a day, read or not, so a failed or
  * abandoned import never leaves files behind. Returns how many went.
+ *
+ * Reads `listed` when the caller already has every Garmin upload in hand — the
+ * cron lists once and sweeps from the same listing (`garmin-integration/09`) —
+ * and lists them itself otherwise.
  */
-export async function sweepOldBlobs(now: Date): Promise<number> {
+export async function sweepOldBlobs(now: Date, listed?: readonly ListedBlob[]): Promise<number> {
   const cutoff = now.getTime() - BLOB_MAX_AGE_MS;
-  let swept = 0;
-  await forEachPage(GARMIN_BLOB_ROOT, (blobs) => {
-    const old = blobs.filter((b) => b.uploadedAt.getTime() < cutoff).map((b) => b.url);
-    swept += old.length;
-    return old;
-  });
-  return swept;
+  const old = (listed ?? (await listGarminBlobs())).filter((b) => b.uploadedAt.getTime() < cutoff).map((b) => b.url);
+  for (let at = 0; at < old.length; at += LIST_PAGE_SIZE) await del(old.slice(at, at + LIST_PAGE_SIZE));
+  return old.length;
 }
 
-type ListedBlob = { url: string; uploadedAt: Date };
+/**
+ * Every Garmin upload in Blob, every page of it. Lists only — the cron's first
+ * call, which decides whether there is anything for the database to do.
+ */
+export async function listGarminBlobs(): Promise<ListedBlob[]> {
+  const blobs: ListedBlob[] = [];
+  await forEachPage(GARMIN_BLOB_ROOT, (page) => {
+    blobs.push(...page);
+    return [];
+  });
+  return blobs;
+}
+
+export type ListedBlob = { url: string; uploadedAt: Date };
+
+/** What one `list()` page holds at most, and so the most one `del()` is given here. */
+const LIST_PAGE_SIZE = 1000;
 
 /** Walks every page under `prefix`, deleting the URLs `pick` returns from each. */
 async function forEachPage(prefix: string, pick: (blobs: ListedBlob[]) => string[]): Promise<void> {
@@ -103,5 +120,5 @@ async function forEachPage(prefix: string, pick: (blobs: ListedBlob[]) => string
   } while (cursor);
 }
 
-/** The import worker's deps as production wires them: this adapter and the app clock. */
-export const blobWorkerDeps = { fetchBlob, openBlob, putBlob, deleteBlob, deleteHistoryBlobs, today };
+/** The import worker's deps as production wires them: this adapter, the chained run, and the app clock. */
+export const blobWorkerDeps = { fetchBlob, openBlob, putBlob, deleteBlob, deleteHistoryBlobs, requestNextRun: requestNextImportRun, today };
