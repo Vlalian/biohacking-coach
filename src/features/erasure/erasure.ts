@@ -101,3 +101,22 @@ export function toErasureLogEntry(
     disclosureVersion,
   };
 }
+
+/**
+ * How long an erasure record is kept (`garmin-connect-api/09`): three years,
+ * the Danish general limitation period, as proof of what the account had
+ * consented to. The Privacy Policy states it (section 7, "How long we keep it,
+ * and how to delete it"); change both together.
+ */
+export const ERASURE_LOG_RETENTION_YEARS = 3;
+
+/**
+ * The moment before which an erasure record is past its retention. Calendar
+ * years in UTC, so a record erased on a leap day is kept until 1 March three
+ * years on.
+ */
+export function erasureLogCutoff(now: Date): Date {
+  const cutoff = new Date(now);
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - ERASURE_LOG_RETENTION_YEARS);
+  return cutoff;
+}

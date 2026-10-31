@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DISCLOSURE_VERSION } from '@/features/consent/disclosure';
-import { erasurePlan, toErasureLogEntry } from './erasure';
+import { ERASURE_LOG_RETENTION_YEARS, erasureLogCutoff, erasurePlan, toErasureLogEntry } from './erasure';
 
 describe('erasurePlan', () => {
   it('deletes the athlete row before the user row', () => {
@@ -94,5 +94,16 @@ describe('toErasureLogEntry', () => {
       'consentedPurposes',
       'disclosureVersion',
     ]);
+  });
+});
+
+describe('erasureLogCutoff', () => {
+  it('keeps an erasure record three years, to the day', () => {
+    expect(ERASURE_LOG_RETENTION_YEARS).toBe(3);
+    expect(erasureLogCutoff(new Date('2029-11-02T03:17:00Z'))).toEqual(new Date('2026-11-02T03:17:00Z'));
+  });
+
+  it('lands a leap day on the 1st of March three years before', () => {
+    expect(erasureLogCutoff(new Date('2028-02-29T12:00:00Z'))).toEqual(new Date('2025-03-01T12:00:00Z'));
   });
 });
