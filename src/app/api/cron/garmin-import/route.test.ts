@@ -105,6 +105,7 @@ describe('GET /api/cron/garmin-import', () => {
     expect(await response.json()).toEqual({ imports: 2, failed: 1, swept: 3 });
     expect(resumeImports).toHaveBeenCalledTimes(1);
     expect(sweepOldBlobs.mock.calls[0][1]).toBeUndefined();
+    expect(errors).toHaveBeenCalledWith('garmin cron: blob listing failed');
     errors.mockRestore();
   });
 

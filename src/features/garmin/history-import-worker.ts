@@ -173,8 +173,10 @@ async function deleteQuietly(url: string, deps: WorkerDeps): Promise<void> {
 
 /**
  * Runs an import step after step until it is finished or `timeUp` says to
- * stop. When time runs out with work left it asks for the next run at once
- * (`garmin-integration/08`); the cron would get there too, minutes later. An
+ * stop. When time runs out first — the import was running when last read — it
+ * asks for the next run at once (`garmin-integration/08`); the cron would get
+ * there too, minutes later. A next run that finds nothing to do costs one
+ * empty pass. An
  * error stops the run without throwing and asks for no next run — the import
  * stays where it was last saved, the error is kept on it without counting as
  * progress, and the cron picks it up again until it stalls
@@ -182,12 +184,10 @@ async function deleteQuietly(url: string, deps: WorkerDeps): Promise<void> {
  */
 export async function runHistoryImport(importId: string, deps: WorkerDeps, timeUp: () => boolean): Promise<void> {
   try {
-    let step: StepResult = 'stopped';
     while (!timeUp()) {
-      step = await importNextChunk(importId, deps, timeUp);
-      if (!importRunning(step)) return;
+      if (!importRunning(await importNextChunk(importId, deps, timeUp))) return;
     }
-    if (importRunning(step)) await deps.requestNextRun();
+    await deps.requestNextRun();
   } catch (error) {
     console.error('history import stopped', importId);
     await recordImportError(importId, importErrorText(error)).catch(() => {});

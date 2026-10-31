@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
 
   if (new URL(request.url).searchParams.has(CHAINED_PARAM)) {
     after(() => importPass(new Date(), 0));
-    return Response.json({ chained: true }, { status: 202 });
+    return new Response(null, { status: 202 });
   }
   return Response.json(await importPass(new Date(), RESUME_AFTER_MS));
 }

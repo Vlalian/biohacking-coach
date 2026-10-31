@@ -25,8 +25,11 @@ afterEach(() => {
 });
 
 describe('requestNextImportRun', () => {
-  it('calls the cron import route as a chained run, with the cron secret', async () => {
+  it('calls the cron import route as a chained run, with the cron secret, and logs nothing when it is taken', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     await requestNextImportRun();
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://app.example.com/api/cron/garmin-import?chained=1');
