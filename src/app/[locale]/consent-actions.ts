@@ -69,8 +69,12 @@ export async function withdrawConsentAction(
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  await withdrawConsent(athleteId, purpose);
+  // Pause first, so a failure between the two writes fails closed: the coach
+  // already sees nothing, and the consent is still granted for the athlete to
+  // withdraw again (CodeRabbit, PR #130). Pausing touches only an active link,
+  // so a retry repeats it harmlessly.
   if (purpose === 'head_coach_visibility') await pauseLinkForAthlete(athleteId);
+  await withdrawConsent(athleteId, purpose);
 
   revalidatePath('/', 'layout');
   return { ok: true };

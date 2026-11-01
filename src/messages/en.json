@@ -858,7 +858,7 @@
   },
   "Feedback": {
     "consentRequired": "Feedback is only saved if you allow it under “Help improve the product”.",
-    "consentRequiredLink": "Open Privacy & consent",
+    "consentAllowAndSend": "Allow and send",
     "title": "Give feedback",
     "intro": "Something broke, annoyed you or worked well? Tell us here. Someone on the team reads every note, and Momentum never sees it.",
     "guidanceWhat": "What happened.",

@@ -42,10 +42,20 @@ describe('the Head-Coach-visibility consent and the link (training-architecture/
 
     await withdrawConsentAction('head_coach_visibility');
     expect(pauseLinkForAthlete).toHaveBeenCalledWith(ATHLETE);
-    expect(withdrawConsent.mock.invocationCallOrder[0]).toBeLessThan(pauseLinkForAthlete.mock.invocationCallOrder[0]);
+    // Pause first: if the withdrawal then fails, the coach already sees nothing
+    // and the athlete can retry it (CodeRabbit, PR #130).
+    expect(pauseLinkForAthlete.mock.invocationCallOrder[0]).toBeLessThan(withdrawConsent.mock.invocationCallOrder[0]);
 
     await grantConsentsAction(['head_coach_visibility']);
     expect(resumeLinkForAthlete).toHaveBeenCalledWith(ATHLETE);
+  });
+
+  it('a withdrawal that fails after the pause leaves the link paused, not active', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    withdrawConsent.mockRejectedValue(new Error('db down'));
+
+    await expect(withdrawConsentAction('head_coach_visibility')).rejects.toThrow('db down');
+    expect(pauseLinkForAthlete).toHaveBeenCalledWith(ATHLETE);
   });
 
   it('any other consent leaves the link alone', async () => {

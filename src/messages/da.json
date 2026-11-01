@@ -858,7 +858,7 @@
   },
   "Feedback": {
     "consentRequired": "Feedback gemmes kun, hvis du har sagt ja til “Hjælp med at forbedre produktet”.",
-    "consentRequiredLink": "Åbn Privatliv & samtykke",
+    "consentAllowAndSend": "Tillad og send",
     "title": "Giv feedback",
     "intro": "Gik noget i stykker, irriterede det dig, eller virkede det godt? Skriv det her. En fra holdet læser hver besked, og Momentum ser den aldrig.",
     "guidanceWhat": "Hvad der skete.",

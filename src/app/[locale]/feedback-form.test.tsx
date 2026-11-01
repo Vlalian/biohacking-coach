@@ -7,9 +7,8 @@ import da from '@/messages/da.json';
 // The form posts through a server action, whose import chain ends at the
 // database. No first render calls it.
 vi.mock('./feedback-actions', () => ({ submitFeedbackAction: vi.fn() }));
-// The consent link (garmin-connect-api/08) is next-intl's Link, whose navigation
-// module needs Next's runtime; a plain anchor is enough for a static render.
-vi.mock('@/i18n/navigation', () => ({ Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }));
+// The consent prompt (garmin-connect-api/08) grants through a server action.
+vi.mock('./consent-actions', () => ({ grantConsentsAction: vi.fn() }));
 
 const { FeedbackForm } = await import('./feedback-form');
 

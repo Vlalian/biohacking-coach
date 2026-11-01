@@ -111,12 +111,16 @@ export function toErasureLogEntry(
 const ERASURE_LOG_RETENTION_YEARS = 3;
 
 /**
- * The moment before which an erasure record is past its retention. Calendar
- * years in UTC, so a record erased on a leap day is kept until 1 March three
- * years on.
+ * The moment before which an erasure record is past its retention: the same
+ * day and time, three calendar years back, in UTC. On 29 February there is no
+ * such day, so the cutoff is 28 February — never 1 March, which would delete a
+ * record erased on 1 March a day before its three years are up (CodeRabbit,
+ * PR #130).
  */
 export function erasureLogCutoff(now: Date): Date {
   const cutoff = new Date(now);
   cutoff.setUTCFullYear(cutoff.getUTCFullYear() - ERASURE_LOG_RETENTION_YEARS);
+  // Day 0 is the last day of the month before: back from 1 March to 28 February.
+  if (cutoff.getUTCMonth() !== now.getUTCMonth()) cutoff.setUTCDate(0);
   return cutoff;
 }
