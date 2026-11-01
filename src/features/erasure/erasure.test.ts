@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DISCLOSURE_VERSION } from '@/features/consent/disclosure';
-import { ERASURE_LOG_RETENTION_YEARS, erasureLogCutoff, erasurePlan, toErasureLogEntry } from './erasure';
+import { erasureLogCutoff, erasurePlan, toErasureLogEntry } from './erasure';
 
 describe('erasurePlan', () => {
   it('deletes the athlete row before the user row', () => {
@@ -99,7 +99,6 @@ describe('toErasureLogEntry', () => {
 
 describe('erasureLogCutoff', () => {
   it('keeps an erasure record three years, to the day', () => {
-    expect(ERASURE_LOG_RETENTION_YEARS).toBe(3);
     expect(erasureLogCutoff(new Date('2029-11-02T03:17:00Z'))).toEqual(new Date('2026-11-02T03:17:00Z'));
   });
 

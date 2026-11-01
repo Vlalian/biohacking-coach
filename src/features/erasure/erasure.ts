@@ -108,7 +108,7 @@ export function toErasureLogEntry(
  * consented to. The Privacy Policy states it (section 7, "How long we keep it,
  * and how to delete it"); change both together.
  */
-export const ERASURE_LOG_RETENTION_YEARS = 3;
+const ERASURE_LOG_RETENTION_YEARS = 3;
 
 /**
  * The moment before which an erasure record is past its retention. Calendar
