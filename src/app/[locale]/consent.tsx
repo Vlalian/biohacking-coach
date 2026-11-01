@@ -42,9 +42,12 @@ function isRequired(purpose: ConsentPurpose): boolean {
 export function ConsentScreen({
   granted,
   mode,
+  offered = [],
 }: {
   granted: ConsentPurpose[];
   mode: 'gate' | 'manage';
+  /** Point-of-use purposes to offer though ungranted — a paused link's coach consent (training-architecture/14). */
+  offered?: ConsentPurpose[];
 }) {
   const locale = useLocale();
   const copy = useMemo(() => disclosureCopy(locale), [locale]);
@@ -61,7 +64,7 @@ export function ConsentScreen({
   const grantedSet = useMemo(() => new Set(granted), [granted]);
   // What this screen lists: the onboarding set, plus — in manage mode only —
   // any point-of-use purpose already granted, so it can be withdrawn here.
-  const purposes = useMemo(() => purposesToShow(mode, granted), [mode, granted]);
+  const purposes = useMemo(() => purposesToShow(mode, granted, offered), [mode, granted, offered]);
   const allRequiredChecked = REQUIRED_CONSENT_PURPOSES.every((p) =>
     checked.has(p),
   );

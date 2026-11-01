@@ -8,7 +8,7 @@ import type { ActiveConsent } from './consent';
 const getActiveConsents = vi.fn<() => Promise<ActiveConsent[]>>();
 vi.mock('./consent-repository', () => ({ getActiveConsents }));
 
-const { assertAiCoachingConsent } = await import('./consent-gate');
+const { assertAiCoachingConsent, hasConsent } = await import('./consent-gate');
 
 const grant = (
   purpose: ActiveConsent['purpose'],
@@ -58,5 +58,21 @@ describe('assertAiCoachingConsent', () => {
     await assertAiCoachingConsent('athlete_42');
 
     expect(getActiveConsents).toHaveBeenCalledWith('athlete_42');
+  });
+});
+
+describe('hasConsent', () => {
+  beforeEach(() => getActiveConsents.mockReset());
+
+  it('says yes only for an active grant of that purpose at the current disclosure version', async () => {
+    getActiveConsents.mockResolvedValue([grant('product_improvement')]);
+    await expect(hasConsent('athlete_1', 'product_improvement')).resolves.toBe(true);
+    expect(getActiveConsents).toHaveBeenCalledWith('athlete_1');
+
+    getActiveConsents.mockResolvedValue([grant('product_improvement', 'old-version')]);
+    await expect(hasConsent('athlete_1', 'product_improvement')).resolves.toBe(false);
+
+    getActiveConsents.mockResolvedValue([grant('ai_coaching'), grant('health_data')]);
+    await expect(hasConsent('athlete_1', 'product_improvement')).resolves.toBe(false);
   });
 });

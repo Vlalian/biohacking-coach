@@ -1,5 +1,6 @@
 import { LOOKUP_TOOL_NAME } from '@/features/knowledge-oracle/lookup-tool';
 import type { CoachTool, CoachToolCall } from './coach-client';
+import { coachActionReply, coachActionTools } from './coach-actions';
 import type { Grounding } from './grounding';
 import { PROPOSE_WEEK_PLAN_TOOL } from './weekly-session';
 
@@ -29,8 +30,11 @@ export function proposalTurnTools(grounding: Grounding): {
   resolveTool: (call: CoachToolCall) => Promise<string>;
 } {
   return {
-    tools: [PROPOSE_WEEK_PLAN_TOOL, grounding.tool],
-    resolveTool: (call) =>
-      call.name === LOOKUP_TOOL_NAME ? grounding.resolve(call) : Promise.resolve(PROPOSAL_ACK),
+    tools: [PROPOSE_WEEK_PLAN_TOOL, grounding.tool, ...coachActionTools()],
+    resolveTool: (call) => {
+      if (call.name === LOOKUP_TOOL_NAME) return grounding.resolve(call);
+      // A catalog action answers in the words its own entry declares.
+      return Promise.resolve(coachActionReply(call) ?? PROPOSAL_ACK);
+    },
   };
 }

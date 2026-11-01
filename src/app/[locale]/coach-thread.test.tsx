@@ -35,6 +35,7 @@ const base = {
   dismissCheckInOffer: vi.fn(),
   chatSeed: null as ChatSeed | null,
   setChatSeed: vi.fn(),
+  openView: vi.fn(),
 };
 
 const render = (seed: ChatSeed | null, setChatSeed = vi.fn()) =>

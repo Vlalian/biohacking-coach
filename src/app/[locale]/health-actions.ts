@@ -17,6 +17,7 @@ import {
   type DeleteOutcome,
 } from '@/features/health/health-repository';
 import type { HealthNoteRow } from '@/db/schema';
+import { hasConsent } from '@/features/consent/consent-gate';
 
 /**
  * The athlete's own statements about their body (`training-architecture/06`).
@@ -27,16 +28,19 @@ import type { HealthNoteRow } from '@/db/schema';
  * reached. Declaring or closing touches no session: the plan reacts to an
  * injury, it is never mutated by one (slice 04, asserted structurally).
  *
- * **The consent seam (ticket 14, parked).** `declareInjuryAction` and
- * `declareIllnessAction` are where the `injury_health_data` point-of-use
- * consent will be asked — once, before the first record is written, refusing to
- * write rather than writing and asking after. It is deliberately not built here
- * (Mads parked 14 post-test), and until it lands the standing rule holds: no
- * second real person uses the injury features.
+ * **The consent gate (training-architecture/14).** `declareInjuryAction` and
+ * `declareIllnessAction` refuse with `consent-required`, writing nothing, until
+ * the athlete has granted the `injury_health_data` point-of-use consent; the
+ * drawer then asks for it and declares again. Closing, rating and noting a
+ * record already on file ask nothing: the consent was given when it was
+ * declared, and withdrawing it is the athlete's to do on Privacy & consent.
  */
 export type HealthActionResult =
   | { ok: true }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
+
+/** A declaration: done, or why not — including the consent it still needs. */
+export type DeclareActionResult = HealthActionResult | { ok: false; reason: 'consent-required' };
 
 /** A delete: done, or why not (`showable-version/28e`). */
 export type DeleteActionResult =
@@ -49,7 +53,7 @@ export async function declareInjuryAction(
   capacity: Capacity,
   bother?: number | null,
   name?: string | null,
-): Promise<HealthActionResult> {
+): Promise<DeclareActionResult> {
   if (!isCapacity(capacity)) return { ok: false, reason: 'invalid' };
   const rating = parseBother(bother);
   if (rating === undefined) return { ok: false, reason: 'invalid' };
@@ -59,20 +63,20 @@ export async function declareInjuryAction(
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  // ← ticket 14's consent gate goes here, before the write.
+  if (!(await hasConsent(athleteId, 'injury_health_data'))) return { ok: false, reason: 'consent-required' };
   await declareInjury(athleteId, capacity, rating, injuryName);
   revalidatePath('/', 'layout');
   return { ok: true };
 }
 
-export async function declareIllnessAction(bother?: number | null): Promise<HealthActionResult> {
+export async function declareIllnessAction(bother?: number | null): Promise<DeclareActionResult> {
   const rating = parseBother(bother);
   if (rating === undefined) return { ok: false, reason: 'invalid' };
 
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
-  // ← ticket 14's consent gate goes here, before the write.
+  if (!(await hasConsent(athleteId, 'injury_health_data'))) return { ok: false, reason: 'consent-required' };
   await declareIllness(athleteId, rating);
   revalidatePath('/', 'layout');
   return { ok: true };

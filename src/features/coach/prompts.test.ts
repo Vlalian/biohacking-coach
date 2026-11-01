@@ -317,6 +317,25 @@ describe('no real identity reaches a prompt', () => {
   });
 });
 
+// coach-actions/02 — without an app map the Coach cannot answer "where do I
+// change my language?". A prompt is a request, not a control: this pins that the
+// instruction is present, not that the model obeys it.
+describe('Coach Chat carries an app map (coach-actions/02)', () => {
+  it('names the Views and what lives in Settings', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-12');
+    expect(prompt).toContain('APP MAP:');
+    expect(prompt).toMatch(/Settings[^.]*language/i);
+    for (const view of ['Training plan', 'Information', 'Equipment', 'Glossary', 'Settings', 'Privacy']) {
+      expect(prompt).toContain(view);
+    }
+  });
+
+  it('says to open a View only when the athlete asks', () => {
+    const prompt = buildChatPrompt(BASE, '2026-08-12');
+    expect(prompt).toMatch(/open a View only when the athlete asks where something is or asks to be taken there/i);
+  });
+});
+
 // code-health/07 — the Coach must not be told a readiness the athlete never
 // gave. Until a Check-in feature exists there is no readiness, and the honest
 // rendering is *absence*: the CONTEXT line keeps what is real (phase, presence,

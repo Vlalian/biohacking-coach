@@ -1,5 +1,24 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["fra1"],
-  "crons": [{ "path": "/api/cron/garmin-import", "schedule": "*/5 * * * *" }]
+  "regions": [
+    "fra1"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/garmin-import",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/erasure-log",
+      "schedule": "17 3 * * *"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true,
+      "dev": true,
+      "walk/**": true
+    }
+  }
 }

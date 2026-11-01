@@ -248,7 +248,7 @@
     "raceDistanceLabel": "Distance",
     "raceDistanceNote": "Formen på din træningsuge. Sæt den, også selvom du ikke har et løb booket.",
     "hoursLabel": "Timer om ugen",
-    "hoursNote": "Det, din plan bygges ud fra. Hele timer, 1 til 50.",
+    "hoursNote": "Det, din plan bygges ud fra. Hele timer, 1 til {max}.",
     "hoursConfirmTitle": "Skift til {hours} timer om ugen?",
     "hoursConfirmBody": "{count, plural, one {# uge} other {# uger}} fra {date} tegnes om ud fra de nye timer. Denne uge, uger du har accepteret, og din træners sessioner forbliver, som de er.",
     "hoursNothingToRedraw": "Ingen uge tegnes om nu: denne uge, uger du har accepteret, og din træners sessioner forbliver, som de er. Uger, der ikke er planlagt endnu, bruger de nye timer.",
@@ -665,6 +665,8 @@
     "thumbUp": "Det her hjalp",
     "thumbDown": "Det her ramte forkert",
     "thumbComment": "Vil du tilføje noget? (valgfrit)",
+    "thumbConsentRequired": "Vurderinger gemmes kun, hvis du har sagt ja til “Hjælp med at forbedre produktet”.",
+    "thumbConsentRequiredLink": "Åbn Privatliv & samtykke",
     "thumbSave": "Gem"
   },
   "WeeklySession": {
@@ -855,6 +857,8 @@
     }
   },
   "Feedback": {
+    "consentRequired": "Feedback gemmes kun, hvis du har sagt ja til “Hjælp med at forbedre produktet”.",
+    "consentAllowAndSend": "Tillad og send",
     "title": "Giv feedback",
     "intro": "Gik noget i stykker, irriterede det dig, eller virkede det godt? Skriv det her. En fra holdet læser hver besked, og Momentum ser den aldrig.",
     "guidanceWhat": "Hvad der skete.",
@@ -871,6 +875,17 @@
     "openHorizon": "Standard-forløb på seks måneder · intet løb valgt endnu",
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {uge} other {uger}} til {race}"
+  },
+  "CoachLinkRequest": {
+    "reconsentTitle": "{coach} følger stadig din træning",
+    "reconsentIntro": "Vi har ændret ordlyden af det, du har sagt ja til. Læs den nedenfor, og vælg, om din træner fortsat må se dine data. Stopper du, ser din træner intet, før du siger ja igen.",
+    "reconsentKeep": "Fortsæt deling",
+    "reconsentStop": "Stop deling",
+    "title": "{coach} vil gerne følge din træning",
+    "intro": "Din træner ser intet, før du siger ja. Du kan når som helst ændre, hvad vedkommende ser, eller sætte det på pause under Privatliv & samtykke.",
+    "accept": "Accepter og forbind",
+    "decline": "Afvis",
+    "error": "Det virkede ikke. Prøv igen."
   },
   "CoachChores": {
     "kicker": "Venter på dig",
@@ -988,6 +1003,8 @@
     "error": "Det virkede ikke ({reason})."
   },
   "HealthDrawer": {
+    "consentAgreeAndDeclare": "Accepter og meld",
+    "consentNotNow": "Ikke nu",
     "title": "Hvordan har kroppen det?",
     "coachTitle": "Atletens krop",
     "close": "Luk",

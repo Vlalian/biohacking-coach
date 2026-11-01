@@ -2,26 +2,29 @@
 
 import { FEEDBACK_MAX_LENGTH, submittedFromView } from '@/features/feedback/feedback';
 import { recordFeedback } from '@/features/feedback/feedback-repository';
+import { hasConsent } from '@/features/consent/consent-gate';
 import { resolveAthleteId } from './current-actor';
 
 /**
  * The feedback page's one server action (`showable-version/58`).
  *
- * No model call and no consent gate. The escape hatch never depends on the API
- * or on a gate: a tester whose Coach is broken, or who has withdrawn consent and
- * is complaining about what that did, is the tester with the most to say.
+ * No model call, and no AI-consent gate: a tester whose Coach is broken, or who
+ * has withdrawn AI consent, can still write.
  *
- * Not gated on the optional `product_improvement` consent purpose either.
- * Decided 2026-09-01 with Mads: gating an escape hatch on an optional purpose
- * silences exactly the people it exists for, and testers are told about this in
- * the invite email (decision 8, 2026-08-18).
+ * **Gated on the optional `product_improvement` purpose** (garmin-connect-api/08).
+ * On 2026-09-01 Mads decided against this gate: gating an escape hatch on an
+ * optional purpose silences exactly the people it exists for. He reversed it
+ * on 2026-10-31 while settling the Privacy Policy's legal bases ("Keep the
+ * gate"): feedback is used to improve the product, so it rests on that consent
+ * rather than on legitimate interest. Without it the action stores nothing and
+ * says why, and the form links to Privacy & consent.
  *
  * Deliberately no `revalidatePath`: it changes no server-rendered View.
  */
 
 export type FeedbackResult =
   | { ok: true }
-  | { ok: false; reason: 'empty' | 'too-long' | 'not-authenticated' };
+  | { ok: false; reason: 'empty' | 'too-long' | 'not-authenticated' | 'consent-required' };
 
 export async function submitFeedbackAction(input: {
   body: string;
@@ -38,6 +41,7 @@ export async function submitFeedbackAction(input: {
 
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
+  if (!(await hasConsent(athleteId, 'product_improvement'))) return { ok: false, reason: 'consent-required' };
 
   await recordFeedback({ athleteId, body, view: submittedFromView(input.view) });
   return { ok: true };

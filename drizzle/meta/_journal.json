@@ -239,6 +239,13 @@
       "when": 1790711635952,
       "tag": "0033_session_how_to",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793517124607,
+      "tag": "0034_coaching_link_pending_paused",
+      "breakpoints": true
     }
   ]
 }

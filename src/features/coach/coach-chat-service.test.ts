@@ -481,6 +481,38 @@ describe('Coach Chat proposes a week (training-architecture/20)', () => {
     expect(appendMessages.mock.invocationCallOrder[0]).toBeLessThan(recordProposal.mock.invocationCallOrder[0]);
   });
 
+  // Title kept for the test-deletion guard; the body no longer pins "no actions",
+  // which was the bug: the next test pins the corrected behavior.
+  it('returns no actions, and keeps the turn, when staging the proposal fails after the store', async () => {
+    recordProposal.mockRejectedValueOnce(new Error('db down'));
+    callCoach.mockResolvedValue({
+      text: 'Here is the week.',
+      toolCalls: [{ name: 'propose_week_plan', input: PLAN }],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null, actions: [] });
+  });
+
+  it('still returns the navigation action, and keeps the turn, when staging the proposal fails after the store', async () => {
+    recordProposal.mockRejectedValueOnce(new Error('db down'));
+    callCoach.mockResolvedValue({
+      text: 'Here is the week, and Settings.',
+      toolCalls: [
+        { name: 'propose_week_plan', input: PLAN },
+        { name: 'open_view', input: { view: 'settings' } },
+      ],
+    });
+
+    const result = await sendCoachChatMessage(ATHLETE, 'c1', 'go', TODAY);
+
+    expect(result).toMatchObject({ ok: true, proposal: null });
+    expect(result).toMatchObject({
+      actions: [{ name: 'open_view', durability: 'ephemeral', payload: { view: 'settings' } }],
+    });
+  });
+
   it('with a discussed next-week handoff, a next-week proposal is staged and the prompt names that window and the staged week', async () => {
     getDiscussedWeek.mockResolvedValue('2026-09-21');
     const staged = [{ ...PLAN.sessions[0], date: '2026-09-22', note: 'the drafted note' }];
@@ -899,14 +931,56 @@ describe('sendCoachChatMessage — the Coach can look things up (knowledge-oracl
     expect(params.tools.map((t: { name: string }) => t.name)).toEqual([
       'propose_week_plan',
       'look_up_training_science',
+      'open_view',
     ]);
-    // One resolver answers both: the lookup goes to the grounding, the proposal
-    // gets the fixed acknowledgement — the Weekly Session's exact wiring.
+    // One resolver answers all three: the lookup goes to the grounding, the
+    // proposal gets the fixed acknowledgement — the Weekly Session's exact
+    // wiring — and a catalog action gets its own words.
     await expect(params.resolveTool({ name: 'look_up_training_science', input: { question: 'q' } })).resolves.toBe(
       '[1] passage',
     );
     expect(groundingResolve).toHaveBeenCalledWith({ name: 'look_up_training_science', input: { question: 'q' } });
     await expect(params.resolveTool({ name: 'propose_week_plan', input: {} })).resolves.toBe(PROPOSAL_ACK);
+    const opened = await params.resolveTool({ name: 'open_view', input: { view: 'settings' } });
+    expect(opened).toMatch(/is now open/i);
+    expect(opened).not.toBe(PROPOSAL_ACK);
+    const refused = await params.resolveTool({ name: 'open_view', input: { view: 'roster' } });
+    expect(refused).toMatch(/nothing opened/i);
+    expect(refused).not.toBe(PROPOSAL_ACK);
+  });
+
+  // coach-actions/02: the chat result carries a generically typed list.
+  it('returns the validated actions as a list beside the transcript', async () => {
+    callCoach.mockResolvedValue({
+      text: 'Settings has it. I have opened it for you.',
+      toolCalls: [{ name: 'open_view', input: { view: 'settings' } }],
+    });
+    const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'where do I change my language?', '2026-08-12');
+    expect(result).toMatchObject({
+      ok: true,
+      proposal: null,
+      actions: [{ name: 'open_view', durability: 'ephemeral', payload: { view: 'settings' } }],
+    });
+  });
+
+  it('returns an empty action list when the Coach called no action tool', async () => {
+    callCoach.mockResolvedValue({ text: 'Keep Thursday easy.', toolCalls: [] });
+    const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'why is Thursday easy?', '2026-08-12');
+    expect(result).toMatchObject({ ok: true, actions: [] });
+  });
+
+  it('stores and returns the text when an action is refused, and surfaces no action', async () => {
+    callCoach.mockResolvedValue({
+      text: 'Roster is for coaches.',
+      toolCalls: [
+        { name: 'open_view', input: { view: 'roster' } },
+        { name: 'made_up', input: {} },
+      ],
+    });
+    appendMessages.mockClear();
+    const result = await sendCoachChatMessage(ATHLETE, 'conv_1', 'open the roster', '2026-08-12');
+    expect(result).toMatchObject({ ok: true, actions: [] });
+    expect(appendMessages.mock.calls[0][2][1]).toMatchObject({ role: 'coach_ai', content: 'Roster is for coaches.' });
   });
 
   it('hands the grounding only what it needs: who, which surface, which conversation — no athlete facts', async () => {

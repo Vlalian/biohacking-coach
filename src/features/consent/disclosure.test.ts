@@ -164,6 +164,28 @@ describe('DISCLOSURE_VERSION', () => {
   it('is a later version than the last one grants were stamped with', () => {
     expect(DISCLOSURE_VERSION > '2026-09-18').toBe(true);
   });
+
+  // garmin-connect-api/08 changed two purposes' wording, so grants stamped
+  // 2026-09-24 are stale.
+  it('was bumped past 2026-09-24 when feedback joined product improvement', () => {
+    expect(DISCLOSURE_VERSION > '2026-09-24').toBe(true);
+  });
+});
+
+describe('the wording garmin-connect-api/08 changed', () => {
+  it('names the feedback about the app in the product-improvement purpose, in both languages', () => {
+    expect(disclosureCopy('en').purposes.product_improvement.body).toMatch(/feedback you send us about the app/);
+    expect(disclosureCopy('da').purposes.product_improvement.body).toMatch(/feedback, du sender os om appen/);
+  });
+
+  it('describes the OpenAI query as the question Momentum writes, not phase and level', () => {
+    const en = disclosureCopy('en').purposes.ai_coaching.body;
+    const da = disclosureCopy('da').purposes.ai_coaching.body;
+    expect(en).not.toMatch(/experience level|training phase/);
+    expect(da).not.toMatch(/erfaringsniveau|træningsfase/);
+    expect(en).toMatch(/can include details from your conversation/);
+    expect(da).toMatch(/kan indeholde detaljer fra jeres samtale/);
+  });
 });
 
 describe('isConsentPurpose', () => {

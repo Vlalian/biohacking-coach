@@ -12,6 +12,7 @@ import { getLatestOpenConversation, getMessages } from './conversation-repositor
 import type { Message } from './conversation';
 import { getLatestPlanWrittenAt } from './plan-proposal-repository';
 import { productionGrounding } from './grounding';
+import { actionsFromToolCalls, type CoachAction } from './coach-actions';
 import { proposalTurnTools } from './proposal-tools';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import {
@@ -241,7 +242,11 @@ export async function chatStateOf(athleteId: string, conversationId: string): Pr
 }
 
 export type SendChatResult =
-  | (Extract<ConversationTurnResult, { ok: true }> & { proposal: ChatProposal | null })
+  | (Extract<ConversationTurnResult, { ok: true }> & {
+      proposal: ChatProposal | null;
+      /** The Coach Actions the Coach called and the server accepted (`coach-actions/02`). */
+      actions: CoachAction[];
+    })
   | Extract<ConversationTurnResult, { ok: false }>;
 
 /**
@@ -276,6 +281,7 @@ export async function sendCoachChatMessage(
   // What this turn staged, if anything — filled in after the store, read after
   // the turn. Null on every turn where the Coach proposed nothing.
   let proposal: ChatProposal | null = null;
+  let actions: CoachAction[] = [];
   const result = await takeConversationTurn({
     athleteId: athlete.id,
     kind: 'coach_chat',
@@ -306,6 +312,9 @@ export async function sendCoachChatMessage(
         ...proposalTurnTools(grounding),
         citations: () => grounding.citations(),
         onStored: async (id, reply) => {
+          // Actions first: staging can throw after the store, and the Coach's
+          // words already promise what the actions do.
+          actions = actionsFromToolCalls(reply.toolCalls);
           proposal = await stageChatProposal(athlete.id, id, window, reply);
         },
       };
@@ -321,5 +330,5 @@ export async function sendCoachChatMessage(
       maxTokens: CHAT_MAX_TOKENS,
     });
   }
-  return result.ok ? { ...result, proposal } : result;
+  return result.ok ? { ...result, proposal, actions } : result;
 }

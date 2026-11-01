@@ -22,6 +22,7 @@ const {
   setBother,
   getHealthNotes,
   revalidatePath,
+  hasConsent,
 } = vi.hoisted(() => ({
   resolveAthleteId: vi.fn<() => Promise<string | null>>(async () => 'athlete_1'),
   declareInjury: vi.fn(async () => {}),
@@ -34,10 +35,12 @@ const {
   setBother: vi.fn(async () => {}),
   getHealthNotes: vi.fn(async () => [{ id: 'n1' }]),
   revalidatePath: vi.fn(),
+  hasConsent: vi.fn(async () => true),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('./current-actor', () => ({ resolveAthleteId }));
+vi.mock('@/features/consent/consent-gate', () => ({ hasConsent }));
 vi.mock('@/features/health/health-repository', () => ({
   declareInjury,
   declareIllness,
@@ -67,6 +70,33 @@ const CANNOT_RUN = { swim: 'full', bike: 'easy', run: 'none' } as const;
 beforeEach(() => {
   vi.clearAllMocks();
   resolveAthleteId.mockResolvedValue('athlete_1');
+  hasConsent.mockResolvedValue(true);
+});
+
+describe('the injury consent (training-architecture/14)', () => {
+  it('refuses to declare an Injury or an Illness without it, writing nothing', async () => {
+    hasConsent.mockResolvedValue(false);
+
+    expect(await declareInjuryAction(CANNOT_RUN, 2, 'knee')).toEqual({ ok: false, reason: 'consent-required' });
+    expect(hasConsent).toHaveBeenLastCalledWith('athlete_1', 'injury_health_data');
+    expect(await declareIllnessAction(2)).toEqual({ ok: false, reason: 'consent-required' });
+    expect(hasConsent).toHaveBeenLastCalledWith('athlete_1', 'injury_health_data');
+    expect(declareInjury).not.toHaveBeenCalled();
+    expect(declareIllness).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('declares as before once it is granted, without asking again', async () => {
+    expect(await declareInjuryAction(CANNOT_RUN, 2, 'knee')).toEqual({ ok: true });
+    expect(declareInjury).toHaveBeenCalledOnce();
+  });
+
+  it('does not ask for it to close, note or rate an injury already on record', async () => {
+    hasConsent.mockResolvedValue(false);
+
+    expect(await closeInjuryAction('i1')).toEqual({ ok: true });
+    expect(hasConsent).not.toHaveBeenCalled();
+  });
 });
 
 describe('declaring', () => {
