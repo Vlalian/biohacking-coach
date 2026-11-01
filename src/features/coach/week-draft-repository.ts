@@ -18,6 +18,7 @@ import {
 import { latestPlanDecision } from './plan-proposal-repository';
 import { getSessionsForWeek } from '@/features/session/session-repository';
 import { PLAN_EVENT } from './plan-proposal';
+import { HOURS_CHANGED_EVENT, keptWeekStale } from './hours-change';
 import { addDays, weekStartOf } from '@/lib/date';
 import type { ProposedSession } from './weekly-session';
 
@@ -250,6 +251,47 @@ export async function withdrawPreviewDrafts(athleteId: string, today: string): P
     withdrawn += 1;
   }
   return withdrawn;
+}
+
+/**
+ * Withdraws one week's waiting draft because the athlete changed their hours
+ * and chose to start from that week (showable-version/61). The athlete's own
+ * act, so it is theirs in the log; it reads back as `never`, not `declined`, so
+ * the next draft of that week does not treat it as a rejection (`/30`).
+ */
+export async function withdrawWeekDraft(
+  athleteId: string,
+  draft: { weekStart: string; id: string },
+  reason: 'hours-changed',
+): Promise<void> {
+  await getDb().insert(events).values({
+    athleteId,
+    actorType: 'athlete',
+    actorId: athleteId,
+    type: WEEK_DRAFT_EVENT.withdrawn,
+    payload: { weekStart: draft.weekStart, draftId: draft.id, reason },
+  });
+}
+
+/** Records an hours change, and the week whose waiting draft it kept on the old hours, if any. */
+export async function recordHoursChanged(athleteId: string, change: { hours: number; keptWeek: string | null }): Promise<void> {
+  await getDb().insert(events).values({
+    athleteId,
+    actorType: 'athlete',
+    actorId: athleteId,
+    type: HOURS_CHANGED_EVENT,
+    payload: change,
+  });
+}
+
+/** Whether `weekStart`'s arithmetic is still from the hours before a change that kept its draft. */
+export async function isKeptWeekStale(athleteId: string, weekStart: string): Promise<boolean> {
+  const rows = await getDb()
+    .select({ type: events.type, payload: events.payload })
+    .from(events)
+    .where(and(eq(events.athleteId, athleteId), inArray(events.type, [HOURS_CHANGED_EVENT, 'week_plan_declined'])))
+    .orderBy(asc(events.createdAt));
+  return keptWeekStale(rows, weekStart);
 }
 
 /**

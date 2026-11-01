@@ -73,6 +73,15 @@ vi.mock('@/features/athlete/athlete-repository', () => ({
   updateHoursPerWeek,
 }));
 vi.mock('@/features/coach/block-fill-service', () => ({ refillWeeksFromHours, previewRefill }));
+const { previewHoursChange, applyHoursChange, draftWeekNow, afterTasks } = vi.hoisted(() => ({
+  previewHoursChange: vi.fn(),
+  applyHoursChange: vi.fn(),
+  draftWeekNow: vi.fn(() => Promise.resolve('drafted')),
+  afterTasks: [] as (() => Promise<unknown>)[],
+}));
+vi.mock('@/features/coach/hours-change-service', () => ({ previewHoursChange, applyHoursChange }));
+vi.mock('@/features/coach/week-draft-service', () => ({ draftWeekNow }));
+vi.mock('next/server', () => ({ after: (task: () => Promise<unknown>) => afterTasks.push(task) }));
 const getLinkForAthlete = vi.fn(() => Promise.resolve(undefined as unknown));
 const withdrawPreviewDrafts = vi.fn(() => Promise.resolve(0));
 vi.mock('@/features/coach/coach-repository', () => ({
@@ -701,47 +710,63 @@ describe('past races in Settings (training-architecture/35)', () => {
   });
 });
 
-describe('updateHoursPerWeekAction (showable-version/40)', () => {
-  it('stores hours inside the bounds and redraws the weeks the structure owns', async () => {
-    refillWeeksFromHours.mockResolvedValue({ outcome: 'refilled', weeks: ['2026-10-12'] });
+describe('updateHoursPerWeekAction (showable-version/40, /61)', () => {
+  const DAY = expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/);
+  beforeEach(() => {
+    afterTasks.length = 0;
+    applyHoursChange.mockResolvedValue({ redrawn: [], redraft: null });
+  });
 
-    expect(await updateHoursPerWeekAction(10)).toEqual({ ok: true, redrawn: 1 });
-    expect(updateHoursPerWeek).toHaveBeenCalledWith('athlete_1', 10);
-    expect(refillWeeksFromHours).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  it('drafts the withdrawn week at once, after the response — never left to the next app-open', async () => {
+    applyHoursChange.mockResolvedValue({ redrawn: ['2026-10-05', '2026-10-12'], redraft: '2026-10-05' });
+
+    expect(await updateHoursPerWeekAction(10, 'waiting-week')).toEqual({ ok: true, redrawn: 2 });
+    expect(applyHoursChange).toHaveBeenCalledWith('athlete_1', 10, 'waiting-week', DAY);
+    expect(draftWeekNow).not.toHaveBeenCalled();
+    await afterTasks[0]();
+    expect(draftWeekNow).toHaveBeenCalledWith('athlete_1', '2026-10-05', DAY);
+  });
+
+  it('schedules no draft when nothing was withdrawn', async () => {
+    expect(await updateHoursPerWeekAction(10, 'week-after')).toEqual({ ok: true, redrawn: 0 });
+    expect(afterTasks).toHaveLength(0);
   });
 
   it('accepts both ends of the onboarding band', async () => {
-    refillWeeksFromHours.mockResolvedValue({ outcome: 'nothing-due', weeks: [] });
-    expect(await updateHoursPerWeekAction(1)).toEqual({ ok: true, redrawn: 0 });
-    expect(await updateHoursPerWeekAction(HOURS_PER_WEEK_MAX)).toEqual({ ok: true, redrawn: 0 });
+    expect(await updateHoursPerWeekAction(1, 'week-after')).toEqual({ ok: true, redrawn: 0 });
+    expect(await updateHoursPerWeekAction(HOURS_PER_WEEK_MAX, 'week-after')).toEqual({ ok: true, redrawn: 0 });
   });
 
-  it.each([0, HOURS_PER_WEEK_MAX + 1, 7.5, Number.NaN])('refuses %s and writes nothing', async (hours) => {
-    expect(await updateHoursPerWeekAction(hours)).toEqual({ ok: false, reason: 'invalid' });
-    expect(updateHoursPerWeek).not.toHaveBeenCalled();
-    expect(refillWeeksFromHours).not.toHaveBeenCalled();
+  it.each([
+    [0, 'waiting-week'],
+    [HOURS_PER_WEEK_MAX + 1, 'waiting-week'],
+    [7.5, 'waiting-week'],
+    [Number.NaN, 'waiting-week'],
+    [10, 'now'],
+  ])('refuses %s / %s and writes nothing', async (hours, startFrom) => {
+    expect(await updateHoursPerWeekAction(hours, startFrom)).toEqual({ ok: false, reason: 'invalid' });
+    expect(applyHoursChange).not.toHaveBeenCalled();
   });
 
   it('refuses an anonymous caller and writes nothing', async () => {
     getSession.mockResolvedValue(null);
-    expect(await updateHoursPerWeekAction(10)).toEqual({ ok: false, reason: 'not-authenticated' });
-    expect(updateHoursPerWeek).not.toHaveBeenCalled();
+    expect(await updateHoursPerWeekAction(10, 'waiting-week')).toEqual({ ok: false, reason: 'not-authenticated' });
+    expect(applyHoursChange).not.toHaveBeenCalled();
   });
 });
 
-describe('previewHoursChangeAction (showable-version/40)', () => {
-  it('names the weeks a change would redraw, without writing', async () => {
-    previewRefill.mockResolvedValue(['2026-10-12', '2026-11-02']);
+describe('previewHoursChangeAction (showable-version/40, /61)', () => {
+  it('asks the service what the dialog should offer, without writing', async () => {
+    previewHoursChange.mockResolvedValue({ kind: 'confirm', weeks: ['2026-10-12'], plannedWeek: null });
 
-    expect(await previewHoursChangeAction()).toEqual({ ok: true, weeks: ['2026-10-12', '2026-11-02'] });
-    expect(previewRefill).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
-    expect(updateHoursPerWeek).not.toHaveBeenCalled();
-    expect(refillWeeksFromHours).not.toHaveBeenCalled();
+    expect(await previewHoursChangeAction()).toEqual({ ok: true, preview: { kind: 'confirm', weeks: ['2026-10-12'], plannedWeek: null } });
+    expect(previewHoursChange).toHaveBeenCalledWith('athlete_1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(applyHoursChange).not.toHaveBeenCalled();
   });
 
   it('refuses an anonymous caller', async () => {
     getSession.mockResolvedValue(null);
     expect(await previewHoursChangeAction()).toEqual({ ok: false, reason: 'not-authenticated' });
-    expect(previewRefill).not.toHaveBeenCalled();
+    expect(previewHoursChange).not.toHaveBeenCalled();
   });
 });

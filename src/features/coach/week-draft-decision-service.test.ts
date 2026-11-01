@@ -16,7 +16,10 @@ vi.mock('@/features/availability/availability-repository', () => ({ getUnavailab
 vi.mock('@/features/session/session-repository', () => ({ replaceCoachPlanForDateRange }));
 vi.mock('./plan-proposal-repository', () => ({ recordProposal }));
 vi.mock('./conversation-repository', () => ({ getLatestOpenConversation, createConversation, getMessages }));
-vi.mock('./week-draft-repository', () => ({ getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed }));
+const isKeptWeekStale = vi.fn();
+const refillWeeksFromHours = vi.fn();
+vi.mock('./week-draft-repository', () => ({ getCalendarProposalState, recordWeekDraftDecision, recordWeekDraftDiscussed, isKeptWeekStale }));
+vi.mock('./block-fill-service', () => ({ refillWeeksFromHours }));
 
 const { acceptWeekDraft, declineWeekDraft, discussWeekDraft, pastDaysOf } = await import('./week-draft-decision-service');
 
@@ -170,6 +173,21 @@ describe('pastDaysOf', () => {
 });
 
 describe('declineWeekDraft', () => {
+  it('a draft kept through an hours change redraws its week from the new hours once declined (showable-version/61)', async () => {
+    isKeptWeekStale.mockResolvedValue(true);
+    expect(await declineWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: true });
+    expect(isKeptWeekStale).toHaveBeenCalledWith('athlete_1', WEEK);
+    expect(refillWeeksFromHours).toHaveBeenCalledWith('athlete_1', '2026-09-18', { only: WEEK });
+    // Read before the decline is recorded: the decline is what clears the marker.
+    expect(isKeptWeekStale.mock.invocationCallOrder[0]).toBeLessThan(recordWeekDraftDecision.mock.invocationCallOrder[0]);
+  });
+
+  it('any other decline redraws nothing', async () => {
+    isKeptWeekStale.mockResolvedValue(false);
+    await declineWeekDraft(ATHLETE, 'd1', '2026-09-18');
+    expect(refillWeeksFromHours).not.toHaveBeenCalled();
+  });
+
   it('records the decline for the week and writes nothing to the calendar', async () => {
     expect(await declineWeekDraft(ATHLETE, 'd1', '2026-09-18')).toEqual({ ok: true });
     expect(recordWeekDraftDecision).toHaveBeenCalledWith({

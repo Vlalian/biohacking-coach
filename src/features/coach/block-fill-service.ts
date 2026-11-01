@@ -203,6 +203,19 @@ export type RefillResult = {
 };
 
 /**
+ * Which of the redrawable weeks an hours change touches (showable-version/61):
+ * all of them, every one but the week whose waiting draft the athlete kept
+ * (`except`), or that one week alone once its kept draft is declined (`only`).
+ * Either way only weeks `weeksToRefill` already allows — never the current one.
+ */
+export type RefillScope = { only: string } | { except: string };
+
+const inScope =
+  (scope: RefillScope | undefined) =>
+  (week: string): boolean =>
+    scope === undefined || ('only' in scope ? week === scope.only : week !== scope.except);
+
+/**
  * Redraws the weeks the structure still owns from the athlete's current hours.
  *
  * `ensureBlockFilled` fills a week once and never again, so without this an
@@ -216,9 +229,9 @@ export type RefillResult = {
  * Never throws, for the same reason the fill does not: the caller is a
  * Settings save the athlete is waiting on, and the hours are already stored.
  */
-export async function refillWeeksFromHours(athleteId: string, today: string): Promise<RefillResult> {
+export async function refillWeeksFromHours(athleteId: string, today: string, scope?: RefillScope): Promise<RefillResult> {
   try {
-    return await refill(athleteId, today);
+    return await refill(athleteId, today, scope);
   } catch (error) {
     logCoachFailure({ surface: 'block_fill', athleteId, conversationId: null, error });
     return { outcome: 'failed', weeks: [] };
@@ -234,7 +247,7 @@ export async function previewRefill(athleteId: string, today: string): Promise<s
   return weeksOf(redrawDue(resolved.blocks, weeksToRefill({ today, sessions })));
 }
 
-async function refill(athleteId: string, today: string): Promise<RefillResult> {
+async function refill(athleteId: string, today: string, scope: RefillScope | undefined): Promise<RefillResult> {
   const [athlete, resolved, sessions] = await Promise.all([
     getAthleteById(athleteId),
     getResolvedBlocks(athleteId, today),
@@ -243,7 +256,7 @@ async function refill(athleteId: string, today: string): Promise<RefillResult> {
   const facts = drawFacts(athlete, resolved, today);
   if (typeof facts === 'string') return { outcome: facts, weeks: [] };
 
-  const due = redrawDue(facts.blocks, weeksToRefill({ today, sessions }));
+  const due = redrawDue(facts.blocks, weeksToRefill({ today, sessions }).filter(inScope(scope)));
   if (due.length === 0) return { outcome: 'nothing-due', weeks: [] };
 
   const ctx = await drawContext({ athleteId, today, ...facts });

@@ -8,10 +8,12 @@ import { declineReasonOf, wholeWeekWindow } from './week-draft';
 import { chosenFirstDay } from '@/features/onboarding/onboarding-flow';
 import {
   getCalendarProposalState,
+  isKeptWeekStale,
   recordWeekDraftDecision,
   recordWeekDraftDiscussed,
   type CalendarProposalState,
 } from './week-draft-repository';
+import { refillWeeksFromHours } from './block-fill-service';
 
 /**
  * The athlete decides on the week the Coach drafted (`training-architecture/18`):
@@ -107,6 +109,8 @@ export async function declineWeekDraft(
 ): Promise<DeclineResult> {
   const draft = await visibleDraft(athlete, draftId, today);
   if (!draft) return { ok: false, reason: 'not-found' };
+  // Read before the decline is recorded, because the decline is what clears it.
+  const stale = await isKeptWeekStale(athlete.id, draft.weekStart);
   await recordWeekDraftDecision({
     athleteId: athlete.id,
     type: 'week_plan_declined',
@@ -115,6 +119,10 @@ export async function declineWeekDraft(
     sessions: [],
     reason: declineReasonOf(reason),
   });
+  // A draft kept through an hours change was drawn from the old hours. Declining
+  // it moves its week to the new ones before the athlete asks for another draft
+  // (showable-version/61). The refill never throws, so the decline stands either way.
+  if (stale) await refillWeeksFromHours(athlete.id, today, { only: draft.weekStart });
   return { ok: true };
 }
 
