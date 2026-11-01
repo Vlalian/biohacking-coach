@@ -5,7 +5,7 @@ import { after } from 'next/server';
 import { resolveAthlete, resolveAthleteId, type AuthFailure } from './current-actor';
 import { proposeDetectedUpload, type ImportResult, type ImportFailure } from '@/features/garmin/garmin-import';
 import { latestHistoryImport, removeImportedHistory, startHistoryImport } from '@/features/garmin/history-import-service';
-import { IMPORT_TIME_BUDGET_MS, runHistoryImport, timeBudget } from '@/features/garmin/history-import-worker';
+import { FIRST_RUN_BUDGET_MS, runHistoryImport, timeBudget } from '@/features/garmin/history-import-worker';
 import { blobSize, blobWorkerDeps, deleteBlob, fetchBlob } from '@/features/garmin/blob-store';
 import {
   blobPrefix,
@@ -175,8 +175,8 @@ export type StartHistoryImportResult = { ok: true } | { ok: false; reason: 'empt
  *
  * Every URL must be one of the athlete's own history uploads. Then the lock is
  * taken and the import opened, and reading starts in the background after the
- * response: as many 25-file steps as fit in the time budget, the rest left to
- * the cron. The athlete can leave; the screen polls
+ * response: as many 25-file steps as fit in the first run's budget, the rest
+ * chained to the cron route's longer runs. The athlete can leave; the screen polls
  * {@link historyImportStatusAction} for progress.
  */
 export async function startHistoryImportAction(blobUrls: readonly string[]): Promise<StartHistoryImportResult> {
@@ -191,7 +191,7 @@ export async function startHistoryImportAction(blobUrls: readonly string[]): Pro
   const started = await startHistoryImport(athleteId, blobUrls);
   if (!started.ok) return started;
 
-  after(() => runHistoryImport(started.importId, blobWorkerDeps, timeBudget(IMPORT_TIME_BUDGET_MS)));
+  after(() => runHistoryImport(started.importId, blobWorkerDeps, timeBudget(FIRST_RUN_BUDGET_MS)));
   revalidatePath('/', 'layout');
   return { ok: true };
 }

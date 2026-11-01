@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { buildFitFile, buildGpxFile } from './fit-fixture';
-import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_DETECTION_UPLOAD_BYTES, maxUploadBytes, MAX_ACTIVITY_BYTES, MAX_UPLOAD_INFLATED_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
+import { uploadPolicy, MAX_UPLOAD_BYTES, MAX_DETECTION_UPLOAD_BYTES, maxUploadBytes, MAX_ACTIVITY_BYTES, MAX_UPLOAD_INFLATED_BYTES, withinWindow, HISTORY_WINDOW_WEEKS, acceptsPathname, isOwnBlobUrl, expandUpload, advanceImport, advanceUnpack, extractedPathname, nextZip, importRunning, importSummary, isDailyFullPass, IMPORT_CHUNK_FILES, blobPrefix, uploadState, contentTypeFor, uploadKindOf, TOKEN_VALID_MS } from './blob-upload';
 
 /**
  * `garmin-integration/04` — the pure half of the Blob upload: who may upload
@@ -370,15 +370,25 @@ describe('advanceUnpack', () => {
     });
   });
 
-  it('counts a zip that is gone as one failed file and drops it', () => {
+  it('counts a zip that is gone as one failed file, drops it, and with nothing left to read is done', () => {
     expect(advanceUnpack({ ...START, blobUrls: ['z1.zip'] }, 'z1.zip', { extracted: [], failed: 1, complete: true })).toMatchObject({
       blobUrls: [],
       total: 1,
       done: 1,
       failed: 1,
-      status: 'importing',
+      status: 'done',
       finishedZip: 'z1.zip',
     });
+  });
+});
+
+describe('isDailyFullPass', () => {
+  it('is the run that starts 03:00–03:04 UTC, and no other', () => {
+    expect(isDailyFullPass(new Date('2026-11-02T03:00:00Z'))).toBe(true);
+    expect(isDailyFullPass(new Date('2026-11-02T03:04:59Z'))).toBe(true);
+    expect(isDailyFullPass(new Date('2026-11-02T03:05:00Z'))).toBe(false);
+    expect(isDailyFullPass(new Date('2026-11-02T02:59:59Z'))).toBe(false);
+    expect(isDailyFullPass(new Date('2026-11-02T15:02:00Z'))).toBe(false);
   });
 });
 

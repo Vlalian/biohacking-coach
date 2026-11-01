@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 // driver opens no connection until a query runs, so a fake URL is enough here.
 vi.stubEnv('DATABASE_URL', 'postgresql://test:test@localhost/test');
 
-const { auth, resolveBaseURL, resolveTrustedOrigins } = await import('./auth');
+const { auth, resolveTrustedOrigins } = await import('./auth');
+const { resolveBaseURL } = await import('./deploy-origin');
 
 describe('auth plugins', () => {
   const pluginIds = (auth.options.plugins ?? []).map((p) => p.id);
