@@ -278,12 +278,16 @@ export async function pauseLinkForAthlete(athleteId: string): Promise<void> {
     .where(and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'active')));
 }
 
-/** Whether the athlete has a paused link — what keeps the coach consent on Privacy & consent to grant again. */
-export async function hasPausedLink(athleteId: string): Promise<boolean> {
+/**
+ * Whether the athlete has an active or a paused link — what keeps the coach
+ * consent on Privacy & consent whatever its state: to withdraw it, to grant it
+ * again after a pause, or to renew it after the disclosure changed.
+ */
+export async function hasLiveLink(athleteId: string): Promise<boolean> {
   const rows = await getDb()
     .select()
     .from(coachingLink)
-    .where(and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'paused')))
+    .where(and(eq(coachingLink.athleteId, athleteId), inArray(coachingLink.status, ['active', 'paused'])))
     .limit(1);
   return rows.length > 0;
 }

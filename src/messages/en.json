@@ -877,6 +877,10 @@
     "weeksToRace": "{weeks, plural, =1 {week} other {weeks}} to {race}"
   },
   "CoachLinkRequest": {
+    "reconsentTitle": "{coach} still follows your training",
+    "reconsentIntro": "We have changed the wording of what you agreed to. Read it below and choose whether your coach keeps seeing your data. If you stop, your coach sees nothing until you agree again.",
+    "reconsentKeep": "Keep sharing",
+    "reconsentStop": "Stop sharing",
     "title": "{coach} wants to follow your training",
     "intro": "Your coach sees nothing until you say yes. You can change what they see, or pause it, at any time under Privacy & consent.",
     "accept": "Agree and connect",

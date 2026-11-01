@@ -9,7 +9,8 @@ import { redirect } from '@/i18n/navigation';
 import { routing } from '@/i18n/routing';
 import { timed } from '@/lib/render-timing';
 import { getCurrentAthlete, getCurrentSession } from './current-user';
-import { getPendingLinkForAthlete, holdsActiveCoachingLinks, type PendingLinkRequest } from '@/features/coach/coach-repository';
+import { holdsActiveCoachingLinks } from '@/features/coach/coach-repository';
+import { getLinkRequestForAthlete, type LinkRequest } from '@/features/coach/link-request';
 import { getOpenConversations } from '@/features/coach/conversation-repository';
 import { selectOpenConversations } from '@/features/coach/conversation';
 import { getCheckInForWeek } from '@/features/coach/check-in-repository';
@@ -224,14 +225,15 @@ export default async function AppShellLayout({
     }
   }
 
-  // A pending Coaching Link waits for the athlete's yes (training-architecture/14):
-  // read on the render path for the same reason as the chores — a request that
-  // arrives a page late is no request. One query, zero rows the common case;
-  // a failed read costs the athlete the dialog on this open, never the shell.
-  let linkRequest: PendingLinkRequest | undefined;
+  // A Coaching Link that waits for the athlete's yes — a pending one, or an
+  // active one whose consent went stale with a disclosure change
+  // (training-architecture/14): read on the render path for the same reason as
+  // the chores, since a request that arrives a page late is no request. A
+  // failed read costs the athlete the dialog on this open, never the shell.
+  let linkRequest: LinkRequest | undefined;
   if (athlete) {
     try {
-      linkRequest = await getPendingLinkForAthlete(athlete.id);
+      linkRequest = await getLinkRequestForAthlete(athlete.id);
     } catch {
       console.error('coach link request read failed', athlete.id);
     }

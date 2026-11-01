@@ -31,7 +31,7 @@ const {
   declinePendingLink,
   pauseLinkForAthlete,
   resumeLinkForAthlete,
-  hasPausedLink,
+  hasLiveLink,
 } = await import('./coach-repository');
 
 beforeAll(async () => {
@@ -524,14 +524,18 @@ describe('severLinkForAthlete — every live state (training-architecture/14)', 
   });
 });
 
-describe('hasPausedLink', () => {
-  it('is true only while the athlete has a paused link', async () => {
+describe('hasLiveLink', () => {
+  it('is true while the athlete has an active or a paused link, and not for a pending or severed one', async () => {
     const athleteId = await seedAthlete(testDb.db, 'a');
     const coachId = await aCoach('lars');
-    expect(await hasPausedLink(athleteId)).toBe(false);
-    await aLink(coachId, athleteId);
-    expect(await hasPausedLink(athleteId)).toBe(false);
+    expect(await hasLiveLink(athleteId)).toBe(false);
+    await aLink(coachId, athleteId, { status: 'pending' });
+    expect(await hasLiveLink(athleteId)).toBe(false);
+    await testDb.db.update(coachingLink).set({ status: 'active' });
+    expect(await hasLiveLink(athleteId)).toBe(true);
     await pauseLinkForAthlete(athleteId);
-    expect(await hasPausedLink(athleteId)).toBe(true);
+    expect(await hasLiveLink(athleteId)).toBe(true);
+    await severLinkForAthlete(athleteId);
+    expect(await hasLiveLink(athleteId)).toBe(false);
   });
 });

@@ -7,7 +7,7 @@ import { routing } from '@/i18n/routing';
 import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { getActiveConsents } from '@/features/consent/consent-repository';
 import { currentlyConsentedPurposes } from '@/features/consent/consent';
-import { hasPausedLink } from '@/features/coach/coach-repository';
+import { hasLiveLink } from '@/features/coach/coach-repository';
 import type { ConsentPurpose } from '@/features/consent/disclosure';
 import { ConsentScreen } from '../../consent';
 
@@ -44,9 +44,11 @@ export default async function PrivacyPage({
   const granted = athlete
     ? currentlyConsentedPurposes(await getActiveConsents(athlete.id))
     : [];
-  // A paused Coaching Link waits on the coach consent: offer it here so granting
-  // it again resumes the link (training-architecture/14).
-  const offered: ConsentPurpose[] = athlete && (await hasPausedLink(athlete.id)) ? ['head_coach_visibility'] : [];
+  // While a Coaching Link is active or paused, the coach consent is offered here
+  // whatever its state (training-architecture/14): granting it again resumes a
+  // paused link or renews one the disclosure change left stale, and
+  // withdrawing it pauses the link.
+  const offered: ConsentPurpose[] = athlete && (await hasLiveLink(athlete.id)) ? ['head_coach_visibility'] : [];
 
   const t = await getTranslations('Privacy');
 

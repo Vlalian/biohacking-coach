@@ -877,6 +877,10 @@
     "weeksToRace": "{weeks, plural, =1 {uge} other {uger}} til {race}"
   },
   "CoachLinkRequest": {
+    "reconsentTitle": "{coach} følger stadig din træning",
+    "reconsentIntro": "Vi har ændret ordlyden af det, du har sagt ja til. Læs den nedenfor, og vælg, om din træner fortsat må se dine data. Stopper du, ser din træner intet, før du siger ja igen.",
+    "reconsentKeep": "Fortsæt deling",
+    "reconsentStop": "Stop deling",
     "title": "{coach} vil gerne følge din træning",
     "intro": "Din træner ser intet, før du siger ja. Du kan når som helst ændre, hvad vedkommende ser, eller sætte det på pause under Privatliv & samtykke.",
     "accept": "Accepter og forbind",
