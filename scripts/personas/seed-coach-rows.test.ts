@@ -102,8 +102,8 @@ describe('linkAthletes', () => {
   it('links each athlete once, to the coach it was given', async () => {
     await linkAthletes('coach-1', ['ath-a', 'ath-b']);
     expect(inserted).toEqual([
-      { table: coachingLink, row: { coachId: 'coach-1', athleteId: 'ath-a' } },
-      { table: coachingLink, row: { coachId: 'coach-1', athleteId: 'ath-b' } },
+      { table: coachingLink, row: { coachId: 'coach-1', athleteId: 'ath-a', status: 'active' } },
+      { table: coachingLink, row: { coachId: 'coach-1', athleteId: 'ath-b', status: 'active' } },
     ]);
   });
 

@@ -665,6 +665,8 @@
     "thumbUp": "This helped",
     "thumbDown": "This was off",
     "thumbComment": "Anything you want to add? (optional)",
+    "thumbConsentRequired": "Ratings are only saved if you allow it under “Help improve the product”.",
+    "thumbConsentRequiredLink": "Open Privacy & consent",
     "thumbSave": "Save"
   },
   "WeeklySession": {
@@ -855,6 +857,8 @@
     }
   },
   "Feedback": {
+    "consentRequired": "Feedback is only saved if you allow it under “Help improve the product”.",
+    "consentAllowAndSend": "Allow and send",
     "title": "Give feedback",
     "intro": "Something broke, annoyed you or worked well? Tell us here. Someone on the team reads every note, and Momentum never sees it.",
     "guidanceWhat": "What happened.",
@@ -871,6 +875,17 @@
     "openHorizon": "Default six-month arc · no race picked yet",
     "weekOf": "week {week} of {weeks}",
     "weeksToRace": "{weeks, plural, =1 {week} other {weeks}} to {race}"
+  },
+  "CoachLinkRequest": {
+    "reconsentTitle": "{coach} still follows your training",
+    "reconsentIntro": "We have changed the wording of what you agreed to. Read it below and choose whether your coach keeps seeing your data. If you stop, your coach sees nothing until you agree again.",
+    "reconsentKeep": "Keep sharing",
+    "reconsentStop": "Stop sharing",
+    "title": "{coach} wants to follow your training",
+    "intro": "Your coach sees nothing until you say yes. You can change what they see, or pause it, at any time under Privacy & consent.",
+    "accept": "Agree and connect",
+    "decline": "Decline",
+    "error": "That didn't work. Please try again."
   },
   "CoachChores": {
     "kicker": "Waiting for you",
@@ -988,6 +1003,8 @@
     "error": "That didn't work ({reason})."
   },
   "HealthDrawer": {
+    "consentAgreeAndDeclare": "Agree and report",
+    "consentNotNow": "Not now",
     "title": "How's your body?",
     "coachTitle": "The athlete's body",
     "close": "Close",

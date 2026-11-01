@@ -7,8 +7,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * that matter are the refusals: another athlete's message, an athlete's own
  * turn, and a rating that is not one of the two.
  */
-const { resolveAthleteId, flaggableCoachMessage, rateMessage, clearMessageRating } = vi.hoisted(
+const { resolveAthleteId, flaggableCoachMessage, rateMessage, clearMessageRating, hasConsent } = vi.hoisted(
   () => ({
+    hasConsent: vi.fn(),
     resolveAthleteId: vi.fn(),
     flaggableCoachMessage: vi.fn(),
     rateMessage: vi.fn((_input: { comment: string | null }) => Promise.resolve()),
@@ -17,6 +18,7 @@ const { resolveAthleteId, flaggableCoachMessage, rateMessage, clearMessageRating
 );
 
 vi.mock('./current-actor', () => ({ resolveAthleteId }));
+vi.mock('@/features/consent/consent-gate', () => ({ hasConsent }));
 vi.mock('@/features/feedback/message-feedback-repository', () => ({
   flaggableCoachMessage,
   rateMessage,
@@ -34,6 +36,24 @@ beforeEach(() => {
   flaggableCoachMessage.mockReset().mockResolvedValue(true);
   rateMessage.mockClear();
   clearMessageRating.mockClear();
+  hasConsent.mockReset().mockResolvedValue(true);
+});
+
+describe('the product-improvement consent (garmin-connect-api/08)', () => {
+  it('refuses a rating without the consent and writes nothing', async () => {
+    hasConsent.mockResolvedValue(false);
+
+    expect(await rateMessageAction({ messageId: 'm1', rating: 'up' })).toEqual({ ok: false, reason: 'consent-required' });
+    expect(rateMessage).not.toHaveBeenCalled();
+    expect(hasConsent).toHaveBeenCalledWith(OWNER, 'product_improvement');
+  });
+
+  it('still lets the athlete clear a rating without it: clearing deletes their own data', async () => {
+    hasConsent.mockResolvedValue(false);
+
+    expect(await clearMessageRatingAction({ messageId: 'm1' })).toEqual({ ok: true });
+    expect(clearMessageRating).toHaveBeenCalledOnce();
+  });
 });
 
 describe('rateMessageAction', () => {

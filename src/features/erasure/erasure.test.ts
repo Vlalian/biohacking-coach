@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DISCLOSURE_VERSION } from '@/features/consent/disclosure';
-import { erasurePlan, toErasureLogEntry } from './erasure';
+import { erasureLogCutoff, erasurePlan, toErasureLogEntry } from './erasure';
 
 describe('erasurePlan', () => {
   it('deletes the athlete row before the user row', () => {
@@ -94,5 +94,23 @@ describe('toErasureLogEntry', () => {
       'consentedPurposes',
       'disclosureVersion',
     ]);
+  });
+});
+
+describe('erasureLogCutoff', () => {
+  it('keeps an erasure record three years, to the day', () => {
+    expect(erasureLogCutoff(new Date('2029-11-02T03:17:00Z'))).toEqual(new Date('2026-11-02T03:17:00Z'));
+  });
+
+  it('on a leap day, stops at the 28th of February three years before — never the 1st of March (CodeRabbit, PR #130)', () => {
+    // A record erased on 1 March 2025 is three years old only on 1 March 2028.
+    // Rolling 29 February into 1 March would delete it a day early.
+    expect(erasureLogCutoff(new Date('2028-02-29T03:17:00Z'))).toEqual(new Date('2025-02-28T03:17:00Z'));
+    expect(new Date('2025-03-01T01:00:00Z') < erasureLogCutoff(new Date('2028-02-29T03:17:00Z'))).toBe(false);
+  });
+
+  it('keeps every other date’s day of the month', () => {
+    expect(erasureLogCutoff(new Date('2028-03-01T00:00:00Z'))).toEqual(new Date('2025-03-01T00:00:00Z'));
+    expect(erasureLogCutoff(new Date('2027-12-31T23:59:59Z'))).toEqual(new Date('2024-12-31T23:59:59Z'));
   });
 });

@@ -7,6 +7,8 @@ import da from '@/messages/da.json';
 // The form posts through a server action, whose import chain ends at the
 // database. No first render calls it.
 vi.mock('./feedback-actions', () => ({ submitFeedbackAction: vi.fn() }));
+// The consent prompt (garmin-connect-api/08) grants through a server action.
+vi.mock('./consent-actions', () => ({ grantConsentsAction: vi.fn() }));
 
 const { FeedbackForm } = await import('./feedback-form');
 

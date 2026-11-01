@@ -16,7 +16,7 @@ import type { UiMessage } from './ui-message';
  *
  * `t` is passed in rather than resolved here because the two callers read from
  * different namespaces — `CoachChat` and `WeeklySession` — which each carry
- * their own copy of these five keys. Taking the function keeps this component
+ * their own copy of these seven keys. Taking the function keeps this component
  * out of that decision.
  *
  * The thumbs are for `coach_ai` only. A Head Coach turn is a person speaking,
@@ -41,6 +41,8 @@ export function CoachMessageFooter({
             down: t('thumbDown'),
             commentPlaceholder: t('thumbComment'),
             save: t('thumbSave'),
+            consentRequired: t('thumbConsentRequired'),
+            consentRequiredLink: t('thumbConsentRequiredLink'),
           }}
         />
       )}

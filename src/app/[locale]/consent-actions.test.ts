@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { resolveAthleteId, grantConsent, withdrawConsent, revalidatePath } = vi.hoisted(
+const { resolveAthleteId, grantConsent, withdrawConsent, revalidatePath, pauseLinkForAthlete, resumeLinkForAthlete } = vi.hoisted(
   () => ({
+    pauseLinkForAthlete: vi.fn(),
+    resumeLinkForAthlete: vi.fn(),
     resolveAthleteId: vi.fn(),
     grantConsent: vi.fn(),
     withdrawConsent: vi.fn(),
@@ -12,6 +14,7 @@ const { resolveAthleteId, grantConsent, withdrawConsent, revalidatePath } = vi.h
 vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('./current-actor', () => ({ resolveAthleteId }));
 vi.mock('@/features/consent/consent-repository', () => ({ grantConsent, withdrawConsent }));
+vi.mock('@/features/coach/coach-repository', () => ({ pauseLinkForAthlete, resumeLinkForAthlete }));
 
 const { grantConsentsAction, withdrawConsentAction } = await import('./consent-actions');
 
@@ -29,6 +32,41 @@ beforeEach(() => {
   grantConsent.mockReset();
   withdrawConsent.mockReset();
   revalidatePath.mockClear();
+  pauseLinkForAthlete.mockReset();
+  resumeLinkForAthlete.mockReset();
+});
+
+describe('the Head-Coach-visibility consent and the link (training-architecture/14)', () => {
+  it('withdrawing it pauses the link; granting it again resumes it', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+
+    await withdrawConsentAction('head_coach_visibility');
+    expect(pauseLinkForAthlete).toHaveBeenCalledWith(ATHLETE);
+    // Pause first: if the withdrawal then fails, the coach already sees nothing
+    // and the athlete can retry it (CodeRabbit, PR #130).
+    expect(pauseLinkForAthlete.mock.invocationCallOrder[0]).toBeLessThan(withdrawConsent.mock.invocationCallOrder[0]);
+
+    await grantConsentsAction(['head_coach_visibility']);
+    expect(resumeLinkForAthlete).toHaveBeenCalledWith(ATHLETE);
+  });
+
+  it('a withdrawal that fails after the pause leaves the link paused, not active', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+    withdrawConsent.mockRejectedValue(new Error('db down'));
+
+    await expect(withdrawConsentAction('head_coach_visibility')).rejects.toThrow('db down');
+    expect(pauseLinkForAthlete).toHaveBeenCalledWith(ATHLETE);
+  });
+
+  it('any other consent leaves the link alone', async () => {
+    resolveAthleteId.mockResolvedValue(ATHLETE);
+
+    await withdrawConsentAction('product_improvement');
+    await grantConsentsAction([REAL, 'health_data']);
+
+    expect(pauseLinkForAthlete).not.toHaveBeenCalled();
+    expect(resumeLinkForAthlete).not.toHaveBeenCalled();
+  });
 });
 
 describe('grantConsentsAction', () => {

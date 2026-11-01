@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useTransition, type FormEvent } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Check } from 'lucide-react';
 import { FEEDBACK_MAX_LENGTH } from '@/features/feedback/feedback';
+import { disclosureCopy } from '@/features/consent/disclosure';
 import { submitFeedbackAction } from './feedback-actions';
+import { grantConsentsAction } from './consent-actions';
 
 /**
  * The feedback page (`showable-version/58`): one way to give feedback, and it is
@@ -24,14 +26,23 @@ export function FeedbackForm({
   openedFrom: string | null;
 }) {
   const t = useTranslations('Feedback');
+  const locale = useLocale();
   const [pending, startTransition] = useTransition();
   const [body, setBody] = useState('');
-  const [state, setState] = useState<'idle' | 'sent' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'sent' | 'error' | 'consent'>('idle');
 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!body.trim() || pending) return;
+    send();
+  }
 
+  /**
+   * Sends the draft, granting the product-improvement consent first when asked
+   * to (garmin-connect-api/08). Granted here rather than on Privacy & consent so
+   * the draft is never lost on the way (CodeRabbit, PR #130).
+   */
+  function send(grantFirst = false) {
     // A new send clears the last one's "Sent" or error (CodeRabbit, PR #120).
     setState('idle');
     startTransition(async () => {
@@ -40,8 +51,9 @@ export function FeedbackForm({
       // replaces this form and the text in it with a retry screen. The tester
       // keeps their text and gets the notice instead, as `coach-thread.tsx` does.
       try {
+        if (grantFirst && !(await grantConsentsAction(['product_improvement'])).ok) return setState('error');
         const result = await submitFeedbackAction({ body, view: openedFrom });
-        setState(result.ok ? 'sent' : 'error');
+        setState(result.ok ? 'sent' : result.reason === 'consent-required' ? 'consent' : 'error');
         if (result.ok) setBody('');
       } catch {
         setState('error');
@@ -98,12 +110,50 @@ export function FeedbackForm({
                 ].join(' ')}
               >
                 {state === 'sent' && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
-                {state === 'sent' ? t('sent') : t('error')}
+                {state === 'sent' ? (
+                  t('sent')
+                ) : state === 'consent' ? (
+                  t('consentRequired')
+                ) : (
+                  t('error')
+                )}
               </span>
             )}
           </div>
+          {state === 'consent' && (
+            <ProductImprovementConsent locale={locale} pending={pending} label={t('consentAllowAndSend')} onAllow={() => send(true)} />
+          )}
         </form>
       </section>
     </div>
+  );
+}
+
+/** The "Help improve the product" consent, in the disclosure's own words, offered where the feedback waits. */
+function ProductImprovementConsent({
+  locale,
+  pending,
+  label,
+  onAllow,
+}: {
+  locale: string;
+  pending: boolean;
+  label: string;
+  onAllow: () => void;
+}) {
+  const copy = disclosureCopy(locale).purposes.product_improvement;
+  return (
+    <section className="border border-border p-4">
+      <h3 className="font-body text-base font-semibold text-foreground">{copy.title}</h3>
+      <p className="mt-1 font-body text-sm text-muted-foreground">{copy.body}</p>
+      <button
+        type="button"
+        onClick={onAllow}
+        disabled={pending}
+        className="mt-3 inline-flex h-10 items-center bg-foreground px-4 font-body text-sm font-semibold text-background disabled:opacity-35"
+      >
+        {label}
+      </button>
+    </section>
   );
 }

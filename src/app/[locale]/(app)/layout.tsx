@@ -10,6 +10,7 @@ import { routing } from '@/i18n/routing';
 import { timed } from '@/lib/render-timing';
 import { getCurrentAthlete, getCurrentSession } from './current-user';
 import { holdsActiveCoachingLinks } from '@/features/coach/coach-repository';
+import { getLinkRequestForAthlete, type LinkRequest } from '@/features/coach/link-request';
 import { getOpenConversations } from '@/features/coach/conversation-repository';
 import { selectOpenConversations } from '@/features/coach/conversation';
 import { getCheckInForWeek } from '@/features/coach/check-in-repository';
@@ -18,6 +19,7 @@ import { getCoachChores } from '@/features/coach/coach-chores-service';
 import type { CoachChore } from '@/features/coach/coach-chores';
 import { logCoachChoresFailure, logCoachFailure, logNarrationFailure, logWeekDraftFailure } from '@/lib/coach-log';
 import { CoachChoresDialog } from './coach-chores-dialog';
+import { CoachLinkRequestDialog } from './coach-link-request-dialog';
 import { ensureRosterDrafted, ensureWeekDrafted } from '@/features/coach/week-draft-service';
 import { ensureBlockFilled } from '@/features/coach/block-fill-service';
 import type { CheckInOfferInput } from '@/features/coach/weekly-offer';
@@ -223,6 +225,20 @@ export default async function AppShellLayout({
     }
   }
 
+  // A Coaching Link that waits for the athlete's yes — a pending one, or an
+  // active one whose consent went stale with a disclosure change
+  // (training-architecture/14): read on the render path for the same reason as
+  // the chores, since a request that arrives a page late is no request. A
+  // failed read costs the athlete the dialog on this open, never the shell.
+  let linkRequest: LinkRequest | undefined;
+  if (athlete) {
+    try {
+      linkRequest = await getLinkRequestForAthlete(athlete.id);
+    } catch {
+      console.error('coach link request read failed', athlete.id);
+    }
+  }
+
   // The same trigger for a Head Coach's own open, one draft per athlete on
   // their Roster (`/17`): the coach sees the draft a day before the athlete,
   // and on that day the athlete has no reason to open the app — so the coach's
@@ -256,6 +272,7 @@ export default async function AppShellLayout({
       }
     >
       {chores.length > 0 ? <CoachChoresDialog chores={chores} /> : null}
+      {linkRequest ? <CoachLinkRequestDialog request={linkRequest} /> : null}
       {children}
     </ShellChrome>
   );

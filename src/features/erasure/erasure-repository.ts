@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { athlete, coach, erasureLog } from '@/db/schema';
 import { user } from '@/db/auth-schema';
@@ -76,4 +76,14 @@ export async function eraseAccount(subject: ErasureSubject): Promise<void> {
         break;
     }
   }
+}
+
+/**
+ * Deletes every erasure record erased before `cutoff`, and says how many went
+ * (`garmin-connect-api/09`). The daily cron passes `erasureLogCutoff(now)`:
+ * three years, as the Privacy Policy promises.
+ */
+export async function deleteErasureLogsBefore(cutoff: Date): Promise<number> {
+  const deleted = await getDb().delete(erasureLog).where(lt(erasureLog.erasedAt, cutoff)).returning({ id: erasureLog.id });
+  return deleted.length;
 }

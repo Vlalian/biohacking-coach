@@ -7,6 +7,7 @@ import {
   withdrawConsent,
 } from '@/features/consent/consent-repository';
 import { isConsentPurpose } from '@/features/consent/disclosure';
+import { pauseLinkForAthlete, resumeLinkForAthlete } from '@/features/coach/coach-repository';
 
 /**
  * Server actions for consent. The acting athlete is resolved from the
@@ -18,6 +19,12 @@ import { isConsentPurpose } from '@/features/consent/disclosure';
  * On success the layout is revalidated: granting the last required purpose lifts
  * the consent gate on the next render, and withdrawing a required purpose drops
  * it back into place.
+ *
+ * The `head_coach_visibility` consent also moves the athlete's Coaching Link
+ * (training-architecture/14, Mads 2026-10-31): withdrawing it **pauses** the
+ * link, so the coach sees nothing from that moment, history included; granting
+ * it again resumes a paused link. A pending link is accepted through its own
+ * request, not here (`coaching-link-actions.ts`).
  */
 
 export type ConsentActionResult =
@@ -45,6 +52,7 @@ export async function grantConsentsAction(
     // Stryker disable next-line ConditionalExpression — equivalent: every purpose already passed the whole-set check above; this repeats it only to narrow `string` for the repository's type
     if (isConsentPurpose(purpose)) await grantConsent(athleteId, purpose);
   }
+  if (purposes.includes('head_coach_visibility')) await resumeLinkForAthlete(athleteId);
 
   revalidatePath('/', 'layout');
   return { ok: true };
@@ -61,6 +69,11 @@ export async function withdrawConsentAction(
   const athleteId = await resolveAthleteId();
   if (!athleteId) return { ok: false, reason: 'not-authenticated' };
 
+  // Pause first, so a failure between the two writes fails closed: the coach
+  // already sees nothing, and the consent is still granted for the athlete to
+  // withdraw again (CodeRabbit, PR #130). Pausing touches only an active link,
+  // so a retry repeats it harmlessly.
+  if (purpose === 'head_coach_visibility') await pauseLinkForAthlete(athleteId);
   await withdrawConsent(athleteId, purpose);
 
   revalidatePath('/', 'layout');

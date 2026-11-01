@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { MessageRating } from '@/db/schema';
+import { Link } from '@/i18n/navigation';
 import { clearMessageRatingAction, rateMessageAction } from './message-feedback-actions';
 
 /**
@@ -28,11 +29,20 @@ export function MessageThumbs({
 }: {
   messageId: string;
   initial: { rating: MessageRating; comment: string | null } | null;
-  labels: { up: string; down: string; commentPlaceholder: string; save: string };
+  labels: {
+    up: string;
+    down: string;
+    commentPlaceholder: string;
+    save: string;
+    consentRequired: string;
+    consentRequiredLink: string;
+  };
 }) {
   const [rating, setRating] = useState<MessageRating | null>(initial?.rating ?? null);
   const [comment, setComment] = useState(initial?.comment ?? '');
   const [pending, startTransition] = useTransition();
+  // A rating needs the product-improvement consent (garmin-connect-api/08).
+  const [needsConsent, setNeedsConsent] = useState(false);
 
   function choose(next: MessageRating) {
     // Tapping the same thumb again clears it: the tester changed their mind
@@ -51,6 +61,7 @@ export function MessageThumbs({
         ? await clearMessageRatingAction({ messageId })
         : await rateMessageAction({ messageId, rating: next, comment });
       if (!result.ok) setRating(previous);
+      setNeedsConsent(!result.ok && result.reason === 'consent-required');
     });
   }
 
@@ -61,6 +72,7 @@ export function MessageThumbs({
       const result = await rateMessageAction({ messageId, rating, comment });
       // Same rule as the thumb: an unsaved comment must not read as saved.
       if (!result.ok) setComment(previous);
+      setNeedsConsent(!result.ok && result.reason === 'consent-required');
     });
   }
 
@@ -84,6 +96,15 @@ export function MessageThumbs({
           <ThumbsDown className="h-3.5 w-3.5" />
         </ThumbButton>
       </div>
+
+      {needsConsent && (
+        <p role="status" className="font-body text-sm text-muted-foreground">
+          {labels.consentRequired}{' '}
+          <Link href="/privacy" className="underline">
+            {labels.consentRequiredLink}
+          </Link>
+        </p>
+      )}
 
       {rating && (
         <div className="flex items-center gap-1.5">
