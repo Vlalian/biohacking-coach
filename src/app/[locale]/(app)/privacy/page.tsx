@@ -7,6 +7,8 @@ import { routing } from '@/i18n/routing';
 import { getCurrentAthlete, getCurrentSession } from '../current-user';
 import { getActiveConsents } from '@/features/consent/consent-repository';
 import { currentlyConsentedPurposes } from '@/features/consent/consent';
+import { hasPausedLink } from '@/features/coach/coach-repository';
+import type { ConsentPurpose } from '@/features/consent/disclosure';
 import { ConsentScreen } from '../../consent';
 
 // Read per-request: the page depends on who is signed in, so it can never be
@@ -42,12 +44,15 @@ export default async function PrivacyPage({
   const granted = athlete
     ? currentlyConsentedPurposes(await getActiveConsents(athlete.id))
     : [];
+  // A paused Coaching Link waits on the coach consent: offer it here so granting
+  // it again resumes the link (training-architecture/14).
+  const offered: ConsentPurpose[] = athlete && (await hasPausedLink(athlete.id)) ? ['head_coach_visibility'] : [];
 
   const t = await getTranslations('Privacy');
 
   return (
     <div className="flex flex-col items-center gap-6 p-8">
-      <ConsentScreen granted={granted} mode="manage" />
+      <ConsentScreen granted={granted} mode="manage" offered={offered} />
 
       {/*
         Export and erasure are *explained* here and *exercised* in Settings

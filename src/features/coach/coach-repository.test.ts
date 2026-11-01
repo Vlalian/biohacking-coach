@@ -26,6 +26,12 @@ const {
   updateCoachInformationViewLayout,
   getSharedTranscripts,
   resolveAthleteName,
+  getPendingLinkForAthlete,
+  activatePendingLink,
+  declinePendingLink,
+  pauseLinkForAthlete,
+  resumeLinkForAthlete,
+  hasPausedLink,
 } = await import('./coach-repository');
 
 beforeAll(async () => {
@@ -49,6 +55,7 @@ async function aSyntheticAthlete(label: string): Promise<string> {
   return row.id;
 }
 
+/** A link, active unless `over` says otherwise: the column defaults to pending (training-architecture/14). */
 async function aLink(
   coachId: string,
   athleteId: string,
@@ -56,7 +63,7 @@ async function aLink(
 ): Promise<string> {
   const [row] = await testDb.db
     .insert(coachingLink)
-    .values({ coachId, athleteId, ...over })
+    .values({ coachId, athleteId, status: 'active', ...over })
     .returning({ id: coachingLink.id });
   return row.id;
 }
@@ -393,5 +400,138 @@ describe('getSharedTranscripts — gated on the link', () => {
     expect(await getSharedTranscripts(undefined)).toBeNull();
     expect(await getSharedTranscripts(link(athleteId, { shareAiTranscripts: false }))).toBeNull();
     expect(await getSharedTranscripts(link(athleteId, { status: 'severed' }))).toBeNull();
+  });
+});
+
+describe('the link states in the database (training-architecture/14)', () => {
+  it('accepts pending and paused, and a new link starts pending', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    const [row] = await testDb.db.insert(coachingLink).values({ coachId, athleteId }).returning({ status: coachingLink.status });
+    expect(row.status).toBe('pending');
+    await testDb.db.update(coachingLink).set({ status: 'paused' });
+  });
+
+  it('holds one live link per pair, whatever its state, while severed history does not count', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    await aLink(coachId, athleteId, { status: 'severed' });
+    await aLink(coachId, athleteId, { status: 'paused' });
+    await expect(aLink(coachId, athleteId, { status: 'pending' })).rejects.toThrow();
+  });
+});
+
+describe('the coach sees nothing through a pending or paused link (training-architecture/14)', () => {
+  it('getActiveLink, the roster and the athlete’s coached state admit only active', async () => {
+    for (const status of ['pending', 'paused'] as const) {
+      await testDb.reset();
+      const a = await seedAthlete(testDb.db, 'a');
+      const c = await aCoach('lars');
+      await aLink(c, a, { status });
+      expect(await getActiveLink(c, a)).toBeUndefined();
+      expect(await getRoster(c)).toEqual([]);
+      expect(await holdsActiveCoachingLinks('user_lars')).toBe(false);
+      expect(await getLinkForAthlete(a)).toBeUndefined();
+    }
+  });
+});
+
+describe('getPendingLinkForAthlete', () => {
+  it('returns the pending link with the coach’s name, preferring the name they chose', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars', { preferredName: 'Lars B' });
+    const id = await aLink(coachId, athleteId, { status: 'pending' });
+
+    expect(await getPendingLinkForAthlete(athleteId)).toEqual({ linkId: id, coachName: 'Lars B' });
+  });
+
+  it('falls back to the account name, and is undefined with no pending link', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    expect(await getPendingLinkForAthlete(athleteId)).toBeUndefined();
+    await aLink(coachId, athleteId, { status: 'active' });
+    expect(await getPendingLinkForAthlete(athleteId)).toBeUndefined();
+    await testDb.db.update(coachingLink).set({ status: 'pending' });
+    expect((await getPendingLinkForAthlete(athleteId))?.coachName).toBe('Coach lars');
+  });
+});
+
+describe('activatePendingLink and declinePendingLink', () => {
+  it('activates only this athlete’s pending link', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const other = await seedAthlete(testDb.db, 'b');
+    const coachId = await aCoach('lars');
+    const mine = await aLink(coachId, athleteId, { status: 'pending' });
+    const theirs = await aLink(coachId, other, { status: 'pending' });
+
+    expect(await activatePendingLink(other, mine)).toBe(false);
+    expect((await linkRow(mine)).status).toBe('pending');
+    expect(await activatePendingLink(athleteId, mine)).toBe(true);
+    expect((await linkRow(mine)).status).toBe('active');
+    expect((await linkRow(theirs)).status).toBe('pending');
+    expect(await activatePendingLink(athleteId, mine)).toBe(false);
+  });
+
+  it('declining severs the pending link and stamps when', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    const id = await aLink(coachId, athleteId, { status: 'pending' });
+
+    expect(await declinePendingLink(athleteId, id)).toBe(true);
+    const row = await linkRow(id);
+    expect(row.status).toBe('severed');
+    expect(row.severedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('pauseLinkForAthlete and resumeLinkForAthlete', () => {
+  it('pause turns the athlete’s active link paused, and resume turns it back', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    const id = await aLink(coachId, athleteId);
+
+    await pauseLinkForAthlete(athleteId);
+    expect((await linkRow(id)).status).toBe('paused');
+    expect((await linkRow(id)).severedAt).toBeNull();
+    await resumeLinkForAthlete(athleteId);
+    expect((await linkRow(id)).status).toBe('active');
+  });
+
+  it('touches neither a pending nor a severed link, nor another athlete’s', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const other = await seedAthlete(testDb.db, 'b');
+    const coachId = await aCoach('lars');
+    const pending = await aLink(coachId, athleteId, { status: 'pending' });
+    const theirs = await aLink(coachId, other);
+
+    await pauseLinkForAthlete(athleteId);
+    await resumeLinkForAthlete(athleteId);
+    expect((await linkRow(pending)).status).toBe('pending');
+    expect((await linkRow(theirs)).status).toBe('active');
+  });
+});
+
+describe('severLinkForAthlete — every live state (training-architecture/14)', () => {
+  it('severs a pending or a paused link too', async () => {
+    for (const status of ['pending', 'paused'] as const) {
+      await testDb.reset();
+      const athleteId = await seedAthlete(testDb.db, 'a');
+      const coachId = await aCoach('lars');
+      const id = await aLink(coachId, athleteId, { status });
+      await severLinkForAthlete(athleteId);
+      expect((await linkRow(id)).status).toBe('severed');
+    }
+  });
+});
+
+describe('hasPausedLink', () => {
+  it('is true only while the athlete has a paused link', async () => {
+    const athleteId = await seedAthlete(testDb.db, 'a');
+    const coachId = await aCoach('lars');
+    expect(await hasPausedLink(athleteId)).toBe(false);
+    await aLink(coachId, athleteId);
+    expect(await hasPausedLink(athleteId)).toBe(false);
+    await pauseLinkForAthlete(athleteId);
+    expect(await hasPausedLink(athleteId)).toBe(true);
   });
 });

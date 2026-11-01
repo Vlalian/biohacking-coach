@@ -876,6 +876,13 @@
     "weekOf": "uge {week} af {weeks}",
     "weeksToRace": "{weeks, plural, =1 {uge} other {uger}} til {race}"
   },
+  "CoachLinkRequest": {
+    "title": "{coach} vil gerne følge din træning",
+    "intro": "Din træner ser intet, før du siger ja. Du kan når som helst ændre, hvad vedkommende ser, eller sætte det på pause under Privatliv & samtykke.",
+    "accept": "Accepter og forbind",
+    "decline": "Afvis",
+    "error": "Det virkede ikke. Prøv igen."
+  },
   "CoachChores": {
     "kicker": "Venter på dig",
     "title": "{count, plural, one {Et løb er flyttet} other {# løb er flyttet}}",
@@ -992,6 +999,8 @@
     "error": "Det virkede ikke ({reason})."
   },
   "HealthDrawer": {
+    "consentAgreeAndDeclare": "Accepter og meld",
+    "consentNotNow": "Ikke nu",
     "title": "Hvordan har kroppen det?",
     "coachTitle": "Atletens krop",
     "close": "Luk",

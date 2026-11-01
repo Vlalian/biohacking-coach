@@ -251,8 +251,8 @@ describe('mint-tester CLI', () => {
     expect(returningShapes[0]).toEqual({ id: coach.id });
     expect(conflictTargets.slice(1)).toEqual([null, null]);
     expect(inserted.slice(1)).toEqual([
-      { table: coachingLink, row: { coachId: 'coach-new', athleteId: 'ath-a' } },
-      { table: coachingLink, row: { coachId: 'coach-new', athleteId: 'ath-b' } },
+      { table: coachingLink, row: { coachId: 'coach-new', athleteId: 'ath-a', status: 'pending' } },
+      { table: coachingLink, row: { coachId: 'coach-new', athleteId: 'ath-b', status: 'pending' } },
     ]);
   });
 
@@ -282,7 +282,7 @@ describe('mint-tester CLI', () => {
     await main(['--name', 'C', '--email', 'c@x.dk', '--coach', '--athletes', 'a@x.dk']);
     expect(inserted.at(-1)).toEqual({
       table: coachingLink,
-      row: { coachId: 'coach-existing', athleteId: 'ath-a' },
+      row: { coachId: 'coach-existing', athleteId: 'ath-a', status: 'pending' },
     });
     // The fallback asks for the coach row's id, keyed on the user it belongs to.
     expect(selectShapes).toEqual([{ id: athlete.id }, { id: coach.id }]);
@@ -316,9 +316,9 @@ describe('mint-tester CLI', () => {
     await main(['--name', 'C', '--email', 'C@X.dk', '--coach', '--personas']);
     expect(seedPersonas).toHaveBeenCalledWith(personasFor('c@x.dk'), expect.any(Date), expect.any(Function));
     expect(inserted.slice(1).map((i) => i.row)).toEqual([
-      { coachId: 'coach-new', athleteId: 'p1' },
-      { coachId: 'coach-new', athleteId: 'p2' },
-      { coachId: 'coach-new', athleteId: 'p3' },
+      { coachId: 'coach-new', athleteId: 'p1', status: 'active' },
+      { coachId: 'coach-new', athleteId: 'p2', status: 'active' },
+      { coachId: 'coach-new', athleteId: 'p3', status: 'active' },
     ]);
     expect(log).toHaveBeenCalledWith(expect.stringMatching(/holds their own copy of 3 personas/));
   });
@@ -345,9 +345,9 @@ describe('--personas-only — the way back after a retire (ruled 2026-09-23)', (
     // The copy is the one that coach already owns: same owner key, same ids.
     expect(seedPersonas).toHaveBeenCalledWith(personasFor('c@x.dk'), expect.any(Date), expect.any(Function));
     expect(inserted.map((i) => i.row)).toEqual([
-      { coachId: 'coach-existing', athleteId: 'p1' },
-      { coachId: 'coach-existing', athleteId: 'p2' },
-      { coachId: 'coach-existing', athleteId: 'p3' },
+      { coachId: 'coach-existing', athleteId: 'p1', status: 'active' },
+      { coachId: 'coach-existing', athleteId: 'p2', status: 'active' },
+      { coachId: 'coach-existing', athleteId: 'p3', status: 'active' },
     ]);
     // Found through the account's email, and it is the coach row that comes back.
     expect(selectShapes).toEqual([{ id: coach.id }]);

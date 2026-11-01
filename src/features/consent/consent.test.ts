@@ -83,6 +83,18 @@ describe('consent decision', () => {
       ]);
     });
 
+    it('offers a withdrawn point-of-use purpose again while its subject still waits (training-architecture/14)', () => {
+      // A paused Coaching Link is a named coach in front of the athlete: the
+      // question is concrete, and granting again is how the link resumes.
+      expect(purposesToShow('manage', ['ai_coaching', 'health_data'], ['head_coach_visibility'])).toEqual([
+        'ai_coaching',
+        'health_data',
+        'head_coach_visibility',
+        'product_improvement',
+      ]);
+      expect(purposesToShow('gate', [], ['head_coach_visibility'])).not.toContain('head_coach_visibility');
+    });
+
     it('keeps the disclosure order, whatever order the grants arrive in', () => {
       expect(purposesToShow('manage', ['head_coach_visibility', 'injury_health_data'])).toEqual([
         'ai_coaching',

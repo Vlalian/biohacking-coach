@@ -62,7 +62,9 @@ vi.mock('@/features/feedback/message-feedback-repository', () => ({
   getRatingsForConversation,
 }));
 vi.mock('@/features/coach/narration-service', () => ({ narratePendingEvents }));
-vi.mock('@/features/coach/coach-repository', () => ({ holdsActiveCoachingLinks }));
+const getPendingLinkForAthlete = vi.fn((_athleteId: string) => Promise.resolve(undefined as unknown));
+vi.mock('@/features/coach/coach-repository', () => ({ holdsActiveCoachingLinks, getPendingLinkForAthlete }));
+vi.mock('./coach-link-request-dialog', () => ({ CoachLinkRequestDialog: () => null }));
 // The chores read has its own tests; here the layout's job is to run it once,
 // before render, and only for a linked coach (`training-architecture/19`).
 const getCoachChores = vi.fn(() => Promise.resolve([] as unknown[]));
@@ -463,5 +465,33 @@ describe('the shell reads the athlete and the coaching links together (code-heal
     expect(getAthleteByUserId).toHaveBeenCalledWith('user_abc');
     expect(holdsActiveCoachingLinks).toHaveBeenCalledWith('user_abc');
     holdsActiveCoachingLinks.mockReset().mockResolvedValue(false);
+  });
+});
+
+describe('a pending Coaching Link is read before render, for an athlete only (training-architecture/14)', () => {
+  beforeEach(() => {
+    getPendingLinkForAthlete.mockReset().mockResolvedValue(undefined);
+    holdsActiveCoachingLinks.mockResolvedValue(false);
+    getSession.mockResolvedValue({ user: { id: 'user_1', name: 'Alex' } });
+  });
+
+  it('reads the athlete’s pending link once, on the render path', async () => {
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    await render();
+    expect(getPendingLinkForAthlete).toHaveBeenCalledTimes(1);
+    expect(getPendingLinkForAthlete).toHaveBeenCalledWith('athlete_1');
+  });
+
+  it('costs an account without an athlete no read, and a failed read costs only the dialog', async () => {
+    getAthleteByUserId.mockResolvedValue(undefined);
+    await render();
+    expect(getPendingLinkForAthlete).not.toHaveBeenCalled();
+
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getAthleteByUserId.mockResolvedValue({ id: 'athlete_1', syntheticLabel: null, profile: {} });
+    getPendingLinkForAthlete.mockRejectedValue(new Error('db down'));
+    await expect(render()).resolves.toBeDefined();
+    expect(errors).toHaveBeenCalledWith('coach link request read failed', 'athlete_1');
+    errors.mockRestore();
   });
 });

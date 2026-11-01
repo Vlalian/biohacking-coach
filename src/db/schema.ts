@@ -475,7 +475,9 @@ export const coachingLink = pgTable(
     athleteId: uuid('athlete_id')
       .notNull()
       .references(() => athlete.id, { onDelete: 'cascade' }),
-    status: text('status').notNull().default('active'),
+    // pending → active → paused ⇄ active → severed (training-architecture/14).
+    // New links wait for the athlete's consent, so the default is pending.
+    status: text('status').notNull().default('pending'),
     shareAthleteReports: boolean('share_athlete_reports').notNull().default(true),
     shareAiTranscripts: boolean('share_ai_transcripts').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -484,12 +486,13 @@ export const coachingLink = pgTable(
   (table) => [
     check(
       'coaching_link_status_valid',
-      sql`${table.status} IN ('active', 'severed')`,
+      sql`${table.status} IN ('pending', 'active', 'paused', 'severed')`,
     ),
-    // One active link per pair; severed history does not block re-linking.
+    // One live link per pair — pending, active or paused; severed history does
+    // not block re-linking. The name predates pending and paused.
     uniqueIndex('coaching_link_active_pair_idx')
       .on(table.coachId, table.athleteId)
-      .where(sql`${table.status} = 'active'`),
+      .where(sql`${table.status} IN ('pending', 'active', 'paused')`),
     // The roster reads by coach; the athlete's link list reads by athlete.
     index('coaching_link_coach_idx').on(table.coachId),
     index('coaching_link_athlete_idx').on(table.athleteId),

@@ -86,7 +86,8 @@ export async function main(argv: string[]): Promise<void> {
   if (steps.some((s) => s.kind === 'ensureCoach')) {
     const coachId = await ensureCoach(userId);
     const personaIds = await seedPlannedPersonas(steps, request.name);
-    await link(coachId, [...personaIds, ...athleteIds]);
+    await link(coachId, personaIds, 'active');
+    await link(coachId, athleteIds, 'pending');
   }
 
   console.log(`minted ${request.coach ? 'coach' : 'athlete'} ${request.email} ${password}`);
@@ -102,7 +103,7 @@ export async function main(argv: string[]): Promise<void> {
 async function topUp(steps: MintStep[], email: string): Promise<void> {
   const coachId = await findCoach(email);
   const personaIds = await seedPlannedPersonas(steps, email);
-  await link(coachId, personaIds);
+  await link(coachId, personaIds, 'active');
   console.log(`topped up ${email.toLowerCase()} with ${personaIds.length} personas`);
 }
 
@@ -198,10 +199,15 @@ async function ensureCoach(userId: string): Promise<string> {
   return existing.id;
 }
 
-/** One active Coaching Link per athlete; the partial unique index makes a rerun a no-op. */
-async function link(coachId: string, athleteIds: string[]): Promise<void> {
+/**
+ * One Coaching Link per athlete; the partial unique index makes a rerun a
+ * no-op. The status is the caller's to say (training-architecture/14): a real
+ * tester's link is **pending** — the coach sees nothing until the athlete says
+ * yes in the app — and a synthetic persona's is **active**, with no one to ask.
+ */
+async function link(coachId: string, athleteIds: string[], status: 'pending' | 'active'): Promise<void> {
   for (const athleteId of athleteIds) {
-    await getDb().insert(coachingLink).values({ coachId, athleteId }).onConflictDoNothing();
+    await getDb().insert(coachingLink).values({ coachId, athleteId, status }).onConflictDoNothing();
   }
 }
 

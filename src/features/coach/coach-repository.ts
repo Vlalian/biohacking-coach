@@ -8,6 +8,7 @@ import {
   type AthleteCoachingLink,
   type Coach,
   type CoachingLink,
+  type CoachingLinkStatus,
   type RosterEntry,
 } from './coach';
 import type { LinkVisibility } from './link-visibility';
@@ -215,8 +216,84 @@ export async function severLinkForAthlete(athleteId: string): Promise<void> {
     .update(coachingLink)
     .set({ status: 'severed', severedAt: new Date() })
     .where(
-      and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'active')),
+      and(eq(coachingLink.athleteId, athleteId), inArray(coachingLink.status, ['pending', 'active', 'paused'])),
     );
+}
+
+/** A link waiting for the athlete's yes, and who is asking (training-architecture/14). */
+export type PendingLinkRequest = { linkId: string; coachName: string };
+
+/**
+ * The athlete's pending link, if one waits for their Head-Coach-visibility
+ * consent, with the coach's name — the one they chose, else their account
+ * name — for the request the athlete is shown.
+ */
+export async function getPendingLinkForAthlete(athleteId: string): Promise<PendingLinkRequest | undefined> {
+  const [row] = await getDb()
+    .select({ id: coachingLink.id, coachUserName: user.name, coachUiPrefs: user.uiPrefs })
+    .from(coachingLink)
+    .innerJoin(coach, eq(coachingLink.coachId, coach.id))
+    .innerJoin(user, eq(coach.userId, user.id))
+    .where(and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'pending')))
+    .orderBy(desc(coachingLink.createdAt))
+    .limit(1);
+  if (!row) return undefined;
+  return { linkId: row.id, coachName: (row.coachUiPrefs as UiPrefs | null)?.preferredName ?? row.coachUserName };
+}
+
+/** Moves one of the athlete's own links from `from` to `to`; whether it moved. */
+async function moveOwnLink(
+  athleteId: string,
+  linkId: string,
+  from: CoachingLinkStatus,
+  to: Partial<typeof coachingLink.$inferInsert>,
+): Promise<boolean> {
+  const moved = await getDb()
+    .update(coachingLink)
+    .set(to)
+    .where(and(eq(coachingLink.id, linkId), eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, from)))
+    .returning({ id: coachingLink.id });
+  return moved.length > 0;
+}
+
+/** The athlete said yes: their pending link becomes active. False when there was nothing pending to accept. */
+export async function activatePendingLink(athleteId: string, linkId: string): Promise<boolean> {
+  return moveOwnLink(athleteId, linkId, 'pending', { status: 'active' });
+}
+
+/** The athlete said no: their pending link is severed, as if they had ended it. */
+export async function declinePendingLink(athleteId: string, linkId: string): Promise<boolean> {
+  return moveOwnLink(athleteId, linkId, 'pending', { status: 'severed', severedAt: new Date() });
+}
+
+/**
+ * The athlete withdrew the Head-Coach-visibility consent: their active link is
+ * paused, so the coach sees nothing from now, history included. Granting it
+ * again resumes it ({@link resumeLinkForAthlete}).
+ */
+export async function pauseLinkForAthlete(athleteId: string): Promise<void> {
+  await getDb()
+    .update(coachingLink)
+    .set({ status: 'paused' })
+    .where(and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'active')));
+}
+
+/** Whether the athlete has a paused link — what keeps the coach consent on Privacy & consent to grant again. */
+export async function hasPausedLink(athleteId: string): Promise<boolean> {
+  const rows = await getDb()
+    .select()
+    .from(coachingLink)
+    .where(and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'paused')))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** The consent is granted again: a paused link is active again. */
+export async function resumeLinkForAthlete(athleteId: string): Promise<void> {
+  await getDb()
+    .update(coachingLink)
+    .set({ status: 'active' })
+    .where(and(eq(coachingLink.athleteId, athleteId), eq(coachingLink.status, 'paused')));
 }
 
 /**

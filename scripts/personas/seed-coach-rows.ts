@@ -38,12 +38,16 @@ export async function ensureCoachRow(userId: string): Promise<string> {
 
 /**
  * One active Coaching Link per athlete, idempotently. The partial unique index
- * guards the active pair, so `onConflictDoNothing` makes a re-seed a no-op
+ * guards the live pair, so `onConflictDoNothing` makes a re-seed a no-op
  * rather than a duplicate.
+ *
+ * Active, explicitly: the column defaults to pending (training-architecture/14),
+ * because a real athlete must say yes first. The seed's athletes are synthetic
+ * personas and seed accounts, with no one to ask.
  */
 export async function linkAthletes(coachId: string, athleteIds: readonly string[]): Promise<void> {
   const db = getDb();
   for (const athleteId of athleteIds) {
-    await db.insert(coachingLink).values({ coachId, athleteId }).onConflictDoNothing();
+    await db.insert(coachingLink).values({ coachId, athleteId, status: 'active' }).onConflictDoNothing();
   }
 }

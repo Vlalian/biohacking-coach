@@ -876,6 +876,13 @@
     "weekOf": "week {week} of {weeks}",
     "weeksToRace": "{weeks, plural, =1 {week} other {weeks}} to {race}"
   },
+  "CoachLinkRequest": {
+    "title": "{coach} wants to follow your training",
+    "intro": "Your coach sees nothing until you say yes. You can change what they see, or pause it, at any time under Privacy & consent.",
+    "accept": "Agree and connect",
+    "decline": "Decline",
+    "error": "That didn't work. Please try again."
+  },
   "CoachChores": {
     "kicker": "Waiting for you",
     "title": "{count, plural, one {A race moved} other {# races moved}}",
@@ -992,6 +999,8 @@
     "error": "That didn't work ({reason})."
   },
   "HealthDrawer": {
+    "consentAgreeAndDeclare": "Agree and report",
+    "consentNotNow": "Not now",
     "title": "How's your body?",
     "coachTitle": "The athlete's body",
     "close": "Close",

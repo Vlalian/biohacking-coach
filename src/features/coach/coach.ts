@@ -40,11 +40,20 @@ export function toCoach(row: CoachRow): Coach {
  * unexpected stored value resolves to `severed` (fail-closed) rather than
  * leaking access.
  */
+/**
+ * A link's life (training-architecture/14): **pending** until the athlete grants
+ * the Head-Coach-visibility consent, **active** while it holds, **paused** while
+ * that consent is withdrawn, **severed** for good. Only `active` gives the coach
+ * anything: every coach-side read filters on it.
+ */
+export const COACHING_LINK_STATUSES = ['pending', 'active', 'paused', 'severed'] as const;
+export type CoachingLinkStatus = (typeof COACHING_LINK_STATUSES)[number];
+
 export type CoachingLink = {
   id: string;
   coachId: string;
   athleteId: string;
-  status: 'active' | 'severed';
+  status: CoachingLinkStatus;
   visibility: LinkVisibility;
 };
 
@@ -54,8 +63,10 @@ export function toCoachingLink(row: CoachingLinkRow): CoachingLink {
     id: row.id,
     coachId: row.coachId,
     athleteId: row.athleteId,
-    // Fail closed: only an explicit 'active' is active; anything else is severed.
-    status: row.status === 'active' ? 'active' : 'severed',
+    // Fail closed: a known state is kept as it is; anything else is severed.
+    status: (COACHING_LINK_STATUSES as readonly string[]).includes(row.status)
+      ? (row.status as CoachingLinkStatus)
+      : 'severed',
     visibility: {
       shareAthleteReports: row.shareAthleteReports,
       shareAiTranscripts: row.shareAiTranscripts,

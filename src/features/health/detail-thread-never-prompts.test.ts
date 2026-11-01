@@ -72,6 +72,7 @@ describe('the detail thread does not reach the model', () => {
       'app/[locale]/(app)/coach/athlete/[athleteId]/health-actions.ts',
       'app/[locale]/health-actions.test.ts',
       'app/[locale]/health-actions.ts',
+      'app/[locale]/health-drawer-consent.test.tsx',
       'app/[locale]/health-drawer.test.tsx',
       'app/[locale]/health-drawer.tsx',
       'db/schema.ts',

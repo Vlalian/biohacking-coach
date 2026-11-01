@@ -123,10 +123,16 @@ export const ONBOARDING_CONSENT_PURPOSES: readonly ConsentPurpose[] = CONSENT_PU
 export function purposesToShow(
   mode: 'gate' | 'manage',
   granted: readonly ConsentPurpose[],
+  // A point-of-use purpose whose subject is still in front of the athlete — a
+  // paused Coaching Link waiting on `head_coach_visibility` — is offered on the
+  // manage screen even ungranted: granting it again is how the link resumes
+  // (training-architecture/14). The question is concrete there, so it is not
+  // the noise ADR 0012 keeps off this screen.
+  offered?: readonly ConsentPurpose[],
 ): ConsentPurpose[] {
   if (mode === 'gate') return [...ONBOARDING_CONSENT_PURPOSES];
   return CONSENT_PURPOSES.filter(
-    (purpose) => !POINT_OF_USE_PURPOSES.includes(purpose) || granted.includes(purpose),
+    (purpose) => !POINT_OF_USE_PURPOSES.includes(purpose) || granted.includes(purpose) || offered?.includes(purpose),
   );
 }
 

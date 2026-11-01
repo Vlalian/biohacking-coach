@@ -10,6 +10,8 @@ import type { HealthNoteRow } from '@/db/schema';
 import { ALLOWANCES, DISCIPLINES, type Allowance, type Capacity } from '@/features/health/capacity';
 import { confirmationKey } from '@/features/health/delete-confirmation';
 import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
+import { disclosureCopy } from '@/features/consent/disclosure';
+import { grantConsentsAction } from './consent-actions';
 import { ConfirmDelete } from './confirm-delete';
 import {
   addHealthNoteAction,
@@ -21,6 +23,7 @@ import {
   deleteInjuryAction,
   readHealthNotesAction,
   setBotherAction,
+  type DeclareActionResult,
   type HealthSubject,
 } from './health-actions';
 import {
@@ -44,8 +47,10 @@ import {
  * this path reaches a prompt — `detail-thread-never-prompts.test.ts` names
  * this file as one of the few allowed to touch it.
  *
- * **The consent gate (ticket 14, parked)** sits behind the two declare actions,
- * not in this component: the drawer will not need to change when it lands.
+ * **The consent gate (training-architecture/14)** sits behind the two declare
+ * actions. When one refuses with `consent-required`, the drawer shows what the
+ * `injury_health_data` consent covers ({@link InjuryConsent}); agreeing grants
+ * it and repeats the same declaration.
  *
  * `showable-version/28a` (Mads, 2026-09-17/18): one list — open records first,
  * expanded (name · dates, then the glance); past ones collapsed under a fold,
@@ -92,7 +97,34 @@ export function HealthDrawer({
   const open = spans.filter((s) => s.to === null);
   const closed = spans.filter((s) => s.to !== null);
   const [selectedId, setSelectedId] = useState<string | null>(() => initialSelection(state, open));
+  // The declaration waiting on the injury consent (training-architecture/14):
+  // kept so agreeing can repeat exactly what the athlete asked for.
+  const [awaitingConsent, setAwaitingConsent] = useState<(() => Promise<DeclareActionResult>) | null>(null);
   if (!state.open) return null;
+
+  function declare(action: () => Promise<DeclareActionResult>) {
+    setFailed(false);
+    startTransition(async () => {
+      const result = await action().catch(() => ({ ok: false as const, reason: 'invalid' as const }));
+      if (result.ok) {
+        setAwaitingConsent(null);
+        router.refresh();
+      } else if (result.reason === 'consent-required') setAwaitingConsent(() => action);
+      else setFailed(true);
+    });
+  }
+
+  /** Grants the consent first; only a grant that landed declares again. */
+  function agreeAndDeclare(action: () => Promise<DeclareActionResult>) {
+    setFailed(false);
+    startTransition(async () => {
+      const granted = await grantConsentsAction(['injury_health_data']).catch(() => ({ ok: false as const }));
+      const result = granted.ok ? await action().catch(() => ({ ok: false as const })) : granted;
+      if (!result.ok) return setFailed(true);
+      setAwaitingConsent(null);
+      router.refresh();
+    });
+  }
 
   function run(action: () => Promise<{ ok: boolean }>) {
     setFailed(false);
@@ -192,12 +224,22 @@ export function HealthDrawer({
             </ul>
           )}
 
+          {!isCoach && awaitingConsent && (
+            <InjuryConsent
+              locale={locale}
+              pending={pending}
+              t={t}
+              onAgree={() => agreeAndDeclare(awaitingConsent)}
+              onCancel={() => setAwaitingConsent(null)}
+            />
+          )}
+
           {!isCoach && (
             <DeclareForm
               pending={pending}
               t={t}
-              onInjury={(capacity, bother, name) => run(() => declareInjuryAction(capacity, bother, name))}
-              onIllness={(bother) => run(() => declareIllnessAction(bother))}
+              onInjury={(capacity, bother, name) => declare(() => declareInjuryAction(capacity, bother, name))}
+              onIllness={(bother) => declare(() => declareIllnessAction(bother))}
             />
           )}
 
@@ -583,6 +625,52 @@ function DeclareForm({
           className="border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
         >
           {t('imIll')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The `injury_health_data` consent, asked where it matters: the first time the
+ * athlete declares an Injury or Illness (training-architecture/14, ADR 0012).
+ * The words are the disclosure's own, so what is shown here is what is agreed
+ * to. Built plain; the design pass is Lovable's.
+ */
+function InjuryConsent({
+  locale,
+  pending,
+  t,
+  onAgree,
+  onCancel,
+}: {
+  locale: string;
+  pending: boolean;
+  t: (key: string) => string;
+  onAgree: () => void;
+  onCancel: () => void;
+}) {
+  const copy = disclosureCopy(locale).purposes.injury_health_data;
+  return (
+    <section data-injury-consent="" className="mt-5 border border-border p-4">
+      <h3 className="font-body text-base font-semibold text-foreground">{copy.title}</h3>
+      <p className="mt-1 font-body text-sm text-muted-foreground">{copy.body}</p>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onAgree}
+          disabled={pending}
+          className="inline-flex h-10 items-center bg-foreground px-4 font-body text-sm font-semibold text-background disabled:opacity-35"
+        >
+          {t('consentAgreeAndDeclare')}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="font-body text-sm text-muted-foreground hover:text-foreground disabled:opacity-35"
+        >
+          {t('consentNotNow')}
         </button>
       </div>
     </section>
