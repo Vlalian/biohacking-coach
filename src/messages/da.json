@@ -1015,7 +1015,7 @@
     "reportInjurySub": "Noget begrænser, hvad du kan træne",
     "ill": "Jeg er syg",
     "illSub": "Al træning af for nu",
-    "illExplain": "Alle planlagte træningspas tages af, indtil du melder sygdommen ovre.",
+    "illExplain": "Momentum planlægger først træning igen når du er rask.",
     "trainLabel": "Hvad kan du træne lige nu?",
     "botherToday": "Generer i dag",
     "botherLow": "Næsten ikke",

@@ -1015,7 +1015,7 @@
     "reportInjurySub": "Something limits what you can train",
     "ill": "I'm ill",
     "illSub": "All training off for now",
-    "illExplain": "Every planned session comes off until you mark the illness over.",
+    "illExplain": "Momentum only plans training again once you are well.",
     "trainLabel": "What can you train right now?",
     "botherToday": "Bothering you today",
     "botherLow": "Barely",

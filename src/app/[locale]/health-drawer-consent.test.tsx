@@ -148,6 +148,14 @@ describe('HealthDrawer: reporting (showable-version/50)', () => {
     expect((screen.getByRole('button', { name: 'saveInjury' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('moves focus to the consent panel, since Save, which held it, is gone', async () => {
+    declareInjuryAction.mockResolvedValue({ ok: false, reason: 'consent-required' });
+    openDrawer();
+
+    await screen.findByText(COPY.title, {}, SLOW);
+    await vi.waitFor(() => expect(document.activeElement?.hasAttribute('data-injury-consent')).toBe(true), SLOW);
+  });
+
   it('keeps the report filled in and read-only under the consent panel, and hides Save', async () => {
     declareInjuryAction.mockResolvedValue({ ok: false, reason: 'consent-required' });
     openDrawer();

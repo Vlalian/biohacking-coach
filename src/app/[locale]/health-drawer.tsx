@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
@@ -771,8 +771,12 @@ function ConsentPanel({
   onAgree: () => void;
   onNotNow: () => void;
 }) {
+  // Save held focus and is gone now; without this, focus falls to the page
+  // and the next Tab leaves the drawer.
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => panel.current?.focus(), []);
   return (
-    <section data-injury-consent="" aria-busy={pending} className="space-y-3 border border-input bg-background p-4">
+    <section ref={panel} tabIndex={-1} data-injury-consent="" aria-busy={pending} className="space-y-3 border border-input bg-background p-4">
       <h3 className="font-body text-base font-semibold leading-snug text-foreground">{title}</h3>
       <p className="font-body text-base leading-relaxed text-foreground">{body}</p>
       <div className="flex flex-col gap-2 pt-1 min-[380px]:flex-row min-[380px]:items-center">
