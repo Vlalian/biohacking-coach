@@ -70,6 +70,7 @@ describe('the detail thread does not reach the model', () => {
     expect(readers).toEqual([
       'app/[locale]/(app)/coach/athlete/[athleteId]/health-actions.test.ts',
       'app/[locale]/(app)/coach/athlete/[athleteId]/health-actions.ts',
+      'app/[locale]/calendar-marks.test.tsx',
       'app/[locale]/health-actions.test.ts',
       'app/[locale]/health-actions.ts',
       'app/[locale]/health-drawer-consent.test.tsx',

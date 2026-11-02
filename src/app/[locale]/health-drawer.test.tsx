@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { HealthSpan } from '@/features/health/health-layer';
+import en from '@/messages/en.json';
+import da from '@/messages/da.json';
 
 /**
  * `training-architecture/06` — the drawer where an athlete says what their body
@@ -8,8 +10,12 @@ import type { HealthSpan } from '@/features/health/health-layer';
  * thread.
  *
  * Rendered, not asserted on props: what each role is *offered* is the contract.
- * The athlete declares, closes and rates; the Head Coach sees everything the
+ * The athlete reports, ends and rates; the Head Coach sees everything the
  * athlete sees (Mads, 2026-09-11) and may only add a note.
+ *
+ * `showable-version/50` (Mads, 2026-09-29) replaced the open list and its
+ * History fold with two counted sections, Ongoing and Past, and the always-open
+ * declare form with two entry points; the design is Lovable's (2026-11-01).
  */
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) =>
@@ -65,29 +71,75 @@ function render(props: Partial<Parameters<typeof HealthDrawer>[0]> = {}) {
   );
 }
 
+const sevenClosed: HealthSpan[] = Array.from({ length: 7 }, (_, i) => ({
+  ...closedInjury,
+  id: `inj_past_${i}`,
+  from: `2026-0${i + 1}-01`,
+  to: `2026-0${i + 1}-10`,
+}));
+
 describe('HealthDrawer — the athlete', () => {
-  it('offers the declare form under the decided heading, never "report an injury"', () => {
+  it('offers the two entry points, closed, and no form until one is chosen', () => {
     const html = render();
-    expect(html).toContain('whatCanYouDo');
-    expect(html.toLowerCase()).not.toContain('report');
-    // Three disciplines, each with the three allowances as the athlete reads them.
-    for (const d of ['swim', 'bike', 'run']) expect(html).toContain(`data-discipline="${d}"`);
-    for (const a of ['allowFull', 'allowEasy', 'allowNone']) expect(html).toContain(a);
-    // Illness is one button.
-    expect(html).toContain('imIll');
+    expect(html).toMatch(/aria-expanded="false"[^>]*>[\s\S]*?reportInjury/);
+    expect(html).toContain('>ill<');
+    expect(html).not.toContain('data-field="name"');
   });
 
-  it('offers close and the Bother Rating on each open record, and add-note', () => {
-    const html = render();
-    expect(html).toContain('imBack');
-    expect(html).toContain('illnessOver');
-    expect(html).toContain('botherQuestion');
-    expect(html.match(/data-bother="/g)?.length).toBeGreaterThanOrEqual(5);
-    expect(html).toContain('notesDivider');
-    expect(html).toContain('addNote');
+  it('lists one ongoing and seven past records under counted sections, with no fold (showable-version/50)', () => {
+    const html = render({ spans: [openInjury, ...sevenClosed] });
+    expect(html).toMatch(/ongoing[^<]*<span[^>]*>\(1\)/);
+    expect(html).toMatch(/past[^<]*<span[^>]*>\(7\)/);
+    expect(html).not.toContain('<details');
+    expect(html.match(/data-record=/g)).toHaveLength(8);
   });
 
-  it('shows what an open injury prevents in the athlete’s language, and the illness as its own record', () => {
+  it('shows a new athlete one sentence and both ways to report, no section headers', () => {
+    const html = render({ spans: [] });
+    expect(html).toContain('>empty<');
+    expect(html).toContain('reportInjury');
+    expect(html).toContain('>ill<');
+    expect(html).not.toMatch(/>ongoing|>past/);
+  });
+
+  it('shows Ongoing (0) and Past (1) when the only record has ended', () => {
+    const html = render({ spans: [closedInjury] });
+    expect(html).toMatch(/ongoing[^<]*<span[^>]*>\(0\)/);
+    expect(html).toMatch(/past[^<]*<span[^>]*>\(1\)/);
+  });
+
+  it('opens straight onto a past record a calendar mark named', () => {
+    const html = render({ spans: [openInjury, closedInjury], state: { open: true, kind: 'injury', id: 'inj_0' } });
+    expect(html).toContain('data-selected="inj_0"');
+  });
+
+  it('opens straight onto the record that was clicked, and its notes', () => {
+    const html = render({ state: { open: true, kind: 'injury', id: 'inj_1' } });
+    expect(html).toMatch(/data-record="inj_1"[^>]*data-selected="inj_1"[\s\S]*?notesDivider/);
+  });
+
+  it('opened with a kind and no id, selects the newest ongoing record of that kind', () => {
+    const newer = { ...openInjury, id: 'inj_2', openedAt: new Date('2026-09-10T08:00:00Z') };
+    expect(render({ spans: [openInjury, newer], state: { open: true, kind: 'injury' } })).toContain('data-selected="inj_2"');
+    expect(render({ spans: [openInjury, openIllness], state: { open: true, kind: 'illness' } })).toContain('data-selected="ill_1"');
+  });
+
+  it('offers ending and the Bother Rating on each ongoing record, not on a past one', () => {
+    const html = render({ spans: [openInjury, openIllness, closedInjury] });
+    expect(html.match(/injuryOver/g)).toHaveLength(1);
+    expect(html.match(/illnessOver/g)).toHaveLength(1);
+    expect(html.match(/data-bother="/g)).toHaveLength(10);
+  });
+
+  it('treats a record ended today as past: no end button, no rating on it', () => {
+    const endedToday = { ...openInjury, id: 'inj_today', to: '2026-09-14' };
+    const html = render({ spans: [endedToday] });
+    expect(html).toMatch(/past[^<]*<span[^>]*>\(1\)/);
+    expect(html).not.toContain('injuryOver');
+    expect(html).not.toContain('data-bother="');
+  });
+
+  it('shows what an injury prevents in the athlete’s language, and an illness as its own record', () => {
     const html = render();
     expect(html).toContain('glance_none_run');
     expect(html).toContain('glance_easy_bike');
@@ -95,67 +147,12 @@ describe('HealthDrawer — the athlete', () => {
     expect(html).toContain('illnessLabel');
   });
 
-  it('keeps closed records in a collapsed history, not among the open ones', () => {
-    const html = render();
-    expect(html).toContain('history');
-    expect(html).toMatch(/<details[^>]*>[\s\S]*inj_0/);
-    expect(html.match(/imBack/g)?.length).toBe(1);
-  });
-
-  it('treats a record closed today as closed — no close button, no rating on it', () => {
-    const closedToday: HealthSpan = { ...closedInjury, id: 'inj_today', to: '2026-09-11' };
-    const html = render({ spans: [openInjury, closedToday] });
-    expect(html).toMatch(/<details[^>]*>[\s\S]*inj_today/);
-    expect(html.match(/imBack/g)?.length).toBe(1);
-  });
-
-  it('opens straight onto the record that was clicked', () => {
-    const html = render({ state: { open: true, kind: 'injury', id: 'inj_1' } });
-    expect(html).toContain('data-selected="inj_1"');
-  });
-
-  it('lists open records expanded with the name and dates on line one and the glance on line two; past ones collapsed under the fold (28a)', () => {
+  it('offers Delete on an ongoing record and Remove from history on a past one, each asking nothing yet (showable-version/28e)', () => {
     const html = render({ spans: [openInjury, closedInjury] });
-    expect(html).toMatch(/data-record="inj_1"[^>]*data-open="true"/);
-    // Line one: the name; an unnamed injury falls back to the kind label.
-    expect(html).toMatch(/data-record="inj_1"[^]*?left knee[^]*?since\(/);
-    expect(html).toMatch(/<details[^>]*data-history-fold/);
-    expect(html).toMatch(/data-record="inj_0"[^>]*data-open="false"/);
-    expect(html).toMatch(/data-record="inj_0"[^]*?injuryLabel/);
-    // The past record is collapsed: its own details, closed, with the line as summary.
-    expect(html).toMatch(/<details[^>]*data-record="inj_0"/);
-    expect(html).not.toMatch(/<details[^>]*data-record="inj_0"[^>]* open[ =>]/);
-  });
-
-  it('offers Delete – it was a mistake on an open record of any age, to the athlete only (showable-version/28e)', () => {
-    const young = { ...openInjury, openedAt: new Date(Date.now() - 3_600_000) };
-    expect(render({ spans: [young] })).toMatch(/data-action="delete"[^>]*>declaredByMistake</);
-    // A year old: the 24 h window is gone.
-    const old = { ...openInjury, openedAt: new Date(Date.now() - 365 * 24 * 3_600_000) };
-    expect(render({ spans: [old] })).toContain('data-action="delete"');
-    expect(render({ spans: [old], coachAthleteId: 'a1' })).not.toContain('data-action="delete"');
-  });
-
-  it('offers Remove from history on a closed record, to the athlete only, and asks nothing yet (showable-version/28e)', () => {
-    const html = render({ spans: [closedInjury] });
-    expect(html).toMatch(/data-history="inj_0"[^]*data-action="remove"[^>]*>removeFromHistory</);
+    expect(html).toMatch(/data-action="delete"[^>]*>declaredByMistake</);
+    expect(html).toMatch(/data-action="remove"[^>]*>removeFromHistory</);
     expect(html).not.toContain('data-action="confirm-remove"');
-    expect(render({ spans: [closedInjury], coachAthleteId: 'a1' })).not.toContain('data-action="remove"');
-  });
-
-  it('has no "too old" message left to show', () => {
-    expect(render()).not.toContain('tooOld');
-  });
-
-  it('the declare form asks for a name', () => {
-    expect(render({ spans: [] })).toContain('data-field="name"');
-  });
-
-  it('opened with a kind and no id, selects the newest open record of that kind', () => {
-    const later: HealthSpan = { ...openInjury, id: 'inj_2', from: '2026-09-09', openedAt: new Date('2026-09-09T08:00:00Z') };
-    const html = render({ spans: [openInjury, later, openIllness], state: { open: true, kind: 'injury' } });
-    expect(html).toContain('data-selected="inj_2"');
-    expect(render({ spans: [openInjury, openIllness], state: { open: true, kind: 'illness' } })).toContain('data-selected="ill_1"');
+    expect(html).not.toContain('tooOld');
   });
 
   it('renders nothing when closed', () => {
@@ -164,23 +161,45 @@ describe('HealthDrawer — the athlete', () => {
 });
 
 describe('HealthDrawer — the Head Coach', () => {
-  const coach = () => render({ coachAthleteId: 'a1' });
+  const coach = (props: Partial<Parameters<typeof HealthDrawer>[0]> = {}) =>
+    render({ coachAthleteId: 'a1', athleteName: 'Sam', ...props });
 
-  it('sees everything the athlete sees — capacity, bother, thread, history', () => {
+  it('names the athlete in the title and sees what the athlete sees: capacity, bother, both sections', () => {
     const html = coach();
+    expect(html).toContain('titleFor(Sam)');
     expect(html).toContain('glance_none_run');
     expect(html).toContain('botherLabel(3)');
-    expect(html).toContain('history');
-    expect(html).toContain('notesDivider');
+    expect(html).toMatch(/ongoing[^<]*<span[^>]*>\(2\)/);
+    expect(html).toMatch(/past[^<]*<span[^>]*>\(1\)/);
   });
 
-  it('may add a note and nothing else — no declare, no close, no rating control', () => {
-    const html = coach();
+  it('may add a note and nothing else: no reporting, ending, deleting or rating', () => {
+    const html = coach({ state: { open: true, kind: 'injury', id: 'inj_1' } });
     expect(html).toContain('addNote');
-    expect(html).not.toContain('whatCanYouDo');
-    expect(html).not.toContain('imIll');
-    expect(html).not.toContain('imBack');
-    expect(html).not.toContain('illnessOver');
+    for (const k of ['reportInjury', '>ill<', 'injuryOver', 'illnessOver', 'declaredByMistake', 'removeFromHistory']) {
+      expect(html).not.toContain(k);
+    }
     expect(html).not.toContain('data-bother="');
+  });
+
+  it('is told plainly when the athlete has reported nothing', () => {
+    expect(coach({ spans: [] })).toContain('>emptyCoach<');
+  });
+});
+
+describe('the drawer’s words (showable-version/50)', () => {
+  it('never says open or closed in the drawer or the button that opens it, in either language', () => {
+    for (const cat of [en, da]) {
+      const strings = [...Object.values(cat.HealthDrawer), cat.Calendar.healthButton] as string[];
+      for (const s of strings) expect(s).not.toMatch(/\b(open|closed|åben|åbent|åbne|lukket)\b/i);
+    }
+  });
+
+  it('names the button after the drawer: Injuries and illness, Skader og sygdom', () => {
+    expect(en.HealthDrawer.title).toBe('Injuries and illness');
+    expect(da.HealthDrawer.title).toBe('Skader og sygdom');
+    expect(en.Calendar.healthButton).toBe(en.HealthDrawer.title);
+    expect(da.Calendar.healthButton).toBe(da.HealthDrawer.title);
+    expect(da.HealthDrawer.ongoing).toBe('Aktuelle');
   });
 });

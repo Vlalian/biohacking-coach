@@ -14,7 +14,7 @@ export const HEALTH_ICON: Record<'injury' | 'illness', LucideIcon> = { injury: B
  * Two lines: "Uninjured · Healthy", muted, on a clean day; "Injured: left knee"
  * in signal while an injury is open. Each line opens the Health Drawer on that
  * kind. It says nothing about the past — history is the muted marks on the
- * days and the drawer's History fold. Muted, never red: no alarm, no demand
+ * days and the drawer's Past section. Muted, never red: no alarm, no demand
  * for an explanation.
  *
  * The caller renders it only when the layer is shared. For a Head Coach the

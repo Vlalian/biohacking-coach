@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
@@ -13,6 +13,7 @@ import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
 import { disclosureCopy } from '@/features/consent/disclosure';
 import { grantConsentsAction } from './consent-actions';
 import { ConfirmDelete } from './confirm-delete';
+import { HEALTH_ICON } from './health-status-card';
 import {
   addHealthNoteAction,
   closeIllnessAction,
@@ -32,39 +33,38 @@ import {
 } from './(app)/coach/athlete/[athleteId]/health-actions';
 
 /**
- * Where the athlete says what their body can do, and where they and their Head
- * Coach read and add to the detail thread (`training-architecture/06`).
+ * Injuries and illness: the register of every record and the place to report
+ * one (`training-architecture/06`, `showable-version/50`).
  *
- * Two roles, one drawer. The **athlete** declares (the form asks what they can
- * do — capacity, never diagnosis), closes ("I'm back" / "Illness over" — not
- * "recovered", which is a clinical judgment), rates how much it bothers them,
- * and notes. The **Head Coach** sees everything the athlete sees (Mads,
- * 2026-09-11) and may only add a note: declaring, closing and rating are the
- * athlete's statements about their own body.
+ * Two roles, one drawer. The **athlete** reports (capacity, never diagnosis),
+ * ends a record ("Injury over" / "Illness over", not "recovered", which is a
+ * clinical judgment), rates how much it bothers them, notes, and deletes. The
+ * **Head Coach** sees everything the athlete sees (Mads, 2026-09-11), titled
+ * with the athlete's name, and may only add a note.
  *
- * The thread is for human eyes only (ADR 0011). It is fetched here, by the
- * athlete's own action or the coach's link-gated one, and rendered; nothing on
- * this path reaches a prompt — `detail-thread-never-prompts.test.ts` names
- * this file as one of the few allowed to touch it.
+ * Mads's ruling on 50 (2026-09-29): two counted sections, **Ongoing** and
+ * **Past**, both expanded and with every record; for an athlete with none, one
+ * sentence and the two ways to report, no headers. The design is Lovable's
+ * (`.scratch/showable-version/lovable/50-health-drawer/`, 2026-11-01). A day's
+ * calendar mark opens the drawer on its own record, past ones included (51).
  *
- * **The consent gate (training-architecture/14)** sits behind the two declare
- * actions. When one refuses with `consent-required`, the drawer shows what the
- * `injury_health_data` consent covers ({@link InjuryConsent}); agreeing grants
- * it and repeats the same declaration.
+ * **The injury consent (training-architecture/14)** is asked inside the form:
+ * when a declare action refuses with `consent-required`, the report stays in
+ * the form, read-only, under the consent's own words; agreeing grants it and
+ * repeats the same declaration, Not now gives the form back. The server is the
+ * gate: the drawer remembers nothing about consent itself.
  *
- * `showable-version/28a` (Mads, 2026-09-17/18): one list — open records first,
- * expanded (name · dates, then the glance); past ones collapsed under a fold,
- * each its own fold with the same line as summary. The injury carries a short
- * name ("left knee").
- *
- * `showable-version/28e` (Mads, 2026-09-19: "tooOld should not be a thing"):
- * the athlete may delete any record at any age, each after a confirm tap — an
- * open one as "declared by mistake", a past one as "Remove from history". The
- * Head Coach deletes nothing.
+ * The detail thread is for human eyes only (ADR 0011). It is fetched for the
+ * opened record only, by the athlete's own action or the coach's link-gated
+ * one; nothing on this path reaches a prompt (`detail-thread-never-prompts`
+ * names this file as one of the few allowed to touch it).
  */
 export type HealthDrawerState =
   | { open: false }
   | { open: true; kind?: 'injury' | 'illness'; id?: string };
+
+type Kind = HealthSpan['kind'];
+type T = ReturnType<typeof useTranslations<'HealthDrawer'>>;
 
 export function HealthDrawer({
   state,
@@ -72,57 +72,72 @@ export function HealthDrawer({
   locale,
   onClose,
   coachAthleteId,
+  athleteName,
 }: {
   state: HealthDrawerState;
-  /** Every span, open and closed — the drawer sorts them. */
+  /** Every span, ongoing and past; the drawer sorts them. */
   spans: HealthSpan[];
   locale: string;
   onClose: () => void;
   /** Set when the Head Coach is the one looking. Read-only except for notes. */
   coachAthleteId?: string;
+  /** The athlete's name, for the coach's title. */
+  athleteName?: string;
 }) {
   const t = useTranslations('HealthDrawer');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
   // The one record whose delete is waiting on its confirm tap, keyed by its
-  // section so an open record's confirm never arms its History row (28e).
+  // section so an ongoing record's confirm never arms a past row (28e).
   const [confirming, setConfirming] = useState<string | null>(null);
   const panelRef = useDialogFocus<HTMLElement>(onClose, state.open);
   const isCoach = Boolean(coachAthleteId);
 
-  // Closed is closed, including a record closed today: the calendar draws `to`
+  // Past is past, including a record ended today: the calendar draws `to`
   // inclusively so the band covers the last day, but the drawer must not keep
-  // offering "I'm back" and the Bother Rating on it (CodeRabbit, PR #67).
-  const open = spans.filter((s) => s.to === null);
-  const closed = spans.filter((s) => s.to !== null);
-  const [selectedId, setSelectedId] = useState<string | null>(() => initialSelection(state, open));
-  // The declaration waiting on the injury consent (training-architecture/14):
-  // kept so agreeing can repeat exactly what the athlete asked for.
-  const [awaitingConsent, setAwaitingConsent] = useState<(() => Promise<DeclareActionResult>) | null>(null);
+  // offering "Injury over" and the Bother Rating on it (CodeRabbit, PR #67).
+  const ongoing = spans.filter((s) => s.to === null);
+  const past = spans.filter((s) => s.to !== null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => initialSelection(state, ongoing));
+  const [form, setForm] = useState<Kind | null>(null);
+  // The declaration waiting on the injury consent: kept so agreeing repeats
+  // exactly what the athlete asked for.
+  const [consentFor, setConsentFor] = useState<{ kind: Kind; retry: () => Promise<DeclareActionResult> } | null>(null);
+
+  useEffect(() => {
+    if (!state.open || !selectedId) return;
+    requestAnimationFrame(() => document.getElementById(`health-record-${selectedId}`)?.scrollIntoView?.({ block: 'start' }));
+    // Only on opening: scrolling again on every selection would jump the list.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.open]);
+
   if (!state.open) return null;
 
-  function declare(action: () => Promise<DeclareActionResult>) {
+  function finish(result: { ok: boolean }) {
+    if (!result.ok) return setFailed(true);
+    setConsentFor(null);
+    setForm(null);
+    router.refresh();
+  }
+
+  function declare(kind: Kind, action: () => Promise<DeclareActionResult>) {
     setFailed(false);
     startTransition(async () => {
       const result = await action().catch(() => ({ ok: false as const, reason: 'invalid' as const }));
-      if (result.ok) {
-        setAwaitingConsent(null);
-        router.refresh();
-      } else if (result.reason === 'consent-required') setAwaitingConsent(() => action);
-      else setFailed(true);
+      if (!result.ok && result.reason === 'consent-required') return setConsentFor({ kind, retry: action });
+      finish(result);
     });
   }
 
   /** Grants the consent first; only a grant that landed declares again. */
-  function agreeAndDeclare(action: () => Promise<DeclareActionResult>) {
+  function agreeAndDeclare() {
+    const waiting = consentFor;
+    if (!waiting) return;
     setFailed(false);
     startTransition(async () => {
       const granted = await grantConsentsAction(['injury_health_data']).catch(() => ({ ok: false as const }));
-      const result = granted.ok ? await action().catch(() => ({ ok: false as const })) : granted;
-      if (!result.ok) return setFailed(true);
-      setAwaitingConsent(null);
-      router.refresh();
+      finish(granted.ok ? await waiting.retry().catch(() => ({ ok: false as const })) : granted);
     });
   }
 
@@ -137,175 +152,119 @@ export function HealthDrawer({
     });
   }
 
+  const title = isCoach && athleteName ? t('titleFor', { name: athleteName }) : t('title');
+  const consent = consentFor ? disclosureCopy(locale).purposes.injury_health_data : null;
+
+  const renderRecord = (span: HealthSpan) => (
+    <RecordCard
+      key={span.id}
+      span={span}
+      selected={selectedId === span.id}
+      isCoach={isCoach}
+      pending={pending}
+      locale={locale}
+      t={t}
+      confirmKey={confirmationKey(span.to === null ? 'open' : 'history', span.id)}
+      confirming={confirming}
+      onSelect={() => setSelectedId(span.id)}
+      onEnd={() => run(() => (span.kind === 'injury' ? closeInjuryAction(span.id) : closeIllnessAction(span.id)))}
+      onAskDelete={(key) => setConfirming(key)}
+      onDelete={() => run(() => deleteOf(span))}
+      onBother={(value) => run(() => setBotherAction(subjectOf(span), value))}
+      thread={
+        <Thread
+          subject={subjectOf(span)}
+          coachAthleteId={coachAthleteId}
+          pending={pending}
+          t={t}
+          onAdd={(body) =>
+            run(() =>
+              coachAthleteId
+                ? addHealthNoteAsCoachAction(coachAthleteId, subjectOf(span), body)
+                : addHealthNoteAction(subjectOf(span), body),
+            )
+          }
+        />
+      }
+    />
+  );
+
   return (
     <div className="fixed inset-0 z-50">
       <button
         type="button"
         aria-label={t('close')}
+        disabled={pending && Boolean(consentFor)}
         onClick={onClose}
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-foreground/30 backdrop-blur-[1px]"
       />
       <aside
         ref={panelRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border bg-panel shadow-2xl outline-none"
+        aria-label={title}
+        className="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l-4 border-signal bg-background shadow-2xl outline-none"
       >
-        <header className="flex items-center justify-between border-b border-border px-5 py-3">
-          <span className="font-body text-sm uppercase tracking-[0.24em] text-muted-foreground">
-            {isCoach ? t('coachTitle') : t('title')}
-          </span>
+        <header className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="font-display text-2xl font-bold uppercase italic tracking-[0.04em] text-foreground">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label={t('close')}
-            className="text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-6 py-6">
           {failed && (
-            <p role="alert" className="mb-3 font-body text-sm text-destructive">
+            <p role="alert" className="border-l-4 border-destructive bg-panel px-4 py-3 font-body text-base text-foreground">
               {t('error')}
             </p>
           )}
 
-          {open.length === 0 ? (
-            <p className="font-body text-sm text-muted-foreground">
-              {isCoach ? t('nothingOpenCoach') : t('nothingOpen')}
-            </p>
-          ) : (
-            <ul className="divide-y divide-border border border-border">
-              {open.map((span) => (
-                <li
-                  key={span.id}
-                  data-record={span.id}
-                  data-open="true"
-                  data-selected={selectedId === span.id ? span.id : undefined}
-                >
-                  <RecordRow
-                    span={span}
-                    selected={selectedId === span.id}
-                    isCoach={isCoach}
-                    pending={pending}
-                    locale={locale}
-                    t={t}
-                    confirmingDelete={confirming === confirmationKey('open', span.id)}
-                    onSelect={() => setSelectedId(span.id)}
-                    onClose={() =>
-                      run(() =>
-                        span.kind === 'injury' ? closeInjuryAction(span.id) : closeIllnessAction(span.id),
-                      )
-                    }
-                    onAskDelete={() => setConfirming(confirmationKey('open', span.id))}
-                    onDelete={() => run(() => deleteOf(span))}
-                    onBother={(value) => run(() => setBotherAction(subjectOf(span), value))}
-                  />
-                  {selectedId === span.id && (
-                    <Thread
-                      subject={subjectOf(span)}
-                      coachAthleteId={coachAthleteId}
-                      pending={pending}
-                      t={t}
-                      onAdd={(body) =>
-                        run(() =>
-                          coachAthleteId
-                            ? addHealthNoteAsCoachAction(coachAthleteId, subjectOf(span), body)
-                            : addHealthNoteAction(subjectOf(span), body),
-                        )
-                      }
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {!isCoach && awaitingConsent && (
-            <InjuryConsent
-              locale={locale}
-              pending={pending}
-              t={t}
-              onAgree={() => agreeAndDeclare(awaitingConsent)}
-              onCancel={() => setAwaitingConsent(null)}
-            />
+          {spans.length === 0 && (
+            <p className="font-body text-base text-foreground">{isCoach ? t('emptyCoach') : t('empty')}</p>
           )}
 
           {!isCoach && (
-            <DeclareForm
+            <Report
+              form={form}
               pending={pending}
               t={t}
-              onInjury={(capacity, bother, name) => declare(() => declareInjuryAction(capacity, bother, name))}
-              onIllness={(bother) => declare(() => declareIllnessAction(bother))}
+              consent={consent && consentFor ? { kind: consentFor.kind, ...consent } : null}
+              onToggle={(kind) => {
+                setConsentFor(null);
+                setForm(form === kind ? null : kind);
+              }}
+              onCancel={() => {
+                setConsentFor(null);
+                setForm(null);
+              }}
+              onInjury={(capacity, bother, name) => declare('injury', () => declareInjuryAction(capacity, bother, name))}
+              onIllness={(bother) => declare('illness', () => declareIllnessAction(bother))}
+              onAgree={agreeAndDeclare}
+              onNotNow={() => setConsentFor(null)}
             />
           )}
 
-          {closed.length > 0 && (
-            <details className="mt-6" data-history-fold="">
-              <summary className="cursor-pointer font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-                {t('history')} ({closed.length})
-              </summary>
-              <ul className="mt-2 divide-y divide-border border border-border">
-                {closed.map((span) => (
-                  // Each past record is its own fold: one muted line, and the
-                  // rest — glance, bother, the thread — on tap.
-                  <li key={span.id} data-history={span.id}>
-                    <details
-                      data-record={span.id}
-                      data-open="false"
-                      className="px-3 py-2 opacity-70"
-                      onToggle={(e) => {
-                        if (e.currentTarget.open) setSelectedId(span.id);
-                      }}
-                    >
-                      <summary className="cursor-pointer">
-                        <RecordLine span={span} locale={locale} t={t} />
-                      </summary>
-                      <RecordGlance span={span} t={t} />
-                      {!isCoach && (
-                        <div className="mt-2">
-                          <ConfirmDelete
-                            action="remove"
-                            label={t('removeFromHistory')}
-                            confirmLabel={t('confirmRemove')}
-                            confirming={confirming === confirmationKey('history', span.id)}
-                            disabled={pending}
-                            onAsk={() => setConfirming(confirmationKey('history', span.id))}
-                            onConfirm={() => run(() => deleteOf(span))}
-                          />
-                        </div>
-                      )}
-                      {selectedId === span.id && (
-                        <Thread
-                          subject={subjectOf(span)}
-                          coachAthleteId={coachAthleteId}
-                          pending={pending}
-                          t={t}
-                          onAdd={(body) =>
-                            run(() =>
-                              coachAthleteId
-                                ? addHealthNoteAsCoachAction(coachAthleteId, subjectOf(span), body)
-                                : addHealthNoteAction(subjectOf(span), body),
-                            )
-                          }
-                        />
-                      )}
-                    </details>
-                  </li>
-                ))}
-              </ul>
-            </details>
+          {spans.length > 0 && (
+            <>
+              <Section label={t('ongoing')} count={ongoing.length}>
+                {ongoing.map(renderRecord)}
+              </Section>
+              <Section label={t('past')} count={past.length}>
+                {past.map(renderRecord)}
+              </Section>
+            </>
           )}
         </div>
       </aside>
     </div>
   );
 }
-
-type T = ReturnType<typeof useTranslations<'HealthDrawer'>>;
 
 /** Deletes the record for good, whatever its age (28e). The athlete's only. */
 function deleteOf(span: HealthSpan) {
@@ -317,66 +276,47 @@ function subjectOf(span: HealthSpan): HealthSubject {
 }
 
 /**
- * Which record the drawer opens on: the one clicked; else, opened from a
- * status, the newest open record of that kind; else the first open one.
+ * Which record the drawer opens on: the one a mark or a row named, ongoing or
+ * past (51); else, opened from the status card, the newest ongoing record of
+ * that kind; else the first ongoing one.
  */
-function initialSelection(state: HealthDrawerState, open: HealthSpan[]): string | null {
+function initialSelection(state: HealthDrawerState, ongoing: HealthSpan[]): string | null {
   if (!state.open) return null;
   if (state.id) return state.id;
-  const ofKind = state.kind ? open.filter((s) => s.kind === state.kind) : open;
+  const ofKind = state.kind ? ongoing.filter((s) => s.kind === state.kind) : ongoing;
   const newest = [...ofKind].sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime())[0];
-  return newest?.id ?? open[0]?.id ?? null;
+  return newest?.id ?? ongoing[0]?.id ?? null;
 }
 
-/** Line one: the name (or the kind) and the dates — "left knee · since 2 Sep". */
-function RecordLine({ span, locale, t }: { span: HealthSpan; locale: string; t: T }) {
-  const kindLabel = span.kind === 'illness' ? t('illnessLabel') : t('injuryLabel');
+/** A counted section, "Ongoing (1)", shown even when empty, once any record exists. */
+function Section({ label, count, children }: { label: string; count: number; children: ReactNode }) {
   return (
-    <p className="font-body text-sm text-foreground">
-      {span.name ?? kindLabel}
-      <span className="ml-2 font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-        {t('since', { date: formatFullDate(span.from, locale) })}
-        {span.to && ` — ${formatFullDate(span.to, locale)}`}
-      </span>
-    </p>
+    <section className="space-y-3">
+      <h3 className="flex items-center gap-3 font-display text-base font-bold uppercase italic tracking-[0.08em] text-foreground">
+        {label}
+        <span className="font-mono text-sm not-italic text-muted-foreground">({count})</span>
+        <span className="h-px flex-1 bg-border" />
+      </h3>
+      {count > 0 && <ul className="space-y-3">{children}</ul>}
+    </section>
   );
 }
 
-/** Line two: what it prevents, and how much it bothers. Empty for an illness with no rating. */
-function RecordGlance({ span, t }: { span: HealthSpan; t: T }) {
-  const parts = span.capacity ? glanceParts(span.capacity) : [];
-  if (parts.length === 0 && span.bother === null) return null;
-  return (
-    <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-      {parts.map((p) => t(`glance_${p.allowance}_${p.discipline}`)).join(' · ')}
-      {span.bother !== null && `${parts.length > 0 ? ' · ' : ''}${t('botherLabel', { value: span.bother })}`}
-    </p>
-  );
-}
-
-/** The record as words: name and dates, then what it prevents and how much it bothers. */
-function RecordSummary({ span, locale, t }: { span: HealthSpan; locale: string; t: T }) {
-  return (
-    <div>
-      <RecordLine span={span} locale={locale} t={t} />
-      <RecordGlance span={span} t={t} />
-    </div>
-  );
-}
-
-function RecordRow({
+function RecordCard({
   span,
   selected,
   isCoach,
   pending,
   locale,
   t,
-  confirmingDelete,
+  confirmKey,
+  confirming,
   onSelect,
-  onClose,
+  onEnd,
   onAskDelete,
   onDelete,
   onBother,
+  thread,
 }: {
   span: HealthSpan;
   selected: boolean;
@@ -384,88 +324,148 @@ function RecordRow({
   pending: boolean;
   locale: string;
   t: T;
-  /** "Declared by mistake" was tapped: the confirm is showing. */
-  confirmingDelete: boolean;
+  confirmKey: string;
+  confirming: string | null;
   onSelect: () => void;
-  onClose: () => void;
-  onAskDelete: () => void;
+  onEnd: () => void;
+  onAskDelete: (key: string) => void;
   onDelete: () => void;
   onBother: (value: number | null) => void;
+  /** The detail thread, rendered for the opened record only. */
+  thread: ReactNode;
 }) {
+  const isOngoing = span.to === null;
+  const KindIcon = HEALTH_ICON[span.kind];
   return (
-    <div className={['px-3 py-2', selected ? 'bg-background/60' : ''].join(' ')}>
-      <button type="button" onClick={onSelect} className="block w-full text-left">
-        <RecordSummary span={span} locale={locale} t={t} />
+    <li
+      id={`health-record-${span.id}`}
+      data-record={span.id}
+      data-open={isOngoing ? 'true' : 'false'}
+      data-selected={selected ? span.id : undefined}
+      className={['scroll-mt-4 border border-border bg-panel', selected ? 'ring-2 ring-signal' : ''].join(' ')}
+    >
+      <button type="button" onClick={onSelect} className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left">
+        <span
+          className={[
+            'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center',
+            isOngoing
+              ? span.kind === 'injury'
+                ? 'bg-signal text-signal-foreground'
+                : 'bg-foreground text-background'
+              : 'border border-border text-muted-foreground',
+          ].join(' ')}
+        >
+          <KindIcon className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline justify-between gap-3">
+            <span className="font-display text-lg font-bold uppercase italic leading-tight tracking-[0.03em] text-foreground">
+              {span.name ?? (span.kind === 'injury' ? t('injuryLabel') : t('illnessLabel'))}
+            </span>
+            <span className="shrink-0 font-mono text-xs uppercase text-muted-foreground">
+              {t('since', { date: formatFullDate(span.from, locale) })}
+              {span.to && ` — ${formatFullDate(span.to, locale)}`}
+            </span>
+          </span>
+          <Glance span={span} showBother={isCoach || !isOngoing} t={t} />
+        </span>
       </button>
-      {!isCoach && (
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <BotherControl value={span.bother} disabled={pending} t={t} onChange={onBother} />
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
-          >
-            {span.kind === 'injury' ? t('imBack') : t('illnessOver')}
-          </button>
-          {/* Any age (28e): the 24 h window is gone. */}
-          <ConfirmDelete
-            action="delete"
-            label={t('declaredByMistake')}
-            confirmLabel={t('confirmRemove')}
-            confirming={confirmingDelete}
-            disabled={pending}
-            onAsk={onAskDelete}
-            onConfirm={onDelete}
-          />
-        </div>
-      )}
-    </div>
+
+      <div className="space-y-4 px-4 py-4">
+        {isOngoing && !isCoach && (
+          <BotherScale label={t('botherToday')} value={span.bother} disabled={pending} t={t} onChange={onBother} />
+        )}
+
+        {selected && thread}
+
+        {!isCoach && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            {isOngoing && (
+              <button
+                type="button"
+                onClick={onEnd}
+                disabled={pending}
+                className="inline-flex h-10 items-center border border-foreground px-4 font-body text-[15px] text-foreground transition-colors hover:bg-foreground hover:text-background disabled:opacity-50"
+              >
+                {span.kind === 'injury' ? t('injuryOver') : t('illnessOver')}
+              </button>
+            )}
+            {/* Any age (28e): the 24 h window is gone. */}
+            <ConfirmDelete
+              action={isOngoing ? 'delete' : 'remove'}
+              label={isOngoing ? t('declaredByMistake') : t('removeFromHistory')}
+              confirmLabel={t('confirmRemove')}
+              confirming={confirming === confirmKey}
+              disabled={pending}
+              onAsk={() => onAskDelete(confirmKey)}
+              onConfirm={onDelete}
+            />
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 
-/** "How much is it bothering you today?" — 1–5, optional, the athlete's only. */
-function BotherControl({
+/** What the record prevents ("easy bike · no run") and, where no scale shows it, how much it bothers. */
+function Glance({ span, showBother, t }: { span: HealthSpan; showBother: boolean; t: T }) {
+  const parts = span.capacity ? glanceParts(span.capacity).map((p) => t(`glance_${p.allowance}_${p.discipline}`)) : [];
+  if (showBother && span.bother !== null) parts.push(t('botherLabel', { value: span.bother }));
+  if (parts.length === 0) return null;
+  return <span className="mt-0.5 block font-body text-sm text-muted-foreground">{parts.join(' · ')}</span>;
+}
+
+/** 1–5, optional; tapping the chosen value again clears it. The athlete's only. */
+function BotherScale({
+  label,
   value,
   disabled,
   t,
   onChange,
 }: {
+  label: string;
   value: number | null;
   disabled: boolean;
   t: T;
   onChange: (value: number | null) => void;
 }) {
   return (
-    <div>
-      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-        {t('botherQuestion')}
-      </p>
-      <div className="mt-1 flex gap-1">
+    <div role="radiogroup" aria-label={label}>
+      <div className="flex items-baseline justify-between">
+        <span className="font-body text-sm text-muted-foreground">{label}</span>
+        <span className="font-mono text-xs text-muted-foreground">{value ? `${value} / 5` : '– / 5'}</span>
+      </div>
+      <div className="mt-2 flex gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
+            role="radio"
             data-bother={n}
+            aria-checked={value === n}
+            aria-label={`${n}`}
             disabled={disabled}
-            aria-pressed={value === n}
             onClick={() => onChange(value === n ? null : n)}
             className={[
-              'h-7 w-7 border font-body text-sm transition-colors disabled:opacity-50',
-              value === n
-                ? 'border-signal text-signal'
-                : 'border-border text-muted-foreground hover:text-foreground',
+              'flex h-10 flex-1 items-end justify-start border px-2 pb-1 font-mono text-xs transition-colors disabled:cursor-default',
+              value !== null && n <= value
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-border bg-transparent text-muted-foreground hover:border-foreground',
             ].join(' ')}
           >
             {n}
           </button>
         ))}
       </div>
+      <div className="mt-1 flex justify-between font-body text-xs text-muted-foreground">
+        <span>{t('botherLow')}</span>
+        <span>{t('botherHigh')}</span>
+      </div>
     </div>
   );
 }
 
-/** The detail thread: read on select, one form to add. Human eyes only. */
+/** The detail thread: read on opening the record, one form to add. Human eyes only. */
 function Thread({
   subject,
   coachAthleteId,
@@ -500,86 +500,244 @@ function Thread({
   }, [key, coachAthleteId]);
 
   return (
-    <div className="border-t border-dashed border-border px-3 py-3">
-      <p className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-        {t('notesDivider')}
-      </p>
-      <ul className="mt-2 space-y-2">
-        {(notes ?? []).map((note) => (
-          <li key={note.id} className="font-body text-sm text-foreground">
-            <span className="mr-2 font-body text-[13px] uppercase tracking-[0.16em] text-muted-foreground">
-              {note.authorRole === 'head_coach' ? t('authorHeadCoach') : t('authorAthlete')}
-            </span>
-            {note.body}
-          </li>
-        ))}
-      </ul>
-      <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        rows={2}
-        aria-label={t('addNote')}
-        className="mt-2 w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none focus:border-signal"
-      />
-      <button
-        type="button"
-        disabled={pending || draft.trim() === ''}
-        onClick={() => {
-          onAdd(draft);
-          setDraft('');
-        }}
-        className="mt-2 border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-      >
-        {t('addNote')}
-      </button>
+    <div>
+      <span className="font-body text-xs uppercase tracking-[0.14em] text-muted-foreground">{t('notesDivider')}</span>
+      {notes && notes.length > 0 && (
+        <ul className="mt-2 space-y-2">
+          {notes.map((note) => (
+            <li key={note.id} className="border-l-2 border-border pl-3">
+              <span className="font-mono text-[11px] uppercase text-muted-foreground">
+                {note.authorRole === 'head_coach' ? t('authorHeadCoach') : t('authorAthlete')}
+              </span>
+              <p className="font-body text-sm text-foreground">{note.body}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          aria-label={t('addNote')}
+          className="h-10 min-w-0 flex-1 border border-border bg-background px-3 font-body text-base text-foreground outline-none focus:border-signal"
+        />
+        <button
+          type="button"
+          disabled={pending || draft.trim() === ''}
+          onClick={() => {
+            onAdd(draft);
+            setDraft('');
+          }}
+          className="inline-flex h-10 items-center border border-border px-4 font-body text-[15px] text-foreground transition-colors hover:border-foreground disabled:opacity-40"
+        >
+          {t('addNote')}
+        </button>
+      </div>
     </div>
   );
 }
 
 /**
- * "What can you do right now?" — capacity, never diagnosis. Three disciplines,
- * three allowances, an optional Bother Rating; and Illness as one button. The
- * copy was decided on 2026-09-11 so the form cannot drift into asking what is
- * wrong: the name field (28a, Mads 2026-09-18) is "what and where" in the
+ * The two ways to report, as entry cards that open their own form. Capacity,
+ * never diagnosis: the copy was decided on 2026-09-11 so the form cannot drift
+ * into asking what is wrong, and the name (28a) is "what and where" in the
  * athlete's words — "left knee" — to tell two injuries apart, never a
  * diagnosis, and never read by the planner.
  */
-function DeclareForm({
+function Report({
+  form,
   pending,
   t,
+  consent,
+  onToggle,
+  onCancel,
   onInjury,
   onIllness,
+  onAgree,
+  onNotNow,
 }: {
+  form: Kind | null;
   pending: boolean;
   t: T;
+  /** Set while a report waits on the injury consent: its form shows the consent's words. */
+  consent: { kind: Kind; title: string; body: string } | null;
+  onToggle: (kind: Kind) => void;
+  onCancel: () => void;
   onInjury: (capacity: Capacity, bother: number | null, name: string) => void;
   onIllness: (bother: number | null) => void;
+  onAgree: () => void;
+  onNotNow: () => void;
 }) {
   const [capacity, setCapacity] = useState<Capacity>({ swim: 'full', bike: 'full', run: 'full' });
   const [bother, setBother] = useState<number | null>(null);
   const [name, setName] = useState('');
+  // Each opened form starts blank: a saved report must not come back
+  // pre-filled, inviting the same declaration twice.
+  const [openedFor, setOpenedFor] = useState(form);
+  if (form !== openedFor) {
+    setOpenedFor(form);
+    setCapacity({ swim: 'full', bike: 'full', run: 'full' });
+    setBother(null);
+    setName('');
+  }
   const restricted = DISCIPLINES.some((d) => capacity[d] !== 'full');
+  const frozen = Boolean(consent) || pending;
+
+  const panel = (kind: Kind) =>
+    consent?.kind === kind ? (
+      <ConsentPanel title={consent.title} body={consent.body} pending={pending} t={t} onAgree={onAgree} onNotNow={onNotNow} />
+    ) : null;
+
+  const actions = (kind: Kind, save: ReactNode) => (
+    <div className="flex items-center gap-2 border-t border-border pt-4">
+      {consent?.kind !== kind && save}
+      <button
+        type="button"
+        disabled={pending}
+        onClick={onCancel}
+        className="inline-flex h-11 items-center px-4 font-body text-[15px] text-muted-foreground hover:text-foreground"
+      >
+        {t('cancel')}
+      </button>
+    </div>
+  );
 
   return (
-    <section className="mt-6">
-      <h2 className="font-display text-xl font-bold uppercase italic tracking-[0.03em] text-foreground">{t('whatCanYouDo')}</h2>
-      <p className="mt-1 font-body text-[13px] text-muted-foreground">{t('whatCanYouDoNote')}</p>
-      <div className="mt-3 space-y-2">
+    <section className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <EntryCard kind="injury" open={form === 'injury'} dim={form === 'illness'} disabled={frozen} t={t} onToggle={onToggle} />
+        <EntryCard kind="illness" open={form === 'illness'} dim={form === 'injury'} disabled={frozen} t={t} onToggle={onToggle} />
+      </div>
+
+      {form === 'injury' && (
+        <div className="space-y-5 border-2 border-t-0 border-signal bg-panel p-5">
+          <fieldset disabled={frozen} className="space-y-5">
+            <label className="block">
+              <span className="font-body text-sm text-muted-foreground">{t('nameLabel')}</span>
+              <input
+                data-field="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                readOnly={frozen}
+                placeholder={t('namePlaceholder')}
+                maxLength={60}
+                className="mt-1.5 h-11 w-full border border-border bg-background px-3 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
+              />
+            </label>
+            <CapacityGrid value={capacity} t={t} onChange={setCapacity} />
+            <BotherScale label={t('botherQuestion')} value={bother} disabled={frozen} t={t} onChange={setBother} />
+          </fieldset>
+          {panel('injury')}
+          {actions(
+            'injury',
+            <button
+              type="button"
+              disabled={!restricted || pending}
+              onClick={() => onInjury(capacity, bother, name)}
+              className="inline-flex h-11 flex-1 items-center justify-center bg-signal px-4 font-body text-base font-medium text-signal-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {t('saveInjury')}
+            </button>,
+          )}
+        </div>
+      )}
+
+      {form === 'illness' && (
+        <div className="space-y-5 border-2 border-t-0 border-foreground bg-panel p-5">
+          <fieldset disabled={frozen} className="space-y-5">
+            <p className="font-body text-base text-foreground">{t('illExplain')}</p>
+            <BotherScale label={t('botherQuestion')} value={bother} disabled={frozen} t={t} onChange={setBother} />
+          </fieldset>
+          {panel('illness')}
+          {actions(
+            'illness',
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onIllness(bother)}
+              className="inline-flex h-11 flex-1 items-center justify-center bg-foreground px-4 font-body text-base font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {t('saveIllness')}
+            </button>,
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EntryCard({
+  kind,
+  open,
+  dim,
+  disabled,
+  t,
+  onToggle,
+}: {
+  kind: Kind;
+  open: boolean;
+  dim: boolean;
+  disabled: boolean;
+  t: T;
+  onToggle: (kind: Kind) => void;
+}) {
+  const injury = kind === 'injury';
+  const Icon = HEALTH_ICON[kind];
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      disabled={disabled}
+      onClick={() => onToggle(kind)}
+      className={[
+        'flex min-h-24 flex-col items-start gap-1 border-2 p-4 text-left transition-colors',
+        open
+          ? injury
+            ? 'border-signal bg-signal text-signal-foreground'
+            : 'border-foreground bg-foreground text-background'
+          : injury
+            ? 'border-signal bg-panel text-foreground hover:bg-signal/10'
+            : 'border-border bg-panel text-foreground hover:border-foreground',
+        dim ? 'opacity-50' : '',
+      ].join(' ')}
+    >
+      <Icon className={open || !injury ? 'h-5 w-5' : 'h-5 w-5 text-signal'} />
+      <span className="font-display text-lg font-bold uppercase italic leading-tight tracking-[0.03em]">
+        {injury ? t('reportInjury') : t('ill')}
+      </span>
+      <span className={['font-body text-sm', open ? 'opacity-90' : 'text-muted-foreground'].join(' ')}>
+        {injury ? t('reportInjurySub') : t('illSub')}
+      </span>
+    </button>
+  );
+}
+
+/** "What can you train right now?": three disciplines, three allowances. */
+function CapacityGrid({ value, t, onChange }: { value: Capacity; t: T; onChange: (value: Capacity) => void }) {
+  return (
+    <div>
+      <span className="font-body text-sm text-muted-foreground">{t('trainLabel')}</span>
+      <div className="mt-2 divide-y divide-border border border-border">
         {DISCIPLINES.map((d) => (
-          <div key={d} data-discipline={d} className="flex items-center justify-between gap-3">
-            <span className="font-body text-sm text-foreground">{t(`discipline_${d}`)}</span>
-            <div className="flex gap-1">
+          <div key={d} data-discipline={d} className="grid grid-cols-[64px_1fr] items-center">
+            <span className="px-3 font-display text-sm font-bold uppercase italic tracking-[0.08em] text-foreground">
+              {t(`discipline_${d}`)}
+            </span>
+            <div className="grid grid-cols-3 border-l border-border" role="radiogroup" aria-label={t(`discipline_${d}`)}>
               {[...ALLOWANCES].reverse().map((a: Allowance) => (
                 <button
                   key={a}
                   type="button"
-                  aria-pressed={capacity[d] === a}
-                  onClick={() => setCapacity({ ...capacity, [d]: a })}
+                  role="radio"
+                  aria-checked={value[d] === a}
+                  onClick={() => onChange({ ...value, [d]: a })}
                   className={[
-                    'border px-2.5 py-1 font-body text-sm uppercase tracking-[0.12em] transition-colors',
-                    capacity[d] === a
-                      ? 'border-signal text-signal'
-                      : 'border-border text-muted-foreground hover:text-foreground',
+                    'h-10 border-l border-border px-1 font-body text-sm transition-colors first:border-l-0',
+                    value[d] === a
+                      ? a === 'full'
+                        ? 'bg-foreground text-background'
+                        : 'bg-signal text-signal-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
                   ].join(' ')}
                 >
                   {t(`allow${a[0].toUpperCase()}${a.slice(1)}`)}
@@ -589,86 +747,52 @@ function DeclareForm({
           </div>
         ))}
       </div>
-      {/* What and where, in the athlete's words — a name to tell two injuries
-          apart, not a diagnosis; optional, and never read by the planner. */}
-      <div className="mt-3">
-        <label htmlFor="health-injury-name" className="font-body text-sm uppercase tracking-[0.16em] text-muted-foreground">
-          {t('nameLabel')}
-        </label>
-        <input
-          id="health-injury-name"
-          data-field="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('namePlaceholder')}
-          maxLength={60}
-          disabled={pending}
-          className="mt-1 w-full border border-border bg-background px-3 py-2.5 font-body text-base text-foreground outline-none placeholder:text-muted-foreground focus:border-signal"
-        />
-      </div>
-      <div className="mt-3">
-        <BotherControl value={bother} disabled={pending} t={t} onChange={setBother} />
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={pending || !restricted}
-          onClick={() => onInjury(capacity, bother, name)}
-          className="border border-signal h-10 px-4 font-body text-[15px] font-medium text-signal transition-colors hover:bg-signal hover:text-signal-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
-        >
-          {t('declareInjury')}
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => onIllness(bother)}
-          className="border border-border h-10 px-4 font-body text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-        >
-          {t('imIll')}
-        </button>
-      </div>
-    </section>
+    </div>
   );
 }
 
 /**
- * The `injury_health_data` consent, asked where it matters: the first time the
- * athlete declares an Injury or Illness (training-architecture/14, ADR 0012).
- * The words are the disclosure's own, so what is shown here is what is agreed
- * to. Built plain; the design pass is Lovable's.
+ * The `injury_health_data` consent, inside the form that asked for it
+ * (training-architecture/14, ADR 0012). The words are the disclosure's own, so
+ * what is shown is what is agreed to.
  */
-function InjuryConsent({
-  locale,
+function ConsentPanel({
+  title,
+  body,
   pending,
   t,
   onAgree,
-  onCancel,
+  onNotNow,
 }: {
-  locale: string;
+  title: string;
+  body: string;
   pending: boolean;
-  t: (key: string) => string;
+  t: T;
   onAgree: () => void;
-  onCancel: () => void;
+  onNotNow: () => void;
 }) {
-  const copy = disclosureCopy(locale).purposes.injury_health_data;
+  // Save held focus and is gone now; without this, focus falls to the page
+  // and the next Tab leaves the drawer.
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => panel.current?.focus(), []);
   return (
-    <section data-injury-consent="" className="mt-5 border border-border p-4">
-      <h3 className="font-body text-base font-semibold text-foreground">{copy.title}</h3>
-      <p className="mt-1 font-body text-sm text-muted-foreground">{copy.body}</p>
-      <div className="mt-3 flex items-center gap-3">
+    <section ref={panel} tabIndex={-1} data-injury-consent="" aria-busy={pending} className="space-y-3 border border-input bg-background p-4">
+      <h3 className="font-body text-base font-semibold leading-snug text-foreground">{title}</h3>
+      <p className="font-body text-base leading-relaxed text-foreground">{body}</p>
+      <div className="flex flex-col gap-2 pt-1 min-[380px]:flex-row min-[380px]:items-center">
         <button
           type="button"
-          onClick={onAgree}
           disabled={pending}
-          className="inline-flex h-10 items-center bg-foreground px-4 font-body text-sm font-semibold text-background disabled:opacity-35"
+          onClick={onAgree}
+          className="inline-flex h-11 min-w-0 flex-1 items-center justify-center bg-signal px-3 font-body text-base text-signal-foreground hover:bg-signal/90 disabled:opacity-40"
         >
           {t('consentAgreeAndDeclare')}
         </button>
         <button
           type="button"
-          onClick={onCancel}
           disabled={pending}
-          className="font-body text-sm text-muted-foreground hover:text-foreground disabled:opacity-35"
+          onClick={onNotNow}
+          className="inline-flex h-10 items-center border border-border bg-transparent px-3 font-body text-base text-foreground disabled:opacity-40"
         >
           {t('consentNotNow')}
         </button>

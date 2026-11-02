@@ -23,6 +23,7 @@ export function CoachCalendar({
   unavailableDates,
   todayKey,
   health,
+  athleteName,
 }: {
   athleteId: string;
   sessions: Session[];
@@ -32,6 +33,8 @@ export function CoachCalendar({
    *  no layer at all, not an empty one: "uninjured" is a claim, and a coach who
    *  was not shown the records has not been told it (`showable-version/28b`). */
   health: HealthSpan[] | null;
+  /** The athlete's name, for the health drawer's title (showable-version/50); null when they set none. */
+  athleteName: string | null;
 }) {
   return (
     <Calendar
@@ -41,6 +44,7 @@ export function CoachCalendar({
       health={health}
       readOnly
       coachAthleteId={athleteId}
+      athleteName={athleteName ?? undefined}
       onMove={(sessionId, targetDate, expectedVersion) =>
         moveSessionAsCoachAction(athleteId, sessionId, targetDate, expectedVersion)
       }

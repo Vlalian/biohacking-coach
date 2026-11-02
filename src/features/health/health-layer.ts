@@ -77,6 +77,8 @@ export interface HealthMark {
   /** Signal while the record is open; muted once it is over — but never removed. */
   open: boolean;
   label: string | null;
+  /** The record the mark stands for, so pressing it opens that record (`showable-version/51`). */
+  id: string;
 }
 
 /** Whether a span covers a date, with an open span running to today and never past it. */
@@ -93,7 +95,7 @@ function covers(span: HealthSpan, date: string, todayKey: string): boolean {
  * day, because an open span ends at today.
  */
 export function marksFor(date: string, spans: readonly HealthSpan[], todayKey: string): HealthMark[] {
-  const mark = (span: HealthSpan): HealthMark => ({ kind: span.kind, open: span.to === null, label: span.name });
+  const mark = (span: HealthSpan): HealthMark => ({ kind: span.kind, open: span.to === null, label: span.name, id: span.id });
   const covering = spans.filter((s) => covers(s, date, todayKey));
   return [...covering.filter((s) => s.kind === 'injury'), ...covering.filter((s) => s.kind === 'illness')].map(mark);
 }
@@ -102,7 +104,7 @@ export function marksFor(date: string, spans: readonly HealthSpan[], todayKey: s
  * What the calendar's one status card says (`showable-version/28e`, Mads
  * 2026-09-19): the newest **open** record of each kind, or null. It reads
  * today and nothing else — a healed record is history, which lives in the
- * muted marks on the days and the drawer's History fold, never on the card.
+ * muted marks on the days and the drawer's Past section, never on the card.
  */
 export function currentStatus(spans: readonly HealthSpan[]): {
   injury: HealthSpan | null;

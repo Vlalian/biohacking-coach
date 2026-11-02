@@ -81,7 +81,7 @@ describe('marksFor — the icons a session carries (showable-version/28a)', () =
   };
 
   it('an open injury marks every session from its start through today, whatever the discipline', () => {
-    expect(marksFor('2026-09-12', [knee], '2026-09-14')).toEqual([{ kind: 'injury', open: true, label: 'left knee' }]);
+    expect(marksFor('2026-09-12', [knee], '2026-09-14')).toEqual([{ kind: 'injury', open: true, label: 'left knee', id: 'i1' }]);
     expect(marksFor('2026-09-10', [knee], '2026-09-14')).toHaveLength(1);
     expect(marksFor('2026-09-14', [knee], '2026-09-14')).toHaveLength(1);
     expect(marksFor('2026-09-09', [knee], '2026-09-14')).toEqual([]);
@@ -90,7 +90,7 @@ describe('marksFor — the icons a session carries (showable-version/28a)', () =
   });
 
   it('a closed record still marks its days, muted, forever', () => {
-    expect(marksFor('2026-09-04', [flu], '2026-09-14')).toEqual([{ kind: 'illness', open: false, label: null }]);
+    expect(marksFor('2026-09-04', [flu], '2026-09-14')).toEqual([{ kind: 'illness', open: false, label: null, id: 'l1' }]);
     expect(marksFor('2026-09-05', [flu], '2026-09-14')).toHaveLength(1);
     expect(marksFor('2026-09-06', [flu], '2026-09-14')).toEqual([]);
   });
