@@ -24,7 +24,7 @@ const W48 = '2026-11-23';
 
 const render = (preview: HoursChangePreview) =>
   renderToStaticMarkup(
-    <HoursChangeDialog hours={10} preview={preview} pending={false} onApply={() => {}} onRetry={() => {}} onCancel={() => {}} />,
+    <HoursChangeDialog hours={10} preview={preview} pending={false} onApply={() => {}} onCancel={() => {}} />,
   );
 
 describe('HoursChangeDialog', () => {
@@ -57,11 +57,16 @@ describe('HoursChangeDialog', () => {
     expect(nothing).not.toContain('hoursPlannedStays');
   });
 
-  it('while a draft is being written: says so and offers try again, not confirm', () => {
-    const html = render({ kind: 'drafting', week: W41 });
-    expect(html).toContain('hoursDrafting(seconds=30,week=41)');
-    expect(html).toContain('hoursTryAgain()');
-    expect(html).not.toContain('hoursConfirm()');
+  // Review of 61 (Mads, 2026-11-02): never a lock while the Coach is down.
+  it('while a draft is being written: keeps that week and offers the week after, never the drafted week', () => {
+    const html = render({ kind: 'drafting', week: W41, weeks: [W42, W48] });
+    expect(html).toContain('hoursDrafting(after=42,week=41)');
+    expect(html).toContain('hoursDraftingNote(hours=10,week=41)');
+    expect(html).toContain('hoursRedrawWeeks(count=2,first=42,hours=10,last=48)');
+    expect(html).toContain('hoursStartFrom(week=42)');
+    expect(html).toContain('hoursCancel()');
+    expect(html).not.toContain('hoursStartFrom(week=41)');
+    expect(html).not.toContain('hoursTryAgain');
   });
 
   it('names the week after by date, so the year turns over: after week 53 comes week 1', () => {

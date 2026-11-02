@@ -26,8 +26,10 @@ export function isStartFrom(value: unknown): value is StartFrom {
 
 /**
  * What the confirm dialog asks, given what an hours change would touch:
- * - `drafting`: Momentum is writing the waiting week right now, so the dialog
- *   says so and lets the athlete try again, rather than racing the draft;
+ * - `drafting`: Momentum is writing an upcoming week right now, so that week is
+ *   kept like a coach's preview and the change starts the week after it. Never
+ *   a lock: a Coach that keeps failing reads as drafting for as long as it fails
+ *   (review of 61, Mads 2026-11-02);
  * - `choose`: a draft the athlete can see is waiting, so they pick the week;
  * - `coach-preparing`: the waiting draft is still in a linked Head Coach's
  *   preview, so only the week after is offered — the coach's work stays;
@@ -35,7 +37,7 @@ export function isStartFrom(value: unknown): value is StartFrom {
  *   naming next week when it is already planned and stays as it is.
  */
 export type HoursChangePreview =
-  | { kind: 'drafting'; week: string }
+  | { kind: 'drafting'; week: string; weeks: string[] }
   | { kind: 'choose'; waitingWeek: string; weeks: string[]; weeksIfKept: string[] }
   | { kind: 'coach-preparing'; waitingWeek: string; weeks: string[] }
   | { kind: 'confirm'; weeks: string[]; plannedWeek: string | null };
@@ -60,10 +62,18 @@ function waitingChoice(waiting: WeekDraft, weeks: string[], today: string): Hour
   return { kind: 'choose', waitingWeek, weeks, weeksIfKept: others };
 }
 
+/**
+ * The upcoming week Momentum is drafting right now, if any. This week's own
+ * first draft is not one an hours change can race: the current week is never redrawn.
+ */
+export function draftingWeek(inFlightWeek: string | null, today: string): string | null {
+  return inFlightWeek && inFlightWeek > weekStartOf(today) ? inFlightWeek : null;
+}
+
 export function hoursChangePreview(facts: HoursChangeFacts): HoursChangePreview {
   const { today, weeks, inFlightWeek, waiting, nextWeekPlanned } = facts;
-  // Only a later week's draft can race the change; this week's own first draft cannot.
-  if (inFlightWeek && inFlightWeek > weekStartOf(today)) return { kind: 'drafting', week: inFlightWeek };
+  const drafting = draftingWeek(inFlightWeek, today);
+  if (drafting) return { kind: 'drafting', week: drafting, weeks: weeks.filter((w) => w !== drafting) };
   if (waiting) return waitingChoice(waiting, weeks, today);
   return { kind: 'confirm', weeks, plannedWeek: nextWeekPlanned ? addDays(weekStartOf(today), 7) : null };
 }

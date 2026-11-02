@@ -70,13 +70,35 @@ describe('previewHoursChange', () => {
     expect(getSessionsForWeek).toHaveBeenCalledWith('athlete_1', W41);
   });
 
-  it('waits while Momentum is writing an upcoming week', async () => {
+  it('keeps the week Momentum is writing and offers the weeks after it', async () => {
+    previewRefill.mockResolvedValue([W41, W42]);
     draftInFlight.mockResolvedValue({ weekStart: W41, visibleFrom: W41, expectedSeconds: 30 });
-    expect(await previewHoursChange('athlete_1', TODAY)).toEqual({ kind: 'drafting', week: W41 });
+    expect(await previewHoursChange('athlete_1', TODAY)).toEqual({ kind: 'drafting', week: W41, weeks: [W42] });
   });
 });
 
 describe('applyHoursChange', () => {
+  // Review of 61 (Mads, 2026-11-02): a draft still being written is kept like a coach's preview,
+  // whatever the client asked, so the athlete is never locked out while the Coach is down.
+  it.each(['waiting-week', 'week-after'] as const)('%s with a draft in flight keeps that week and redraws the others', async (startFrom) => {
+    draftInFlight.mockResolvedValue({ weekStart: W41, visibleFrom: TODAY, expectedSeconds: 30 });
+    refillWeeksFromHours.mockResolvedValue({ outcome: 'refilled', weeks: [W42] });
+
+    expect(await applyHoursChange('athlete_1', 10, startFrom, TODAY)).toEqual({ redrawn: [W42], redraft: null });
+    expect(refillWeeksFromHours).toHaveBeenCalledWith('athlete_1', TODAY, { except: W41 });
+    expect(recordHoursChanged).toHaveBeenCalledWith('athlete_1', { hours: 10, keptWeek: W41 });
+    expect(withdrawWeekDraft).not.toHaveBeenCalled();
+  });
+
+  it('ignores this week’s own first draft in flight: the current week is never the one kept', async () => {
+    draftInFlight.mockResolvedValue({ weekStart: '2026-09-28', visibleFrom: TODAY, expectedSeconds: 30 });
+    refillWeeksFromHours.mockResolvedValue({ outcome: 'refilled', weeks: [W41, W42] });
+
+    expect(await applyHoursChange('athlete_1', 10, 'week-after', TODAY)).toEqual({ redrawn: [W41, W42], redraft: null });
+    expect(refillWeeksFromHours).toHaveBeenCalledWith('athlete_1', TODAY);
+    expect(recordHoursChanged).toHaveBeenCalledWith('athlete_1', { hours: 10, keptWeek: null });
+  });
+
   it('start from the waiting week: stores, redraws it with the rest, withdraws its draft, and names it to draft again', async () => {
     waitingIn(W41, draft());
     refillWeeksFromHours.mockResolvedValue({ outcome: 'refilled', weeks: [W41, W42] });

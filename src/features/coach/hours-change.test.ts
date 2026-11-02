@@ -37,7 +37,9 @@ describe('hoursChangePreview — what the hours dialog asks (showable-version/61
       waitingWeek: W41,
       weeks: [W42],
     });
-    expect(hoursChangePreview({ ...base, inFlightWeek: W41 })).toEqual({ kind: 'drafting', week: W41 });
+    // A draft being written is kept like one in a coach's preview: the change starts the week after it
+    // (review of 61, Mads 2026-11-02), so a Coach that keeps failing never locks the athlete out.
+    expect(hoursChangePreview({ ...base, weeks: [W41, W42, W48], inFlightWeek: W41 })).toEqual({ kind: 'drafting', week: W41, weeks: [W42, W48] });
     // This week's own first draft is not one an hours change can race.
     expect(hoursChangePreview({ ...base, inFlightWeek: '2026-09-28' })).toEqual({ kind: 'confirm', weeks: [W42, W48], plannedWeek: null });
     expect(hoursChangePreview({ ...base, nextWeekPlanned: true })).toEqual({ kind: 'confirm', weeks: [W42, W48], plannedWeek: W41 });

@@ -5,7 +5,6 @@ import { Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { HoursChangePreview, StartFrom } from '@/features/coach/hours-change';
 import { addDays, isoWeekNumber } from '@/lib/date';
-import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 
 /** The signal-red outlined button every choice in this dialog uses. */
 const SIGNAL_BUTTON =
@@ -22,7 +21,6 @@ type Props = {
   preview: HoursChangePreview;
   pending: boolean;
   onApply: (startFrom: StartFrom) => void;
-  onRetry: () => void;
   onCancel: () => void;
 };
 
@@ -43,7 +41,7 @@ export function HoursChangeDialog(props: Props) {
 function Body(props: Props) {
   switch (props.preview.kind) {
     case 'drafting':
-      return <Drafting {...props} week={props.preview.week} />;
+      return <Drafting {...props} preview={props.preview} />;
     case 'choose':
       return <Choose {...props} preview={props.preview} />;
     case 'coach-preparing':
@@ -97,22 +95,16 @@ function RedrawLine({ weeks, hours }: { weeks: string[]; hours: number }) {
   );
 }
 
-function Drafting({ week: drafting, onRetry, onCancel, pending }: Props & { week: string }) {
+function Drafting({ preview, hours, onApply, onCancel, pending }: Props & { preview: Extract<HoursChangePreview, { kind: 'drafting' }> }) {
   const t = useTranslations('Settings');
+  const drafting = week(preview.week);
   return (
     <>
-      <Note>{t('hoursDrafting', { week: week(drafting), seconds: COACH_EXPECTED_SECONDS })}</Note>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onRetry}
-          disabled={pending}
-          className={`mt-3 ${SIGNAL_BUTTON}`}
-        >
-          {t('hoursTryAgain')}
-        </button>
-        <Cancel onCancel={onCancel} pending={pending} />
-      </div>
+      <Note>{t('hoursDrafting', { week: drafting, after: weekAfter(preview.week) })}</Note>
+      <Note>{t('hoursDraftingNote', { week: drafting, hours })}</Note>
+      <RedrawLine weeks={preview.weeks} hours={hours} />
+      <Choice label={t('hoursStartFrom', { week: weekAfter(preview.week) })} onClick={() => onApply('week-after')} pending={pending} />
+      <Cancel onCancel={onCancel} pending={pending} />
     </>
   );
 }

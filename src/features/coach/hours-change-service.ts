@@ -2,7 +2,7 @@ import { updateHoursPerWeek } from '@/features/athlete/athlete-repository';
 import { getSessionsForWeek } from '@/features/session/session-repository';
 import { addDays, weekStartOf } from '@/lib/date';
 import { previewRefill, refillWeeksFromHours } from './block-fill-service';
-import { hoursChangePreview, type HoursChangePreview, type StartFrom } from './hours-change';
+import { draftingWeek, hoursChangePreview, type HoursChangePreview, type StartFrom } from './hours-change';
 import { hasCoachPlannedSession, visibleTo, type WeekDraft } from './week-draft';
 import { getPendingWeekDraft, recordHoursChanged, withdrawWeekDraft } from './week-draft-repository';
 import { draftInFlight } from './week-draft-service';
@@ -48,7 +48,10 @@ export async function previewHoursChange(athleteId: string, today: string): Prom
  * the caller drafts it again at once. Otherwise the waiting week is kept as it
  * is and recorded, so declining its draft later moves it to the new hours too.
  * A draft still in a linked Head Coach's preview is always kept, whatever the
- * client asked: the coach's work is never thrown away.
+ * client asked: the coach's work is never thrown away. So is a week Momentum is
+ * drafting right now: the change starts the week after it, and declining that
+ * draft once it lands moves the week to the new hours (review of 61, Mads
+ * 2026-11-02).
  */
 export async function applyHoursChange(
   athleteId: string,
@@ -59,7 +62,7 @@ export async function applyHoursChange(
   await updateHoursPerWeek(athleteId, hours);
   const waiting = await waitingDraft(athleteId, today);
 
-  if (!waiting) return finish(athleteId, hours, (await refillWeeksFromHours(athleteId, today)).weeks, null, null);
+  if (!waiting) return withNoWaitingDraft(athleteId, hours, today);
 
   if (startFrom === 'waiting-week' && visibleTo(waiting, today)) {
     const { weeks } = await refillWeeksFromHours(athleteId, today);
@@ -69,6 +72,13 @@ export async function applyHoursChange(
 
   const { weeks } = await refillWeeksFromHours(athleteId, today, { except: waiting.weekStart });
   return finish(athleteId, hours, weeks, waiting.weekStart, null);
+}
+
+/** No undecided draft: a week Momentum is drafting right now is kept, as a waiting one would be. */
+async function withNoWaitingDraft(athleteId: string, hours: number, today: string) {
+  const kept = draftingWeek((await draftInFlight(athleteId, today))?.weekStart ?? null, today);
+  const { weeks } = kept ? await refillWeeksFromHours(athleteId, today, { except: kept }) : await refillWeeksFromHours(athleteId, today);
+  return finish(athleteId, hours, weeks, kept, null);
 }
 
 async function finish(athleteId: string, hours: number, redrawn: string[], keptWeek: string | null, redraft: string | null) {

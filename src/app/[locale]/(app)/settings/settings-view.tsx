@@ -673,7 +673,6 @@ function HoursPerWeekField({
           preview={confirming}
           pending={pending}
           onApply={confirm}
-          onRetry={ask}
           onCancel={() => setConfirming(null)}
         />
       )}
