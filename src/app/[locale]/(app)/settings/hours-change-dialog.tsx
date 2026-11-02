@@ -7,6 +7,10 @@ import type { HoursChangePreview, StartFrom } from '@/features/coach/hours-chang
 import { addDays, isoWeekNumber } from '@/lib/date';
 import { COACH_EXPECTED_SECONDS } from '@/lib/generation';
 
+/** The signal-red outlined button every choice in this dialog uses. */
+const SIGNAL_BUTTON =
+  'border border-signal h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50';
+
 /**
  * The hours confirm dialog (showable-version/61): what an hours change will do,
  * and — when a drafted week is waiting — which week the new hours start from.
@@ -60,7 +64,7 @@ function Choice({ label, note, onClick, pending }: { label: string; note?: strin
         type="button"
         onClick={onClick}
         disabled={pending}
-        className="inline-flex items-center gap-2 border border-signal h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
+        className={`inline-flex items-center gap-2 ${SIGNAL_BUTTON}`}
       >
         {pending && <Loader2 className="h-3 w-3 animate-spin" />}
         {label}
@@ -103,7 +107,7 @@ function Drafting({ week: drafting, onRetry, onCancel, pending }: Props & { week
           type="button"
           onClick={onRetry}
           disabled={pending}
-          className="mt-3 border border-signal h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
+          className={`mt-3 ${SIGNAL_BUTTON}`}
         >
           {t('hoursTryAgain')}
         </button>
@@ -166,7 +170,7 @@ function Confirm({ preview, hours, onApply, onCancel, pending }: Props & { previ
           type="button"
           onClick={() => onApply('week-after')}
           disabled={pending}
-          className="mt-3 inline-flex items-center gap-2 border border-signal h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
+          className={`mt-3 inline-flex items-center gap-2 ${SIGNAL_BUTTON}`}
         >
           {pending && <Loader2 className="h-3 w-3 animate-spin" />}
           {t('hoursConfirm')}

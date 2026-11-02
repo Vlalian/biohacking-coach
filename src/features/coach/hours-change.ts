@@ -14,6 +14,7 @@
 
 import { addDays, weekStartOf } from '@/lib/date';
 import type { WeekDraft } from './week-draft';
+import { PLAN_EVENT } from './plan-proposal';
 
 /** Where the new hours start: the week with the waiting draft, or the week after it. */
 export const START_FROM = ['waiting-week', 'week-after'] as const;
@@ -70,8 +71,6 @@ export function hoursChangePreview(facts: HoursChangeFacts): HoursChangePreview 
 /** The event an hours change records, naming the week whose draft was kept on the old hours, if any. */
 export const HOURS_CHANGED_EVENT = 'hours_changed';
 
-/** The event a declined draft writes (`week-draft-repository.recordWeekDraftDecision`). */
-const DECLINED_EVENT = 'week_plan_declined';
 
 /** The minimal shape of an event this module reads. */
 export type MarkerEvent = { type: string; payload: unknown };
@@ -90,7 +89,7 @@ export function keptWeekStale(events: readonly MarkerEvent[], weekStart: string)
   let stale = false;
   for (const event of events) {
     if (event.type === HOURS_CHANGED_EVENT) stale = payloadField(event, 'keptWeek') === weekStart;
-    else if (event.type === DECLINED_EVENT && payloadField(event, 'weekStart') === weekStart) stale = false;
+    else if (event.type === PLAN_EVENT.declined && payloadField(event, 'weekStart') === weekStart) stale = false;
   }
   return stale;
 }

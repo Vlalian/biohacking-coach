@@ -51,7 +51,7 @@ function directiveAbove(lines: string[], line: number): number | null {
  * first em-dash or colon after the directive, and runs on through the comment
  * lines below it.
  */
-export function suppressionReason(source: string, line: number): SuppressionReason | null {
+function suppressionReason(source: string, line: number): SuppressionReason | null {
   const lines = source.split('\n');
   const at = directiveAbove(lines, line);
   if (at === null) return null;

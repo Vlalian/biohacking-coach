@@ -32,9 +32,13 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 const { FrontpageView } = await import('./frontpage-view');
-const { frontpageScreenshots } = await import('./screenshots');
+const { frontpageScreenshotsFor } = await import('./screenshots');
 
-function html(locale: 'en' | 'da', screenshots = frontpageScreenshots) {
+/** Every frame without a picture yet, so each shows its placeholder. */
+const empty = { src: '', alt: '' };
+const placeholders = { rosterView: empty, coachChat: empty, trainingPlan: empty, informationView: empty };
+
+function html(locale: 'en' | 'da', screenshots = placeholders) {
   current.locale = locale;
   return renderToStaticMarkup(<FrontpageView locale={locale} screenshots={screenshots} />);
 }
@@ -113,7 +117,7 @@ describe('FrontpageView screenshots', () => {
 
   it('shows an image in place of the placeholder once a src is given, and labels the chat frame', () => {
     const withChat = {
-      ...frontpageScreenshots,
+      ...placeholders,
       coachChat: { src: '/shots/coach-chat.png', alt: 'The Momentum chat' },
     };
     const out = html('en', withChat);
@@ -126,7 +130,7 @@ describe('FrontpageView screenshots', () => {
 
 describe('Frontpage and the retired Weekly Session', () => {
   it('has no weeklySession prop, key or string', () => {
-    expect(Object.keys(frontpageScreenshots).sort()).toEqual(
+    expect(Object.keys(frontpageScreenshotsFor((key) => key)).sort()).toEqual(
       ['coachChat', 'informationView', 'rosterView', 'trainingPlan'],
     );
     expect(sources()).not.toMatch(/weekly/i);

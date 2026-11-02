@@ -33,7 +33,7 @@ function dayStart(value: string): Date {
   return date;
 }
 
-export function parseFeedbackArgs(argv: readonly string[]): FeedbackArgs {
+function parseFeedbackArgs(argv: readonly string[]): FeedbackArgs {
   const parsed: FeedbackArgs = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] !== '--since') throw new Error(`unknown option: ${argv[i]}`);

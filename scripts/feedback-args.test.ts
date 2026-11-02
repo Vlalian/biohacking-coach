@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { feedbackReport, parseFeedbackArgs } from './feedback-args';
+import { feedbackReport } from './feedback-args';
 import type { FeedbackReportInput } from '../src/features/feedback/feedback-report';
 
 describe('feedbackReport — what npm run feedback prints', () => {
@@ -30,21 +30,28 @@ describe('feedbackReport — what npm run feedback prints', () => {
   });
 });
 
-describe('parseFeedbackArgs — npm run feedback -- --since YYYY-MM-DD (showable-version/48)', () => {
-  it('reads nothing as everything', () => {
-    expect(parseFeedbackArgs([])).toEqual({});
+describe('feedbackReport — npm run feedback -- --since YYYY-MM-DD (showable-version/48)', () => {
+  const row = (id: string, at: string) => ({ id, athleteId: 'a', kind: 'fallback' as const, body: id, view: null, conversationId: null, coachFailureReason: null, createdAt: new Date(at) });
+  const edge: FeedbackReportInput = {
+    interviews: [],
+    feedback: [row('lastSecondBefore', '2026-09-29T23:59:59Z'), row('firstSecond', '2026-09-30T00:00:00Z')],
+    thumbs: [],
+    reflections: [],
+  };
+
+  it('reads --since as the start of that day, in UTC', async () => {
+    const text = await feedbackReport(['--since', '2026-09-30'], async () => edge);
+    expect(text).toContain('[fallback:firstSecond]');
+    expect(text).not.toContain('[fallback:lastSecondBefore]');
   });
 
-  it('reads --since as the start of that day, in UTC', () => {
-    expect(parseFeedbackArgs(['--since', '2026-09-30'])).toEqual({ since: new Date('2026-09-30T00:00:00Z') });
-  });
-
-  it('refuses a missing value, a value in another shape, a date that is not one, and an unknown option', () => {
-    expect(() => parseFeedbackArgs(['--since'])).toThrow(/--since needs a value/);
-    expect(() => parseFeedbackArgs(['--since', '--x'])).toThrow(/--since needs a value/);
-    expect(() => parseFeedbackArgs(['--since', '30-09-2026'])).toThrow(/YYYY-MM-DD/);
-    expect(() => parseFeedbackArgs(['--since', '2026-02-30'])).toThrow(/YYYY-MM-DD/);
-    expect(() => parseFeedbackArgs(['--since', '2026-13-45'])).toThrow(/YYYY-MM-DD/);
-    expect(() => parseFeedbackArgs(['--until', 'x'])).toThrow(/unknown option: --until/);
+  it('refuses a missing value, a value in another shape, a date that is not one, and an unknown option', async () => {
+    const report = (argv: string[]) => feedbackReport(argv, async () => edge);
+    await expect(report(['--since'])).rejects.toThrow(/--since needs a value/);
+    await expect(report(['--since', '--x'])).rejects.toThrow(/--since needs a value/);
+    await expect(report(['--since', '30-09-2026'])).rejects.toThrow(/YYYY-MM-DD/);
+    await expect(report(['--since', '2026-02-30'])).rejects.toThrow(/YYYY-MM-DD/);
+    await expect(report(['--since', '2026-13-45'])).rejects.toThrow(/YYYY-MM-DD/);
+    await expect(report(['--until', 'x'])).rejects.toThrow(/unknown option: --until/);
   });
 });

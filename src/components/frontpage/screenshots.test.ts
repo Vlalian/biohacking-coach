@@ -1,12 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { frontpageScreenshots, frontpageScreenshotsFor } from './screenshots';
-
-describe('frontpageScreenshots', () => {
-  it('is four empty pictures, so every frame shows its placeholder', () => {
-    const empty = { src: '', alt: '' };
-    expect(frontpageScreenshots).toEqual({ rosterView: empty, coachChat: empty, trainingPlan: empty, informationView: empty });
-  });
-});
+import { frontpageScreenshotsFor } from './screenshots';
 
 /** showable-version/63: the Frontpage's four pictures, each with its alt text from the catalogue. */
 describe('frontpageScreenshotsFor', () => {

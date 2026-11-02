@@ -32,7 +32,7 @@ vi.mock('node:fs', () => ({
 }));
 vi.mock('node:os', () => ({ tmpdir: () => '/tmp' }));
 
-const { main, report, reportSuppressions, MUTATION_EXEMPT } = await import('./cli');
+const { main, report, MUTATION_EXEMPT } = await import('./cli');
 
 /** A source file with one trivial function. */
 const SOURCE = 'export function f() { return 1; }';
@@ -543,24 +543,21 @@ describe('report — what a human is actually told', () => {
   const suppressed = (over = {}) => ({ file: 'src/a.ts', line: 10, mutator: 'X', commentLine: 9, reason: 'equivalent' as string | null, ...over });
 
   it('prints each new suppression with its reason under the verdict', () => {
-    const { text } = output(() => {
-      reportSuppressions({ new: [suppressed()], existing: [] });
-      return 0;
-    });
+    const { text } = output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { new: [suppressed()], existing: [] }));
     expect(text).toContain('Suppressed, new in this change:');
     expect(text).toContain('  src/a.ts:10 X — equivalent');
     expect(text).not.toContain('already there');
   });
 
   it('prints nothing for an empty list, and "(no reason given)" for a null reason', () => {
-    expect(output(() => (reportSuppressions({ new: [], existing: [] }), 0)).text).toBe('');
-    const { text } = output(() => (reportSuppressions({ new: [], existing: [suppressed({ file: 'b.ts', line: 3, mutator: 'Y', reason: null })] }), 0));
+    expect(output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { new: [], existing: [] })).text).not.toContain('Suppressed');
+    const { text } = output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { new: [], existing: [suppressed({ file: 'b.ts', line: 3, mutator: 'Y', reason: null })] }));
     expect(text).toContain('Suppressed, already there:');
     expect(text).toContain('  b.ts:3 Y — (no reason given)');
   });
 
   it('says plainly when it cannot tell new from old', () => {
-    const { text } = output(() => (reportSuppressions({ unsplit: [suppressed()] }), 0));
+    const { text } = output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { unsplit: [suppressed()] }));
     expect(text).toContain('Suppressed (no diff to tell new from old):');
     expect(text).toContain('  src/a.ts:10 X — equivalent');
   });

@@ -13,15 +13,6 @@ export type FrontpageScreenshots = {
   informationView: FrontpageImage;
 };
 
-const empty: FrontpageImage = { src: '', alt: '' };
-
-export const frontpageScreenshots: FrontpageScreenshots = {
-  rosterView: empty,
-  coachChat: empty,
-  trainingPlan: empty,
-  informationView: empty,
-};
-
 /** The `Frontpage` catalogue keys of the four pictures' alt texts. */
 export type FrontpageAltKey = 'altRosterView' | 'altCoachChat' | 'altTrainingPlan' | 'altInformationView';
 

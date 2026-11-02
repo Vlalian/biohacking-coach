@@ -257,7 +257,7 @@ function reportStanding(standing: CrapScore[]): void {
  * cannot become the quiet route past a mutant. Prints nothing when there are
  * none. The verdict does not depend on it.
  */
-export function reportSuppressions(list: SuppressionList): void {
+function reportSuppressions(list: SuppressionList): void {
   const groups: [string, Suppression[]][] =
     'unsplit' in list
       ? [['Suppressed (no diff to tell new from old):', list.unsplit]]

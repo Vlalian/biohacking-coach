@@ -289,7 +289,7 @@ export async function isKeptWeekStale(athleteId: string, weekStart: string): Pro
   const rows = await getDb()
     .select({ type: events.type, payload: events.payload })
     .from(events)
-    .where(and(eq(events.athleteId, athleteId), inArray(events.type, [HOURS_CHANGED_EVENT, 'week_plan_declined'])))
+    .where(and(eq(events.athleteId, athleteId), inArray(events.type, [HOURS_CHANGED_EVENT, PLAN_EVENT.declined])))
     .orderBy(asc(events.createdAt));
   return keptWeekStale(rows, weekStart);
 }

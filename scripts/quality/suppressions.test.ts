@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifySuppressions, suppressionReason, suppressionsOf } from './suppressions';
+import { classifySuppressions, suppressionsOf } from './suppressions';
 
 /**
  * code-health/31: every suppression the gate lets through reaches Mads with its
@@ -8,14 +8,25 @@ import { classifySuppressions, suppressionReason, suppressionsOf } from './suppr
  * read from the source, here.
  */
 
-describe('suppressionReason', () => {
+/**
+ * The reason `suppressionsOf` reports for one Ignored mutant on `line` of
+ * `src`. Stryker's own reason is 'stryker-own', so a mutant with no comment
+ * block above it reads back as exactly that, on its own line.
+ */
+function reasonAt(src: string, line: number) {
+  const [s] = suppressionsOf([{ file: 'a.ts', line, mutator: 'X', status: 'Ignored', ignoreReason: 'stryker-own' }], () => src);
+  return { commentLine: s.commentLine, reason: s.reason };
+}
+const noBlock = (line: number) => ({ commentLine: line, reason: 'stryker-own' });
+
+describe('suppressionsOf — the reason read from the comment above the mutant', () => {
   it('reads the reason after an em-dash on the comment above the mutant', () => {
     const src = [
       'const a = 1;',
       '// Stryker disable next-line ConditionalExpression — equivalent: both branches return 0',
       'return x ? 0 : 0;',
     ].join('\n');
-    expect(suppressionReason(src, 3)).toEqual({ commentLine: 2, reason: 'equivalent: both branches return 0' });
+    expect(reasonAt(src, 3)).toEqual({ commentLine: 2, reason: 'equivalent: both branches return 0' });
   });
 
   it('reads a colon reason and joins the comment lines that continue it', () => {
@@ -24,40 +35,40 @@ describe('suppressionReason', () => {
       "//   atomicity is db.batch's",
       'await db.batch([a, b]);',
     ].join('\n');
-    expect(suppressionReason(src, 3)).toEqual({ commentLine: 1, reason: "equivalent under the unit mock; atomicity is db.batch's" });
+    expect(reasonAt(src, 3)).toEqual({ commentLine: 1, reason: "equivalent under the unit mock; atomicity is db.batch's" });
   });
 
   it('returns a null reason when the directive carries none', () => {
-    expect(suppressionReason('// Stryker disable next-line StringLiteral\nconst s = "x";', 2)).toEqual({ commentLine: 1, reason: null });
+    expect(reasonAt('// Stryker disable next-line StringLiteral\nconst s = "x";', 2)).toEqual({ commentLine: 1, reason: null });
   });
 
   it('finds no suppression when a line of code sits between the directive and the mutant', () => {
     const src = ['// Stryker disable next-line X — r', 'const a = 1;', 'const b = 2;'].join('\n');
-    expect(suppressionReason(src, 3)).toBeNull();
+    expect(reasonAt(src, 3)).toEqual(noBlock(3));
   });
 
   it('reads an indented comment block inside a function body', () => {
     const src = ['function f() {', '    // Stryker disable next-line EqualityOperator — equal keys give the same key', '    return a > b ? a : b;', '}'].join('\n');
-    expect(suppressionReason(src, 3)).toEqual({ commentLine: 2, reason: 'equal keys give the same key' });
+    expect(reasonAt(src, 3)).toEqual({ commentLine: 2, reason: 'equal keys give the same key' });
   });
 
   it('stops the reason at the mutant line: a comment below the code is not part of it', () => {
     const src = ['// Stryker disable next-line X — equivalent', 'return a;', '// a note about the next function'].join('\n');
-    expect(suppressionReason(src, 2)).toEqual({ commentLine: 1, reason: 'equivalent' });
+    expect(reasonAt(src, 2)).toEqual({ commentLine: 1, reason: 'equivalent' });
   });
 
   it('does not take a trailing comment on a code line for a directive block', () => {
-    expect(suppressionReason('const a = 1; // Stryker disable next-line X — r\nreturn a;', 2)).toBeNull();
+    expect(reasonAt('const a = 1; // Stryker disable next-line X — r\nreturn a;', 2)).toEqual(noBlock(2));
   });
 
   it('gives no reason for a separator with nothing after it, or reason lines with no separator', () => {
-    expect(suppressionReason('// Stryker disable next-line X —\nreturn a;', 2)).toEqual({ commentLine: 1, reason: null });
-    expect(suppressionReason('// Stryker disable next-line X\n// equivalent\nreturn a;', 3)).toEqual({ commentLine: 1, reason: null });
+    expect(reasonAt('// Stryker disable next-line X —\nreturn a;', 2)).toEqual({ commentLine: 1, reason: null });
+    expect(reasonAt('// Stryker disable next-line X\n// equivalent\nreturn a;', 3)).toEqual({ commentLine: 1, reason: null });
   });
 
   it('finds no suppression on the first line of a file, or under a plain comment', () => {
-    expect(suppressionReason('const a = 1;', 1)).toBeNull();
-    expect(suppressionReason('// just a note\nconst a = 1;', 2)).toBeNull();
+    expect(reasonAt('const a = 1;', 1)).toEqual(noBlock(1));
+    expect(reasonAt('// just a note\nconst a = 1;', 2)).toEqual(noBlock(2));
   });
 });
 
