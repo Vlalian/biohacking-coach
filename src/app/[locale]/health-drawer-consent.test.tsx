@@ -66,10 +66,16 @@ async function agreeButton(): Promise<HTMLButtonElement> {
   return button;
 }
 
-/** Opens the drawer and marks one discipline as impossible, which is what enables "declare an injury". */
+/**
+ * Opens the drawer, opens "Report an injury", names it "left calf" and marks
+ * swimming impossible — what enables Save — then saves (showable-version/50).
+ */
 function openDrawer() {
   render(<HealthDrawer state={{ open: true }} spans={[]} locale="en" onClose={() => {}} />);
-  fireEvent.click(screen.getAllByRole('button', { name: 'allowNone' })[0]);
+  fireEvent.click(screen.getByRole('button', { name: /reportInjury/ }));
+  fireEvent.change(document.querySelector('[data-field="name"]')!, { target: { value: 'left calf' } });
+  fireEvent.click(screen.getAllByRole('radio', { name: 'allowNone' })[0]);
+  fireEvent.click(screen.getByRole('button', { name: 'saveInjury' }));
 }
 
 describe('HealthDrawer — the injury consent', () => {
@@ -77,7 +83,6 @@ describe('HealthDrawer — the injury consent', () => {
     declareInjuryAction.mockResolvedValue({ ok: false, reason: 'consent-required' });
     openDrawer();
 
-    fireEvent.click(screen.getByRole('button', { name: 'declareInjury' }));
 
     expect(await screen.findByText(COPY.title, {}, SLOW)).toBeTruthy();
     expect(screen.getByText(COPY.body)).toBeTruthy();
@@ -91,7 +96,6 @@ describe('HealthDrawer — the injury consent', () => {
       .mockResolvedValueOnce({ ok: true });
     openDrawer();
 
-    fireEvent.click(screen.getByRole('button', { name: 'declareInjury' }));
     fireEvent.click(await agreeButton());
 
     await vi.waitFor(() => expect(declareInjuryAction).toHaveBeenCalledTimes(2), SLOW);
@@ -107,10 +111,50 @@ describe('HealthDrawer — the injury consent', () => {
     grantConsentsAction.mockResolvedValue({ ok: false, reason: 'not-authenticated' });
     openDrawer();
 
-    fireEvent.click(screen.getByRole('button', { name: 'declareInjury' }));
     fireEvent.click(await agreeButton());
 
     expect(await screen.findByRole('alert', {}, SLOW)).toBeTruthy();
     expect(declareInjuryAction).toHaveBeenCalledOnce();
+  });
+});
+
+describe('HealthDrawer — reporting (showable-version/50)', () => {
+  it('the injury and illness entry points save through the existing declare actions', async () => {
+    declareInjuryAction.mockResolvedValue({ ok: true });
+    declareIllnessAction.mockResolvedValue({ ok: true });
+    openDrawer();
+    await vi.waitFor(
+      () => expect(declareInjuryAction).toHaveBeenCalledWith({ swim: 'none', bike: 'full', run: 'full' }, null, 'left calf'),
+      SLOW,
+    );
+
+    const ill = screen.getByRole('button', { name: /^ill/ }) as HTMLButtonElement;
+    await vi.waitFor(() => expect(ill.disabled).toBe(false), SLOW);
+    fireEvent.click(ill);
+    fireEvent.click(screen.getByRole('button', { name: 'saveIllness' }));
+    await vi.waitFor(() => expect(declareIllnessAction).toHaveBeenCalledWith(null), SLOW);
+  });
+
+  it('keeps the report filled in and read-only under the consent panel, and hides Save', async () => {
+    declareInjuryAction.mockResolvedValue({ ok: false, reason: 'consent-required' });
+    openDrawer();
+
+    await screen.findByText(COPY.title, {}, SLOW);
+    expect((screen.getByDisplayValue('left calf') as HTMLInputElement).readOnly).toBe(true);
+    expect(screen.queryByRole('button', { name: 'saveInjury' })).toBeNull();
+  });
+
+  it('Not now clears the consent panel, saves nothing, and leaves the report editable', async () => {
+    declareInjuryAction.mockResolvedValue({ ok: false, reason: 'consent-required' });
+    openDrawer();
+
+    const notNow = (await screen.findByRole('button', { name: 'consentNotNow' }, SLOW)) as HTMLButtonElement;
+    await vi.waitFor(() => expect(notNow.disabled).toBe(false), SLOW);
+    fireEvent.click(notNow);
+
+    await vi.waitFor(() => expect(screen.queryByText(COPY.title)).toBeNull(), SLOW);
+    expect(grantConsentsAction).not.toHaveBeenCalled();
+    expect((screen.getByDisplayValue('left calf') as HTMLInputElement).readOnly).toBe(false);
+    expect(screen.getByRole('button', { name: 'saveInjury' })).toBeTruthy();
   });
 });

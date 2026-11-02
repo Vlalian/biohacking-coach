@@ -454,13 +454,27 @@ describe('the health layer (training-architecture/06, showable-version/28a)', ()
   const dayCell = (html: string, date: string) =>
     html.match(new RegExp(`data-day="${date}"[^]*?(?=data-day="|$)`))?.[0] ?? '';
 
+  it('renders one labelled button per mark, two on a day with an injury and an illness (showable-version/51)', () => {
+    const today = dayCell(render({ sessions: [], health: [injury, illness] }), '2026-08-19');
+    expect(today.match(/<button[^>]*data-mark="injury"[^>]*aria-label="markInjury: left knee"/g)).toHaveLength(1);
+    expect(today.match(/<button[^>]*data-mark="illness"[^>]*aria-label="markIll"/g)).toHaveLength(1);
+    expect(today).not.toContain('role="img"');
+  });
+
+  it('keeps the 14 px glyph inside a padded button with a focus ring, so the calendar looks the same at rest', () => {
+    const today = dayCell(render({ sessions: [], health: [injury] }), '2026-08-19');
+    const button = today.match(/<button[^>]*data-mark="injury"[\s\S]*?<\/button>/)![0];
+    expect(button).toMatch(/<svg[^>]*width:14px;height:14px/);
+    expect(button).toMatch(/focus-visible:ring/);
+  });
+
   it('puts a day’s marks inside its day cell, and none on a day without (showable-version/28e)', () => {
     const html = render({ sessions: [session({ date: '2026-08-19' })], health: [injury] });
     const today = dayCell(html, '2026-08-19');
     expect(today).toContain('data-day-marks');
     expect(today).toMatch(/data-mark="injury"[^>]*data-open="true"/);
-    // Named for a screen reader, since the icons are images.
-    expect(today).toMatch(/data-day-marks=""[^>]*aria-label="markInjury: left knee"/);
+    // Each mark is a button named for a screen reader (showable-version/51).
+    expect(today).toMatch(/<button[^>]*data-mark="injury"[^>]*aria-label="markInjury: left knee"/);
     // The future carries none: an open span ends at today.
     expect(dayCell(html, '2026-08-20')).not.toContain('data-day-marks');
     // One element per marked day (1–19 August), and never on the card.

@@ -250,6 +250,7 @@ export function Calendar({
   readOnly = false,
   onMove,
   coachAthleteId,
+  athleteName,
   proposal = null,
   health = [],
   phase = null,
@@ -319,6 +320,8 @@ export function Calendar({
    * record they are meant to judge the plan against (showable-version/20).
    */
   coachAthleteId?: string;
+  /** The athlete's name, for the coach's health drawer title (showable-version/50). */
+  athleteName?: string;
   /**
    * The week the Coach drafted and the athlete has not decided on, or a pointer
    * to the conversation it moved into (`training-architecture/18`). Only the
@@ -591,6 +594,7 @@ export function Calendar({
               onDragOverDay={setHoverDate}
               onDropDay={handleDrop}
               onToggleAvailability={toggleAvailability}
+              onOpenHealth={(m) => setHealthDrawer({ open: true, kind: m.kind, id: m.id })}
               health={health}
             />
           ))}
@@ -632,6 +636,7 @@ export function Calendar({
             spans={health}
             locale={locale}
             coachAthleteId={coachAthleteId}
+            athleteName={athleteName}
             onClose={() => setHealthDrawer({ open: false })}
           />
         )}
@@ -668,6 +673,7 @@ function WeekRow({
   onDragOverDay,
   onDropDay,
   onToggleAvailability,
+  onOpenHealth,
   health,
 }: {
   week: Week;
@@ -696,6 +702,8 @@ function WeekRow({
   onDragOverDay: (date: string | null) => void;
   onDropDay: (day: Day) => void;
   onToggleAvailability: (date: string, currentlyUnavailable: boolean) => void;
+  /** A pressed mark: open the drawer on its record (`showable-version/51`). */
+  onOpenHealth: (mark: HealthMark) => void;
 }) {
   // The ISO week number, as the export's gutter shows it (Mads, 2026-09-24:
   // "the first day of the week instead of the week number"). Computed in UTC
@@ -823,16 +831,9 @@ function WeekRow({
               </div>
               {marks.length > 0 && (
                 // At the bottom edge of the day (showable-version/28e, ruling
-                // 1), only on a day a record covers. The icons are images, so
-                // the group carries their names.
-                <div
-                  data-day-marks=""
-                  role="img"
-                  aria-label={marksLabel(marks, t)}
-                  title={marksLabel(marks, t)}
-                  className="mt-auto flex flex-wrap items-center gap-1 pt-2"
-                >
-                  <Marks marks={marks} size={14} />
+                // 1), only on a day a record covers. Each mark names itself.
+                <div data-day-marks="" className="mt-auto flex flex-wrap items-center gap-1 pt-2">
+                  <Marks marks={marks} size={14} t={t} onOpen={onOpenHealth} />
                 </div>
               )}
             </div>
@@ -890,32 +891,55 @@ function RaceBlock({ race, t }: { race: RaceDay; t: ReturnType<typeof useTransla
  * record is open, muted once it is over. One icon per record, so two open
  * injuries are two bandages. They go only when the athlete deletes the record.
  */
-function Marks({ marks, size }: { marks: HealthMark[]; size: number }) {
-  if (marks.length === 0) return null;
+/**
+ * A day's marks, each a button that opens its own record in the drawer
+ * (`showable-version/51`). The glyph keeps its 14 px, so the calendar looks
+ * as it did at rest; the padding makes it a target, and the ring shows focus.
+ */
+function Marks({
+  marks,
+  size,
+  t,
+  onOpen,
+}: {
+  marks: HealthMark[];
+  size: number;
+  t: ReturnType<typeof useTranslations<'Calendar'>>;
+  onOpen: (mark: HealthMark) => void;
+}) {
   return (
     <>
-      {marks.map((m, i) => {
+      {marks.map((m) => {
         const Icon = HEALTH_ICON[m.kind];
         return (
-          <Icon
-            key={`${m.kind}-${i}`}
+          <button
+            key={`${m.kind}-${m.id}`}
+            type="button"
             data-mark={m.kind}
             data-open={m.open ? 'true' : 'false'}
-            aria-hidden="true"
-            style={{ width: size, height: size }}
-            className={['shrink-0', m.open ? 'text-signal' : 'text-muted-foreground'].join(' ')}
-          />
+            aria-label={markLabel(m, t)}
+            title={markLabel(m, t)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(m);
+            }}
+            className={[
+              '-m-1 rounded-sm p-1 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal',
+              m.open ? 'text-signal' : 'text-muted-foreground',
+            ].join(' ')}
+          >
+            <Icon aria-hidden="true" style={{ width: size, height: size }} className="shrink-0" />
+          </button>
         );
       })}
     </>
   );
 }
 
-/** The marks spelled out for a screen reader and the tooltip: "Injury: left knee · Ill". */
-function marksLabel(marks: HealthMark[], t: ReturnType<typeof useTranslations<'Calendar'>>): string {
-  return marks
-    .map((m) => (m.kind === 'injury' ? (m.label ? `${t('markInjury')}: ${m.label}` : t('markInjury')) : t('markIll')))
-    .join(' · ');
+/** One mark spelled out for a screen reader and the tooltip: "Injury: left knee", or "Ill". */
+function markLabel(m: HealthMark, t: ReturnType<typeof useTranslations<'Calendar'>>): string {
+  if (m.kind === 'illness') return t('markIll');
+  return m.label ? `${t('markInjury')}: ${m.label}` : t('markInjury');
 }
 
 /** The lucide component for each icon name `cardIcon` can return. */
