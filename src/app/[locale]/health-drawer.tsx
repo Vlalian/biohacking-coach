@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Bandage, Pill, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
 import { useDialogFocus } from '@/lib/use-dialog-focus';
 import { formatFullDate } from '@/lib/date';
@@ -13,6 +13,7 @@ import { glanceParts, type HealthSpan } from '@/features/health/health-layer';
 import { disclosureCopy } from '@/features/consent/disclosure';
 import { grantConsentsAction } from './consent-actions';
 import { ConfirmDelete } from './confirm-delete';
+import { HEALTH_ICON } from './health-status-card';
 import {
   addHealthNoteAction,
   closeIllnessAction,
@@ -36,7 +37,7 @@ import {
  * one (`training-architecture/06`, `showable-version/50`).
  *
  * Two roles, one drawer. The **athlete** reports (capacity, never diagnosis),
- * ends a record ("Injury over" / "Illness over" — not "recovered", which is a
+ * ends a record ("Injury over" / "Illness over", not "recovered", which is a
  * clinical judgment), rates how much it bothers them, notes, and deletes. The
  * **Head Coach** sees everything the athlete sees (Mads, 2026-09-11), titled
  * with the athlete's name, and may only add a note.
@@ -51,12 +52,12 @@ import {
  * when a declare action refuses with `consent-required`, the report stays in
  * the form, read-only, under the consent's own words; agreeing grants it and
  * repeats the same declaration, Not now gives the form back. The server is the
- * gate — the drawer remembers nothing about consent itself.
+ * gate: the drawer remembers nothing about consent itself.
  *
  * The detail thread is for human eyes only (ADR 0011). It is fetched for the
  * opened record only, by the athlete's own action or the coach's link-gated
- * one; nothing on this path reaches a prompt — `detail-thread-never-prompts`
- * names this file as one of the few allowed to touch it.
+ * one; nothing on this path reaches a prompt (`detail-thread-never-prompts`
+ * names this file as one of the few allowed to touch it).
  */
 export type HealthDrawerState =
   | { open: false }
@@ -74,7 +75,7 @@ export function HealthDrawer({
   athleteName,
 }: {
   state: HealthDrawerState;
-  /** Every span, ongoing and past — the drawer sorts them. */
+  /** Every span, ongoing and past; the drawer sorts them. */
   spans: HealthSpan[];
   locale: string;
   onClose: () => void;
@@ -287,7 +288,7 @@ function initialSelection(state: HealthDrawerState, ongoing: HealthSpan[]): stri
   return newest?.id ?? ongoing[0]?.id ?? null;
 }
 
-/** A counted section — "Ongoing (1)" — shown even when empty, once any record exists. */
+/** A counted section, "Ongoing (1)", shown even when empty, once any record exists. */
 function Section({ label, count, children }: { label: string; count: number; children: ReactNode }) {
   return (
     <section className="space-y-3">
@@ -334,7 +335,7 @@ function RecordCard({
   thread: ReactNode;
 }) {
   const isOngoing = span.to === null;
-  const KindIcon = span.kind === 'injury' ? Bandage : Pill;
+  const KindIcon = HEALTH_ICON[span.kind];
   return (
     <li
       id={`health-record-${span.id}`}
@@ -406,7 +407,7 @@ function RecordCard({
   );
 }
 
-/** What the record prevents — "easy bike · no run" — and, where no scale shows it, how much it bothers. */
+/** What the record prevents ("easy bike · no run") and, where no scale shows it, how much it bothers. */
 function Glance({ span, showBother, t }: { span: HealthSpan; showBother: boolean; t: T }) {
   const parts = span.capacity ? glanceParts(span.capacity).map((p) => t(`glance_${p.allowance}_${p.discipline}`)) : [];
   if (showBother && span.bother !== null) parts.push(t('botherLabel', { value: span.bother }));
@@ -570,6 +571,15 @@ function Report({
   const [capacity, setCapacity] = useState<Capacity>({ swim: 'full', bike: 'full', run: 'full' });
   const [bother, setBother] = useState<number | null>(null);
   const [name, setName] = useState('');
+  // Each opened form starts blank: a saved report must not come back
+  // pre-filled, inviting the same declaration twice.
+  const [openedFor, setOpenedFor] = useState(form);
+  if (form !== openedFor) {
+    setOpenedFor(form);
+    setCapacity({ swim: 'full', bike: 'full', run: 'full' });
+    setBother(null);
+    setName('');
+  }
   const restricted = DISCIPLINES.some((d) => capacity[d] !== 'full');
   const frozen = Boolean(consent) || pending;
 
@@ -672,7 +682,7 @@ function EntryCard({
   onToggle: (kind: Kind) => void;
 }) {
   const injury = kind === 'injury';
-  const Icon = injury ? Bandage : Pill;
+  const Icon = HEALTH_ICON[kind];
   return (
     <button
       type="button"
@@ -702,7 +712,7 @@ function EntryCard({
   );
 }
 
-/** "What can you train right now?" — three disciplines, three allowances. */
+/** "What can you train right now?": three disciplines, three allowances. */
 function CapacityGrid({ value, t, onChange }: { value: Capacity; t: T; onChange: (value: Capacity) => void }) {
   return (
     <div>

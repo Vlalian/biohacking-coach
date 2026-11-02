@@ -131,7 +131,7 @@ describe('HealthDrawer — the athlete', () => {
     expect(html.match(/data-bother="/g)).toHaveLength(10);
   });
 
-  it('treats a record ended today as past — no end button, no rating on it', () => {
+  it('treats a record ended today as past: no end button, no rating on it', () => {
     const endedToday = { ...openInjury, id: 'inj_today', to: '2026-09-14' };
     const html = render({ spans: [endedToday] });
     expect(html).toMatch(/past[^<]*<span[^>]*>\(1\)/);
@@ -164,7 +164,7 @@ describe('HealthDrawer — the Head Coach', () => {
   const coach = (props: Partial<Parameters<typeof HealthDrawer>[0]> = {}) =>
     render({ coachAthleteId: 'a1', athleteName: 'Sam', ...props });
 
-  it('names the athlete in the title and sees what the athlete sees — capacity, bother, both sections', () => {
+  it('names the athlete in the title and sees what the athlete sees: capacity, bother, both sections', () => {
     const html = coach();
     expect(html).toContain('titleFor(Sam)');
     expect(html).toContain('glance_none_run');
@@ -173,7 +173,7 @@ describe('HealthDrawer — the Head Coach', () => {
     expect(html).toMatch(/past[^<]*<span[^>]*>\(1\)/);
   });
 
-  it('may add a note and nothing else — no reporting, ending, deleting or rating', () => {
+  it('may add a note and nothing else: no reporting, ending, deleting or rating', () => {
     const html = coach({ state: { open: true, kind: 'injury', id: 'inj_1' } });
     expect(html).toContain('addNote');
     for (const k of ['reportInjury', '>ill<', 'injuryOver', 'illnessOver', 'declaredByMistake', 'removeFromHistory']) {

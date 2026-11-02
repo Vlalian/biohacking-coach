@@ -68,7 +68,7 @@ async function agreeButton(): Promise<HTMLButtonElement> {
 
 /**
  * Opens the drawer, opens "Report an injury", names it "left calf" and marks
- * swimming impossible — what enables Save — then saves (showable-version/50).
+ * swimming impossible (what enables Save), then saves (showable-version/50).
  */
 function openDrawer() {
   render(<HealthDrawer state={{ open: true }} spans={[]} locale="en" onClose={() => {}} />);
@@ -118,7 +118,7 @@ describe('HealthDrawer — the injury consent', () => {
   });
 });
 
-describe('HealthDrawer — reporting (showable-version/50)', () => {
+describe('HealthDrawer: reporting (showable-version/50)', () => {
   it('the injury and illness entry points save through the existing declare actions', async () => {
     declareInjuryAction.mockResolvedValue({ ok: true });
     declareIllnessAction.mockResolvedValue({ ok: true });
@@ -133,6 +133,19 @@ describe('HealthDrawer — reporting (showable-version/50)', () => {
     fireEvent.click(ill);
     fireEvent.click(screen.getByRole('button', { name: 'saveIllness' }));
     await vi.waitFor(() => expect(declareIllnessAction).toHaveBeenCalledWith(null), SLOW);
+  });
+
+  it('opens a blank form after a saved report, so the last one is not offered again', async () => {
+    declareInjuryAction.mockResolvedValue({ ok: true });
+    openDrawer();
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce(), SLOW);
+
+    const report = screen.getByRole('button', { name: /reportInjury/ }) as HTMLButtonElement;
+    await vi.waitFor(() => expect(report.disabled).toBe(false), SLOW);
+    fireEvent.click(report);
+
+    expect((document.querySelector('[data-field="name"]') as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('button', { name: 'saveInjury' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('keeps the report filled in and read-only under the consent panel, and hides Save', async () => {

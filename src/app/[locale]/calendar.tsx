@@ -487,11 +487,11 @@ export function Calendar({
               {t('nextMonth')}
             </GhostButton>
             {!readOnly && (
-              // "How's your body?" — always there for the athlete, healthy or
-              // not: it is how the first injury gets declared when nothing on the
-              // calendar can be clicked yet, and where "I'm back" lives too. The
-              // Head Coach never sees it. (Mads, 2026-09-11: a good start, may
-              // move — one button, easy to move.)
+              // "Injuries and illness": always there for the athlete, healthy or
+              // not. It is how the first injury gets reported when nothing on the
+              // calendar can be pressed yet, and where every record ends. The
+              // Head Coach opens the same drawer from a mark. (Mads, 2026-09-11:
+              // a good start, may move; one button, easy to move.)
               <GhostButton onClick={() => setHealthDrawer({ open: true })}>
                 {t('healthButton')}
               </GhostButton>
