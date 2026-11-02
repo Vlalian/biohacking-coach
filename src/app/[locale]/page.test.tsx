@@ -63,7 +63,6 @@ vi.mock('@/components/frontpage/frontpage-view', () => ({ FrontpageView: () => n
 
 const { default: AthletePage } = await import('./page');
 const { FrontpageView } = await import('@/components/frontpage/frontpage-view');
-const { frontpageScreenshots } = await import('@/components/frontpage/screenshots');
 
 function render(locale = 'en') {
   return AthletePage({ params: Promise.resolve({ locale }) });
@@ -85,9 +84,25 @@ describe('AthletePage', () => {
 
     expect(redirect).not.toHaveBeenCalled();
     expect(tree.type).toBe(FrontpageView);
-    expect(tree.props).toEqual({ locale: 'da', screenshots: frontpageScreenshots });
+    expect((tree.props as { locale: string }).locale).toBe('da');
     // Signed out, the page never looks up an athlete.
     expect(getAthleteByUserId).not.toHaveBeenCalled();
+  });
+
+  it('hands the Frontpage the four pictures with alt text from the Frontpage catalogue', async () => {
+    getSession.mockResolvedValue(null);
+
+    const tree = (await render('da')) as unknown as {
+      props: { locale: string; screenshots: Record<string, { src: string; alt: string }> };
+    };
+
+    expect(tree.props.locale).toBe('da');
+    expect(tree.props.screenshots).toEqual({
+      rosterView: { src: '/frontpage/roster-view.png', alt: 'altRosterView' },
+      coachChat: { src: '/frontpage/coach-chat.png', alt: 'altCoachChat' },
+      trainingPlan: { src: '/frontpage/training-plan.png', alt: 'altTrainingPlan' },
+      informationView: { src: '/frontpage/information-view.png', alt: 'altInformationView' },
+    });
   });
 
   it('sends a signed-in, fully-onboarded athlete to the Training Plan View', async () => {

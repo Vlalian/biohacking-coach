@@ -50,7 +50,9 @@ describe('FrontpageView copy', () => {
     const other = locale === 'en' ? 'da' : 'en';
     const plain = (value: string) => !/[{}&<>"'\n]/.test(value);
     for (const [key, value] of Object.entries(catalogues[locale].Frontpage as Record<string, string>)) {
-      if (!plain(value)) continue;
+      // The pictures' alt texts (showable-version/63) appear only once a picture
+      // has a src; frontpage-pictures.test.tsx renders them.
+      if (!plain(value) || key.startsWith('alt')) continue;
       expect(out, `${locale}.Frontpage.${key} is rendered`).toContain(value);
       const foreign = (catalogues[other].Frontpage as Record<string, string>)[key];
       if (foreign !== value && plain(foreign)) {

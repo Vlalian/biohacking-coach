@@ -1114,6 +1114,10 @@
     "sourcesTitle": "Træningsvidenskab med kilder",
     "sourcesBody": "Et grundlag, du og din træner kan undersøge.",
     "footerLine": "Træning og coaching, fremad sammen.",
-    "copyright": "© Momentum"
+    "copyright": "© Momentum",
+    "altRosterView": "Visningen Atleter: træneren ser alle sine atleter på én liste.",
+    "altCoachChat": "Momentum svarer på et spørgsmål i Coach Chat på en telefon.",
+    "altTrainingPlan": "Træningsplan: en uge med sessioner i kalenderen.",
+    "altInformationView": "Informationsvisningen: atletens signaler og tal."
   }
 }

@@ -1114,6 +1114,10 @@
     "sourcesTitle": "Cited training science",
     "sourcesBody": "Evidence you and your coach can examine.",
     "footerLine": "Training and coaching, moving together.",
-    "copyright": "© Momentum"
+    "copyright": "© Momentum",
+    "altRosterView": "The Roster View: the coach sees every athlete on one list.",
+    "altCoachChat": "Momentum answering a question in Coach Chat on a phone.",
+    "altTrainingPlan": "The Training Plan View: a week of sessions on the calendar.",
+    "altInformationView": "The Information View: the athlete’s signals and numbers."
   }
 }

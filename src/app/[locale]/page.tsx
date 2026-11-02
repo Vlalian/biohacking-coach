@@ -17,7 +17,7 @@ import {
 } from '@/features/consent/consent';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { FrontpageView } from '@/components/frontpage/frontpage-view';
-import { frontpageScreenshots } from '@/components/frontpage/screenshots';
+import { frontpageScreenshotsFor } from '@/components/frontpage/screenshots';
 import { OnboardingFlow } from './onboarding';
 import { ConsentScreen } from './consent';
 
@@ -136,5 +136,6 @@ export default async function AthletePage({
   }
 
   // Signed out, the visitor meets Momentum before the sign-in form.
-  return <FrontpageView locale={locale} screenshots={frontpageScreenshots} />;
+  const tFront = await getTranslations('Frontpage');
+  return <FrontpageView locale={locale} screenshots={frontpageScreenshotsFor((key) => tFront(key))} />;
 }
