@@ -124,26 +124,7 @@ export async function ensureWeekDrafted(athleteId: string, today: string): Promi
   if (facts === 'coach-failed') return facts;
   if ('gated' in facts) return facts.gated;
   const { dueWeek, visibleFrom, window, unavailableDates } = facts;
-
-  const asked = await askCoach(athleteId, today, window, unavailableDates);
-  if (typeof asked === 'string') return asked;
-
-  // The last write is inside the boundary too — the promise is "never
-  // throws", not "never throws until the insert" (CodeRabbit, PR #69).
-  const outcome = await guarded(athleteId, () =>
-    recordWeekDraft({
-      athleteId,
-      weekStart: dueWeek,
-      visibleFrom,
-      sessions: asked.sessions,
-      citations: asked.citations,
-      skeleton: asked.skeleton,
-      adjusted: asked.adjusted,
-      whatChanged: asked.whatChanged,
-    }),
-  );
-  if (outcome === 'coach-failed') return outcome;
-  return outcome === 'drafted' ? 'drafted' : 'lost-race';
+  return askAndRecord(athleteId, today, { weekStart: dueWeek, visibleFrom, window, unavailableDates });
 }
 
 /** A draft the gate would write now, and nothing recorded yet: what the waiting surfaces show. */
@@ -231,16 +212,70 @@ export async function redraftWeek(
   const facts = await guarded(athleteId, () => redraftFacts(athleteId, weekStart, today));
   if (facts === 'coach-failed') return facts;
   if ('refused' in facts) return facts.refused;
-  const { window, unavailableDates, declined } = facts;
+  return askAndRecord(athleteId, today, { weekStart, visibleFrom: today, ...facts });
+}
 
-  const asked = await askCoach(athleteId, today, window, unavailableDates, declined);
+/**
+ * Drafts one named week now (showable-version/61): after an hours change that
+ * withdrew that week's waiting draft, Momentum drafts it again from the new
+ * hours at once, rather than leaving it to whatever next opens the app or to a
+ * cron. Gated like a first draft: the withdrawn week reads `never`, consent is
+ * required, a week still drafted is left alone, and so is a week a coach has
+ * already planned, as in a re-draft. A switched-off Coach reads nothing, as in
+ * `gateFacts`. Visible today — the week was already the athlete's. Never throws.
+ */
+export async function draftWeekNow(
+  athleteId: string,
+  weekStart: string,
+  today: string,
+): Promise<DraftOutcome | 'already-planned'> {
+  if (isCoachDisabled()) return 'coach-disabled';
+  const facts = await guarded(athleteId, () => nowFacts(athleteId, weekStart, today));
+  if (facts === 'coach-failed') return facts;
+  if ('gated' in facts) return facts.gated;
+  return askAndRecord(athleteId, today, { weekStart, visibleFrom: today, ...facts });
+}
+
+async function nowFacts(
+  athleteId: string,
+  weekStart: string,
+  today: string,
+): Promise<{ gated: DraftOutcome | 'already-planned' } | { window: PlanningWindow; unavailableDates: string[] }> {
+  const [athlete, consent, history, unavailableDates, sessions] = await Promise.all([
+    getAthleteById(athleteId),
+    assertAiCoachingConsent(athleteId),
+    getWeekDraftHistory(athleteId, weekStart),
+    getUnavailableDates(athleteId),
+    getSessionsForWeek(athleteId, weekStart),
+  ]);
+  if (hasCoachPlannedSession(sessions)) return { gated: 'already-planned' };
+  const { fixedConstraints, firstDay } = profileFacts(athlete, today);
+  const window = weekWindow(weekStart, today, fixedConstraints, unavailableDates, firstDay);
+  const gated = draftGate({ consented: consent.ok, history, window });
+  // The gate's last exit is a null window, so past it the window is real; the
+  // fallback only narrows the type, as in `gateFacts`.
+  // Stryker disable next-line StringLiteral — unreachable: draftGate already returns 'no-window' for a null window
+  return gated || !window ? { gated: gated ?? 'no-window' } : { window, unavailableDates };
+}
+
+/**
+ * The Coach call and the write every drafting entry point shares: ask for the
+ * week, then record it guarded. The last write is inside the boundary too — the
+ * promise is "never throws", not "never throws until the insert" (CodeRabbit,
+ * PR #69).
+ */
+async function askAndRecord(
+  athleteId: string,
+  today: string,
+  week: { weekStart: string; visibleFrom: string; window: PlanningWindow; unavailableDates: string[]; declined?: DeclinedDraft | null },
+): Promise<DraftOutcome> {
+  const asked = await askCoach(athleteId, today, week.window, week.unavailableDates, week.declined ?? null);
   if (typeof asked === 'string') return asked;
-
   const outcome = await guarded(athleteId, () =>
     recordWeekDraft({
       athleteId,
-      weekStart,
-      visibleFrom: today,
+      weekStart: week.weekStart,
+      visibleFrom: week.visibleFrom,
       sessions: asked.sessions,
       citations: asked.citations,
       skeleton: asked.skeleton,

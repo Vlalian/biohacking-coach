@@ -7,6 +7,12 @@ import { measureComplexity } from './complexity';
 import { scoreCrap, type CrapScore, type FileCoverage } from './crap';
 import { judge, CRAP_CEILING, type MutantReport } from './policy';
 import {
+  classifySuppressions,
+  suppressionsOf,
+  type Suppression,
+  type SuppressionList,
+} from './suppressions';
+import {
   changedRanges,
   emptyMeansMissed,
   mutateEntries,
@@ -246,6 +252,26 @@ function reportStanding(standing: CrapScore[]): void {
 }
 
 /**
+ * Every suppression the gate let through, with its reason (code-health/31).
+ * The count above says how many; this says which and why, so a suppression
+ * cannot become the quiet route past a mutant. Prints nothing when there are
+ * none. The verdict does not depend on it.
+ */
+function reportSuppressions(list: SuppressionList): void {
+  const groups: [string, Suppression[]][] =
+    'unsplit' in list
+      ? [['Suppressed (no diff to tell new from old):', list.unsplit]]
+      : [
+          ['Suppressed, new in this change:', list.new],
+          ['Suppressed, already there:', list.existing],
+        ];
+  for (const [heading, items] of groups.filter(([, items]) => items.length > 0)) {
+    console.log(`\n${heading}`);
+    for (const s of items) console.log(`  ${s.file}:${s.line} ${s.mutator} — ${s.reason ?? '(no reason given)'}`);
+  }
+}
+
+/**
  * Everything the run says to a human, and the exit code that goes with it.
  *
  * Split out of `main` so both are gradable: this is the whole product of the
@@ -258,6 +284,7 @@ export function report(
   mutants: MutantReport[],
   result: ReturnType<typeof judge>,
   standing: CrapScore[] = [],
+  suppressions: SuppressionList = { new: [], existing: [] },
 ): number {
   const worst = [...crap].sort((a, b) => b.crap - a.crap).slice(0, 5);
   console.log('Highest CRAP:');
@@ -268,6 +295,7 @@ export function report(
 
   const killed = mutants.filter((m) => m.status === 'Killed').length;
   console.log(`\nMutants: ${mutants.length} — ${killed} killed, ${result.suppressed} suppressed`);
+  reportSuppressions(suppressions);
 
   if (result.verdict === 'pass') {
     console.log('\nPASS');
@@ -406,5 +434,10 @@ function grade(files: string[], argv: string[]): number {
     // there was nothing to mutate — see `emptyMeansMissed`.
     judge({ crap, mutants, ranMutation: emptyMeansMissed(files, mutate, changed, log) }),
     standing,
+    // The reasons come from the source, not Stryker: it drops an em-dash reason.
+    classifySuppressions(
+      suppressionsOf(mutants, (file) => graded.find((g) => g.file === file)?.source),
+      changed,
+    ),
   );
 }

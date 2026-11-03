@@ -64,7 +64,7 @@ vi.mock('@/lib/coach-log', () => ({ logCoachFailure, logWeekDraftClamped, logWee
 vi.mock('./coach-repository', () => ({ getLinkForAthlete, getCoachByUserId, getRoster }));
 vi.mock('@/features/user-prefs/user-prefs-repository', () => ({ getLanguageForAthlete }));
 
-const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState, draftLanded } =
+const { ensureRosterDrafted, ensureWeekDrafted, redraftWeek, draftWeekNow, draftGate, groundingQuestion, draftInFlight, slotStateFor, calendarSlotState, draftLanded } =
   await import(
   './week-draft-service',
 );
@@ -903,5 +903,43 @@ describe("the draft is written in the athlete's own language (showable-version/4
     expect(callCoach).toHaveBeenCalledTimes(2);
     expect(callCoach.mock.calls[0][0].system).toContain(DANISH);
     expect(callCoach.mock.calls[1][0].system).not.toContain('LANGUAGE:');
+  });
+});
+
+describe('draftWeekNow — an hours change drafts the withdrawn week at once (showable-version/61)', () => {
+  beforeEach(() => getSessionsForWeek.mockResolvedValue([]));
+
+  it('drafts a never-drafted week, visible today; refuses one still drafted', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('drafted');
+    expect(getWeekDraftHistory).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    expect(recordWeekDraft).toHaveBeenCalledWith(expect.objectContaining({ weekStart: NEXT_MON, visibleFrom: TODAY }));
+
+    callCoach.mockClear();
+    getWeekDraftHistory.mockResolvedValue({ kind: 'pending', draft: DRAFT });
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('already-drafted');
+    expect(callCoach).not.toHaveBeenCalled();
+  });
+
+  // CodeRabbit on PR #133: the same gates a first draft and a re-draft keep.
+  it('leaves a week a coach already planned alone, and reads nothing while the Coach is switched off', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    getSessionsForWeek.mockResolvedValue([{ date: '2026-09-22', origin: 'coach' }]);
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('already-planned');
+    expect(getSessionsForWeek).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    expect(callCoach).not.toHaveBeenCalled();
+
+    getWeekDraftHistory.mockClear();
+    isCoachDisabled.mockReturnValueOnce(true);
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('coach-disabled');
+    expect(getWeekDraftHistory).not.toHaveBeenCalled();
+    expect(logCoachFailure).not.toHaveBeenCalled();
+  });
+
+  it('never throws: a dead driver on its reads is coach-failed, logged, and no Coach call', async () => {
+    getWeekDraftHistory.mockRejectedValueOnce(new Error('driver down'));
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('coach-failed');
+    expect(logCoachFailure).toHaveBeenCalledWith(expect.objectContaining({ surface: 'week_draft', athleteId: ATHLETE }));
+    expect(callCoach).not.toHaveBeenCalled();
   });
 });

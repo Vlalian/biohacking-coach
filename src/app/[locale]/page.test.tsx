@@ -28,8 +28,9 @@ const {
 
 vi.mock('next-intl/server', () => ({
   setRequestLocale: vi.fn(),
-  getTranslations: async () => (key: string, vals?: Record<string, unknown>) =>
-    vals ? `${key}:${vals.name}` : key,
+  // The Frontpage's keys come back with their namespace, so a test can tell which catalogue was read.
+  getTranslations: async (namespace?: string) => (key: string, vals?: Record<string, unknown>) =>
+    namespace === 'Frontpage' ? `Frontpage.${key}` : vals ? `${key}:${vals.name}` : key,
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
@@ -57,8 +58,12 @@ vi.mock('./consent', () => ({ ConsentScreen: () => null }));
 // Client components / server actions pulling in browser + auth deps; stub them
 // out of the node test — the page's own wiring is what's under test here.
 vi.mock('@/components/auth/sign-out-button', () => ({ SignOutButton: () => null }));
+// The Frontpage's own markup is tested in frontpage-view.test.tsx; here only that
+// the signed-out page hands it the locale and the screenshots.
+vi.mock('@/components/frontpage/frontpage-view', () => ({ FrontpageView: () => null }));
 
 const { default: AthletePage } = await import('./page');
+const { FrontpageView } = await import('@/components/frontpage/frontpage-view');
 
 function render(locale = 'en') {
   return AthletePage({ params: Promise.resolve({ locale }) });
@@ -73,13 +78,32 @@ describe('AthletePage', () => {
     getUiPrefs.mockReset().mockResolvedValue({});
   });
 
-  it('redirects a signed-out visitor to sign-in instead of rendering', async () => {
+  it('renders the Frontpage for a signed-out visitor without redirecting', async () => {
     getSession.mockResolvedValue(null);
 
-    await expect(render('da')).rejects.toThrow('REDIRECT');
-    expect(redirect).toHaveBeenCalledWith({ href: '/sign-in', locale: 'da' });
-    // It never reached the athlete lookup — the page is not a page when signed out.
+    const tree = (await render('da')) as unknown as { type: unknown; props: unknown };
+
+    expect(redirect).not.toHaveBeenCalled();
+    expect(tree.type).toBe(FrontpageView);
+    expect((tree.props as { locale: string }).locale).toBe('da');
+    // Signed out, the page never looks up an athlete.
     expect(getAthleteByUserId).not.toHaveBeenCalled();
+  });
+
+  it('hands the Frontpage the four pictures with alt text from the Frontpage catalogue', async () => {
+    getSession.mockResolvedValue(null);
+
+    const tree = (await render('da')) as unknown as {
+      props: { locale: string; screenshots: Record<string, { src: string; alt: string }> };
+    };
+
+    expect(tree.props.locale).toBe('da');
+    expect(tree.props.screenshots).toEqual({
+      rosterView: { src: '/frontpage/roster-view.png', alt: 'Frontpage.altRosterView' },
+      coachChat: { src: '/frontpage/coach-chat.png', alt: 'Frontpage.altCoachChat' },
+      trainingPlan: { src: '/frontpage/training-plan.png', alt: 'Frontpage.altTrainingPlan' },
+      informationView: { src: '/frontpage/information-view.png', alt: 'Frontpage.altInformationView' },
+    });
   });
 
   it('sends a signed-in, fully-onboarded athlete to the Training Plan View', async () => {

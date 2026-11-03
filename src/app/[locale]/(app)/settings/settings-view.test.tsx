@@ -56,7 +56,7 @@ function render(
       onAddPastRace={async () => ({ ok: true, pastRaceId: 'p' })}
       onRemovePastRace={ok}
       onUpdateRaceDistance={ok}
-      onPreviewHoursChange={async () => ({ ok: true, weeks: [] })}
+      onPreviewHoursChange={async () => ({ ok: true, preview: { kind: 'confirm', weeks: [], plannedWeek: null } })}
       onUpdateHoursPerWeek={async () => ({ ok: true, redrawn: 0 })}
       onUpdateWeeklySessionDay={ok}
       onAddFixedConstraint={ok}

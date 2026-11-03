@@ -382,6 +382,33 @@ describe('refillWeeksFromHours', () => {
     expect(rows).toEqual(await sameWeekAt(12));
   });
 
+  it('with except, redraws every eligible week but the kept one (showable-version/61)', async () => {
+    getAthleteById.mockResolvedValue(athlete({ hoursPerWeek: 12 }));
+    getSessionsForAthlete.mockResolvedValue([
+      { date: NEXT_WEEK_WED, origin: 'arithmetic', status: 'planned' },
+      { date: WEEK_AFTER_WED, origin: 'arithmetic', status: 'planned' },
+    ]);
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY, { except: NEXT_WEEK })).toEqual({ outcome: 'refilled', weeks: ['2026-10-19'] });
+    const [, weeks, rows] = replaceArithmeticWeeks.mock.calls[0];
+    expect(weeks).toEqual(['2026-10-19']);
+    expect(rows.every((r) => weekStartOf(r.date) === '2026-10-19')).toBe(true);
+  });
+
+  it('with only, redraws that week alone — and the current week never', async () => {
+    getAthleteById.mockResolvedValue(athlete({ hoursPerWeek: 12 }));
+    getSessionsForAthlete.mockResolvedValue([
+      { date: TODAY, origin: 'arithmetic', status: 'planned' },
+      { date: NEXT_WEEK_WED, origin: 'arithmetic', status: 'planned' },
+      { date: WEEK_AFTER_WED, origin: 'arithmetic', status: 'planned' },
+    ]);
+
+    expect(await refillWeeksFromHours('athlete_1', TODAY, { only: NEXT_WEEK })).toEqual({ outcome: 'refilled', weeks: [NEXT_WEEK] });
+    replaceArithmeticWeeks.mockClear();
+    expect(await refillWeeksFromHours('athlete_1', TODAY, { only: weekStartOf(TODAY) })).toEqual({ outcome: 'nothing-due', weeks: [] });
+    expect(replaceArithmeticWeeks).not.toHaveBeenCalled();
+  });
+
   it('draws a week straddling a block boundary once, not once per block', async () => {
     const blocks = await blocksFrom(TODAY, RACE);
     const shared = weekStartOf(blocks[1].startDate);

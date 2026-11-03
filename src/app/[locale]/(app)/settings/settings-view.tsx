@@ -3,7 +3,7 @@
 import { RACE_DISTANCES } from '@/lib/race-distances';
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useSave, useSaveStatus } from './use-save';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import { Check, Download, Loader2, LogOut, Moon, Sun, SunMoon } from 'lucide-react';
 import { SignOutButton } from '@/components/auth/sign-out-button';
@@ -23,6 +23,8 @@ import type {
   HoursPreviewResult,
   SettingsActionResult,
 } from './settings-actions';
+import type { HoursChangePreview, StartFrom } from '@/features/coach/hours-change';
+import { HoursChangeDialog } from './hours-change-dialog';
 import { PastRacesSection, type PastRaceInput, type SettingsPastRace } from './settings-past-races';
 import { RacesSection, type SettingsRace } from './settings-races';
 import { HistoryUpload } from '../../history-upload';
@@ -79,7 +81,7 @@ export interface SettingsViewProps {
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   /** The weeks an hours change would redraw, asked before the athlete confirms. */
   onPreviewHoursChange: () => Promise<HoursPreviewResult>;
-  onUpdateHoursPerWeek: (hours: number) => Promise<HoursChangeResult>;
+  onUpdateHoursPerWeek: (hours: number, startFrom: StartFrom) => Promise<HoursChangeResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -490,7 +492,7 @@ function TrainingSection({
   onRemovePastRace: (pastRaceId: string) => Promise<SettingsActionResult>;
   onUpdateRaceDistance: (value: string) => Promise<SettingsActionResult>;
   onPreviewHoursChange: () => Promise<HoursPreviewResult>;
-  onUpdateHoursPerWeek: (hours: number) => Promise<HoursChangeResult>;
+  onUpdateHoursPerWeek: (hours: number, startFrom: StartFrom) => Promise<HoursChangeResult>;
   onUpdateWeeklySessionDay: (day: string) => Promise<SettingsActionResult>;
   onAddFixedConstraint: (day: string) => Promise<SettingsActionResult>;
   onRemoveFixedConstraint: (day: string) => Promise<SettingsActionResult>;
@@ -600,33 +602,32 @@ function HoursPerWeekField({
 }: {
   value: number | null;
   onPreview: () => Promise<HoursPreviewResult>;
-  onSave: (hours: number) => Promise<HoursChangeResult>;
+  onSave: (hours: number, startFrom: StartFrom) => Promise<HoursChangeResult>;
 }) {
   const t = useTranslations('Settings');
-  const format = useFormatter();
   const [draft, setDraft] = useState(value === null ? '' : String(value));
   // The baseline is what has been saved, not the prop — same rule as the race
   // fields: the action does not revalidate the route.
   const [saved, setSaved] = useState(value);
-  // The weeks the pending change would redraw; null while nothing is being confirmed.
-  const [confirming, setConfirming] = useState<string[] | null>(null);
+  // What the confirm dialog asks (showable-version/61); null while nothing is being confirmed.
+  const [confirming, setConfirming] = useState<HoursChangePreview | null>(null);
   const { pending, error, run } = useSave();
   const hours = Number(draft);
   const valid = draft !== '' && isHoursPerWeek(hours);
   const dirty = valid && hours !== saved;
 
   async function ask() {
-    let weeks: string[] = [];
+    let preview: HoursChangePreview | null = null;
     const ok = await run(async () => {
       const result = await onPreview();
-      if (result.ok) weeks = result.weeks;
+      if (result.ok) preview = result.preview;
       return result;
     });
-    if (ok) setConfirming(weeks);
+    if (ok) setConfirming(preview);
   }
 
-  async function confirm() {
-    if (await run(() => onSave(hours))) {
+  async function confirm(startFrom: StartFrom) {
+    if (await run(() => onSave(hours, startFrom))) {
       setSaved(hours);
       setConfirming(null);
     }
@@ -667,36 +668,13 @@ function HoursPerWeekField({
         )}
       </div>
       {confirming !== null && (
-        <div className="mt-3 border border-signal/40 bg-signal/5 p-4">
-          <p className="font-body text-sm text-foreground">{t('hoursConfirmTitle', { hours })}</p>
-          <p className="mt-1 font-body text-[13px] text-muted-foreground">
-            {confirming.length > 0
-              ? t('hoursConfirmBody', {
-                  count: confirming.length,
-                  date: format.dateTime(new Date(`${confirming[0]}T00:00:00`), { day: 'numeric', month: 'long' }),
-                })
-              : t('hoursNothingToRedraw')}
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={confirm}
-              disabled={pending}
-              className="inline-flex items-center gap-2 border border-signal h-11 px-4 font-body text-base font-semibold text-foreground transition-colors hover:bg-signal hover:text-signal-foreground disabled:opacity-50"
-            >
-              {pending && <Loader2 className="h-3 w-3 animate-spin" />}
-              {t('hoursConfirm')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(null)}
-              disabled={pending}
-              className="border border-border h-11 px-4 font-body text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {t('hoursCancel')}
-            </button>
-          </div>
-        </div>
+        <HoursChangeDialog
+          hours={hours}
+          preview={confirming}
+          pending={pending}
+          onApply={confirm}
+          onCancel={() => setConfirming(null)}
+        />
       )}
       {error && <FieldError message={t('error')} />}
     </div>

@@ -16,11 +16,13 @@ import {
   missingRequiredConsents,
 } from '@/features/consent/consent';
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { FrontpageView } from '@/components/frontpage/frontpage-view';
+import { frontpageScreenshotsFor } from '@/components/frontpage/screenshots';
 import { OnboardingFlow } from './onboarding';
 import { ConsentScreen } from './consent';
 
 // Read per-request: the page depends on who is signed in, so it can never be
-// prerendered. Signed out, it is not a page at all — it redirects to sign-in.
+// prerendered. Signed out, it is the Frontpage (showable-version/62).
 export const dynamic = 'force-dynamic';
 
 export default async function AthletePage({
@@ -133,7 +135,7 @@ export default async function AthletePage({
     );
   }
 
-  // Signed out, this is not a page — it becomes the sign-in page. redirect()
-  // throws, so nothing below it runs.
-  redirect({ href: '/sign-in', locale });
+  // Signed out, the visitor meets Momentum before the sign-in form.
+  const tFront = await getTranslations('Frontpage');
+  return <FrontpageView locale={locale} screenshots={frontpageScreenshotsFor((key) => tFront(key))} />;
 }

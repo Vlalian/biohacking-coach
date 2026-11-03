@@ -25,9 +25,11 @@ import {
   updateRaceTarget,
   updateRaceDistance,
   updateExperienceLevel,
-  updateHoursPerWeek,
 } from '@/features/athlete/athlete-repository';
-import { previewRefill, refillWeeksFromHours } from '@/features/coach/block-fill-service';
+import { after } from 'next/server';
+import { applyHoursChange, previewHoursChange } from '@/features/coach/hours-change-service';
+import { isStartFrom, type HoursChangePreview } from '@/features/coach/hours-change';
+import { draftWeekNow } from '@/features/coach/week-draft-service';
 import { resolveAthlete, resolveUserId } from '../../current-actor';
 import {
   getLinkForAthlete,
@@ -67,8 +69,8 @@ export type HoursChangeResult =
   | { ok: true; redrawn: number }
   | { ok: false; reason: 'not-authenticated' | 'invalid' };
 
-/** The weeks an hours change would redraw, for the confirmation that names them. */
-export type HoursPreviewResult = { ok: true; weeks: string[] } | { ok: false; reason: 'not-authenticated' };
+/** What the hours confirmation should ask (`showable-version/61`). */
+export type HoursPreviewResult = { ok: true; preview: HoursChangePreview } | { ok: false; reason: 'not-authenticated' };
 
 export type AddPastRaceResult =
   | { ok: true; pastRaceId: string }
@@ -311,32 +313,34 @@ export async function removeRaceAction(raceId: string): Promise<SettingsActionRe
 }
 
 /**
- * Hours per week, changed after onboarding (`showable-version/40`).
+ * Hours per week, changed after onboarding (`showable-version/40`, `/61`).
  *
  * Checked with onboarding's own `isHoursPerWeek`: a whole number in the same
- * band. The new number is stored, then the weeks the structure still owns are
- * redrawn from it — this week, weeks the athlete accepted and weeks holding a
- * Head Coach's prescription are never touched (`refillWeeksFromHours`). The
- * redraw never throws; a failed one leaves the hours stored and the old weeks
- * in place, and reports zero weeks redrawn.
+ * band; `startFrom` is the athlete's answer to the confirm dialog when a draft
+ * is waiting. The service stores the hours, redraws the weeks the structure
+ * still owns — never this week, nor weeks the athlete accepted or a Head Coach
+ * prescribed — and settles the waiting draft (`applyHoursChange`). When that
+ * draft was withdrawn, Momentum drafts its week again after the response, here
+ * and now: nothing waits for the next app-open or a cron (Mads, 2026-10-01).
  */
-export async function updateHoursPerWeekAction(hours: number): Promise<HoursChangeResult> {
-  if (!isHoursPerWeek(hours)) return { ok: false, reason: 'invalid' };
+export async function updateHoursPerWeekAction(hours: number, startFrom: string): Promise<HoursChangeResult> {
+  if (!isHoursPerWeek(hours) || !isStartFrom(startFrom)) return { ok: false, reason: 'invalid' };
 
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  await updateHoursPerWeek(athlete.id, hours);
-  const { weeks } = await refillWeeksFromHours(athlete.id, today());
-  return { ok: true, redrawn: weeks.length };
+  const day = today();
+  const { redrawn, redraft } = await applyHoursChange(athlete.id, hours, startFrom, day);
+  if (redraft) after(() => draftWeekNow(athlete.id, redraft, day));
+  return { ok: true, redrawn: redrawn.length };
 }
 
-/** What {@link updateHoursPerWeekAction} would redraw today — a read, asked before the athlete confirms. */
+/** What the confirm dialog should ask for an hours change today — a read, before the athlete confirms. */
 export async function previewHoursChangeAction(): Promise<HoursPreviewResult> {
   const athlete = await actingAthlete();
   if (!athlete) return { ok: false, reason: 'not-authenticated' };
 
-  return { ok: true, weeks: await previewRefill(athlete.id, today()) };
+  return { ok: true, preview: await previewHoursChange(athlete.id, today()) };
 }
 
 /** Weekly Session Day — any weekday. */

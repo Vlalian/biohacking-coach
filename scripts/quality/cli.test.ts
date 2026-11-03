@@ -60,6 +60,9 @@ function mutationReport(statuses: string[]) {
           location: { start: { line: i + 1 } },
           mutatorName: 'ConditionalExpression',
           status,
+          // What Stryker writes for a comment suppression in the repo's em-dash
+          // form: its own default, never the author's reason (code-health/31).
+          ...(status === 'Ignored' ? { statusReason: 'Ignored using a comment' } : {}),
         })),
       },
     },
@@ -141,6 +144,23 @@ describe('main — the exit code /build-afk keys off', () => {
     givenRun({ mutants: ['Killed', 'Survived'] });
 
     expect(main(['src/a.ts'])).toBe(1);
+  });
+
+  it('lists a suppressed mutant from a gated run with its reason, and keeps the same verdict (code-health/31)', () => {
+    // The Ignored mutant sits on line 2; the em-dash reason is on line 1, which
+    // the diff adds, so it is new in this change.
+    givenRun({
+      mutants: ['Killed', 'Ignored'],
+      source: '// Stryker disable next-line ConditionalExpression — equivalent\nexport function f() { return 1; }',
+      diff: diffAdding(['src/a.ts'], '+1,2'),
+    });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    log.mockClear();
+
+    expect(main(['src/a.ts'])).toBe(0);
+    const text = log.mock.calls.flat().join('\n');
+    expect(text).toContain('Suppressed, new in this change:');
+    expect(text).toContain('  src/a.ts:2 ConditionalExpression — equivalent');
   });
 
   it('exits 1 on a status the run never settled', () => {
@@ -517,6 +537,29 @@ describe('report — what a human is actually told', () => {
     );
 
     expect(text).toContain('Mutants: 3 — 2 killed, 1 suppressed');
+  });
+
+  // code-health/31: the count alone hides what was suppressed and why.
+  const suppressed = (over = {}) => ({ file: 'src/a.ts', line: 10, mutator: 'X', commentLine: 9, reason: 'equivalent' as string | null, ...over });
+
+  it('prints each new suppression with its reason under the verdict', () => {
+    const { text } = output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { new: [suppressed()], existing: [] }));
+    expect(text).toContain('Suppressed, new in this change:');
+    expect(text).toContain('  src/a.ts:10 X — equivalent');
+    expect(text).not.toContain('already there');
+  });
+
+  it('prints nothing for an empty list, and "(no reason given)" for a null reason', () => {
+    expect(output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { new: [], existing: [] })).text).not.toContain('Suppressed');
+    const { text } = output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { new: [], existing: [suppressed({ file: 'b.ts', line: 3, mutator: 'Y', reason: null })] }));
+    expect(text).toContain('Suppressed, already there:');
+    expect(text).toContain('  b.ts:3 Y — (no reason given)');
+  });
+
+  it('says plainly when it cannot tell new from old', () => {
+    const { text } = output(() => report([], [], [], { verdict: 'pass', failures: [], suppressed: 0 }, [], { unsplit: [suppressed()] }));
+    expect(text).toContain('Suppressed (no diff to tell new from old):');
+    expect(text).toContain('  src/a.ts:10 X — equivalent');
   });
 
   it('lists what it left standing with its numbers, and still passes', () => {

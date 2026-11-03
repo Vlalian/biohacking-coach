@@ -61,6 +61,9 @@ const {
   recordWeekDraft,
   recordWeekDraftApproval,
   withdrawPreviewDrafts,
+  withdrawWeekDraft,
+  recordHoursChanged,
+  isKeptWeekStale,
   getCalendarProposalState,
   recordWeekDraftDecision,
   recordWeekDraftDiscussed,
@@ -475,5 +478,47 @@ describe('getLastDeclinedDraft — the declined draft a re-draft reads (training
     const bound = boundValues(whereArgs.at(-1));
     expect(bound).toContain(ATHLETE);
     expect(bound).toContain(WEEK);
+  });
+});
+
+describe('an hours change and a waiting draft (showable-version/61)', () => {
+  it('withdraws one week’s draft as the athlete’s act, and the week reads back as never, not declined', async () => {
+    await withdrawWeekDraft(ATHLETE, { weekStart: WEEK, id: 'd1' }, 'hours-changed');
+    expect(insertValues).toEqual([
+      { athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'week_draft_withdrawn', payload: { weekStart: WEEK, draftId: 'd1', reason: 'hours-changed' } },
+    ]);
+
+    nextRows = [
+      { id: 'd1', type: 'week_drafted', payload: { weekStart: WEEK, visibleFrom: WEEK, sessions: [SESSION], citations: [] }, createdAt: new Date('2026-09-20T08:00:00Z') },
+      { id: 'w1', type: 'week_draft_withdrawn', payload: (insertValues[0] as { payload: unknown }).payload, createdAt: new Date('2026-09-20T09:00:00Z') },
+    ];
+    expect(await getWeekDraftHistory(ATHLETE, WEEK)).toEqual({ kind: 'never' });
+  });
+
+  it('marks the kept week stale until its first decline, or until a later hours change keeps nothing', async () => {
+    await recordHoursChanged(ATHLETE, { hours: 10, keptWeek: WEEK });
+    expect(insertValues[0]).toEqual({ athleteId: ATHLETE, actorType: 'athlete', actorId: ATHLETE, type: 'hours_changed', payload: { hours: 10, keptWeek: WEEK } });
+
+    const changed = (keptWeek: string | null, at: string) => ({ type: 'hours_changed', payload: { hours: 10, keptWeek }, createdAt: new Date(at) });
+    const declined = (weekStart: string) => ({ type: 'week_plan_declined', payload: { weekStart }, createdAt: new Date('2026-09-21T10:00:00Z') });
+
+    nextRows = [changed(WEEK, '2026-09-21T08:00:00Z')];
+    expect(await isKeptWeekStale(ATHLETE, WEEK)).toBe(true);
+    expect(await isKeptWeekStale(ATHLETE, '2026-09-28')).toBe(false);
+
+    nextRows = [changed(WEEK, '2026-09-21T08:00:00Z'), declined(WEEK)];
+    expect(await isKeptWeekStale(ATHLETE, WEEK)).toBe(false);
+
+    nextRows = [changed(WEEK, '2026-09-21T08:00:00Z'), declined('2026-09-28')];
+    expect(await isKeptWeekStale(ATHLETE, WEEK)).toBe(true);
+
+    nextRows = [changed(WEEK, '2026-09-21T08:00:00Z'), changed(null, '2026-09-21T09:00:00Z')];
+    expect(await isKeptWeekStale(ATHLETE, WEEK)).toBe(false);
+  });
+
+  it('reads the marker for this athlete only', async () => {
+    nextRows = [];
+    await isKeptWeekStale(ATHLETE, WEEK);
+    expect(boundValues(whereArgs.at(-1))).toContain(ATHLETE);
   });
 });
