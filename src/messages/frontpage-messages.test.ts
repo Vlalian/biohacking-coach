@@ -14,7 +14,10 @@ describe('Frontpage catalogue', () => {
     expect(da.Frontpage.researchTitle).toBe('Intet navn eller e-mail i forskningsspørgsmål');
     expect(en.Frontpage.researchBody).toBe('Library questions carry your training phase and question, never who you are.');
     expect(da.Frontpage.researchBody).toBe('Spørgsmål til biblioteket indeholder din træningsfase og dit spørgsmål, aldrig hvem du er.');
-    expect(en.Frontpage.euBody).toBe('Stored in Frankfurt. AI runs in the US, with no name or email sent.');
+    // CodeRabbit on PR #133, reworded on Mads's word (2026-11-03): a Preferred Name the athlete chooses
+    // reaches Momentum; the account name and email never do.
+    expect(en.Frontpage.euBody).toBe('Stored in Frankfurt. AI runs in the US and never gets your email or account name, only a name you choose to share.');
+    expect(da.Frontpage.euBody).toBe('Opbevaret i Frankfurt. AI kører i USA og får aldrig din e-mail eller dit kontonavn, kun et navn, du selv vælger at dele.');
     expect(en.Frontpage.privacy).toBe('Privacy policy');
     expect(da.Frontpage.privacy).toBe('Privatlivspolitik');
     expect(en.Frontpage.coachChat).toBe('Ask Momentum');
