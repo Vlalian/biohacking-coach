@@ -13,7 +13,8 @@
 import type { MutantReport } from './policy';
 import type { ChangedFile } from './scope';
 
-const DIRECTIVE = /Stryker disable next-line\b/;
+/** Stryker's directive, read as Stryker reads it: at the start of the comment's text. */
+const DIRECTIVE = /^Stryker disable next-line\b/;
 
 /** One suppressed mutant, located, with the reason its comment gives. */
 export type Suppression = { file: string; line: number; mutator: string; commentLine: number; reason: string | null };

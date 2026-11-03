@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { settled, snapshot } from './settled';
 
 test('sign-in, signed out', async ({ page }) => {
@@ -11,6 +11,8 @@ test('sign-in, signed out', async ({ page }) => {
 for (const locale of ['en', 'da'] as const) {
   test(`frontpage (${locale}), signed out`, async ({ page }) => {
     await page.goto(`/${locale}`);
+    // A redirect to sign-in would otherwise be photographed as the Frontpage (CodeRabbit on PR #133).
+    await expect(page).toHaveURL(new RegExp(`/${locale}$`));
     await settled(page);
     await snapshot(page);
   });

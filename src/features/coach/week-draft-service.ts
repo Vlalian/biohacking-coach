@@ -220,10 +220,16 @@ export async function redraftWeek(
  * withdrew that week's waiting draft, Momentum drafts it again from the new
  * hours at once, rather than leaving it to whatever next opens the app or to a
  * cron. Gated like a first draft: the withdrawn week reads `never`, consent is
- * required, and a week still drafted is left alone. Visible today — the week was
- * already the athlete's. Never throws.
+ * required, a week still drafted is left alone, and so is a week a coach has
+ * already planned, as in a re-draft. A switched-off Coach reads nothing, as in
+ * `gateFacts`. Visible today — the week was already the athlete's. Never throws.
  */
-export async function draftWeekNow(athleteId: string, weekStart: string, today: string): Promise<DraftOutcome> {
+export async function draftWeekNow(
+  athleteId: string,
+  weekStart: string,
+  today: string,
+): Promise<DraftOutcome | 'already-planned'> {
+  if (isCoachDisabled()) return 'coach-disabled';
   const facts = await guarded(athleteId, () => nowFacts(athleteId, weekStart, today));
   if (facts === 'coach-failed') return facts;
   if ('gated' in facts) return facts.gated;
@@ -234,13 +240,15 @@ async function nowFacts(
   athleteId: string,
   weekStart: string,
   today: string,
-): Promise<{ gated: DraftOutcome } | { window: PlanningWindow; unavailableDates: string[] }> {
-  const [athlete, consent, history, unavailableDates] = await Promise.all([
+): Promise<{ gated: DraftOutcome | 'already-planned' } | { window: PlanningWindow; unavailableDates: string[] }> {
+  const [athlete, consent, history, unavailableDates, sessions] = await Promise.all([
     getAthleteById(athleteId),
     assertAiCoachingConsent(athleteId),
     getWeekDraftHistory(athleteId, weekStart),
     getUnavailableDates(athleteId),
+    getSessionsForWeek(athleteId, weekStart),
   ]);
+  if (hasCoachPlannedSession(sessions)) return { gated: 'already-planned' };
   const { fixedConstraints, firstDay } = profileFacts(athlete, today);
   const window = weekWindow(weekStart, today, fixedConstraints, unavailableDates, firstDay);
   const gated = draftGate({ consented: consent.ok, history, window });

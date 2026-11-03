@@ -28,8 +28,9 @@ const {
 
 vi.mock('next-intl/server', () => ({
   setRequestLocale: vi.fn(),
-  getTranslations: async () => (key: string, vals?: Record<string, unknown>) =>
-    vals ? `${key}:${vals.name}` : key,
+  // The Frontpage's keys come back with their namespace, so a test can tell which catalogue was read.
+  getTranslations: async (namespace?: string) => (key: string, vals?: Record<string, unknown>) =>
+    namespace === 'Frontpage' ? `Frontpage.${key}` : vals ? `${key}:${vals.name}` : key,
 }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/i18n/navigation', () => ({ redirect, Link: () => null }));
@@ -98,10 +99,10 @@ describe('AthletePage', () => {
 
     expect(tree.props.locale).toBe('da');
     expect(tree.props.screenshots).toEqual({
-      rosterView: { src: '/frontpage/roster-view.png', alt: 'altRosterView' },
-      coachChat: { src: '/frontpage/coach-chat.png', alt: 'altCoachChat' },
-      trainingPlan: { src: '/frontpage/training-plan.png', alt: 'altTrainingPlan' },
-      informationView: { src: '/frontpage/information-view.png', alt: 'altInformationView' },
+      rosterView: { src: '/frontpage/roster-view.png', alt: 'Frontpage.altRosterView' },
+      coachChat: { src: '/frontpage/coach-chat.png', alt: 'Frontpage.altCoachChat' },
+      trainingPlan: { src: '/frontpage/training-plan.png', alt: 'Frontpage.altTrainingPlan' },
+      informationView: { src: '/frontpage/information-view.png', alt: 'Frontpage.altInformationView' },
     });
   });
 

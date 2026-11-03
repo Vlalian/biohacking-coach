@@ -921,6 +921,21 @@ describe('draftWeekNow — an hours change drafts the withdrawn week at once (sh
     expect(callCoach).not.toHaveBeenCalled();
   });
 
+  // CodeRabbit on PR #133: the same gates a first draft and a re-draft keep.
+  it('leaves a week a coach already planned alone, and reads nothing while the Coach is switched off', async () => {
+    getWeekDraftHistory.mockResolvedValue({ kind: 'never' });
+    getSessionsForWeek.mockResolvedValue([{ date: '2026-09-22', origin: 'coach' }]);
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('already-planned');
+    expect(getSessionsForWeek).toHaveBeenCalledWith(ATHLETE, NEXT_MON);
+    expect(callCoach).not.toHaveBeenCalled();
+
+    getWeekDraftHistory.mockClear();
+    isCoachDisabled.mockReturnValueOnce(true);
+    expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('coach-disabled');
+    expect(getWeekDraftHistory).not.toHaveBeenCalled();
+    expect(logCoachFailure).not.toHaveBeenCalled();
+  });
+
   it('never throws: a dead driver on its reads is coach-failed, logged, and no Coach call', async () => {
     getWeekDraftHistory.mockRejectedValueOnce(new Error('driver down'));
     expect(await draftWeekNow(ATHLETE, NEXT_MON, TODAY)).toBe('coach-failed');

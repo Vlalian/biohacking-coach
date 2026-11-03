@@ -65,9 +65,12 @@ export async function applyHoursChange(
   if (!waiting) return withNoWaitingDraft(athleteId, hours, today);
 
   if (startFrom === 'waiting-week' && visibleTo(waiting, today)) {
-    const { weeks } = await refillWeeksFromHours(athleteId, today);
+    const refill = await refillWeeksFromHours(athleteId, today);
+    // A redraw that failed left the week on the old hours: its draft stays decidable and the week
+    // is kept, so declining it later still moves it (CodeRabbit on PR #133).
+    if (refill.outcome === 'failed') return finish(athleteId, hours, [], waiting.weekStart, null);
     await withdrawWeekDraft(athleteId, waiting, 'hours-changed');
-    return finish(athleteId, hours, weeks, null, waiting.weekStart);
+    return finish(athleteId, hours, refill.weeks, null, waiting.weekStart);
   }
 
   const { weeks } = await refillWeeksFromHours(athleteId, today, { except: waiting.weekStart });

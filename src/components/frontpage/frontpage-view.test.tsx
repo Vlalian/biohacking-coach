@@ -66,6 +66,13 @@ describe('FrontpageView copy', () => {
   });
 });
 
+describe('FrontpageView heading with a line break', () => {
+  // CodeRabbit on PR #133: the copy test skips strings with a newline, so whyTitle is checked here.
+  it.each(['en', 'da'] as const)('renders the %s whyTitle, line break included', (locale) => {
+    expect(html(locale)).toContain(catalogues[locale].Frontpage.whyTitle);
+  });
+});
+
 describe('FrontpageView links', () => {
   it('links every Sign in action to /sign-in and the footer link to /privacy', () => {
     const enOut = html('en');

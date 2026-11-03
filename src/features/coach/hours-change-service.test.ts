@@ -110,6 +110,16 @@ describe('applyHoursChange', () => {
     expect(recordHoursChanged).toHaveBeenCalledWith('athlete_1', { hours: 10, keptWeek: null });
   });
 
+  // CodeRabbit on PR #133: a failed redraw must not throw the waiting draft away.
+  it('start from the waiting week whose redraw fails: keeps the draft decidable, kept on the old hours', async () => {
+    waitingIn(W41, draft());
+    refillWeeksFromHours.mockResolvedValue({ outcome: 'failed', weeks: [] });
+
+    expect(await applyHoursChange('athlete_1', 10, 'waiting-week', TODAY)).toEqual({ redrawn: [], redraft: null });
+    expect(withdrawWeekDraft).not.toHaveBeenCalled();
+    expect(recordHoursChanged).toHaveBeenCalledWith('athlete_1', { hours: 10, keptWeek: W41 });
+  });
+
   it.each([
     ['week-after', TODAY],
     // In the coach's preview: the server keeps it whatever the client asked.

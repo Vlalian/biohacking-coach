@@ -70,6 +70,11 @@ describe('suppressionsOf — the reason read from the comment above the mutant',
     expect(reasonAt('const a = 1;', 1)).toEqual(noBlock(1));
     expect(reasonAt('// just a note\nconst a = 1;', 2)).toEqual(noBlock(2));
   });
+
+  // CodeRabbit on PR #133: Stryker reads a directive only at the start of a comment.
+  it('does not take a comment that quotes the directive mid-sentence for one', () => {
+    expect(reasonAt('// write Stryker disable next-line X — reason\nconst a = 1;', 2)).toEqual(noBlock(2));
+  });
 });
 
 describe('suppressionsOf', () => {

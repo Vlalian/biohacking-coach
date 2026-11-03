@@ -17,6 +17,7 @@ describe('frontpage screenshots wiring', () => {
     const frontpage = read('playwright-frontpage.config.ts');
     expect(frontpage).toContain("testMatch: '**/*.shot.ts'");
     expect(frontpage).toMatch(/name: 'setup'/);
+    expect(frontpage).toMatch(/name: 'frontpage',\s*dependencies: \['setup'\]/);
     expect(frontpage).toMatch(/auth\\?\.setup\\?\.ts/);
     expect(frontpage).toContain("from './e2e/pinned-today'");
     expect(frontpage).toContain('COACH_TODAY: PINNED_TODAY');
@@ -60,6 +61,8 @@ describe('frontpage screenshots spec', () => {
     expect(spec()).toContain("from './pinned-today'");
     expect(spec()).toContain("from './settled'");
     expect((spec().match(/settled\(page\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    // CodeRabbit on PR #133: a redirect to sign-in must fail the run, not become a picture.
+    expect((spec().match(/await onPage\(page, '\/en\//g) ?? []).length).toBe(4);
     for (const file of ['roster-view.png', 'coach-chat.png', 'training-plan.png', 'information-view.png']) {
       expect(spec()).toContain(file);
     }

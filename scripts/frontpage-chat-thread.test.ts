@@ -27,6 +27,21 @@ describe('frontpage Coach Chat thread', () => {
     expect(messages[1].content).toMatch(/Shall I move them\?$/);
   });
 
+  // CodeRabbit on PR #133: the thread is public copy on the Frontpage; any change to it is deliberate.
+  it('is exactly the approved exchange', () => {
+    const { messages } = frontpageChatThread({ athleteId: 'a1', conversationId: 'c1' });
+    expect(messages.map((m) => [m.role, m.content])).toEqual([
+      ['athlete', 'Work runs late on Thursday. Can I swap the bike intervals with Saturday’s easy run?'],
+      [
+        'coach_ai',
+        'Yes. Saturday gives you the morning for the intervals, and Thursday’s easy run fits around a late day. ' +
+          'Keep the run easy, so you come into Saturday fresh. Shall I move them?',
+      ],
+      ['athlete', 'Yes, move them.'],
+      ['coach_ai', 'Done. Thursday is now the easy run and Saturday the bike intervals. Your coach sees the change.'],
+    ]);
+  });
+
   it('is timed on the pinned day, oldest first, so the picture is the same on every run', () => {
     const { conversation, messages } = frontpageChatThread({ athleteId: 'a1', conversationId: 'c1' });
     expect(conversation.createdAt.toISOString()).toBe('2026-09-10T08:00:00.000Z');
